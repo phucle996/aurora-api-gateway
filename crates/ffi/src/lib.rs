@@ -1,22 +1,86 @@
-//! ABI v3: borrowed input buffers, owned immutable engine handles.
+//! Aurora WAF FFI - Lớp cầu nối giao tiếp C ABI (C Foreign Function Interface).
+//!
+//! Vai trò kiến trúc:
+//! - Xuất các hàm Rust theo chuẩn C ABI (`extern "C"` với `#[no_mangle]`) để module NGINX viết bằng C
+//!   có thể trực tiếp nhúng và gọi hàm của Engine mà không cần thông qua mạng hoặc socket.
+//! - Thiết kế ABI v3: Sử dụng bộ đệm vay mượn (borrowed input buffers), dữ liệu trả về kiểu giá trị (value-only struct),
+//!   và con trỏ đối tượng Engine bất biến (owned immutable engine handles).
+//! - Bọc toàn bộ các lời gọi bằng `catch_unwind` để đảm bảo nếu Rust xảy ra panic thì
+//!   tuyệt đối không bị rò rỉ ra ngoài C làm sập tiến trình NGINX.
+
 use aurora_engine::{Decision, Engine, MAX_PATH_BYTES, MAX_POLICY_BYTES};
 use std::{
     panic::{AssertUnwindSafe, catch_unwind},
     ptr, slice,
 };
+
+/// Mã trạng thái trả về cho caller C:
+/// - OK (0): Thao tác thành công
 const OK: u32 = 0;
+/// - INVALID (1): Tham số đầu vào không hợp lệ hoặc dữ liệu chính sách bị lỗi
 const INVALID: u32 = 1;
+/// - PANIC (2): Quá trình xử lý phía Rust bị panic nhưng đã được chặn lại an toàn
 const PANIC: u32 = 2;
 
-// SAFETY: Unique Aurora symbol, with a fixed C signature.
+/// Trả về số phiên bản ABI hiện tại của Aurora WAF (hiện tại là 3).
+/// Module NGINX sẽ gọi hàm này lúc khởi động để kiểm tra tính tương thích nhị phân.
 #[unsafe(no_mangle)]
 pub extern "C" fn aurora_waf_abi_version() -> u32 {
     3
 }
 
+/// Tạo mới một đối tượng Engine từ dữ liệu chuỗi byte JSON chính sách (Policy data).
+///
 /// # Safety
-/// Handle must be live, path readable for len, out writable/aligned. No concurrent
-/// destroy. Results contain only values; no allocation crosses the boundary.
+/// - Con trỏ `data` phải hợp lệ và có thể đọc được `len` bytes.
+/// - Con trỏ `out` phải trỏ tới vùng nhớ hợp lệ có thể ghi con trỏ `*mut Engine`.
+/// - Khi không còn sử dụng, con trỏ Engine trả về phải được giải phóng đúng 1 lần qua hàm `aurora_waf_destroy`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn aurora_waf_create(
+    data: *const u8,
+    len: usize,
+    out: *mut *mut Engine,
+) -> u32 {
+    // Bước 1: Kiểm tra con trỏ đầu ra out có hợp lệ không
+    if out.is_null() {
+        return INVALID;
+    }
+
+    // Gán con trỏ đầu ra ban đầu về null để đảm bảo an toàn nếu gặp lỗi giữa chừng
+    unsafe {
+        *out = ptr::null_mut();
+    }
+
+    // Bước 2: Kiểm tra dữ liệu đầu vào: không null, không rỗng và không vượt quá 64KB
+    if data.is_null() || len == 0 || len > MAX_POLICY_BYTES {
+        return INVALID;
+    }
+
+    // Bước 3: Gọi Engine::from_policy bên trong khối catch_unwind để ngăn panic tràn sang C
+    match catch_unwind(|| {
+        Engine::from_policy(unsafe { slice::from_raw_parts(data, len) })
+            .map(|e| Box::into_raw(Box::new(e))) // Đưa Engine lên Heap và chuyển thành con trỏ thô (raw pointer)
+    }) {
+        // Khởi tạo thành công: gán con trỏ Engine vào *out và trả về mã OK (0)
+        Ok(Ok(engine)) => {
+            unsafe {
+                *out = engine;
+            }
+            OK
+        }
+        // Dữ liệu chính sách JSON không hợp lệ: trả về mã INVALID (1)
+        Ok(Err(_)) => INVALID,
+        // Bắt được panic từ Rust: trả về mã PANIC (2) mà không làm sập NGINX
+        Err(_) => PANIC,
+    }
+}
+
+/// Đánh giá một đường dẫn URL theo chuẩn ABI v3, ghi kết quả trực tiếp vào struct Decision.
+///
+/// # Safety
+/// - `engine`: Phải là con trỏ còn sống được tạo từ `aurora_waf_create`.
+/// - `path`: Vùng nhớ hợp lệ có thể đọc `len` bytes.
+/// - `out`: Vùng nhớ hợp lệ có thể ghi struct `Decision`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn aurora_waf_evaluate_v3(
     engine: *const Engine,
@@ -24,34 +88,47 @@ pub unsafe extern "C" fn aurora_waf_evaluate_v3(
     len: usize,
     out: *mut Decision,
 ) -> u32 {
+    // Bước 1: Kiểm tra con trỏ đầu ra
     if out.is_null() {
         return INVALID;
     }
+
+    // Thiết lập giá trị phòng ngừa ban đầu theo nguyên tắc Fail-Closed (mặc định action = 1 tức Block)
+    // Nếu có lỗi xảy ra giữa chừng, request sẽ tự động bị chặn để đảm bảo an toàn
     unsafe {
         *out = Decision {
             action: 1,
             ..Decision::default()
         };
     }
+
+    // Bước 2: Kiểm tra tính hợp lệ của con trỏ engine và dữ liệu đường dẫn
     if engine.is_null() || path.is_null() || len == 0 || len > MAX_PATH_BYTES {
         return INVALID;
     }
+
+    // Bước 3: Gọi hàm evaluate của Engine trong khối bọc an toàn catch_unwind
     match catch_unwind(AssertUnwindSafe(|| unsafe {
         (&*engine).evaluate(slice::from_raw_parts(path, len))
     })) {
+        // So khớp thành công: ghi kết quả Decision vào *out và trả về mã OK (0)
         Ok(Ok(decision)) => {
             unsafe {
                 *out = decision;
             }
             OK
         }
+        // Đường dẫn URL không hợp lệ: trả về mã INVALID (1)
         Ok(Err(_)) => INVALID,
+        // Bắt được panic: trả về mã PANIC (2)
         Err(_) => PANIC,
     }
 }
 
+/// Lấy số thế hệ (generation) của chính sách đang được Engine áp dụng.
+///
 /// # Safety
-/// engine must be live, with no concurrent destroy. Null returns generation zero.
+/// - `engine`: Con trỏ Engine còn sống. Nếu truyền con trỏ null sẽ trả về 0.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn aurora_waf_generation(engine: *const Engine) -> u64 {
     if engine.is_null() {
@@ -60,42 +137,10 @@ pub unsafe extern "C" fn aurora_waf_generation(engine: *const Engine) -> u64 {
     unsafe { (&*engine).generation() }
 }
 
+/// Đánh giá đường dẫn URL theo chuẩn ABI cũ (chỉ kiểm tra trạng thái chặn 0 hoặc 1).
+///
 /// # Safety
-/// out must be writable/aligned; data must contain len readable bytes for this
-/// call. Destroy a successful handle exactly once. Input is copied, never retained.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn aurora_waf_create(
-    data: *const u8,
-    len: usize,
-    out: *mut *mut Engine,
-) -> u32 {
-    if out.is_null() {
-        return INVALID;
-    }
-    unsafe {
-        *out = ptr::null_mut();
-    }
-    if data.is_null() || len == 0 || len > MAX_POLICY_BYTES {
-        return INVALID;
-    }
-    match catch_unwind(|| {
-        Engine::from_policy(unsafe { slice::from_raw_parts(data, len) })
-            .map(|e| Box::into_raw(Box::new(e)))
-    }) {
-        Ok(Ok(engine)) => {
-            unsafe {
-                *out = engine;
-            }
-            OK
-        }
-        Ok(Err(_)) => INVALID,
-        Err(_) => PANIC,
-    }
-}
-
-/// # Safety
-/// Handle must be live; path readable for len; action writable/aligned.
-/// No concurrent destroy. Request buffers are never retained.
+/// - `action`: Con trỏ ghi giá trị số nguyên: 0 là Allow, 1 là Block.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn aurora_waf_evaluate(
     engine: *const Engine,
@@ -106,6 +151,7 @@ pub unsafe extern "C" fn aurora_waf_evaluate(
     if action.is_null() {
         return INVALID;
     }
+    // Giá trị an toàn mặc định là Block (1)
     unsafe {
         *action = 1;
     }
@@ -126,12 +172,15 @@ pub unsafe extern "C" fn aurora_waf_evaluate(
     }
 }
 
+/// Thu hồi và giải phóng bộ nhớ của đối tượng Engine khi NGINX reload hoặc shutdown.
+///
 /// # Safety
-/// Null accepted; otherwise handle must originate from create, still live, with
-/// no concurrent evaluations. No access or second destroy after return.
+/// - Chấp nhận con trỏ null (không làm gì).
+/// - Nếu khác null: phải là con trỏ hợp lệ được cấp phát từ `aurora_waf_create` và chưa từng bị giải phóng trước đó.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn aurora_waf_destroy(engine: *mut Engine) {
     if !engine.is_null() {
+        // Tái tạo lại Box từ con trỏ thô để bộ thu dọn bộ nhớ của Rust tự động drop giải phóng
         let _ = catch_unwind(AssertUnwindSafe(|| unsafe {
             drop(Box::from_raw(engine));
         }));
