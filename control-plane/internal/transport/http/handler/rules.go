@@ -25,21 +25,22 @@ import (
 
 // CreateRule tiếp nhận yêu cầu tạo mới một luật bảo vệ WAF thế hệ 1 (theo đường dẫn tĩnh).
 //
-// [Góc nhìn kinh tế / tiếp nhận hồ sơ]:
-// Tương đương quầy tiếp nhận hồ sơ đăng ký chính sách bảo vệ mới:
-// - Kiểm tra định dạng đơn nộp: Bắt buộc chuẩn JSON, giới hạn hồ sơ dưới 64KB (chống tấn công làm nghẽn quầy DoS).
-// - Kiểm tra mã biên lai chống trùng (Idempotency-Key): Ngăn chặn tình trạng nhân viên ấn nút gửi 2 lần tạo ra 2 luật trùng nhau.
-// - Thẩm định tại chỗ (Sanitization & Validation inline): Soát xét tính hợp lệ của tên, nhóm rủi ro, điểm cảnh báo và hành vi trước khi chuyển tiếp vào phòng xử lý nghiệp vụ.
-// - Trả về mã số định danh (ID) và số phiên bản khởi tạo (Version = 1) dưới dạng phản hồi inline.
+// Quy trình xử lý:
+// - Kiểm tra tiêu đề Content-Type bắt buộc là application/json.
+// - Giới hạn kích thước gói dữ liệu tối đa 64KB để bảo vệ bộ nhớ và chống tấn công làm quá tải máy chủ (DoS).
+// - Kiểm tra khóa chống trùng lặp Idempotency-Key (độ dài 16 đến 128 ký tự).
+// - Xác thực và chuẩn hóa dữ liệu trực tiếp (Inline Validation): tên, mô tả, điểm số, độ ưu tiên, đường dẫn, hành vi, mức độ nghiêm trọng, nhóm luật.
+// - Đóng gói dữ liệu sang entity.CreateRuleCommand phẳng và chuyển cho tầng Service xử lý.
+// - Phản hồi mã HTTP 201 Created cùng ID và phiên bản khởi tạo (Version = 1) dưới dạng JSON inline.
 func CreateRule(s port.RuleService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Bước 1: Kiểm tra tiêu đề Content-Type — bắt buộc là đơn chuẩn application/json
+		// Bước 1: Kiểm tra tiêu đề Content-Type — bắt buộc là application/json
 		if strings.Split(c.GetHeader("Content-Type"), ";")[0] != "application/json" {
 			c.String(http.StatusUnsupportedMediaType, "application/json required")
 			return
 		}
 
-		// Bước 2: Khống chế dung lượng tối đa 64KB để bảo vệ bộ nhớ máy chủ tiếp nhận
+		// Bước 2: Khống chế dung lượng tối đa 64KB để bảo vệ bộ nhớ máy chủ
 		reader := http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
 		d := json.NewDecoder(reader)
 		d.DisallowUnknownFields() // Nghiêm cấm gửi thừa trường dữ liệu không nằm trong biểu mẫu
@@ -55,20 +56,20 @@ func CreateRule(s port.RuleService) gin.HandlerFunc {
 			return
 		}
 
-		// Đảm bảo hồ sơ không có dữ liệu lạ bám theo đuôi
+		// Đảm bảo request body không có dữ liệu lạ bám theo đuôi
 		if err := d.Decode(new(any)); err != io.EOF {
 			c.String(http.StatusBadRequest, "trailing JSON")
 			return
 		}
 
-		// Bước 3: Kiểm tra khóa đối soát Idempotency (độ dài hợp lệ từ 16 đến 128 ký tự)
+		// Bước 3: Kiểm tra khóa chống trùng lặp Idempotency (độ dài hợp lệ từ 16 đến 128 ký tự)
 		key := c.GetHeader("Idempotency-Key")
 		if len(key) < 16 || len(key) > 128 {
 			c.String(http.StatusUnprocessableEntity, "invalid idempotency key")
 			return
 		}
 
-		// Bước 4: Thẩm định và làm sạch dữ liệu hồ sơ ngay tại quầy tiếp tân (Inline Validation):
+		// Bước 4: Xác thực và chuẩn hóa dữ liệu đầu vào trực tiếp (Inline Validation):
 		// - Tên luật: Bắt buộc, tối đa 120 ký tự UTF-8, không để khoảng trắng vô nghĩa.
 		// - Mô tả: Tối đa 2000 ký tự UTF-8.
 		// - Điểm rủi ro (Score): Thang điểm từ 0 đến 1000.
@@ -103,7 +104,7 @@ func CreateRule(s port.RuleService) gin.HandlerFunc {
 			return
 		}
 
-		// Kiểm tra phân loại mức độ nghiêm trọng rủi ro
+		// Kiểm tra phân loại mức độ nghiêm trọng
 		switch req.Severity {
 		case "low", "medium", "high", "critical":
 		default:
@@ -111,7 +112,7 @@ func CreateRule(s port.RuleService) gin.HandlerFunc {
 			return
 		}
 
-		// Kiểm tra nhóm danh mục nghiệp vụ bảo vệ
+		// Kiểm tra nhóm danh mục quy tắc bảo vệ
 		switch req.Group {
 		case "custom", "sqli", "xss", "traversal", "bot", "endpoint", "authentication":
 		default:
@@ -159,16 +160,17 @@ func CreateRule(s port.RuleService) gin.HandlerFunc {
 
 // UpdateRule xử lý cập nhật toàn bộ nội dung của một luật WAF đang tồn tại.
 //
-// [Góc nhìn kinh tế / quản trị sửa đổi hợp đồng]:
-// Tương đương việc lập phụ lục sửa đổi hợp đồng:
-// - Kiểm tra ID hợp đồng hợp lệ.
-// - Khóa phiên bản lạc quan (ExpectedVersion): Bắt buộc người sửa phải biết rõ mình đang sửa trên bản hợp đồng số mấy.
-//   Nếu trong lúc nhân viên này thao tác mà có một đồng nghiệp khác đã sửa xong trước, hệ thống sẽ từ chối (409 Conflict)
-//   để người này đối soát lại, tránh tình trạng "ghi đè mất trắng dữ liệu của nhau".
-// - Thẩm định toàn bộ các tiêu chí mới trước khi cho phép lưu.
+// Quy trình xử lý:
+// - Kiểm tra định dạng JSON và khống chế kích thước tối đa 64KB.
+// - Kiểm tra tính hợp lệ của mã định danh (ID) trên URL.
+// - Áp dụng cơ chế khóa lạc quan (Optimistic Concurrency Control) thông qua trường 'ExpectedVersion':
+//   Yêu cầu bên gọi phải gửi kèm phiên bản hiện tại mà họ muốn cập nhật. Nếu phiên bản trong CSDL đã bị
+//   thay đổi bởi một request khác trước đó, hệ thống sẽ trả về lỗi HTTP 409 Conflict để chống ghi đè mất dữ liệu.
+// - Xác thực tính hợp lệ của tất cả các trường dữ liệu mới trước khi lưu.
+// - Phản hồi mã HTTP 200 OK kèm phiên bản mới (Version + 1) dưới dạng JSON inline.
 func UpdateRule(s port.RuleService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Bước 1: Kiểm tra định dạng hồ sơ gửi lên
+		// Bước 1: Kiểm tra định dạng payload gửi lên
 		if strings.Split(c.GetHeader("Content-Type"), ";")[0] != "application/json" {
 			c.String(http.StatusUnsupportedMediaType, "application/json required")
 			return
@@ -207,7 +209,7 @@ func UpdateRule(s port.RuleService) gin.HandlerFunc {
 			return
 		}
 
-		// Bước 4: Thẩm định và làm sạch các trường dữ liệu điều chỉnh
+		// Bước 4: Xác thực và chuẩn hóa các trường dữ liệu điều chỉnh
 		req.Name = strings.TrimSpace(req.Name)
 		if req.Name == "" || len(req.Name) > 120 || !utf8.ValidString(req.Name) ||
 			len(req.Description) > 2000 || !utf8.ValidString(req.Description) ||
@@ -290,12 +292,11 @@ func UpdateRule(s port.RuleService) gin.HandlerFunc {
 
 // ListRules tiếp nhận các bộ lọc tra cứu và trả về danh sách luật đã được phân trang.
 //
-// [Góc nhìn kinh tế / đối soát dữ liệu]:
-// Giống như việc in sao kê danh mục hợp đồng:
-// - Tiếp nhận tiêu chí tìm kiếm (từ khóa, nhóm, hành vi, mức độ rủi ro, trạng thái bật/tắt).
-// - Áp dụng giới hạn trang (Limit từ 1 đến 100 bản ghi, mặc định 50) và con trỏ (After) để người dùng cuộn xem mượt mà,
-//   tránh tải ồ ạt làm treo trình duyệt và tốn băng thông đường truyền.
-// - Trả về tổng số lượng (Total), danh sách thực thể và mốc con trỏ cho trang kế tiếp (NextAfter).
+// Quy trình xử lý:
+// - Tiếp nhận và kiểm tra các tiêu chí lọc: từ khóa tìm kiếm (search), nhóm luật (group), hành vi (action), mức độ nghiêm trọng (severity), trạng thái bật/tắt (enabled).
+// - Áp dụng phân trang theo con trỏ ID (Cursor-based pagination) với tham số 'limit' (1 đến 100, mặc định 50) và 'after' (mốc ID bắt đầu).
+// - Đóng gói truy vấn vào entity.ListRulesQuery và gọi tầng Service để xử lý tối ưu qua CTE trong database.
+// - Phản hồi tổng số lượng bản ghi (Total), danh sách luật và mốc con trỏ trang kế tiếp (NextAfter).
 func ListRules(s port.RuleService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Bước 1: Thẩm định tham số phân trang Limit (tối thiểu 1, tối đa 100)
@@ -326,7 +327,7 @@ func ListRules(s port.RuleService) gin.HandlerFunc {
 			return
 		}
 
-		// Thẩm định tiêu chí lọc theo nhóm nghiệp vụ
+		// Thẩm định tiêu chí lọc theo nhóm quy tắc
 		group := c.Query("group")
 		switch group {
 		case "", "custom", "sqli", "xss", "traversal", "bot", "endpoint", "authentication":
@@ -344,7 +345,7 @@ func ListRules(s port.RuleService) gin.HandlerFunc {
 			return
 		}
 
-		// Thẩm định tiêu chí lọc theo mức độ rủi ro
+		// Thẩm định tiêu chí lọc theo mức độ nghiêm trọng
 		severity := c.Query("severity")
 		switch severity {
 		case "", "low", "medium", "high", "critical":
@@ -408,9 +409,13 @@ func ListRules(s port.RuleService) gin.HandlerFunc {
 
 // ─── 4. Rule Detail (GET /api/v1/rules/:id — Hồ sơ chi tiết của 1 luật) ────────
 
-// RuleDetail trả về toàn bộ thông số kỹ thuật và các điều kiện lọc của một luật cụ thể.
+// RuleDetail trả về toàn bộ thông số kỹ thuật và các điều kiện lọc của một luật cụ thể theo ID.
 //
-// [Góc nhìn kinh tế]: Giống như việc mở một hợp đồng bảo hiểm cụ thể ra xem từng điều khoản chi tiết.
+// Quy trình xử lý:
+// - Kiểm tra tính hợp lệ của ID luật trên URL.
+// - Gọi tầng Service để lấy thông tin chi tiết từ bảng chính và bảng mở rộng.
+// - Chuyển đổi danh sách điều kiện lọc (Conditions) sang định dạng gin.H inline.
+// - Phản hồi toàn bộ thông tin chi tiết của luật dưới dạng JSON.
 func RuleDetail(s port.RuleService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Bước 1: Đọc và kiểm tra ID luật
@@ -473,15 +478,15 @@ func RuleDetail(s port.RuleService) gin.HandlerFunc {
 	}
 }
 
-// ─── 5. Rule History (GET /api/v1/rules/:id/history — Sổ cái lịch sử thay đổi) ─
+// ─── 5. Rule History (GET /api/v1/rules/:id/history — Lịch sử các phiên bản thay đổi) ─
 
-// RuleHistory tra cứu toàn bộ nhật ký thay đổi qua các phiên bản của một luật cụ thể.
+// RuleHistory tra cứu toàn bộ lịch sử các phiên bản sửa đổi của một luật cụ thể (Audit Trail).
 //
-// [Góc nhìn kinh tế / kiểm toán]:
-// Tương đương việc trích lục sổ cái kiểm toán (Audit Trail):
-// - Tiếp nhận mã định danh ID luật và các tham số phân trang lùi thời gian (before, limit).
-// - Giúp kiểm toán viên hoặc trưởng phòng an ninh xác minh: Luật này trước đây ai đã sửa? Từng chuyển từ 'log' sang 'block' khi nào?
-// - Trả về danh sách các phiên bản lịch sử và con trỏ trang kế tiếp (next_before) dưới dạng JSON inline.
+// Quy trình xử lý:
+// - Kiểm tra tính hợp lệ của ID luật trên URL.
+// - Kiểm tra các tham số phân trang lùi thời gian: 'limit' (1 đến 100, mặc định 50) và con trỏ 'before' (phiên bản mốc).
+// - Gọi tầng Service để truy vấn danh sách lịch sử sắp xếp từ phiên bản mới nhất lùi về trước.
+// - Phản hồi danh sách các phiên bản đã lưu và mốc 'next_before' cho trang tiếp theo.
 func RuleHistory(s port.RuleService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Bước 1: Thẩm định mã ID luật
@@ -520,7 +525,7 @@ func RuleHistory(s port.RuleService) gin.HandlerFunc {
 			return
 		}
 
-		// Bước 4: Chuyển đổi danh sách nhật ký kiểm toán sang cấu trúc JSON inline
+		// Bước 4: Chuyển đổi danh sách nhật ký thay đổi sang cấu trúc JSON inline
 		items := make([]gin.H, 0, len(out.Items))
 		for _, item := range out.Items {
 			items = append(items, gin.H{
@@ -544,12 +549,11 @@ func RuleHistory(s port.RuleService) gin.HandlerFunc {
 
 // ─── 6. Rule Stats (GET /api/v1/rules/stats — Thống kê & Báo cáo tổng quan) ───
 
-// RuleStats cung cấp các số liệu đo lường tổng thể về danh mục chính sách bảo mật WAF.
+// RuleStats cung cấp các số liệu đo lường và thống kê tổng thể về danh mục luật bảo vệ WAF.
 //
-// [Góc nhìn kinh tế / Dashboard giám đốc]:
-// Báo cáo số dư tài sản an ninh:
-// - Tổng số luật đang quản lý, số luật đang Bật, số luật ghi log, số luật chặn.
-// - So sánh tăng giảm (Delta) so với mốc đầu tháng để lãnh đạo nắm được tốc độ phát triển và biến động của hệ thống.
+// Quy trình xử lý:
+// - Thống kê tổng số lượng luật, số luật đang Bật (Enabled), số luật ở chế độ Ghi log (Log), số luật đang Chặn (Block).
+// - So sánh mức độ tăng/giảm (Delta) so với mốc thời gian đầu tháng hiện tại để theo dõi biến động số lượng quy tắc bảo mật.
 func RuleStats(s port.RuleService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		out, err := s.Stats(c.Request.Context(), entity.RuleStatsQuery{})
@@ -575,13 +579,13 @@ func RuleStats(s port.RuleService) gin.HandlerFunc {
 
 // ─── 7. Publish Rules (POST /api/v1/rule-releases — Đóng gói & Phát hành) ─────
 
-// PublishRules phát lệnh đóng gói toàn bộ các luật đang Bật thành một "Bản phát hành" (Release) sẵn sàng đưa vào vận hành.
+// PublishRules phát lệnh đóng gói toàn bộ các luật đang Bật thành một "Bản phát hành" (Release) sẵn sàng nạp vào module WAF của Nginx.
 //
-// [Góc nhìn kinh tế / quản lý sản xuất]:
-// Tương đương lệnh xuất xưởng lô hàng thành phẩm:
-// - Yêu cầu thân Request Body phải rỗng (chỉ gửi tín hiệu kích hoạt lệnh).
-// - Bắt buộc cung cấp mã Idempotency-Key để bảo đảm mỗi lần duyệt xuất xưởng chỉ tạo đúng một đợt phát hành duy nhất.
-// - Sau khi gom các luật đang Bật, hệ thống sẽ đưa qua máy biên dịch (Compiler) để niêm phong đóng gói thành tệp nhị phân siêu nhanh cho Nginx.
+// Quy trình xử lý:
+// - Kiểm tra thân yêu cầu (Request Body) phải rỗng vì đây là lệnh kích hoạt hành động.
+// - Kiểm tra tiêu đề Idempotency-Key để đảm bảo mỗi thao tác phát hành chỉ tạo đúng một đợt phát hành duy nhất.
+// - Gọi tầng Service để gom các luật đang Bật, kiểm tra trạng thái sẵn sàng và gửi sang trình biên dịch (Compiler).
+// - Phản hồi thông tin bản phát hành vừa tạo kèm mã băm kiểm tra toàn vẹn (Digest).
 func PublishRules(s port.RuleService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Bước 1: Đảm bảo thân yêu cầu phải rỗng (chỉ là lệnh trigger)
@@ -591,7 +595,7 @@ func PublishRules(s port.RuleService) gin.HandlerFunc {
 			return
 		}
 
-		// Bước 2: Kiểm tra khóa đối soát Idempotency
+		// Bước 2: Kiểm tra khóa chống trùng lặp Idempotency
 		key := c.GetHeader("Idempotency-Key")
 		if len(key) < 16 || len(key) > 128 {
 			c.String(http.StatusUnprocessableEntity, "invalid idempotency key")
@@ -614,7 +618,7 @@ func PublishRules(s port.RuleService) gin.HandlerFunc {
 			return
 		}
 
-		// Bước 4: Trả về thông tin lô hàng vừa phát hành kèm chữ ký niêm phong Digest
+		// Bước 4: Trả về thông tin bản phát hành vừa tạo kèm mã băm kiểm tra toàn vẹn Digest
 		c.JSON(http.StatusCreated, gin.H{
 			"id":     strconv.FormatInt(out.ID, 10),
 			"state":  out.State,
@@ -623,12 +627,9 @@ func PublishRules(s port.RuleService) gin.HandlerFunc {
 	}
 }
 
-// ─── 8. Release Detail (GET /api/v1/rule-releases/:id — Tiến độ phân phối lô) ──
+// ─── 8. Release Detail (GET /api/v1/rule-releases/:id — Tiến độ phân phối bản phát hành) ──
 
-// ReleaseDetail tra cứu trạng thái và giai đoạn kích hoạt của một bản phát hành WAF.
-//
-// [Góc nhìn kinh tế / theo dõi đơn vận]:
-// Giống như tra mã vận đơn xem lô hàng đã đến trạm phân phối nào, đang nạp dữ liệu hay đã chính thức có hiệu lực trên các node biên.
+// ReleaseDetail tra cứu trạng thái và giai đoạn kích hoạt của một bản phát hành WAF trên các node máy chủ biên.
 func ReleaseDetail(s port.RuleService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
@@ -658,18 +659,19 @@ func ReleaseDetail(s port.RuleService) gin.HandlerFunc {
 
 // ─── 9. Create Rule Definition (POST /api/v2/rules — Tạo luật đa điều kiện v2) ──
 
-// CreateRuleDefinition tiếp nhận và thẩm định hồ sơ luật WAF thế hệ 2 với các điều kiện soi chiếu thông minh (đa điều kiện).
+// CreateRuleDefinition tiếp nhận và xác thực yêu cầu tạo luật WAF thế hệ 2 với nhiều điều kiện kiểm tra chi tiết (đa điều kiện).
 //
-// [Góc nhìn kinh tế / kiểm soát chi phí & rủi ro]:
-// Tương đương việc soạn thảo hợp đồng khung phức tạp có nhiều điều khoản ràng buộc:
-// - Kiểm tra ngân sách biểu thức chính quy (Regex Budget):
-//   Biểu thức Regex ngốn rất nhiều CPU của máy chủ khi soi từng gói tin HTTP. Do đó hệ thống áp dụng cơ chế "Ngân sách tính toán":
-//   Mỗi điều kiện regex tối đa 1024 bytes, tổng ngân sách regex của toàn bộ luật không vượt quá 4096 bytes để bảo vệ chi phí vận hành.
-// - Hạn chế tối đa từ 1 đến 16 điều kiện có thứ tự để máy chủ lọc gói tin không bị trễ thời gian phản hồi (Latency thấp).
-// - Kiểm tra tính hợp lệ của dải mạng CIDR, địa chỉ IP, Domain, HTTP Method và mã lỗi HTTP phản hồi khi bị Chặn (400, 403, 429, 500).
+// Quy trình xử lý:
+// - Kiểm tra tiêu đề Content-Type application/json và giới hạn kích thước tối đa 64KB.
+// - Kiểm tra tiêu đề Idempotency-Key chống trùng lặp yêu cầu mạng.
+// - Giới hạn số lượng điều kiện từ 1 đến 16 điều kiện để đảm bảo tốc độ lọc gói tin (giữ độ trễ Latency thấp).
+// - Kiểm soát giới hạn biểu thức chính quy (Regex Budget): Mỗi điều kiện regex tối đa 1024 bytes và tổng độ dài regex của toàn bộ luật không vượt quá 4096 bytes nhằm bảo vệ tài nguyên CPU máy chủ.
+// - Xác thực địa chỉ IP / dải mạng CIDR, Hostname Domain, HTTP Method, tiền tố Path, và mã lỗi phản hồi HTTP khi Chặn (400, 403, 429, 500).
+// - Đóng gói sang entity.CreateRuleDefinitionCommand phẳng và gọi tầng Service để lưu trữ vào CSDL.
+// - Thiết lập tiêu đề Location và phản hồi kết quả khởi tạo dưới dạng JSON inline.
 func CreateRuleDefinition(s port.RuleService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Bước 1: Kiểm tra định dạng đơn JSON
+		// Bước 1: Kiểm tra định dạng JSON
 		media, _, err := mime.ParseMediaType(c.GetHeader("Content-Type"))
 		if err != nil || media != "application/json" {
 			c.String(http.StatusUnsupportedMediaType, "application/json required")
@@ -700,10 +702,10 @@ func CreateRuleDefinition(s port.RuleService) gin.HandlerFunc {
 			return
 		}
 
-		// Bước 4: Kiểm tra khóa chống trùng Idempotency-Key
+		// Bước 4: Kiểm tra khóa chống trùng lặp Idempotency-Key
 		key := c.GetHeader("Idempotency-Key")
 
-		// Bước 5: Bắt đầu thẩm định chi tiết từng điều khoản tại quầy tiếp nhận (Inline Validation)
+		// Bước 5: Bắt đầu xác thực chi tiết từng trường dữ liệu trực tiếp (Inline Validation)
 		invalid := map[string]string{}
 		if len(key) < 16 || len(key) > 128 {
 			invalid["idempotency_key"] = "Use a stable key of 16..128 characters for this submission"
@@ -750,7 +752,7 @@ func CreateRuleDefinition(s port.RuleService) gin.HandlerFunc {
 			return
 		}
 
-		// Bước 6: Kiểm tra từng điều kiện cụ thể và kiểm soát "Ngân sách tính toán" (Regex Budget)
+		// Bước 6: Kiểm tra từng điều kiện cụ thể và kiểm soát giới hạn độ dài biểu thức chính quy (Regex Budget)
 		totalPatternBytes := 0
 		for i, condition := range req.Conditions {
 			prefix := fmt.Sprintf("conditions[%d]", i)
@@ -804,7 +806,7 @@ func CreateRuleDefinition(s port.RuleService) gin.HandlerFunc {
 			}
 		}
 
-		// Kiểm soát tổng ngân sách Regex không vượt quá 4096 bytes để bảo vệ CPU
+		// Kiểm soát tổng độ dài biểu thức chính quy không vượt quá 4096 bytes để bảo vệ hiệu năng CPU
 		if totalPatternBytes > 4096 {
 			invalid["conditions"] = "Combined regex budget is 4096 bytes"
 		}
