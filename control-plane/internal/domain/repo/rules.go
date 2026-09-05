@@ -1,8 +1,9 @@
 package repo
 
 import (
-	"aurora-waf.local/control-plane/internal/domain/entity"
 	"context"
+
+	"aurora-waf.local/control-plane/internal/domain/entity"
 )
 
 // RuleRepository là interface duy nhất cho toàn bộ rule workflow.

@@ -1,14 +1,8 @@
 package entity
 
 import (
-	"errors"
 	"time"
 )
-
-var ErrRuleInvalid = errors.New("invalid or unsupported rule")
-var ErrRuleConflict = errors.New("rule revision or idempotency conflict")
-var ErrRuleNotFound = errors.New("rule not found")
-var ErrPublishUnavailable = errors.New("compiler unavailable or policy rejected")
 
 // PublishRulesSource là dữ liệu trung gian giữa repository và service
 // trong workflow publish. Repository Reserve() trả về struct này;

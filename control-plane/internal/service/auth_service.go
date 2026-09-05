@@ -5,6 +5,7 @@ import (
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	"aurora-waf.local/control-plane/internal/domain/repo"
 	port "aurora-waf.local/control-plane/internal/domain/service"
+	"aurora-waf.local/control-plane/internal/domain/taxonomy"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -62,8 +63,8 @@ func (s *authService) Login(ctx context.Context, input entity.LoginInput) (*enti
 	// Bước 1: Tìm người dùng trong database theo tên đăng nhập
 	user, err := s.repo.FindByUsername(ctx, input.Username)
 	if err != nil {
-		if errors.Is(err, entity.ErrUserNotFound) {
-			return nil, entity.ErrInvalidCredentials // Không tìm thấy tài khoản -> Báo lỗi sai thông tin
+		if errors.Is(err, taxonomy.ErrUserNotFound) {
+			return nil, taxonomy.ErrInvalidCredentials // Không tìm thấy tài khoản -> Báo lỗi sai thông tin
 		}
 		return nil, err
 	}
@@ -71,7 +72,7 @@ func (s *authService) Login(ctx context.Context, input entity.LoginInput) (*enti
 	// Bước 2: Đọc chuỗi muối (salt) của người dùng từ DB
 	saltBytes, err := hex.DecodeString(user.Salt)
 	if err != nil {
-		return nil, entity.ErrInvalidCredentials
+		return nil, taxonomy.ErrInvalidCredentials
 	}
 
 	// Bước 3: Băm mật khẩu người dùng vừa nhập với salt tương ứng
@@ -82,7 +83,7 @@ func (s *authService) Login(ctx context.Context, input entity.LoginInput) (*enti
 	// Cách so sánh này luôn mất cùng một lượng thời gian dù chuỗi giống hay khác nhau ở ký tự nào,
 	// giúp ngăn chặn hacker đo thời gian phản hồi máy chủ để đoán mật khẩu (Timing Attack).
 	if subtle.ConstantTimeCompare([]byte(expectedHash), []byte(actualHash)) != 1 {
-		return nil, entity.ErrInvalidCredentials // Mật khẩu không trùng khớp -> Báo lỗi
+		return nil, taxonomy.ErrInvalidCredentials // Mật khẩu không trùng khớp -> Báo lỗi
 	}
 
 	// Bước 4: Chuẩn bị thông tin định danh (Claims) để nhúng vào thẻ phiên JWT
@@ -160,7 +161,7 @@ func (s *authService) ValidateToken(tokenString string) (*entity.Claims, error) 
 	// Bước 1: Tách token thành 3 phần dựa theo dấu chấm
 	parts := strings.Split(tokenString, ".")
 	if len(parts) != 3 {
-		return nil, entity.ErrUnauthorized // Cấu trúc token không đúng chuẩn
+		return nil, taxonomy.ErrUnauthorized // Cấu trúc token không đúng chuẩn
 	}
 
 	// Bước 2: Máy chủ tự ký lại phần Header.Payload bằng khóa bí mật của mình
@@ -172,28 +173,28 @@ func (s *authService) ValidateToken(tokenString string) (*entity.Claims, error) 
 	// Giải mã chữ ký được đính kèm trong token
 	actualSignature, err := base64.RawURLEncoding.DecodeString(parts[2])
 	if err != nil {
-		return nil, entity.ErrUnauthorized
+		return nil, taxonomy.ErrUnauthorized
 	}
 
 	// So sánh chữ ký mong đợi và chữ ký thực tế bằng Constant-Time Compare
 	if subtle.ConstantTimeCompare(expectedSignature, actualSignature) != 1 {
-		return nil, entity.ErrUnauthorized // Chữ ký không khớp -> Token đã bị can thiệp hoặc giả mạo
+		return nil, taxonomy.ErrUnauthorized // Chữ ký không khớp -> Token đã bị can thiệp hoặc giả mạo
 	}
 
 	// Bước 3: Đọc dữ liệu người dùng từ phần Payload
 	payloadJSON, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return nil, entity.ErrUnauthorized
+		return nil, taxonomy.ErrUnauthorized
 	}
 
 	var claims entity.Claims
 	if err := json.Unmarshal(payloadJSON, &claims); err != nil {
-		return nil, entity.ErrUnauthorized
+		return nil, taxonomy.ErrUnauthorized
 	}
 
 	// Bước 4: Kiểm tra thời hạn của token
 	if claims.ExpiresAt < time.Now().Unix() {
-		return nil, entity.ErrUnauthorized // Token đã quá hạn 24 giờ -> Yêu cầu đăng nhập lại
+		return nil, taxonomy.ErrUnauthorized // Token đã quá hạn 24 giờ -> Yêu cầu đăng nhập lại
 	}
 
 	return &claims, nil // Token hoàn toàn hợp lệ

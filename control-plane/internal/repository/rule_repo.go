@@ -2,6 +2,7 @@ package repository
 
 import (
 	"aurora-waf.local/control-plane/internal/domain/entity"
+	"aurora-waf.local/control-plane/internal/domain/taxonomy"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -76,7 +77,7 @@ coalesce(d.logic_mode,'all'),coalesce(d.conditions_json,'[]'),coalesce(d.source_
 FROM target t LEFT JOIN rule_definitions d ON d.rule_id=t.id AND d.version=t.version`, q.ID).Scan(&x.ID, &x.Version, &x.Name, &x.Description, &x.Group, &x.Action, &x.Severity, &x.Score, &x.Priority, &x.Path, &x.Enabled, &x.UpdatedAt,
 		&x.SchemaVersion, &x.RuntimeReady, &issues, &x.LogicMode, &conditions, &x.SourceIP, &x.HostDomain, &x.PathPrefix, &x.HTTPMethod, &x.ResponseCode, &x.CustomResponse, &x.LogEvent, &x.AddToReputation)
 	if errors.Is(err, sql.ErrNoRows) {
-		err = entity.ErrRuleNotFound
+		err = taxonomy.ErrRuleNotFound
 	}
 	if err != nil {
 		return x, err
@@ -102,7 +103,7 @@ FROM target t LEFT JOIN rule_definitions d ON d.rule_id=t.id AND d.version=t.ver
 func (r *ruleRepository) Stats(ctx context.Context, q entity.RuleStatsQuery) (entity.RuleStatsResult, error) {
 	var x entity.RuleStatsResult
 	if q.AsOf.IsZero() {
-		return x, entity.ErrRuleInvalid
+		return x, taxonomy.ErrRuleInvalid
 	}
 	asOf := q.AsOf.UTC()
 	x.AsOf = asOf.Format(time.RFC3339Nano)
@@ -167,7 +168,7 @@ func (r *ruleRepository) Create(ctx context.Context, c entity.CreateRuleCommand)
 	err = tx.QueryRowContext(ctx, "SELECT rule_id,request_hash FROM rule_creates WHERE request_key=?", c.RequestKey).Scan(&out.ID, &prior)
 	if err == nil {
 		if prior != hash {
-			return out, entity.ErrRuleConflict
+			return out, taxonomy.ErrRuleConflict
 		}
 		out.Version = 1
 		return out, nil
@@ -180,7 +181,7 @@ func (r *ruleRepository) Create(ctx context.Context, c entity.CreateRuleCommand)
 		return out, err
 	}
 	if count >= 1024 {
-		return out, entity.ErrRuleInvalid
+		return out, taxonomy.ErrRuleInvalid
 	}
 	err = tx.QueryRowContext(ctx, `INSERT INTO rules(version,name,description,rule_group,action,severity,score,priority,path,enabled)
 VALUES(1,?,?,?,?,?,?,?,?,?) RETURNING id,version`, c.Name, c.Description, c.Group, c.Action, c.Severity, c.Score, c.Priority, c.Path, c.Enabled).Scan(&out.ID, &out.Version)
@@ -211,13 +212,13 @@ func (r *ruleRepository) Update(ctx context.Context, c entity.UpdateRuleCommand)
 		return out, err
 	}
 	if definitions > 0 {
-		return out, entity.ErrRuleConflict
+		return out, taxonomy.ErrRuleConflict
 	}
 	err = tx.QueryRowContext(ctx, `WITH target AS (SELECT id FROM rules WHERE id=? AND version=?)
 UPDATE rules SET version=version+1,name=?,description=?,rule_group=?,action=?,severity=?,score=?,priority=?,path=?,enabled=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
 WHERE id IN(SELECT id FROM target) RETURNING id,version`, c.ID, c.ExpectedVersion, c.Name, c.Description, c.Group, c.Action, c.Severity, c.Score, c.Priority, c.Path, c.Enabled).Scan(&out.ID, &out.Version)
 	if errors.Is(err, sql.ErrNoRows) {
-		return out, entity.ErrRuleConflict
+		return out, taxonomy.ErrRuleConflict
 	}
 	if err != nil {
 		return out, err
@@ -261,7 +262,7 @@ func (r *ruleRepository) Reserve(ctx context.Context, c entity.PublishRulesComma
 		return out, err
 	}
 	if unsupported > 0 {
-		return out, entity.ErrRuleInvalid
+		return out, taxonomy.ErrRuleInvalid
 	}
 	if err = tx.QueryRowContext(ctx, "INSERT INTO ruleset_releases(request_key,state) VALUES(?,'pending') RETURNING id", c.RequestKey).Scan(&out.ID); err != nil {
 		return out, err
@@ -297,7 +298,7 @@ SELECT v.rule_id,v.path,v.action,v.score,v.priority FROM selected s JOIN rule_re
 		return out, err
 	}
 	if len(out.Payload) > 65536 {
-		return out, entity.ErrRuleInvalid
+		return out, taxonomy.ErrRuleInvalid
 	}
 	if _, err = tx.ExecContext(ctx, "UPDATE ruleset_releases SET payload=? WHERE id=?", out.Payload, out.ID); err != nil {
 		return out, err
@@ -318,7 +319,7 @@ func (r *ruleRepository) Release(ctx context.Context, q entity.ReleaseDetailQuer
 	err := r.reader.QueryRowContext(ctx, `WITH target AS(SELECT * FROM ruleset_releases WHERE id=?)
 SELECT t.id,t.state,t.digest,t.created_at,n.phase FROM target t LEFT JOIN node_activation n ON n.release_id=t.id`, q.ID).Scan(&x.ID, &x.State, &x.Digest, &x.CreatedAt, &x.ActivationPhase)
 	if errors.Is(err, sql.ErrNoRows) {
-		err = entity.ErrRuleNotFound
+		err = taxonomy.ErrRuleNotFound
 	}
 	return x, err
 }
@@ -343,7 +344,7 @@ func (r *ruleRepository) CreateDefinition(ctx context.Context, c entity.CreateRu
  SELECT p.rule_id,p.version,p.request_hash,d.runtime_ready,d.runtime_issues FROM prior p JOIN rule_definitions d ON d.rule_id=p.rule_id AND d.version=p.version`, c.RequestKey).Scan(&out.ID, &out.Version, &previousHash, &out.RuntimeReady, &previousIssues)
 	if err == nil {
 		if hash != previousHash {
-			return out, entity.ErrRuleConflict
+			return out, taxonomy.ErrRuleConflict
 		}
 		if err = json.Unmarshal([]byte(previousIssues), &out.RuntimeIssues); err != nil {
 			return out, err
@@ -358,7 +359,7 @@ func (r *ruleRepository) CreateDefinition(ctx context.Context, c entity.CreateRu
 		return out, err
 	}
 	if count >= 1024 {
-		return out, entity.ErrRuleInvalid
+		return out, taxonomy.ErrRuleInvalid
 	}
 	if err = tx.QueryRowContext(ctx, `INSERT INTO rules(version,name,description,rule_group,action,severity,score,priority,path,enabled)
  VALUES(1,?,?,?,?,?,?,?,?,?) RETURNING id`, c.Name, c.Description, c.Group, c.Action, c.Severity, c.Score, c.Priority, path, c.Enabled).Scan(&out.ID); err != nil {

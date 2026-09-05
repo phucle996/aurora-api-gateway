@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"aurora-waf.local/control-plane/internal/domain/entity"
+	"aurora-waf.local/control-plane/internal/domain/taxonomy"
 	"aurora-waf.local/control-plane/internal/repository"
 	"bytes"
 	"context"
@@ -60,7 +61,7 @@ func TestCreateDefinitionRoundTripAndPublicationBoundary(t *testing.T) {
 	if detail.LogicMode != "any" || len(detail.Conditions) != 2 || detail.Conditions[0].HeaderName != "User-Agent" || detail.Conditions[1].Value != "(?i)union\\s+select" || detail.SourceIP != "10.0.0.0/8, ::1" || detail.HostDomain != "example.com" || detail.PathPrefix != "/api" || detail.HTTPMethod != "POST" || detail.ResponseCode == nil || *detail.ResponseCode != 429 || detail.CustomResponse != "Not allowed" || !detail.LogEvent || !detail.AddToReputation || detail.RuntimeReady || detail.SchemaVersion != 2 {
 		t.Fatalf("lost definition fields: %+v", detail)
 	}
-	if _, err = repository.NewRuleRepository(db, db).Reserve(context.Background(), entity.PublishRulesCommand{RequestKey: "must-not-publish-01"}); err != entity.ErrRuleInvalid {
+	if _, err = repository.NewRuleRepository(db, db).Reserve(context.Background(), entity.PublishRulesCommand{RequestKey: "must-not-publish-01"}); err != taxonomy.ErrRuleInvalid {
 		t.Fatal("unsupported definition flattened", err)
 	}
 	var releases, activations int
@@ -75,7 +76,7 @@ func TestCreateDefinitionRoundTripAndPublicationBoundary(t *testing.T) {
 		}
 	}
 	_, err = repository.NewRuleRepository(db, db).Update(context.Background(), entity.UpdateRuleCommand{ID: 1, ExpectedVersion: 1, Name: "lost", Group: "custom", Action: "allow", Severity: "low", Path: "/"})
-	if err != entity.ErrRuleConflict {
+	if err != taxonomy.ErrRuleConflict {
 		t.Fatal("legacy edit could erase definition", err)
 	}
 }

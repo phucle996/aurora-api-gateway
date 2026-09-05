@@ -3,6 +3,7 @@ package repository
 import (
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	"aurora-waf.local/control-plane/internal/domain/repo"
+	"aurora-waf.local/control-plane/internal/domain/taxonomy"
 	"context"
 	"database/sql"
 	"errors"
@@ -39,7 +40,7 @@ func (r *authRepository) FindByUsername(ctx context.Context, username string) (*
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, entity.ErrUserNotFound
+			return nil, taxonomy.ErrUserNotFound
 		}
 		return nil, err
 	}

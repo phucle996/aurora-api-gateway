@@ -4,6 +4,7 @@ import (
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	"aurora-waf.local/control-plane/internal/domain/repo"
 	port "aurora-waf.local/control-plane/internal/domain/service"
+	"aurora-waf.local/control-plane/internal/domain/taxonomy"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -87,10 +88,10 @@ func (s *ruleService) Update(ctx context.Context, c entity.UpdateRuleCommand) (e
 func (s *ruleService) Publish(ctx context.Context, c entity.PublishRulesCommand) (entity.PublishRulesResult, error) {
 	var out entity.PublishRulesResult
 	if s.compiler == "" {
-		return out, entity.ErrPublishUnavailable
+		return out, taxonomy.ErrPublishUnavailable
 	}
 	if !s.gate.TryLock() {
-		return out, entity.ErrRuleConflict
+		return out, taxonomy.ErrRuleConflict
 	}
 	defer s.gate.Unlock()
 
@@ -112,10 +113,10 @@ func (s *ruleService) Publish(ctx context.Context, c entity.PublishRulesCommand)
 	cmd.Stdout = output
 
 	if err = cmd.Run(); err != nil {
-		return out, entity.ErrPublishUnavailable
+		return out, taxonomy.ErrPublishUnavailable
 	}
 	if !bytes.Equal(source.Payload, output.Bytes()) {
-		return out, entity.ErrPublishUnavailable
+		return out, taxonomy.ErrPublishUnavailable
 	}
 
 	sum := sha256.Sum256(source.Payload)
@@ -133,7 +134,7 @@ type publishCompilerOutput struct{ buffer bytes.Buffer }
 func (b *publishCompilerOutput) Bytes() []byte { return b.buffer.Bytes() }
 func (b *publishCompilerOutput) Write(p []byte) (int, error) {
 	if b.buffer.Len()+len(p) > 65536 {
-		return 0, entity.ErrPublishUnavailable
+		return 0, taxonomy.ErrPublishUnavailable
 	}
 	return b.buffer.Write(p)
 }

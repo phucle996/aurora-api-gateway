@@ -3,6 +3,7 @@ package handler
 import (
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	port "aurora-waf.local/control-plane/internal/domain/service"
+	"aurora-waf.local/control-plane/internal/domain/taxonomy"
 	"errors"
 	"net/http"
 	"strconv"
@@ -35,7 +36,7 @@ func RuleHistory(s port.RuleService) gin.HandlerFunc {
 		}
 		out, err := s.History(c.Request.Context(), entity.RuleHistoryQuery{ID: id, Before: before, Limit: limit})
 		if err != nil {
-			if errors.Is(err, entity.ErrRuleNotFound) {
+			if errors.Is(err, taxonomy.ErrRuleNotFound) {
 				c.String(http.StatusNotFound, err.Error())
 				return
 			}

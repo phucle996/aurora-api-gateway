@@ -5,6 +5,7 @@ import (
 	"aurora-waf.local/control-plane/internal/app"
 	"aurora-waf.local/control-plane/internal/config"
 	"aurora-waf.local/control-plane/internal/domain/entity"
+	"aurora-waf.local/control-plane/internal/domain/taxonomy"
 	"aurora-waf.local/control-plane/internal/repository"
 	"aurora-waf.local/control-plane/internal/service"
 	"bytes"
@@ -156,7 +157,7 @@ func TestConcurrentRuleUpdateHasOneWinner(t *testing.T) {
 	for err := range results {
 		if err == nil {
 			wins++
-		} else if err != entity.ErrRuleConflict {
+		} else if err != taxonomy.ErrRuleConflict {
 			t.Fatal(err)
 		}
 	}
@@ -180,7 +181,7 @@ func TestPublishFreezesRevisionsAndRecoversCompilerFailure(t *testing.T) {
 	publishRepo := repository.NewRuleRepository(db, db)
 	broken := service.NewRuleService(publishRepo, "/missing/aurora-compile")
 	command := entity.PublishRulesCommand{RequestKey: "publish-release-01"}
-	if _, err = broken.Publish(ctx, command); err != entity.ErrPublishUnavailable {
+	if _, err = broken.Publish(ctx, command); err != taxonomy.ErrPublishUnavailable {
 		t.Fatal(err)
 	}
 	_, err = ruleSvc.Update(ctx, entity.UpdateRuleCommand{ID: 1, ExpectedVersion: 1, Name: "one", Group: "custom", Action: "block", Severity: "low", Path: "/one", Enabled: false})

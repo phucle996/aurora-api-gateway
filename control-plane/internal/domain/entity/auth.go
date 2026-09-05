@@ -1,12 +1,5 @@
 package entity
 
-import "errors"
-
-var (
-	ErrInvalidCredentials = errors.New("invalid username or password")
-	ErrUnauthorized       = errors.New("unauthorized")
-	ErrUserNotFound       = errors.New("user not found")
-)
 
 type User struct {
 	ID           string `json:"id"`

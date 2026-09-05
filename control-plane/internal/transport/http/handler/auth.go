@@ -3,6 +3,7 @@ package handler
 import (
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	port "aurora-waf.local/control-plane/internal/domain/service"
+	"aurora-waf.local/control-plane/internal/domain/taxonomy"
 	"encoding/json"
 	"errors"
 	"io"
@@ -56,7 +57,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	result, err := h.service.Login(c.Request.Context(), input)
 	if err != nil {
-		if errors.Is(err, entity.ErrInvalidCredentials) {
+		if errors.Is(err, taxonomy.ErrInvalidCredentials) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
 			return
 		}

@@ -3,6 +3,7 @@ package handler
 import (
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	port "aurora-waf.local/control-plane/internal/domain/service"
+	"aurora-waf.local/control-plane/internal/domain/taxonomy"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -96,9 +97,9 @@ func CreateRule(s port.RuleService) gin.HandlerFunc {
 		out, err := s.Create(c.Request.Context(), cmd)
 		if err != nil {
 			switch {
-			case errors.Is(err, entity.ErrRuleInvalid):
+			case errors.Is(err, taxonomy.ErrRuleInvalid):
 				c.String(http.StatusUnprocessableEntity, err.Error())
-			case errors.Is(err, entity.ErrRuleConflict):
+			case errors.Is(err, taxonomy.ErrRuleConflict):
 				c.String(http.StatusConflict, err.Error())
 			default:
 				c.String(http.StatusInternalServerError, "rules operation failed")
@@ -191,11 +192,11 @@ func UpdateRule(s port.RuleService) gin.HandlerFunc {
 		out, err := s.Update(c.Request.Context(), cmd)
 		if err != nil {
 			switch {
-			case errors.Is(err, entity.ErrRuleNotFound):
+			case errors.Is(err, taxonomy.ErrRuleNotFound):
 				c.String(http.StatusNotFound, err.Error())
-			case errors.Is(err, entity.ErrRuleInvalid):
+			case errors.Is(err, taxonomy.ErrRuleInvalid):
 				c.String(http.StatusUnprocessableEntity, err.Error())
-			case errors.Is(err, entity.ErrRuleConflict):
+			case errors.Is(err, taxonomy.ErrRuleConflict):
 				c.String(http.StatusConflict, err.Error())
 			default:
 				c.String(http.StatusInternalServerError, "rules operation failed")
@@ -294,7 +295,7 @@ func RuleDetail(s port.RuleService) gin.HandlerFunc {
 		}
 		out, err := s.Detail(c.Request.Context(), entity.RuleDetailQuery{ID: id})
 		if err != nil {
-			if errors.Is(err, entity.ErrRuleNotFound) {
+			if errors.Is(err, taxonomy.ErrRuleNotFound) {
 				c.String(http.StatusNotFound, err.Error())
 				return
 			}
@@ -337,11 +338,11 @@ func PublishRules(s port.RuleService) gin.HandlerFunc {
 		out, err := s.Publish(c.Request.Context(), entity.PublishRulesCommand{RequestKey: key})
 		if err != nil {
 			switch {
-			case errors.Is(err, entity.ErrRuleInvalid):
+			case errors.Is(err, taxonomy.ErrRuleInvalid):
 				c.String(http.StatusUnprocessableEntity, err.Error())
-			case errors.Is(err, entity.ErrPublishUnavailable):
+			case errors.Is(err, taxonomy.ErrPublishUnavailable):
 				c.String(http.StatusServiceUnavailable, err.Error())
-			case errors.Is(err, entity.ErrRuleConflict):
+			case errors.Is(err, taxonomy.ErrRuleConflict):
 				c.String(http.StatusConflict, err.Error())
 			default:
 				c.String(http.StatusInternalServerError, "rules operation failed")
@@ -365,7 +366,7 @@ func ReleaseDetail(s port.RuleService) gin.HandlerFunc {
 		out, err := s.Release(c.Request.Context(), entity.ReleaseDetailQuery{ID: id})
 		if err != nil {
 			switch {
-			case errors.Is(err, entity.ErrRuleNotFound):
+			case errors.Is(err, taxonomy.ErrRuleNotFound):
 				c.String(http.StatusNotFound, err.Error())
 			default:
 				c.String(http.StatusInternalServerError, "rules operation failed")
@@ -582,7 +583,7 @@ func CreateRuleDefinition(s port.RuleService) gin.HandlerFunc {
 
 		out, err := s.CreateDefinition(c.Request.Context(), cmd)
 		if err != nil {
-			if errors.Is(err, entity.ErrRuleConflict) {
+			if errors.Is(err, taxonomy.ErrRuleConflict) {
 				c.String(http.StatusConflict, err.Error())
 				return
 			}
