@@ -17,6 +17,7 @@ type RuleService interface {
 
 	// --- Nhóm thao tác thay đổi (Mutation & Publish) ---
 	Create(context.Context, entity.CreateRuleCommand) (entity.CreateRuleResult, error)
+	CreateDefinition(context.Context, entity.CreateRuleDefinitionCommand) (entity.CreateRuleDefinitionResult, error)
 	Update(context.Context, entity.UpdateRuleCommand) (entity.UpdateRuleResult, error)
 	Publish(context.Context, entity.PublishRulesCommand) (entity.PublishRulesResult, error)
 }

@@ -51,13 +51,10 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	authSvc := service.NewAuthService(authRepo, cfg)
 	authHdr := handler.NewAuthHandler(authSvc)
 
-	createDefRepo := repository.NewCreateRuleDefinitionRepository(writerDB)
-	createDefSvc := service.NewCreateRuleDefinitionService(createDefRepo)
-	createDefHdr := handler.CreateRuleDefinition(createDefSvc)
-
 	ruleRepo := repository.NewRuleRepository(writerDB, readerDB)
 	ruleSvc := service.NewRuleService(ruleRepo, cfg.CompilerPath)
 
+	createDefHdr := handler.CreateRuleDefinition(ruleSvc)
 	listRulesHdr := handler.ListRules(ruleSvc)
 	createRuleHdr := handler.CreateRule(ruleSvc)
 	ruleStatsHdr := handler.RuleStats(ruleSvc)
