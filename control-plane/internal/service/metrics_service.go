@@ -157,23 +157,15 @@ func (s *metricsService) GetNodeMetrics(ctx context.Context, nodeID string) ([]e
 			return nil, taxonomy.ErrMetricsUnavailable
 		}
 		resp.Body.Close()
-
-		// Khi Prometheus online, trả về các điểm đo chuẩn
-		return s.getStandaloneSamples(nodeID), nil
 	}
 
-	// 3. Chế độ Standalone (Lab / Dev) - Trả về chuỗi mẫu từ In-Memory Ring Buffer
-	return s.getStandaloneSamples(nodeID), nil
-}
-
-// getStandaloneSamples lấy hoặc khởi tạo mẫu In-Memory Ring Buffer cho 60 phút gần nhất.
-func (s *metricsService) getStandaloneSamples(nodeID string) []entity.NodeMetricPoint {
+	// 3. Trích xuất hoặc khởi tạo mẫu In-Memory Ring Buffer cho 60 phút gần nhất
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	points, exists := s.buffers[nodeID]
 	if exists && len(points) > 0 {
-		return points
+		return points, nil
 	}
 
 	// Khởi tạo 20 điểm mẫu trải dài 60 phút trước đến Hiện tại
@@ -203,5 +195,5 @@ func (s *metricsService) getStandaloneSamples(nodeID string) []entity.NodeMetric
 	}
 
 	s.buffers[nodeID] = points
-	return points
+	return points, nil
 }
