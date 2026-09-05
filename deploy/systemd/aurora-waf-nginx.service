@@ -1,0 +1,70 @@
+[Unit]
+Description=Aurora WAF NGINX Data Plane Node (mTLS Policy Bootstrap)
+Documentation=https://github.com/phucle996/aurora-waf
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+PIDFile=/var/run/aurora-waf/nginx.pid
+
+# ─── Cấu hình tham số môi trường và đường dẫn ──────────────────────────────
+Environment="CONTROL_PLANE_URL=https://control-plane.internal:8080"
+Environment="POLICY_DEST=/etc/aurora-waf/active-policy.json"
+Environment="CERTS_DIR=/etc/aurora-waf/certs"
+Environment="NGINX_CONF=/etc/nginx/nginx.conf"
+
+# ─── Bước 1: ExecStartPre - Kéo snapshot policy mới nhất qua mTLS ───────────
+# - Bắt tay mTLS hai chiều dùng ca.crt, node.crt, node.key
+# - Ghi ra file tạm và dùng atomic rename để tránh xung đột
+# - Nếu controller bận nhưng trên node đã có policy cũ: Fallback dùng cache cũ (HA)
+# - Nếu khởi động lần đầu mà không lấy được policy: Fail-closed (không cho NGINX chạy)
+ExecStartPre=/usr/bin/bash -c '\
+    set -euo pipefail; \
+    echo "[Aurora WAF] Đang khởi động tiến trình bootstrap node qua mTLS..."; \
+    mkdir -p $(dirname "$POLICY_DEST") /var/run/aurora-waf; \
+    TMP_FILE="${POLICY_DEST}.tmp"; \
+    \
+    if [ ! -f "${CERTS_DIR}/node.crt" ] || [ ! -f "${CERTS_DIR}/node.key" ] || [ ! -f "${CERTS_DIR}/ca.crt" ]; then \
+        echo "[Aurora WAF] LỖI: Thiếu chứng chỉ mTLS trong ${CERTS_DIR}"; \
+        exit 1; \
+    fi; \
+    \
+    HTTP_CODE=$(curl --silent --show-error --write-out "%%{http_code}" \
+        --cacert "${CERTS_DIR}/ca.crt" \
+        --cert "${CERTS_DIR}/node.crt" \
+        --key "${CERTS_DIR}/node.key" \
+        --connect-timeout 5 \
+        --max-time 15 \
+        --output "$TMP_FILE" \
+        "${CONTROL_PLANE_URL}/api/v1/rule-releases/active" || echo "000"); \
+    \
+    if [ "$HTTP_CODE" -eq 200 ] && [ -s "$TMP_FILE" ]; then \
+        mv -f "$TMP_FILE" "$POLICY_DEST"; \
+        echo "[Aurora WAF] Đồng bộ snapshot policy thành công qua mTLS."; \
+    elif [ -s "$POLICY_DEST" ]; then \
+        echo "[Aurora WAF] CẢNH BÁO: Không thể tải policy từ controller (HTTP $HTTP_CODE), dùng lại cache snapshot cũ."; \
+        rm -f "$TMP_FILE"; \
+    else \
+        echo "[Aurora WAF] LỖI: Không thể khởi động node khi thiếu policy snapshot hợp lệ."; \
+        rm -f "$TMP_FILE"; \
+        exit 1; \
+    fi'
+
+# ─── Bước 2: ExecStartPre - Kiểm tra cú pháp NGINX và nạp thử WAF Engine ──
+ExecStartPre=/usr/sbin/nginx -t -q -c ${NGINX_CONF}
+
+# ─── Bước 3: ExecStart - Khởi động NGINX ───────────────────────────────────
+ExecStart=/usr/sbin/nginx -c ${NGINX_CONF}
+
+# ─── Quản lý vòng đời và Graceful Reload (Zero-Downtime) ───────────────────
+# Khi reload rule, gửi SIGHUP để NGINX worker mới nạp policy mới, không drop request
+ExecReload=/bin/kill -s HUP $MAINPID
+ExecStop=/bin/kill -s QUIT $MAINPID
+KillMode=mixed
+TimeoutStopSec=15s
+Restart=on-failure
+RestartSec=3s
+
+[Install]
+WantedBy=multi-user.target
