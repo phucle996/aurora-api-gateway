@@ -12,7 +12,7 @@ import {
 import { integrationsApi } from '../../../lib/api';
 
 export function IntegrationsSettingsSection() {
-  const [mode, setMode] = useState<'standalone' | 'prometheus' | 'disabled'>('standalone');
+  const [mode, setMode] = useState<'standalone' | 'prometheus' | 'disabled'>('disabled');
   const [prometheusUrl, setPrometheusUrl] = useState('http://127.0.0.1:9090');
   const [prometheusJob, setPrometheusJob] = useState('aurora-waf-nodes');
   const [isLoading, setIsLoading] = useState(true);

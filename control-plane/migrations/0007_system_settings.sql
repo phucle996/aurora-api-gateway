@@ -6,8 +6,9 @@ CREATE TABLE system_settings (
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
--- Khởi tạo cấu hình mặc định là chế độ standalone để chạy out-of-the-box cho môi trường Lab/Dev
+-- Khởi tạo cấu hình mặc định là disabled (tắt thu thập metrics cho đến khi người dùng kích hoạt)
 INSERT OR IGNORE INTO system_settings (key, value) VALUES
-    ('metrics_mode', 'standalone'),
+    ('metrics_mode', 'disabled'),
     ('prometheus_url', 'http://127.0.0.1:9090'),
     ('prometheus_job', 'aurora-waf-nodes');
+

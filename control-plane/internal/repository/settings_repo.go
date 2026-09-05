@@ -32,7 +32,7 @@ func (r *sqliteSettingsRepository) GetMetricsConfig(ctx context.Context) (*entit
 
 	// Cấu hình mặc định nếu bảng chưa có bản ghi
 	cfg := &entity.MetricsIntegrationConfig{
-		Mode:          "standalone",
+		Mode:          "disabled",
 		PrometheusURL: "http://127.0.0.1:9090",
 		PrometheusJob: "aurora-waf-nodes",
 	}

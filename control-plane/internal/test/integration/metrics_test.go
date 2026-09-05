@@ -55,7 +55,7 @@ func TestMetricsFlexibilityLabAndProduction(t *testing.T) {
 		return w
 	}
 
-	// 1. Kiểm tra cấu hình mặc định ban đầu là 'standalone' (Lab/Dev mode)
+	// 1. Kiểm tra cấu hình mặc định ban đầu là 'disabled'
 	w := request("GET", "/api/v1/settings/integrations/metrics", "")
 	if w.Code != http.StatusOK {
 		t.Fatalf("kỳ vọng mã 200, nhận được: %d, body: %s", w.Code, w.Body.String())
@@ -64,11 +64,23 @@ func TestMetricsFlexibilityLabAndProduction(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &defaultCfg); err != nil {
 		t.Fatal(err)
 	}
-	if defaultCfg["mode"] != "standalone" {
-		t.Errorf("kỳ vọng mode mặc định là 'standalone', nhận được: %v", defaultCfg["mode"])
+	if defaultCfg["mode"] != "disabled" {
+		t.Errorf("kỳ vọng mode mặc định là 'disabled', nhận được: %v", defaultCfg["mode"])
 	}
 
-	// 2. Trong chế độ standalone: Gọi lấy timeline metrics của node thành công (200 OK)
+	// 2. Trong chế độ mặc định disabled: Gọi lấy timeline metrics của node trả về 503
+	wMetricsDisabled := request("GET", "/api/v1/nodes/node-local-01/metrics", "")
+	if wMetricsDisabled.Code != http.StatusServiceUnavailable {
+		t.Fatalf("kỳ vọng mã lỗi 503 khi metrics đang disabled, nhận: %d", wMetricsDisabled.Code)
+	}
+
+	// 3. Kích hoạt chuyển sang chế độ 'standalone' (Lab/Dev mode): Gọi lấy metrics thành công 200 OK
+	standalonePayload := `{"mode":"standalone","prometheus_url":"http://127.0.0.1:9090","prometheus_job":"aurora-waf-nodes"}`
+	wEnable := request("PUT", "/api/v1/settings/integrations/metrics", standalonePayload)
+	if wEnable.Code != http.StatusOK {
+		t.Fatalf("kỳ vọng cập nhật sang standalone thành công 200, nhận: %d", wEnable.Code)
+	}
+
 	wMetrics := request("GET", "/api/v1/nodes/node-local-01/metrics", "")
 	if wMetrics.Code != http.StatusOK {
 		t.Fatalf("kỳ vọng mã 200 khi lấy metrics standalone, nhận được: %d, body: %s", wMetrics.Code, wMetrics.Body.String())
@@ -79,18 +91,6 @@ func TestMetricsFlexibilityLabAndProduction(t *testing.T) {
 	}
 	if len(points) == 0 {
 		t.Errorf("kỳ vọng có các điểm đo timeline, nhận được mảng rỗng")
-	}
-
-	// 3. Chuyển sang chế độ 'disabled': Gọi lấy metrics phải trả về 503 Service Unavailable
-	disablePayload := `{"mode":"disabled","prometheus_url":"http://127.0.0.1:9090","prometheus_job":"test"}`
-	wDisable := request("PUT", "/api/v1/settings/integrations/metrics", disablePayload)
-	if wDisable.Code != http.StatusOK {
-		t.Fatalf("kỳ vọng cập nhật sang disabled thành công 200, nhận: %d", wDisable.Code)
-	}
-
-	wMetricsDisabled := request("GET", "/api/v1/nodes/node-local-01/metrics", "")
-	if wMetricsDisabled.Code != http.StatusServiceUnavailable {
-		t.Fatalf("kỳ vọng mã lỗi 503 khi metrics disabled, nhận: %d", wMetricsDisabled.Code)
 	}
 
 	// 4. Chuyển sang chế độ 'prometheus' với máy chủ offline: Phải trả về 503 kèm PROMETHEUS_UNAVAILABLE
