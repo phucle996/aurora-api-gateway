@@ -93,13 +93,3 @@ func Auth(authService port.AuthService, staticToken string) gin.HandlerFunc {
 		c.Next()
 	}
 }
-
-// RulesBoundaryWithAuth is provided for backward compatibility.
-func RulesBoundaryWithAuth(token string, authService port.AuthService) gin.HandlerFunc {
-	return Auth(authService, token)
-}
-
-// RulesBoundary is provided for backward compatibility.
-func RulesBoundary(token string) gin.HandlerFunc {
-	return Auth(nil, token)
-}
