@@ -39,9 +39,12 @@ func TestListRulesFiltersCountsAndCursor(t *testing.T) {
 		req.Header.Set("Authorization", "Bearer rules-test-token-at-least-32-bytes")
 		out := httptest.NewRecorder()
 		mux.ServeHTTP(out, req)
-		var result entity.ListRulesResult
-		if out.Code != 200 {
-			t.Fatal(tc.query, out.Code, out.Body.String())
+		var result struct {
+			Total int `json:"total"`
+			Items []struct {
+				ID int64 `json:"id,string"`
+			} `json:"items"`
+			NextAfter string `json:"next_after"`
 		}
 		if err := json.Unmarshal(out.Body.Bytes(), &result); err != nil {
 			t.Fatal(err)

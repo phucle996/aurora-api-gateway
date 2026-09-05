@@ -67,6 +67,13 @@ FROM totals LEFT JOIN page ON 1=1 ORDER BY id`,
 
 // ─── Rule Detail ──────────────────────────────────────────────────────────────
 
+type ruleConditionRecord struct {
+	Field      string `json:"field"`
+	Operator   string `json:"operator"`
+	Value      string `json:"value"`
+	HeaderName string `json:"header_name"`
+}
+
 func (r *ruleRepository) Detail(ctx context.Context, q entity.RuleDetailQuery) (entity.RuleDetailResult, error) {
 	var x entity.RuleDetailResult
 	var conditions, issues string
@@ -82,8 +89,19 @@ FROM target t LEFT JOIN rule_definitions d ON d.rule_id=t.id AND d.version=t.ver
 	if err != nil {
 		return x, err
 	}
-	if err = json.Unmarshal([]byte(conditions), &x.Conditions); err != nil {
+
+	var condRecords []ruleConditionRecord
+	if err = json.Unmarshal([]byte(conditions), &condRecords); err != nil {
 		return x, err
+	}
+	x.Conditions = make([]entity.RuleDetailCondition, len(condRecords))
+	for i, cr := range condRecords {
+		x.Conditions[i] = entity.RuleDetailCondition{
+			Field:      cr.Field,
+			Operator:   cr.Operator,
+			Value:      cr.Value,
+			HeaderName: cr.HeaderName,
+		}
 	}
 	if err = json.Unmarshal([]byte(issues), &x.RuntimeIssues); err != nil {
 		return x, err
@@ -368,7 +386,16 @@ func (r *ruleRepository) CreateDefinition(ctx context.Context, c entity.CreateRu
 	if _, err = tx.ExecContext(ctx, `INSERT INTO rule_revisions SELECT id,version,name,description,rule_group,action,severity,score,priority,path,enabled,updated_at,'management-token' FROM rules WHERE id=?`, out.ID); err != nil {
 		return out, err
 	}
-	conditions, err := json.Marshal(c.Conditions)
+	condRecords := make([]ruleConditionRecord, len(c.Conditions))
+	for i, cond := range c.Conditions {
+		condRecords[i] = ruleConditionRecord{
+			Field:      cond.Field,
+			Operator:   cond.Operator,
+			Value:      cond.Value,
+			HeaderName: cond.HeaderName,
+		}
+	}
+	conditions, err := json.Marshal(condRecords)
 	if err != nil {
 		return out, err
 	}

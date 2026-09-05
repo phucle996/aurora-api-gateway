@@ -95,7 +95,10 @@ func TestRulesHTTPIsolationAndRevisions(t *testing.T) {
 		t.Fatal(w.Code)
 	}
 	w := request("GET", "/api/v1/rules/1", "", "", token, "")
-	var detail entity.RuleDetailResult
+	var detail struct {
+		Version int64 `json:"version"`
+		Enabled bool  `json:"enabled"`
+	}
 	if err := json.Unmarshal(w.Body.Bytes(), &detail); err != nil || detail.Version != 2 || detail.Enabled {
 		t.Fatal(w.Body.String(), err)
 	}

@@ -4,6 +4,7 @@ import (
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	port "aurora-waf.local/control-plane/internal/domain/service"
 	"aurora-waf.local/control-plane/internal/domain/taxonomy"
+	"aurora-waf.local/control-plane/internal/transport/http/dto"
 	"encoding/json"
 	"errors"
 	"io"
@@ -31,11 +32,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	reader := http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
-	var input entity.LoginInput
+	var req dto.LoginRequest
 	decoder := json.NewDecoder(reader)
 	decoder.DisallowUnknownFields()
 
-	if err := decoder.Decode(&input); err != nil {
+	if err := decoder.Decode(&req); err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
 			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body exceeds 64KB limit"})
@@ -50,12 +51,15 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	if strings.TrimSpace(input.Username) == "" || input.Password == "" {
+	if strings.TrimSpace(req.Username) == "" || req.Password == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "username and password are required"})
 		return
 	}
 
-	result, err := h.service.Login(c.Request.Context(), input)
+	result, err := h.service.Login(c.Request.Context(), entity.LoginInput{
+		Username: req.Username,
+		Password: req.Password,
+	})
 	if err != nil {
 		if errors.Is(err, taxonomy.ErrInvalidCredentials) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
@@ -77,7 +81,16 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		true,
 	)
 
-	c.JSON(http.StatusOK, result)
+	c.JSON(http.StatusOK, gin.H{
+		"token":      result.Token,
+		"token_type": result.TokenType,
+		"expires_in": result.ExpiresIn,
+		"user": gin.H{
+			"id":       result.User.ID,
+			"username": result.User.Username,
+			"role":     result.User.Role,
+		},
+	})
 }
 
 func (h *AuthHandler) Me(c *gin.Context) {

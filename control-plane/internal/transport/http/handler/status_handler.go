@@ -20,7 +20,13 @@ func (h *StatusHandler) Health(c *gin.Context) {
 }
 
 func (h *StatusHandler) Status(c *gin.Context) {
-	c.JSON(http.StatusOK, h.service.Status())
+	st := h.service.Status()
+	c.JSON(http.StatusOK, gin.H{
+		"component":         st.Component,
+		"stage":             st.Stage,
+		"enforcement_ready": st.EnforcementReady,
+		"message":           st.Message,
+	})
 }
 
 // Ready checks controller storage, not WAF enforcement or database write capacity.

@@ -4,6 +4,7 @@ import (
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	port "aurora-waf.local/control-plane/internal/domain/service"
 	"aurora-waf.local/control-plane/internal/domain/taxonomy"
+	"aurora-waf.local/control-plane/internal/transport/http/dto"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -32,8 +33,8 @@ func CreateRule(s port.RuleService) gin.HandlerFunc {
 		reader := http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
 		d := json.NewDecoder(reader)
 		d.DisallowUnknownFields()
-		var cmd entity.CreateRuleCommand
-		if err := d.Decode(&cmd); err != nil {
+		var req dto.CreateRuleRequest
+		if err := d.Decode(&req); err != nil {
 			var maxBytesErr *http.MaxBytesError
 			if errors.As(err, &maxBytesErr) {
 				c.String(http.StatusRequestEntityTooLarge, "request body exceeds 64KB limit")
@@ -52,46 +53,58 @@ func CreateRule(s port.RuleService) gin.HandlerFunc {
 			c.String(http.StatusUnprocessableEntity, "invalid idempotency key")
 			return
 		}
-		cmd.RequestKey = key
 
 		// Validate và sanitize raw input trực tiếp tại handler (inline)
-		cmd.Name = strings.TrimSpace(cmd.Name)
-		if cmd.Name == "" || len(cmd.Name) > 120 || !utf8.ValidString(cmd.Name) ||
-			len(cmd.Description) > 2000 || !utf8.ValidString(cmd.Description) ||
-			cmd.Score < 0 || cmd.Score > 1000 || cmd.Priority < 0 || cmd.Priority > 1000000 ||
-			!strings.HasPrefix(cmd.Path, "/") || len(cmd.Path) > 8192 || strings.ContainsAny(cmd.Path, "%?#\\\\") || strings.Contains(cmd.Path, "//") {
+		req.Name = strings.TrimSpace(req.Name)
+		if req.Name == "" || len(req.Name) > 120 || !utf8.ValidString(req.Name) ||
+			len(req.Description) > 2000 || !utf8.ValidString(req.Description) ||
+			req.Score < 0 || req.Score > 1000 || req.Priority < 0 || req.Priority > 1000000 ||
+			!strings.HasPrefix(req.Path, "/") || len(req.Path) > 8192 || strings.ContainsAny(req.Path, "%?#\\\\") || strings.Contains(req.Path, "//") {
 			c.String(http.StatusUnprocessableEntity, "invalid rule")
 			return
 		}
-		for _, b := range []byte(cmd.Path) {
+		for _, b := range []byte(req.Path) {
 			if b <= 32 || b >= 127 {
 				c.String(http.StatusUnprocessableEntity, "invalid rule")
 				return
 			}
 		}
-		for _, segment := range strings.Split(cmd.Path, "/") {
+		for _, segment := range strings.Split(req.Path, "/") {
 			if segment == "." || segment == ".." {
 				c.String(http.StatusUnprocessableEntity, "invalid rule")
 				return
 			}
 		}
-		switch cmd.Action {
+		switch req.Action {
 		case "allow", "log", "block":
 		default:
 			c.String(http.StatusUnprocessableEntity, "invalid rule")
 			return
 		}
-		switch cmd.Severity {
+		switch req.Severity {
 		case "low", "medium", "high", "critical":
 		default:
 			c.String(http.StatusUnprocessableEntity, "invalid rule")
 			return
 		}
-		switch cmd.Group {
+		switch req.Group {
 		case "custom", "sqli", "xss", "traversal", "bot", "endpoint", "authentication":
 		default:
 			c.String(http.StatusUnprocessableEntity, "invalid rule")
 			return
+		}
+
+		cmd := entity.CreateRuleCommand{
+			RequestKey:  key,
+			Name:        req.Name,
+			Description: req.Description,
+			Group:       req.Group,
+			Action:      req.Action,
+			Severity:    req.Severity,
+			Score:       req.Score,
+			Priority:    req.Priority,
+			Path:        req.Path,
+			Enabled:     req.Enabled,
 		}
 
 		out, err := s.Create(c.Request.Context(), cmd)
@@ -106,7 +119,10 @@ func CreateRule(s port.RuleService) gin.HandlerFunc {
 			}
 			return
 		}
-		c.JSON(http.StatusCreated, out)
+		c.JSON(http.StatusCreated, gin.H{
+			"id":      strconv.FormatInt(out.ID, 10),
+			"version": out.Version,
+		})
 	}
 }
 
@@ -122,8 +138,8 @@ func UpdateRule(s port.RuleService) gin.HandlerFunc {
 		reader := http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
 		d := json.NewDecoder(reader)
 		d.DisallowUnknownFields()
-		var cmd entity.UpdateRuleCommand
-		if err := d.Decode(&cmd); err != nil {
+		var req dto.UpdateRuleRequest
+		if err := d.Decode(&req); err != nil {
 			var maxBytesErr *http.MaxBytesError
 			if errors.As(err, &maxBytesErr) {
 				c.String(http.StatusRequestEntityTooLarge, "request body exceeds 64KB limit")
@@ -142,51 +158,64 @@ func UpdateRule(s port.RuleService) gin.HandlerFunc {
 			c.String(http.StatusBadRequest, "invalid rule ID")
 			return
 		}
-		cmd.ID = id
 
-		if cmd.ExpectedVersion < 1 {
+		if req.ExpectedVersion < 1 {
 			c.String(http.StatusUnprocessableEntity, "invalid expected version")
 			return
 		}
 
 		// Validate và sanitize raw input trực tiếp tại handler (inline)
-		cmd.Name = strings.TrimSpace(cmd.Name)
-		if cmd.Name == "" || len(cmd.Name) > 120 || !utf8.ValidString(cmd.Name) ||
-			len(cmd.Description) > 2000 || !utf8.ValidString(cmd.Description) ||
-			cmd.Score < 0 || cmd.Score > 1000 || cmd.Priority < 0 || cmd.Priority > 1000000 ||
-			!strings.HasPrefix(cmd.Path, "/") || len(cmd.Path) > 8192 || strings.ContainsAny(cmd.Path, "%?#\\\\") || strings.Contains(cmd.Path, "//") {
+		req.Name = strings.TrimSpace(req.Name)
+		if req.Name == "" || len(req.Name) > 120 || !utf8.ValidString(req.Name) ||
+			len(req.Description) > 2000 || !utf8.ValidString(req.Description) ||
+			req.Score < 0 || req.Score > 1000 || req.Priority < 0 || req.Priority > 1000000 ||
+			!strings.HasPrefix(req.Path, "/") || len(req.Path) > 8192 || strings.ContainsAny(req.Path, "%?#\\\\") || strings.Contains(req.Path, "//") {
 			c.String(http.StatusUnprocessableEntity, "invalid rule")
 			return
 		}
-		for _, b := range []byte(cmd.Path) {
+		for _, b := range []byte(req.Path) {
 			if b <= 32 || b >= 127 {
 				c.String(http.StatusUnprocessableEntity, "invalid rule")
 				return
 			}
 		}
-		for _, segment := range strings.Split(cmd.Path, "/") {
+		for _, segment := range strings.Split(req.Path, "/") {
 			if segment == "." || segment == ".." {
 				c.String(http.StatusUnprocessableEntity, "invalid rule")
 				return
 			}
 		}
-		switch cmd.Action {
+		switch req.Action {
 		case "allow", "log", "block":
 		default:
 			c.String(http.StatusUnprocessableEntity, "invalid rule")
 			return
 		}
-		switch cmd.Severity {
+		switch req.Severity {
 		case "low", "medium", "high", "critical":
 		default:
 			c.String(http.StatusUnprocessableEntity, "invalid rule")
 			return
 		}
-		switch cmd.Group {
+		switch req.Group {
 		case "custom", "sqli", "xss", "traversal", "bot", "endpoint", "authentication":
 		default:
 			c.String(http.StatusUnprocessableEntity, "invalid rule")
 			return
+		}
+
+		cmd := entity.UpdateRuleCommand{
+			ID:              id,
+			ExpectedVersion: req.ExpectedVersion,
+			Name:            req.Name,
+			Description:     req.Description,
+			Group:           req.Group,
+			Action:          req.Action,
+			Severity:        req.Severity,
+			Score:           req.Score,
+			Priority:        req.Priority,
+			Path:            req.Path,
+			Enabled:         req.Enabled,
 		}
 
 		out, err := s.Update(c.Request.Context(), cmd)
@@ -203,7 +232,10 @@ func UpdateRule(s port.RuleService) gin.HandlerFunc {
 			}
 			return
 		}
-		c.JSON(http.StatusOK, out)
+		c.JSON(http.StatusOK, gin.H{
+			"id":      strconv.FormatInt(out.ID, 10),
+			"version": out.Version,
+		})
 	}
 }
 
@@ -279,7 +311,33 @@ func ListRules(s port.RuleService) gin.HandlerFunc {
 			c.String(http.StatusInternalServerError, "rules operation failed")
 			return
 		}
-		c.JSON(http.StatusOK, out)
+		items := make([]gin.H, 0, len(out.Items))
+		for _, item := range out.Items {
+			items = append(items, gin.H{
+				"schema_version": item.SchemaVersion,
+				"runtime_ready":  item.RuntimeReady,
+				"id":             strconv.FormatInt(item.ID, 10),
+				"version":        item.Version,
+				"name":           item.Name,
+				"description":    item.Description,
+				"group":          item.Group,
+				"action":         item.Action,
+				"severity":       item.Severity,
+				"score":          item.Score,
+				"priority":       item.Priority,
+				"path":           item.Path,
+				"enabled":        item.Enabled,
+				"updated_at":     item.UpdatedAt,
+			})
+		}
+		resp := gin.H{
+			"total": out.Total,
+			"items": items,
+		}
+		if out.NextAfter != "" {
+			resp["next_after"] = out.NextAfter
+		}
+		c.JSON(http.StatusOK, resp)
 	}
 }
 
@@ -302,7 +360,42 @@ func RuleDetail(s port.RuleService) gin.HandlerFunc {
 			c.String(http.StatusInternalServerError, "rules operation failed")
 			return
 		}
-		c.JSON(http.StatusOK, out)
+		conditions := make([]gin.H, 0, len(out.Conditions))
+		for _, cond := range out.Conditions {
+			conditions = append(conditions, gin.H{
+				"field":       cond.Field,
+				"operator":    cond.Operator,
+				"value":       cond.Value,
+				"header_name": cond.HeaderName,
+			})
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"schema_version":    out.SchemaVersion,
+			"runtime_ready":     out.RuntimeReady,
+			"runtime_issues":    out.RuntimeIssues,
+			"logic_mode":        out.LogicMode,
+			"conditions":        conditions,
+			"source_ip":         out.SourceIP,
+			"host_domain":       out.HostDomain,
+			"path_prefix":       out.PathPrefix,
+			"http_method":       out.HTTPMethod,
+			"response_code":     out.ResponseCode,
+			"custom_response":   out.CustomResponse,
+			"log_event":         out.LogEvent,
+			"add_to_reputation": out.AddToReputation,
+			"id":                strconv.FormatInt(out.ID, 10),
+			"version":           out.Version,
+			"name":              out.Name,
+			"description":       out.Description,
+			"group":             out.Group,
+			"action":            out.Action,
+			"severity":          out.Severity,
+			"score":             out.Score,
+			"priority":          out.Priority,
+			"path":              out.Path,
+			"enabled":           out.Enabled,
+			"updated_at":        out.UpdatedAt,
+		})
 	}
 }
 
@@ -316,7 +409,19 @@ func RuleStats(s port.RuleService) gin.HandlerFunc {
 			c.String(http.StatusInternalServerError, "rules operation failed")
 			return
 		}
-		c.JSON(http.StatusOK, out)
+		c.JSON(http.StatusOK, gin.H{
+			"as_of":              out.AsOf,
+			"comparison_before":  out.ComparisonBefore,
+			"history_available":  out.HistoryAvailable,
+			"total_delta":        out.TotalDelta,
+			"enabled_delta":      out.EnabledDelta,
+			"log_delta":          out.LogDelta,
+			"block_delta":        out.BlockDelta,
+			"total":              out.Total,
+			"enabled":            out.Enabled,
+			"log":                out.Log,
+			"block":              out.Block,
+		})
 	}
 }
 
@@ -349,7 +454,11 @@ func PublishRules(s port.RuleService) gin.HandlerFunc {
 			}
 			return
 		}
-		c.JSON(http.StatusCreated, out)
+		c.JSON(http.StatusCreated, gin.H{
+			"id":     strconv.FormatInt(out.ID, 10),
+			"state":  out.State,
+			"digest": out.Digest,
+		})
 	}
 }
 
@@ -373,7 +482,13 @@ func ReleaseDetail(s port.RuleService) gin.HandlerFunc {
 			}
 			return
 		}
-		c.JSON(http.StatusOK, out)
+		c.JSON(http.StatusOK, gin.H{
+			"id":               strconv.FormatInt(out.ID, 10),
+			"state":            out.State,
+			"digest":           out.Digest,
+			"created_at":       out.CreatedAt,
+			"activation_phase": out.ActivationPhase,
+		})
 	}
 }
 
@@ -396,10 +511,10 @@ func CreateRuleDefinition(s port.RuleService) gin.HandlerFunc {
 			c.String(http.StatusBadRequest, "JSON object required")
 			return
 		}
-		var cmd entity.CreateRuleDefinitionCommand
+		var req dto.CreateRuleDefinitionRequest
 		decoder := json.NewDecoder(bytes.NewReader(body))
 		decoder.DisallowUnknownFields()
-		if err = decoder.Decode(&cmd); err != nil {
+		if err = decoder.Decode(&req); err != nil {
 			c.String(http.StatusBadRequest, "invalid JSON or unknown field")
 			return
 		}
@@ -408,43 +523,43 @@ func CreateRuleDefinition(s port.RuleService) gin.HandlerFunc {
 			return
 		}
 
-		cmd.RequestKey = c.GetHeader("Idempotency-Key")
+		key := c.GetHeader("Idempotency-Key")
 
 		// Thẩm định và sanitize trực tiếp raw payload tại call site (inline)
 		invalid := map[string]string{}
-		if len(cmd.RequestKey) < 16 || len(cmd.RequestKey) > 128 {
+		if len(key) < 16 || len(key) > 128 {
 			invalid["idempotency_key"] = "Use a stable key of 16..128 characters for this submission"
 		}
-		cmd.Name = strings.TrimSpace(cmd.Name)
-		if cmd.Name == "" || len(cmd.Name) > 120 || !utf8.ValidString(cmd.Name) {
+		req.Name = strings.TrimSpace(req.Name)
+		if req.Name == "" || len(req.Name) > 120 || !utf8.ValidString(req.Name) {
 			invalid["name"] = "Required, at most 120 UTF-8 bytes"
 		}
-		if len(cmd.Description) > 2000 || !utf8.ValidString(cmd.Description) {
+		if len(req.Description) > 2000 || !utf8.ValidString(req.Description) {
 			invalid["description"] = "At most 2000 UTF-8 bytes"
 		}
-		if cmd.Priority < 0 || cmd.Priority > 1000000 {
+		if req.Priority < 0 || req.Priority > 1000000 {
 			invalid["priority"] = "Must be between 0 and 1000000"
 		}
-		if cmd.Score < 0 || cmd.Score > 1000 {
+		if req.Score < 0 || req.Score > 1000 {
 			invalid["score"] = "Must be between 0 and 1000"
 		}
-		switch cmd.Group {
+		switch req.Group {
 		case "custom", "sqli", "xss", "traversal", "bot", "endpoint", "authentication":
 		default:
 			invalid["group"] = "Unknown rule group"
 		}
-		switch cmd.Severity {
+		switch req.Severity {
 		case "low", "medium", "high", "critical":
 		default:
 			invalid["severity"] = "Unknown severity"
 		}
-		if cmd.PolicyID != nil {
+		if req.PolicyID != nil {
 			invalid["policy_id"] = "Create unassigned; policy binding is a separate workflow"
 		}
-		if cmd.LogicMode != "all" && cmd.LogicMode != "any" {
+		if req.LogicMode != "all" && req.LogicMode != "any" {
 			invalid["logic_mode"] = "Use all or any"
 		}
-		if len(cmd.Conditions) < 1 || len(cmd.Conditions) > 16 {
+		if len(req.Conditions) < 1 || len(req.Conditions) > 16 {
 			invalid["conditions"] = "Supply 1..16 ordered conditions"
 			c.JSON(http.StatusUnprocessableEntity, gin.H{
 				"code":   "invalid_rule_definition",
@@ -453,7 +568,7 @@ func CreateRuleDefinition(s port.RuleService) gin.HandlerFunc {
 			return
 		}
 		totalPatternBytes := 0
-		for i, condition := range cmd.Conditions {
+		for i, condition := range req.Conditions {
 			prefix := fmt.Sprintf("conditions[%d]", i)
 			switch condition.Field {
 			case "uri_raw", "path", "query", "header", "body", "client_ip", "method":
@@ -507,19 +622,19 @@ func CreateRuleDefinition(s port.RuleService) gin.HandlerFunc {
 		if totalPatternBytes > 4096 {
 			invalid["conditions"] = "Combined regex budget is 4096 bytes"
 		}
-		switch cmd.Action {
+		switch req.Action {
 		case "allow", "log":
-			if cmd.ResponseCode != nil {
+			if req.ResponseCode != nil {
 				invalid["response_code"] = "Only block controls the HTTP response"
 			}
-			if cmd.CustomResponse != "" {
+			if req.CustomResponse != "" {
 				invalid["custom_response"] = "Only block accepts a response body"
 			}
 		case "block":
-			if cmd.ResponseCode == nil {
+			if req.ResponseCode == nil {
 				invalid["response_code"] = "Required for block"
 			} else {
-				switch *cmd.ResponseCode {
+				switch *req.ResponseCode {
 				case 400, 403, 429, 500:
 				default:
 					invalid["response_code"] = "Use 400, 403, 429 or 500"
@@ -528,12 +643,12 @@ func CreateRuleDefinition(s port.RuleService) gin.HandlerFunc {
 		default:
 			invalid["action"] = "Supported definitions: allow, log, block; CAPTCHA is not available"
 		}
-		if utf8.RuneCountInString(cmd.CustomResponse) > 512 || !utf8.ValidString(cmd.CustomResponse) || strings.ContainsRune(cmd.CustomResponse, 0) {
+		if utf8.RuneCountInString(req.CustomResponse) > 512 || !utf8.ValidString(req.CustomResponse) || strings.ContainsRune(req.CustomResponse, 0) {
 			invalid["custom_response"] = "At most 512 characters, no NUL"
 		}
-		if cmd.SourceIP != "" {
-			entries := strings.Split(cmd.SourceIP, ",")
-			if len(entries) > 32 || len(cmd.SourceIP) > 2048 {
+		if req.SourceIP != "" {
+			entries := strings.Split(req.SourceIP, ",")
+			if len(entries) > 32 || len(req.SourceIP) > 2048 {
 				invalid["source_ip"] = "At most 32 addresses/CIDRs, 2048 bytes"
 			}
 			for _, entry := range entries {
@@ -545,11 +660,11 @@ func CreateRuleDefinition(s port.RuleService) gin.HandlerFunc {
 				}
 			}
 		}
-		if cmd.HostDomain != "" {
-			if len(cmd.HostDomain) > 253 {
+		if req.HostDomain != "" {
+			if len(req.HostDomain) > 253 {
 				invalid["host_domain"] = "Hostname too long"
 			}
-			for _, label := range strings.Split(cmd.HostDomain, ".") {
+			for _, label := range strings.Split(req.HostDomain, ".") {
 				if len(label) < 1 || len(label) > 63 || strings.HasPrefix(label, "-") || strings.HasSuffix(label, "-") {
 					invalid["host_domain"] = "Use an ASCII hostname without scheme, port or wildcard"
 				}
@@ -560,15 +675,15 @@ func CreateRuleDefinition(s port.RuleService) gin.HandlerFunc {
 				}
 			}
 		}
-		if cmd.PathPrefix != "" && (!strings.HasPrefix(cmd.PathPrefix, "/") || len(cmd.PathPrefix) > 8192 || strings.ContainsAny(cmd.PathPrefix, "\x00\r\n?#")) {
+		if req.PathPrefix != "" && (!strings.HasPrefix(req.PathPrefix, "/") || len(req.PathPrefix) > 8192 || strings.ContainsAny(req.PathPrefix, "\x00\r\n?#")) {
 			invalid["path_prefix"] = "Use a path prefix, max 8192 bytes, without query/fragment/controls"
 		}
-		for _, b := range []byte(cmd.PathPrefix) {
+		for _, b := range []byte(req.PathPrefix) {
 			if b < 32 || b == 127 {
 				invalid["path_prefix"] = "Path prefix must not contain control characters"
 			}
 		}
-		switch cmd.HTTPMethod {
+		switch req.HTTPMethod {
 		case "", "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS":
 		default:
 			invalid["http_method"] = "Unknown HTTP method"
@@ -581,6 +696,38 @@ func CreateRuleDefinition(s port.RuleService) gin.HandlerFunc {
 			return
 		}
 
+		conditions := make([]entity.CreateRuleCondition, len(req.Conditions))
+		for i, cond := range req.Conditions {
+			conditions[i] = entity.CreateRuleCondition{
+				Field:      cond.Field,
+				Operator:   cond.Operator,
+				Value:      cond.Value,
+				HeaderName: cond.HeaderName,
+			}
+		}
+		cmd := entity.CreateRuleDefinitionCommand{
+			RequestKey:      key,
+			Name:            req.Name,
+			Description:     req.Description,
+			Group:           req.Group,
+			Severity:        req.Severity,
+			Score:           req.Score,
+			Enabled:         req.Enabled,
+			Priority:        req.Priority,
+			PolicyID:        req.PolicyID,
+			LogicMode:       req.LogicMode,
+			Conditions:      conditions,
+			Action:          req.Action,
+			ResponseCode:    req.ResponseCode,
+			CustomResponse:  req.CustomResponse,
+			LogEvent:        req.LogEvent,
+			AddToReputation: req.AddToReputation,
+			SourceIP:        req.SourceIP,
+			HostDomain:      req.HostDomain,
+			PathPrefix:      req.PathPrefix,
+			HTTPMethod:      req.HTTPMethod,
+		}
+
 		out, err := s.CreateDefinition(c.Request.Context(), cmd)
 		if err != nil {
 			if errors.Is(err, taxonomy.ErrRuleConflict) {
@@ -591,6 +738,12 @@ func CreateRuleDefinition(s port.RuleService) gin.HandlerFunc {
 			return
 		}
 		c.Header("Location", "/api/v1/rules/"+strconv.FormatInt(out.ID, 10))
-		c.JSON(http.StatusCreated, out)
+		c.JSON(http.StatusCreated, gin.H{
+			"id":             strconv.FormatInt(out.ID, 10),
+			"version":        out.Version,
+			"state":          out.State,
+			"runtime_ready":  out.RuntimeReady,
+			"runtime_issues": out.RuntimeIssues,
+		})
 	}
 }

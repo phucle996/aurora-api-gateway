@@ -1,26 +1,25 @@
 package entity
 
-
 type User struct {
-	ID           string `json:"id"`
-	Username     string `json:"username"`
-	PasswordHash string `json:"-"`
-	Salt         string `json:"-"`
-	Role         string `json:"role"`
-	CreatedAt    string `json:"created_at,omitempty"`
-	UpdatedAt    string `json:"updated_at,omitempty"`
+	ID           string
+	Username     string
+	PasswordHash string
+	Salt         string
+	Role         string
+	CreatedAt    string
+	UpdatedAt    string
 }
 
 type LoginInput struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username string
+	Password string
 }
 
 type LoginOutput struct {
-	Token     string `json:"token"`
-	TokenType string `json:"token_type"`
-	ExpiresIn int64  `json:"expires_in"`
-	User      User   `json:"user"`
+	Token     string
+	TokenType string
+	ExpiresIn int64
+	User      User
 }
 
 type Claims struct {

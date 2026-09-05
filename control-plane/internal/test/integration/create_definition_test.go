@@ -36,7 +36,13 @@ func TestCreateDefinitionRoundTripAndPublicationBoundary(t *testing.T) {
 	if first.Code != 201 {
 		t.Fatal(first.Code, first.Body.String())
 	}
-	var saved entity.CreateRuleDefinitionResult
+	var saved struct {
+		ID            int64    `json:"id,string"`
+		Version       int64    `json:"version"`
+		State         string   `json:"state"`
+		RuntimeReady  bool     `json:"runtime_ready"`
+		RuntimeIssues []string `json:"runtime_issues"`
+	}
 	if err := json.Unmarshal(first.Body.Bytes(), &saved); err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +179,9 @@ func TestCreateDefinitionExactSubsetStillCompiles(t *testing.T) {
 	if response.Code != 201 {
 		t.Fatal(response.Code, response.Body.String())
 	}
-	var result entity.CreateRuleDefinitionResult
+	var result struct {
+		RuntimeReady bool `json:"runtime_ready"`
+	}
 	json.Unmarshal(response.Body.Bytes(), &result)
 	if !result.RuntimeReady {
 		t.Fatal(result)

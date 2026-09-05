@@ -43,6 +43,23 @@ func RuleHistory(s port.RuleService) gin.HandlerFunc {
 			c.String(http.StatusInternalServerError, "rules operation failed")
 			return
 		}
-		c.JSON(http.StatusOK, out)
+		items := make([]gin.H, 0, len(out.Items))
+		for _, item := range out.Items {
+			items = append(items, gin.H{
+				"version":    item.Version,
+				"name":       item.Name,
+				"action":     item.Action,
+				"enabled":    item.Enabled,
+				"actor":      item.Actor,
+				"updated_at": item.UpdatedAt,
+			})
+		}
+		resp := gin.H{
+			"items": items,
+		}
+		if out.NextBefore != 0 {
+			resp["next_before"] = out.NextBefore
+		}
+		c.JSON(http.StatusOK, resp)
 	}
 }

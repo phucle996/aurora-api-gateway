@@ -19,50 +19,50 @@ type RuleHistoryQuery struct {
 	Limit  int
 }
 type RuleHistoryRecord struct {
-	Version   int64  `json:"version"`
-	Name      string `json:"name"`
-	Action    string `json:"action"`
-	Enabled   bool   `json:"enabled"`
-	Actor     string `json:"actor"`
-	UpdatedAt string `json:"updated_at"`
+	Version   int64
+	Name      string
+	Action    string
+	Enabled   bool
+	Actor     string
+	UpdatedAt string
 }
 type RuleHistoryResult struct {
-	Items      []RuleHistoryRecord `json:"items"`
-	NextBefore int64               `json:"next_before,omitempty"`
+	Items      []RuleHistoryRecord
+	NextBefore int64
 }
 
 type CreateRuleCommand struct {
-	RequestKey  string `json:"-"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Group       string `json:"group"`
-	Action      string `json:"action"`
-	Severity    string `json:"severity"`
-	Score       int    `json:"score"`
-	Priority    int    `json:"priority"`
-	Path        string `json:"path"`
-	Enabled     bool   `json:"enabled"`
+	RequestKey  string
+	Name        string
+	Description string
+	Group       string
+	Action      string
+	Severity    string
+	Score       int
+	Priority    int
+	Path        string
+	Enabled     bool
 }
 type CreateRuleResult struct {
-	ID      int64 `json:"id,string"`
-	Version int64 `json:"version"`
+	ID      int64
+	Version int64
 }
 type UpdateRuleCommand struct {
-	ID              int64  `json:"-"`
-	ExpectedVersion int64  `json:"expected_version"`
-	Name            string `json:"name"`
-	Description     string `json:"description"`
-	Group           string `json:"group"`
-	Action          string `json:"action"`
-	Severity        string `json:"severity"`
-	Score           int    `json:"score"`
-	Priority        int    `json:"priority"`
-	Path            string `json:"path"`
-	Enabled         bool   `json:"enabled"`
+	ID              int64
+	ExpectedVersion int64
+	Name            string
+	Description     string
+	Group           string
+	Action          string
+	Severity        string
+	Score           int
+	Priority        int
+	Path            string
+	Enabled         bool
 }
 type UpdateRuleResult struct {
-	ID      int64 `json:"id,string"`
-	Version int64 `json:"version"`
+	ID      int64
+	Version int64
 }
 type ListRulesQuery struct {
 	Limit                                    int
@@ -70,132 +70,131 @@ type ListRulesQuery struct {
 	Search, Group, Action, Severity, Enabled string
 }
 type ListRulesItem struct {
-	SchemaVersion int    `json:"schema_version"`
-	RuntimeReady  bool   `json:"runtime_ready"`
-	ID            int64  `json:"id,string"`
-	Version       int64  `json:"version"`
-	Name          string `json:"name"`
-	Description   string `json:"description"`
-	Group         string `json:"group"`
-	Action        string `json:"action"`
-	Severity      string `json:"severity"`
-	Score         int    `json:"score"`
-	Priority      int    `json:"priority"`
-	Path          string `json:"path"`
-	Enabled       bool   `json:"enabled"`
-	UpdatedAt     string `json:"updated_at"`
+	SchemaVersion int
+	RuntimeReady  bool
+	ID            int64
+	Version       int64
+	Name          string
+	Description   string
+	Group         string
+	Action        string
+	Severity      string
+	Score         int
+	Priority      int
+	Path          string
+	Enabled       bool
+	UpdatedAt     string
 }
 type ListRulesResult struct {
-	Total     int             `json:"total"`
-	Items     []ListRulesItem `json:"items"`
-	NextAfter string          `json:"next_after,omitempty"`
+	Total     int
+	Items     []ListRulesItem
+	NextAfter string
 }
 type RuleDetailQuery struct{ ID int64 }
 type RuleDetailResult struct {
-	SchemaVersion   int                   `json:"schema_version"`
-	RuntimeReady    bool                  `json:"runtime_ready"`
-	RuntimeIssues   []string              `json:"runtime_issues"`
-	LogicMode       string                `json:"logic_mode"`
-	Conditions      []RuleDetailCondition `json:"conditions"`
-	SourceIP        string                `json:"source_ip"`
-	HostDomain      string                `json:"host_domain"`
-	PathPrefix      string                `json:"path_prefix"`
-	HTTPMethod      string                `json:"http_method"`
-	ResponseCode    *int                  `json:"response_code"`
-	CustomResponse  string                `json:"custom_response"`
-	LogEvent        bool                  `json:"log_event"`
-	AddToReputation bool                  `json:"add_to_reputation"`
-	ID              int64                 `json:"id,string"`
-	Version         int64                 `json:"version"`
-	Name            string                `json:"name"`
-	Description     string                `json:"description"`
-	Group           string                `json:"group"`
-	Action          string                `json:"action"`
-	Severity        string                `json:"severity"`
-	Score           int                   `json:"score"`
-	Priority        int                   `json:"priority"`
-	Path            string                `json:"path"`
-	Enabled         bool                  `json:"enabled"`
-	UpdatedAt       string                `json:"updated_at"`
+	SchemaVersion   int
+	RuntimeReady    bool
+	RuntimeIssues   []string
+	LogicMode       string
+	Conditions      []RuleDetailCondition
+	SourceIP        string
+	HostDomain      string
+	PathPrefix      string
+	HTTPMethod      string
+	ResponseCode    *int
+	CustomResponse  string
+	LogEvent        bool
+	AddToReputation bool
+	ID              int64
+	Version         int64
+	Name            string
+	Description     string
+	Group           string
+	Action          string
+	Severity        string
+	Score           int
+	Priority        int
+	Path            string
+	Enabled         bool
+	UpdatedAt       string
 }
 type RuleStatsQuery struct{ AsOf time.Time }
 type RuleDetailCondition struct {
-	Field      string `json:"field"`
-	Operator   string `json:"operator"`
-	Value      string `json:"value"`
-	HeaderName string `json:"header_name"`
+	Field      string
+	Operator   string
+	Value      string
+	HeaderName string
 }
 type RuleStatsResult struct {
-	AsOf             string `json:"as_of"`
-	ComparisonBefore string `json:"comparison_before"`
-	HistoryAvailable bool   `json:"history_available"`
-	TotalDelta       *int   `json:"total_delta"`
-	EnabledDelta     *int   `json:"enabled_delta"`
-	LogDelta         *int   `json:"log_delta"`
-	BlockDelta       *int   `json:"block_delta"`
-	Total            int    `json:"total"`
-	Enabled          int    `json:"enabled"`
-	Log              int    `json:"log"`
-	Block            int    `json:"block"`
+	AsOf             string
+	ComparisonBefore string
+	HistoryAvailable bool
+	TotalDelta       *int
+	EnabledDelta     *int
+	LogDelta         *int
+	BlockDelta       *int
+	Total            int
+	Enabled          int
+	Log              int
+	Block            int
 }
 type PublishRulesCommand struct{ RequestKey string }
 type PublishRulesResult struct {
-	ID     int64  `json:"id,string"`
-	State  string `json:"state"`
-	Digest string `json:"digest"`
+	ID     int64
+	State  string
+	Digest string
 }
 type ReleaseDetailQuery struct{ ID int64 }
 type ReleaseDetailResult struct {
-	ID              int64   `json:"id,string"`
-	State           string  `json:"state"`
-	Digest          string  `json:"digest"`
-	CreatedAt       string  `json:"created_at"`
-	ActivationPhase *string `json:"activation_phase"`
+	ID              int64
+	State           string
+	Digest          string
+	CreatedAt       string
+	ActivationPhase *string
 }
 
 // ─── Rule Definition (v2) ───────────────────────────────────────────────────
 
 type CreateRuleDefinitionCommand struct {
-	RequestKey      string                `json:"-"`
-	Name            string                `json:"name"`
-	Description     string                `json:"description"`
-	Group           string                `json:"group"`
-	Severity        string                `json:"severity"`
-	Score           int                   `json:"score"`
-	Enabled         bool                  `json:"enabled"`
-	Priority        int                   `json:"priority"`
-	PolicyID        *string               `json:"policy_id"`
-	LogicMode       string                `json:"logic_mode"`
-	Conditions      []CreateRuleCondition `json:"conditions"`
-	Action          string                `json:"action"`
-	ResponseCode    *int                  `json:"response_code"`
-	CustomResponse  string                `json:"custom_response"`
-	LogEvent        bool                  `json:"log_event"`
-	AddToReputation bool                  `json:"add_to_reputation"`
-	SourceIP        string                `json:"source_ip"`
-	HostDomain      string                `json:"host_domain"`
-	PathPrefix      string                `json:"path_prefix"`
-	HTTPMethod      string                `json:"http_method"`
+	RequestKey      string
+	Name            string
+	Description     string
+	Group           string
+	Severity        string
+	Score           int
+	Enabled         bool
+	Priority        int
+	PolicyID        *string
+	LogicMode       string
+	Conditions      []CreateRuleCondition
+	Action          string
+	ResponseCode    *int
+	CustomResponse  string
+	LogEvent        bool
+	AddToReputation bool
+	SourceIP        string
+	HostDomain      string
+	PathPrefix      string
+	HTTPMethod      string
 }
 
 type CreateRuleCondition struct {
-	Field      string `json:"field"`
-	Operator   string `json:"operator"`
-	Value      string `json:"value"`
-	HeaderName string `json:"header_name"`
+	Field      string
+	Operator   string
+	Value      string
+	HeaderName string
 }
 
 type CreateRuleDefinitionResult struct {
-	ID            int64    `json:"id,string"`
-	Version       int64    `json:"version"`
-	State         string   `json:"state"`
-	RuntimeReady  bool     `json:"runtime_ready"`
-	RuntimeIssues []string `json:"runtime_issues"`
+	ID            int64
+	Version       int64
+	State         string
+	RuntimeReady  bool
+	RuntimeIssues []string
 }
 
 type CreateRuleFieldError struct {
-	Fields map[string]string `json:"fields"`
+	Fields map[string]string
 }
 
 func (e *CreateRuleFieldError) Error() string { return "invalid rule definition" }
-
