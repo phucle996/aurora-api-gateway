@@ -31,18 +31,15 @@ func (r *sqliteSettingsRepository) GetMetricsConfig(ctx context.Context) (*entit
 	}
 	defer rows.Close()
 
-	// Cấu hình mặc định nếu bảng chưa có bản ghi
-	cfg := &entity.MetricsIntegrationConfig{
-		Mode:          "disabled",
-		PrometheusURL: "http://127.0.0.1:9090",
-		PrometheusJob: "aurora-waf-nodes",
-	}
+	cfg := &entity.MetricsIntegrationConfig{}
+	var count int
 
 	for rows.Next() {
 		var key, val, updatedAt string
 		if err := rows.Scan(&key, &val, &updatedAt); err != nil {
 			return nil, taxonomy.ErrSettingsStorage
 		}
+		count++
 		cfg.UpdatedAt = updatedAt
 		switch key {
 		case "metrics_mode":
@@ -54,6 +51,9 @@ func (r *sqliteSettingsRepository) GetMetricsConfig(ctx context.Context) (*entit
 		}
 	}
 	if err := rows.Err(); err != nil {
+		return nil, taxonomy.ErrSettingsStorage
+	}
+	if count == 0 {
 		return nil, taxonomy.ErrSettingsStorage
 	}
 	return cfg, nil
