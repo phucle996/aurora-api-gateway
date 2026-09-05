@@ -27,6 +27,8 @@ static ngx_int_t ngx_http_aurora_variables(ngx_conf_t *cf);
 static ngx_int_t ngx_http_aurora_generation(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
 static ngx_int_t ngx_http_aurora_init_process(ngx_cycle_t *cycle);
 static void ngx_http_aurora_exit_process(ngx_cycle_t *cycle);
+static char *ngx_http_aurora_metrics_directive(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+static ngx_int_t ngx_http_aurora_metrics_handler(ngx_http_request_t *r);
 
 /* Best-effort match summaries: cap per-worker output, never queue raw requests. */
 static time_t aurora_log_second;
@@ -95,6 +97,12 @@ static ngx_command_t ngx_http_aurora_commands[] = {
       ngx_conf_set_num_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_aurora_conf_t, interval),
+      NULL },
+    { ngx_string("aurora_waf_metrics"),
+      NGX_HTTP_LOC_CONF|NGX_CONF_NOARGS,
+      ngx_http_aurora_metrics_directive,
+      0,
+      0,
       NULL },
     ngx_null_command
 };
@@ -421,4 +429,94 @@ ngx_http_aurora_exit_process(ngx_cycle_t *cycle)
         aurora_waf_stop_telemetry();
     }
 }
+
+/*
+ * Thiết lập location content handler khi directive aurora_waf_metrics xuất hiện trong cấu hình NGINX.
+ */
+static char *
+ngx_http_aurora_metrics_directive(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+    ngx_http_core_loc_conf_t *clcf;
+
+    clcf = ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module);
+    clcf->handler = ngx_http_aurora_metrics_handler;
+
+    return NGX_CONF_OK;
+}
+
+/*
+ * Xử lý HTTP GET /metrics: gọi FFI sinh dữ liệu Prometheus/OpenMetrics text và trả về client.
+ */
+static ngx_int_t
+ngx_http_aurora_metrics_handler(ngx_http_request_t *r)
+{
+    ngx_int_t                 rc;
+    ngx_buf_t                *b;
+    ngx_chain_t               out;
+    ngx_http_aurora_conf_t   *alcf;
+    u_char                   *metrics_buf;
+    size_t                    written = 0;
+    char                      node_id_buf[256];
+
+    /* Chỉ chấp nhận GET hoặc HEAD */
+    if (!(r->method & (NGX_HTTP_GET|NGX_HTTP_HEAD))) {
+        return NGX_HTTP_NOT_ALLOWED;
+    }
+
+    rc = ngx_http_discard_request_body(r);
+    if (rc != NGX_OK) {
+        return rc;
+    }
+
+    alcf = ngx_http_get_module_loc_conf(r, ngx_http_aurora_waf_module);
+
+    node_id_buf[0] = '\0';
+    if (alcf && alcf->node_id.len > 0 && alcf->node_id.len < sizeof(node_id_buf)) {
+        ngx_memcpy(node_id_buf, alcf->node_id.data, alcf->node_id.len);
+        node_id_buf[alcf->node_id.len] = '\0';
+    }
+
+    /* Cấp phát buffer 4096 bytes trong request pool */
+    metrics_buf = ngx_pcalloc(r->pool, 4096);
+    if (metrics_buf == NULL) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+
+    if (aurora_waf_format_prometheus_metrics(node_id_buf[0] ? node_id_buf : NULL,
+                                            metrics_buf, 4096, &written) != 0) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+
+    r->headers_out.status = NGX_HTTP_OK;
+    r->headers_out.content_length_n = written;
+    ngx_str_set(&r->headers_out.content_type, "text/plain; version=0.0.4; charset=utf-8");
+
+    if (r->method == NGX_HTTP_HEAD) {
+        rc = ngx_http_send_header(r);
+        if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
+            return rc;
+        }
+    }
+
+    b = ngx_create_temp_buf(r->pool, written);
+    if (b == NULL) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+
+    ngx_memcpy(b->pos, metrics_buf, written);
+    b->last = b->pos + written;
+    b->last_buf = (r == r->main) ? 1 : 0;
+    b->last_in_chain = 1;
+
+    out.buf = b;
+    out.next = NULL;
+
+    rc = ngx_http_send_header(r);
+    if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
+        return rc;
+    }
+
+    return ngx_http_output_filter(r, &out);
+}
+
 

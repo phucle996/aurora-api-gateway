@@ -326,6 +326,9 @@ func (r *sqliteNodeRepository) GetRecentMetricsHistory(ctx context.Context, node
 		}
 		points = append(points, p)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("lỗi trong quá trình đọc lịch sử metrics: %w", err)
+	}
 	if points == nil {
 		points = []entity.NodeMetricPoint{}
 	}

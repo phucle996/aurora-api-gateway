@@ -109,15 +109,13 @@ pub unsafe extern "C" fn aurora_waf_evaluate_v3(
         return INVALID;
     }
 
-    // Ghi nhận request phục vụ đo lường RPS realtime trong telemetry
-    telemetry::record_evaluation();
-
     // Bước 3: Gọi hàm evaluate của Engine trong khối bọc an toàn catch_unwind
     match catch_unwind(AssertUnwindSafe(|| unsafe {
         (&*engine).evaluate(slice::from_raw_parts(path, len))
     })) {
         // So khớp thành công: ghi kết quả Decision vào *out và trả về mã OK (0)
         Ok(Ok(decision)) => {
+            telemetry::record_evaluation(decision.action);
             unsafe {
                 *out = decision;
             }
@@ -167,8 +165,10 @@ pub unsafe extern "C" fn aurora_waf_evaluate(
         (&*engine).blocked(slice::from_raw_parts(path, len))
     })) {
         Ok(Ok(blocked)) => {
+            let act = u32::from(blocked);
+            telemetry::record_evaluation(act);
             unsafe {
-                *action = u32::from(blocked);
+                *action = act;
             }
             OK
         }
@@ -241,5 +241,43 @@ pub unsafe extern "C" fn aurora_waf_start_telemetry(
 #[unsafe(no_mangle)]
 pub extern "C" fn aurora_waf_stop_telemetry() {
     let _ = catch_unwind(AssertUnwindSafe(telemetry::stop_telemetry));
+}
+
+/// Xuất chuỗi định dạng văn bản Prometheus / OpenMetrics phục vụ endpoint /metrics của NGINX.
+///
+/// # Safety
+/// - `node_id`: Chuỗi C string tên node (hoặc null).
+/// - `out_buf`: Vùng nhớ đệm nhận dữ liệu chuỗi.
+/// - `max_len`: Kích thước tối đa của `out_buf`.
+/// - `written_len`: Con trỏ nhận số byte thực tế đã ghi.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn aurora_waf_format_prometheus_metrics(
+    node_id: *const std::ffi::c_char,
+    out_buf: *mut u8,
+    max_len: usize,
+    written_len: *mut usize,
+) -> u32 {
+    if out_buf.is_null() || written_len.is_null() || max_len == 0 {
+        return INVALID;
+    }
+
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        let nid = if !node_id.is_null() {
+            unsafe { std::ffi::CStr::from_ptr(node_id).to_str().unwrap_or("") }
+        } else {
+            ""
+        };
+
+        let metrics_text = telemetry::format_prometheus_metrics(nid);
+        let bytes = metrics_text.as_bytes();
+        let copy_len = bytes.len().min(max_len);
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_buf, copy_len);
+            *written_len = copy_len;
+        }
+    }));
+
+    OK
 }
 

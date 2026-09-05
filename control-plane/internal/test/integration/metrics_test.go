@@ -9,9 +9,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -139,6 +141,51 @@ func TestMetricsFlexibilityLabAndProduction(t *testing.T) {
 	}
 	if testRes["success"] == true {
 		t.Errorf("kỳ vọng test connection thất bại cho cổng không tồn tại")
+	}
+
+	// 5b. Giả lập một Prometheus Server Online với endpoint /api/v1/query_range
+	mockProm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "query_range") {
+			_, _ = w.Write([]byte(`{
+				"status": "success",
+				"data": {
+					"resultType": "matrix",
+					"result": [
+						{
+							"metric": {"__name__": "aurora_node_cpu_percent", "node_id": "node-local-01"},
+							"values": [
+								[1741160000, "15.5"],
+								[1741160060, "18.2"]
+							]
+						}
+					]
+				}
+			}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[]}}`))
+	}))
+	defer mockProm.Close()
+
+	wPromOnline := request("PUT", "/api/v1/settings/integrations/metrics", fmt.Sprintf(`{"mode":"prometheus","prometheus_url":"%s","prometheus_job":"aurora-waf"}`, mockProm.URL))
+	if wPromOnline.Code != http.StatusOK {
+		t.Fatalf("kỳ vọng cập nhật sang mock prometheus thành công, nhận: %d", wPromOnline.Code)
+	}
+
+	wMetricsOnline := request("GET", "/api/v1/nodes/node-local-01/metrics", "")
+	if wMetricsOnline.Code != http.StatusOK {
+		t.Fatalf("kỳ vọng mã 200 từ mock prometheus, nhận: %d, body: %s", wMetricsOnline.Code, wMetricsOnline.Body.String())
+	}
+	var promPoints []map[string]interface{}
+	if err := json.Unmarshal(wMetricsOnline.Body.Bytes(), &promPoints); err != nil {
+		t.Fatal(err)
+	}
+	if len(promPoints) != 2 {
+		t.Fatalf("kỳ vọng 2 điểm đo từ Prometheus PromQL matrix, nhận: %d", len(promPoints))
+	}
+	if promPoints[0]["cpuUsage"] != 15.5 || promPoints[1]["cpuUsage"] != 18.2 {
+		t.Errorf("dữ liệu cpuUsage không khớp: %+v", promPoints)
 	}
 
 	// 6. Chuyển đổi linh hoạt lại chế độ 'standalone' (Lab/Dev): Hệ thống lập tức phục hồi 200 OK

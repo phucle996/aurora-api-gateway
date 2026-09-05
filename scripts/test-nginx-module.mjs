@@ -42,6 +42,7 @@ http {
     location = /audit { aurora_waf_mode audit; }
     location = /override { aurora_waf_policy ${dir}/override.json; }
     location = /redirect { try_files $uri /blocked; }
+    location = /metrics { aurora_waf_metrics; }
   }
 }`;
 writeFileSync(`${dir}/nginx.conf`, config);
@@ -105,6 +106,17 @@ try {
   }
   assert.ok(!/signal 11|segmentation fault|worker process .* exited with code [1-9]/i.test(readFileSync(`${dir}/error.log`, 'utf8')));
   console.log('invalid reload retention + valid reload + 500 concurrent requests: pass');
+
+  // Native OpenMetrics endpoint check
+  const metricsRes = await fetch(`http://127.0.0.1:${port}/metrics`, { headers: { Connection: 'close' } });
+  assert.equal(metricsRes.status, 200, 'metrics status must be 200');
+  assert.ok(metricsRes.headers.get('content-type')?.includes('text/plain'), 'must return text/plain');
+  const metricsBody = await metricsRes.text();
+  assert.ok(metricsBody.includes('aurora_waf_evaluations_total{action="allow"'), 'missing allow counter');
+  assert.ok(metricsBody.includes('aurora_waf_evaluations_total{action="block"'), 'missing block counter');
+  assert.ok(metricsBody.includes('aurora_node_cpu_percent'), 'missing cpu gauge');
+  assert.ok(metricsBody.includes('aurora_node_memory_percent'), 'missing memory gauge');
+  console.log('native prometheus /metrics endpoint: pass');
 } finally {
   child.kill('SIGQUIT');
   const timeout = setTimeout(() => child.kill('SIGKILL'), 8000);

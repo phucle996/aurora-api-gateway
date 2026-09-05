@@ -12,11 +12,61 @@ use std::{
 
 static TELEMETRY_RUNNING: AtomicBool = AtomicBool::new(false);
 static TOTAL_EVALUATIONS: AtomicU64 = AtomicU64::new(0);
+static TOTAL_ALLOWED: AtomicU64 = AtomicU64::new(0);
+static TOTAL_BLOCKED: AtomicU64 = AtomicU64::new(0);
 
-/// Ghi nhận 1 lượt đánh giá rule khi NGINX xử lý request.
+/// Ghi nhận 1 lượt đánh giá rule khi NGINX xử lý request (kèm action quyết định: 0=allow, 1=block).
 #[inline]
-pub fn record_evaluation() {
+pub fn record_evaluation(action: u32) {
     TOTAL_EVALUATIONS.fetch_add(1, Ordering::Relaxed);
+    if action == 1 {
+        TOTAL_BLOCKED.fetch_add(1, Ordering::Relaxed);
+    } else {
+        TOTAL_ALLOWED.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+/// Sinh chuỗi văn bản định dạng chuẩn Prometheus / OpenMetrics.
+pub fn format_prometheus_metrics(node_id: &str) -> String {
+    let evals = TOTAL_EVALUATIONS.load(Ordering::Relaxed);
+    let allowed = TOTAL_ALLOWED.load(Ordering::Relaxed);
+    let blocked = TOTAL_BLOCKED.load(Ordering::Relaxed);
+
+    let mut last_total = 0u64;
+    let mut last_idle = 0u64;
+    let cpu = sample_cpu(&mut last_total, &mut last_idle);
+    let mem = sample_memory();
+
+    let node_label = if node_id.is_empty() {
+        "".to_string()
+    } else {
+        format!(",node_id=\"{}\"", node_id)
+    };
+
+    let mut out = String::with_capacity(1024);
+    out.push_str("# HELP aurora_waf_evaluations_total Total HTTP requests evaluated by Aurora WAF\n");
+    out.push_str("# TYPE aurora_waf_evaluations_total counter\n");
+    out.push_str(&format!("aurora_waf_evaluations_total{{action=\"allow\"{}}} {}\n", node_label, allowed));
+    out.push_str(&format!("aurora_waf_evaluations_total{{action=\"block\"{}}} {}\n", node_label, blocked));
+    out.push_str(&format!("aurora_waf_evaluations_total{{action=\"total\"{}}} {}\n", node_label, evals));
+
+    out.push_str("# HELP aurora_node_cpu_percent Current CPU usage percent of the node\n");
+    out.push_str("# TYPE aurora_node_cpu_percent gauge\n");
+    if node_id.is_empty() {
+        out.push_str(&format!("aurora_node_cpu_percent {:.2}\n", cpu));
+    } else {
+        out.push_str(&format!("aurora_node_cpu_percent{{node_id=\"{}\"}} {:.2}\n", node_id, cpu));
+    }
+
+    out.push_str("# HELP aurora_node_memory_percent Current memory usage percent of the node\n");
+    out.push_str("# TYPE aurora_node_memory_percent gauge\n");
+    if node_id.is_empty() {
+        out.push_str(&format!("aurora_node_memory_percent {:.2}\n", mem));
+    } else {
+        out.push_str(&format!("aurora_node_memory_percent{{node_id=\"{}\"}} {:.2}\n", node_id, mem));
+    }
+
+    out
 }
 
 /// Cấu trúc dữ liệu nhị phân Heartbeat tương thích 100% với Go Protocol Buffers wire format.
@@ -343,5 +393,16 @@ mod tests {
         // Tag 1 (node_id) bắt đầu bằng (1 << 3) | 2 = 0x0a
         assert_eq!(bytes[0], 0x0a);
         assert_eq!(bytes[1], "node-local-01".len() as u8);
+    }
+
+    #[test]
+    fn test_prometheus_formatting() {
+        record_evaluation(0);
+        record_evaluation(1);
+        let text = format_prometheus_metrics("test-node-01");
+        assert!(text.contains("aurora_waf_evaluations_total{action=\"allow\",node_id=\"test-node-01\"}"));
+        assert!(text.contains("aurora_waf_evaluations_total{action=\"block\",node_id=\"test-node-01\"}"));
+        assert!(text.contains("aurora_node_cpu_percent{node_id=\"test-node-01\"}"));
+        assert!(text.contains("aurora_node_memory_percent{node_id=\"test-node-01\"}"));
     }
 }

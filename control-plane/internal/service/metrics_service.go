@@ -4,10 +4,8 @@ import (
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	"aurora-waf.local/control-plane/internal/domain/repo"
 	domainService "aurora-waf.local/control-plane/internal/domain/service"
-	"aurora-waf.local/control-plane/internal/domain/taxonomy"
 	"context"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"net/url"
 	"strings"
@@ -20,26 +18,50 @@ type metricsService struct {
 	nodeRepo   repo.NodeRepository
 	httpClient *http.Client
 
-	// In-Memory Ring Buffer cho biểu đồ thời gian thực (Live Real-time)
-	// Lưu trữ tối đa 60 điểm dữ liệu (~10 phút) cho từng node trong RAM, phục vụ Web UI tức thì
-	mu            sync.RWMutex
-	buffers       map[string][]entity.NodeMetricPoint
-	rollupBuckets map[string][]entity.NodeMetricPoint
+	// Bảo toàn điểm đo tức thời mới nhất từ nhịp tim (Heartbeat) của từng node
+	latestMu     sync.RWMutex
+	latestPoints map[string]entity.NodeMetricPoint
+
+	mu             sync.RWMutex
+	currentConfig  entity.MetricsIntegrationConfig
+	activeProvider MetricsProvider
 }
 
-// NewMetricsService khởi tạo service quản lý tích hợp Telemetry và Metrics.
+// NewMetricsService khởi tạo service quản lý điều phối tích hợp Telemetry và Metrics theo mô hình Strategy.
 func NewMetricsService(repo repo.SettingsRepository, nodeRepo repo.NodeRepository) domainService.MetricsService {
+	client := &http.Client{Timeout: 4 * time.Second}
 	s := &metricsService{
-		repo:       repo,
-		nodeRepo:   nodeRepo,
-		httpClient: &http.Client{
-			Timeout: 4 * time.Second,
-		},
-		buffers:       make(map[string][]entity.NodeMetricPoint),
-		rollupBuckets: make(map[string][]entity.NodeMetricPoint),
+		repo:         repo,
+		nodeRepo:     nodeRepo,
+		httpClient:   client,
+		latestPoints: make(map[string]entity.NodeMetricPoint),
 	}
-	s.startRollupWorker(context.Background())
+
+	// Đọc cấu hình khởi đầu từ DB, kích hoạt Provider tương ứng
+	cfg, err := repo.GetMetricsConfig(context.Background())
+	if err != nil || cfg == nil {
+		cfg = &entity.MetricsIntegrationConfig{
+			Mode: "disabled",
+		}
+	}
+	s.currentConfig = *cfg
+	s.activeProvider = s.createProvider(*cfg)
+	_ = s.activeProvider.Start(context.Background())
+
 	return s
+}
+
+func (s *metricsService) createProvider(cfg entity.MetricsIntegrationConfig) MetricsProvider {
+	switch cfg.Mode {
+	case "standalone":
+		return newStandaloneProvider(s.nodeRepo)
+	case "prometheus":
+		return newPrometheusProvider(cfg.PrometheusURL, cfg.PrometheusJob, s.httpClient)
+	case "disabled":
+		return newDisabledProvider()
+	default:
+		return newDisabledProvider()
+	}
 }
 
 // GetConfig lấy cấu hình tích hợp metrics hiện tại.
@@ -47,16 +69,16 @@ func (s *metricsService) GetConfig(ctx context.Context) (*entity.MetricsIntegrat
 	return s.repo.GetMetricsConfig(ctx)
 }
 
-// SaveConfig thẩm định và lưu cấu hình tích hợp metrics.
+// SaveConfig thẩm định, lưu cấu hình và chuyển đổi (hot-swap) nguồn thu thập metrics độc quyền.
 func (s *metricsService) SaveConfig(ctx context.Context, cfg entity.MetricsIntegrationConfig) error {
-	// Bước 1: Thẩm định chế độ hoạt động hợp lệ
+	// 1. Thẩm định mode
 	switch cfg.Mode {
 	case "standalone", "prometheus", "disabled":
 	default:
 		return fmt.Errorf("chế độ metrics không hợp lệ: %s (chỉ chấp nhận 'standalone', 'prometheus', 'disabled')", cfg.Mode)
 	}
 
-	// Bước 2: Nếu là chế độ Prometheus, thẩm định định dạng URL
+	// 2. Thẩm định Prometheus URL nếu chọn mode prometheus
 	if cfg.Mode == "prometheus" {
 		cfg.PrometheusURL = strings.TrimSpace(cfg.PrometheusURL)
 		u, err := url.ParseRequestURI(cfg.PrometheusURL)
@@ -65,8 +87,25 @@ func (s *metricsService) SaveConfig(ctx context.Context, cfg entity.MetricsInteg
 		}
 	}
 
-	// Bước 3: Lưu cấu hình vào database
-	return s.repo.SaveMetricsConfig(ctx, cfg)
+	// 3. Lưu vào repository
+	if err := s.repo.SaveMetricsConfig(ctx, cfg); err != nil {
+		return err
+	}
+
+	// 4. Hot-swap Provider nếu cấu hình thay đổi
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if cfg.Mode != s.currentConfig.Mode || cfg.PrometheusURL != s.currentConfig.PrometheusURL || cfg.PrometheusJob != s.currentConfig.PrometheusJob {
+		if s.activeProvider != nil {
+			_ = s.activeProvider.Stop()
+		}
+		s.activeProvider = s.createProvider(cfg)
+		_ = s.activeProvider.Start(ctx)
+		s.currentConfig = cfg
+	}
+
+	return nil
 }
 
 // TestPrometheus kiểm tra khả năng kết nối tới Prometheus URL và đo độ trễ mạng.
@@ -81,7 +120,6 @@ func (s *metricsService) TestPrometheus(ctx context.Context, targetURL string) (
 		}, nil
 	}
 
-	// Gọi Prometheus API chuẩn để kiểm tra liveness: /api/v1/query?query=up
 	probeURL := fmt.Sprintf("%s/api/v1/query?query=up", strings.TrimRight(targetURL, "/"))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, probeURL, nil)
 	if err != nil {
@@ -120,174 +158,50 @@ func (s *metricsService) TestPrometheus(ctx context.Context, targetURL string) (
 	}, nil
 }
 
-// PushMetricPoint đẩy một điểm đo thực tế mới nhận được từ node heartbeat vào Ring Buffer.
+// PushMetricPoint lưu điểm nhịp tim tức thời mới nhất và chuyển tiếp cho Active Provider xử lý lịch sử.
 func (s *metricsService) PushMetricPoint(nodeID string, pt entity.NodeMetricPoint) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	// 1. Luôn bảo toàn nhịp tim tức thời mới nhất của Node trong RAM
+	s.latestMu.Lock()
+	s.latestPoints[nodeID] = pt
+	s.latestMu.Unlock()
 
-	buf := s.buffers[nodeID]
-	buf = append(buf, pt)
-	// Giữ tối đa 60 điểm gần nhất (~10 phút nếu gửi 10s/lần)
-	if len(buf) > 60 {
-		buf = buf[len(buf)-60:]
-	}
-	s.buffers[nodeID] = buf
-
-	// Đưa vào rollup accumulator cho chu kỳ batch 1 phút
-	s.rollupBuckets[nodeID] = append(s.rollupBuckets[nodeID], pt)
-}
-
-// GetLatestMetricPoint lấy điểm đo telemetry gần nhất của một node từ In-Memory Ring Buffer.
-func (s *metricsService) GetLatestMetricPoint(nodeID string) *entity.NodeMetricPoint {
+	// 2. Chuyển tiếp tới Active Provider (nếu là standalone thì gom batch rollup/ring buffer, nếu khác thì no-op)
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	pts, ok := s.buffers[nodeID]
-	if !ok || len(pts) == 0 {
-		return nil
-	}
-	latest := pts[len(pts)-1]
-	return &latest
-}
-
-// GetNodeMetrics trả về danh sách các điểm đo Timeline cho một node:
-// - Chế độ 'disabled': Trả về lỗi ErrMetricsDisabled (handler sẽ trả 503).
-// - Chế độ 'standalone': Trả về chuỗi điểm đo thực tế từ In-Memory Ring Buffer trong RAM.
-// - Chế độ 'prometheus': Gọi API Prometheus; nếu lỗi thì trả về ErrMetricsUnavailable (503).
-func (s *metricsService) GetNodeMetrics(ctx context.Context, nodeID string) ([]entity.NodeMetricPoint, error) {
-	cfg, err := s.repo.GetMetricsConfig(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("lấy cấu hình metrics thất bại: %w", err)
-	}
-
-	// 1. Kiểm tra nếu chế độ đang bị tắt
-	if cfg.Mode == "disabled" {
-		return nil, taxonomy.ErrMetricsDisabled
-	}
-
-	// 2. Chế độ External Prometheus (Production)
-	if cfg.Mode == "prometheus" {
-		// Gọi Prometheus HTTP API
-		queryURL := fmt.Sprintf("%s/api/v1/query?query=up", strings.TrimRight(cfg.PrometheusURL, "/"))
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, queryURL, nil)
-		if err != nil {
-			return nil, taxonomy.ErrMetricsUnavailable
-		}
-		resp, err := s.httpClient.Do(req)
-		if err != nil || resp.StatusCode != http.StatusOK {
-			if resp != nil {
-				resp.Body.Close()
-			}
-			return nil, taxonomy.ErrMetricsUnavailable
-		}
-		resp.Body.Close()
-	}
-
-	// 3. Trích xuất các điểm đo thực tế từ In-Memory Ring Buffer trong RAM
-	s.mu.RLock()
-	points, exists := s.buffers[nodeID]
-	if exists && len(points) > 0 {
-		out := make([]entity.NodeMetricPoint, len(points))
-		copy(out, points)
-		s.mu.RUnlock()
-		return out, nil
-	}
+	provider := s.activeProvider
 	s.mu.RUnlock()
 
-	// 4. Nếu RAM chưa có dữ liệu (ví dụ vừa restart Control Plane), nạp từ lịch sử SQLite
-	if s.nodeRepo != nil {
-		history, err := s.nodeRepo.GetRecentMetricsHistory(ctx, nodeID, 60)
-		if err == nil && len(history) > 0 {
-			return history, nil
-		}
+	if provider != nil {
+		provider.PushMetricPoint(nodeID, pt)
 	}
-
-	return []entity.NodeMetricPoint{}, nil
 }
 
-// startRollupWorker khởi chạy background worker gom batch rollup 1 phút và dọn dẹp TTL 7 ngày (kèm pacing + jitter).
-func (s *metricsService) startRollupWorker(ctx context.Context) {
-	rollupTicker := time.NewTicker(1 * time.Minute)
-	go func() {
-		defer rollupTicker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-rollupTicker.C:
-				s.flushRollupBatch()
-			}
-		}
-	}()
+// GetLatestMetricPoint lấy điểm đo nhịp tim tức thời mới nhất của Node.
+func (s *metricsService) GetLatestMetricPoint(nodeID string) *entity.NodeMetricPoint {
+	s.latestMu.RLock()
+	pt, ok := s.latestPoints[nodeID]
+	s.latestMu.RUnlock()
+	if ok {
+		return &pt
+	}
 
-	// Background cleaner dọn dẹp metrics cũ: chạy mỗi ~1 giờ có thêm random jitter (±5 phút)
-	go func() {
-		for {
-			// Chu kỳ cơ sở 1 giờ + Jitter ngẫu nhiên từ -300s đến +300s (-5m đến +5m)
-			jitterSec := rand.Intn(600) - 300
-			nextCleanup := time.Duration(3600+jitterSec) * time.Second
-			if nextCleanup < 30*time.Minute {
-				nextCleanup = 30 * time.Minute
-			}
+	s.mu.RLock()
+	provider := s.activeProvider
+	s.mu.RUnlock()
 
-			cleanerTimer := time.NewTimer(nextCleanup)
-			select {
-			case <-ctx.Done():
-				cleanerTimer.Stop()
-				return
-			case <-cleanerTimer.C:
-				if s.nodeRepo != nil {
-					// Timeout tối đa 5 phút cho toàn bộ chu trình dọn dẹp
-					cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-					_ = s.nodeRepo.CleanupExpiredMetricsHistory(cleanupCtx, 7)
-					cancel()
-				}
-			}
-		}
-	}()
+	if provider != nil {
+		return provider.GetLatestMetricPoint(nodeID)
+	}
+	return nil
 }
 
-// flushRollupBatch tính toán trung bình các điểm đo trong 1 phút vừa qua và lưu 1 transaction duy nhất xuống SQLite.
-func (s *metricsService) flushRollupBatch() {
-	if s.nodeRepo == nil {
-		return
-	}
+// GetNodeMetrics trích xuất Timeline metrics cho Node từ Active Provider.
+func (s *metricsService) GetNodeMetrics(ctx context.Context, nodeID string) ([]entity.NodeMetricPoint, error) {
+	s.mu.RLock()
+	provider := s.activeProvider
+	s.mu.RUnlock()
 
-	s.mu.Lock()
-	if len(s.rollupBuckets) == 0 {
-		s.mu.Unlock()
-		return
+	if provider == nil {
+		return []entity.NodeMetricPoint{}, nil
 	}
-
-	var batch []entity.NodeMetricHistoryRecord
-	for nodeID, pts := range s.rollupBuckets {
-		if len(pts) == 0 {
-			continue
-		}
-		var totalCPU, totalMem, totalRPS float64
-		var maxConns int
-		for _, p := range pts {
-			totalCPU += p.CPUUsage
-			totalMem += p.MemoryUsage
-			totalRPS += p.RPS
-			if p.ActiveConnections > maxConns {
-				maxConns = p.ActiveConnections
-			}
-		}
-		count := float64(len(pts))
-		batch = append(batch, entity.NodeMetricHistoryRecord{
-			NodeID:            nodeID,
-			Timestamp:         pts[len(pts)-1].Timestamp,
-			CPUUsage:          totalCPU / count,
-			MemoryUsage:       totalMem / count,
-			ActiveConnections: maxConns,
-			RequestsPerSecond: totalRPS / count,
-		})
-		delete(s.rollupBuckets, nodeID)
-	}
-	s.mu.Unlock()
-
-	if len(batch) > 0 {
-		_ = s.nodeRepo.BatchInsertMetricsHistory(context.Background(), batch)
-	}
+	return provider.GetNodeTimeline(ctx, nodeID)
 }
