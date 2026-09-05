@@ -473,7 +473,76 @@ func RuleDetail(s port.RuleService) gin.HandlerFunc {
 	}
 }
 
-// ─── 5. Rule Stats (GET /api/v1/rules/stats — Thống kê & Báo cáo tổng quan) ───
+// ─── 5. Rule History (GET /api/v1/rules/:id/history — Sổ cái lịch sử thay đổi) ─
+
+// RuleHistory tra cứu toàn bộ nhật ký thay đổi qua các phiên bản của một luật cụ thể.
+//
+// [Góc nhìn kinh tế / kiểm toán]:
+// Tương đương việc trích lục sổ cái kiểm toán (Audit Trail):
+// - Tiếp nhận mã định danh ID luật và các tham số phân trang lùi thời gian (before, limit).
+// - Giúp kiểm toán viên hoặc trưởng phòng an ninh xác minh: Luật này trước đây ai đã sửa? Từng chuyển từ 'log' sang 'block' khi nào?
+// - Trả về danh sách các phiên bản lịch sử và con trỏ trang kế tiếp (next_before) dưới dạng JSON inline.
+func RuleHistory(s port.RuleService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Bước 1: Thẩm định mã ID luật
+		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil || id < 1 {
+			c.String(http.StatusBadRequest, "invalid rule ID")
+			return
+		}
+
+		// Bước 2: Thẩm định tham số phân trang Limit (1..100) và con trỏ mốc thời gian Before
+		limit := 50
+		var before int64
+		if limitStr := c.Query("limit"); limitStr != "" {
+			limit, err = strconv.Atoi(limitStr)
+			if err != nil || limit < 1 || limit > 100 {
+				c.String(http.StatusBadRequest, "invalid limit")
+				return
+			}
+		}
+		if beforeStr := c.Query("before"); beforeStr != "" {
+			before, err = strconv.ParseInt(beforeStr, 10, 64)
+			if err != nil || before < 0 {
+				c.String(http.StatusBadRequest, "invalid cursor")
+				return
+			}
+		}
+
+		// Bước 3: Đọc lịch sử từ tầng Service
+		out, err := s.History(c.Request.Context(), entity.RuleHistoryQuery{ID: id, Before: before, Limit: limit})
+		if err != nil {
+			if errors.Is(err, taxonomy.ErrRuleNotFound) {
+				c.String(http.StatusNotFound, err.Error())
+				return
+			}
+			c.String(http.StatusInternalServerError, "rules operation failed")
+			return
+		}
+
+		// Bước 4: Chuyển đổi danh sách nhật ký kiểm toán sang cấu trúc JSON inline
+		items := make([]gin.H, 0, len(out.Items))
+		for _, item := range out.Items {
+			items = append(items, gin.H{
+				"version":    item.Version,
+				"name":       item.Name,
+				"action":     item.Action,
+				"enabled":    item.Enabled,
+				"actor":      item.Actor,
+				"updated_at": item.UpdatedAt,
+			})
+		}
+		resp := gin.H{
+			"items": items,
+		}
+		if out.NextBefore != 0 {
+			resp["next_before"] = out.NextBefore
+		}
+		c.JSON(http.StatusOK, resp)
+	}
+}
+
+// ─── 6. Rule Stats (GET /api/v1/rules/stats — Thống kê & Báo cáo tổng quan) ───
 
 // RuleStats cung cấp các số liệu đo lường tổng thể về danh mục chính sách bảo mật WAF.
 //
@@ -504,7 +573,7 @@ func RuleStats(s port.RuleService) gin.HandlerFunc {
 	}
 }
 
-// ─── 6. Publish Rules (POST /api/v1/rule-releases — Đóng gói & Phát hành) ─────
+// ─── 7. Publish Rules (POST /api/v1/rule-releases — Đóng gói & Phát hành) ─────
 
 // PublishRules phát lệnh đóng gói toàn bộ các luật đang Bật thành một "Bản phát hành" (Release) sẵn sàng đưa vào vận hành.
 //
@@ -554,7 +623,7 @@ func PublishRules(s port.RuleService) gin.HandlerFunc {
 	}
 }
 
-// ─── 7. Release Detail (GET /api/v1/rule-releases/:id — Tiến độ phân phối lô) ──
+// ─── 8. Release Detail (GET /api/v1/rule-releases/:id — Tiến độ phân phối lô) ──
 
 // ReleaseDetail tra cứu trạng thái và giai đoạn kích hoạt của một bản phát hành WAF.
 //
@@ -587,7 +656,7 @@ func ReleaseDetail(s port.RuleService) gin.HandlerFunc {
 	}
 }
 
-// ─── 8. Create Rule Definition (POST /api/v2/rules — Tạo luật đa điều kiện v2) ──
+// ─── 9. Create Rule Definition (POST /api/v2/rules — Tạo luật đa điều kiện v2) ──
 
 // CreateRuleDefinition tiếp nhận và thẩm định hồ sơ luật WAF thế hệ 2 với các điều kiện soi chiếu thông minh (đa điều kiện).
 //
