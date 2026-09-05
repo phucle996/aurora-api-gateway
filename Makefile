@@ -92,10 +92,23 @@ run-nginx: nginx-check
 	systemd-run --user --collect --unit=aurora-waf-nginx --working-directory="$(CURDIR)" --property=KillSignal=SIGQUIT --property=TimeoutStopSec=10 "$(NGINX)" -e stderr -p "$(CURDIR)/" -c deploy/nginx/nginx.conf -g 'daemon off;'
 
 stop:
-	systemctl --user stop aurora-waf-nginx.service aurora-waf-controller.service
+	systemctl --user stop aurora-waf-nginx.service aurora-waf-controller.service 2>/dev/null || true
 
 status:
-	systemctl --user --no-pager status aurora-waf-nginx.service aurora-waf-controller.service
+	systemctl --user --no-pager status aurora-waf-nginx.service aurora-waf-controller.service 2>/dev/null || true
+
+.PHONY: docker-up docker-down docker-logs docker-status
+docker-up:
+	docker compose up -d --build
+
+docker-down:
+	docker compose down
+
+docker-logs:
+	docker compose logs -f
+
+docker-status:
+	docker compose ps
 
 smoke:
 	curl --fail --silent --show-error --retry 10 --retry-delay 1 --retry-all-errors --max-time 3 --output /dev/null http://127.0.0.1:8080/

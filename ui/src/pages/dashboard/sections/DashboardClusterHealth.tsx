@@ -32,40 +32,38 @@ export function DashboardClusterHealth() {
       {/* Key-Value Details */}
       <div className="space-y-1.5 text-xs">
         <div className="flex justify-between py-1 border-b border-[#152030]/50">
-          <span className="text-slate-400">Controllers</span>
-          <span className="text-slate-200">3 / 3</span>
+          <span className="text-slate-400">HA Gateway</span>
+          <span className="text-cyan-400 font-semibold">aurora-lb (:8090)</span>
         </div>
 
         <div className="flex justify-between py-1 border-b border-[#152030]/50">
-          <span className="text-slate-400">Leader</span>
-          <span className="text-amber-400 flex items-center gap-1 font-semibold">
-            <Crown className="w-3 h-3 inline" /> cp-01
-          </span>
+          <span className="text-slate-400">Control Plane</span>
+          <span className="text-slate-200">Primary (:8080)</span>
         </div>
 
         <div className="flex justify-between py-1 border-b border-[#152030]/50">
-          <span className="text-slate-400">Raft Term</span>
-          <span className="text-slate-200">24</span>
+          <span className="text-slate-400">Data Plane Nodes</span>
+          <span className="text-emerald-400 font-semibold">3 / 3 Ready</span>
         </div>
 
         <div className="flex justify-between py-1 border-b border-[#152030]/50">
-          <span className="text-slate-400">Last Election</span>
-          <span className="text-slate-300">2026-08-25 10:14:32</span>
+          <span className="text-slate-400">State Persistence</span>
+          <span className="text-slate-300">SQLite (WAL Mode)</span>
         </div>
 
         <div className="flex justify-between py-1 border-b border-[#152030]/50">
-          <span className="text-slate-400">Nodes</span>
-          <span className="text-slate-200">12 / 12</span>
+          <span className="text-slate-400">Telemetry Transport</span>
+          <span className="text-slate-200">Protobuf Binary Wire</span>
         </div>
 
         <div className="flex justify-between py-1 border-b border-[#152030]/50">
-          <span className="text-slate-400">Config Revision</span>
-          <span className="text-cyan-400 font-semibold">v128</span>
+          <span className="text-slate-400">Policy Sync</span>
+          <span className="text-cyan-400 font-semibold">In Sync</span>
         </div>
 
         <div className="flex justify-between py-1">
-          <span className="text-slate-400">Last Sync</span>
-          <span className="text-slate-300">2 minutes ago</span>
+          <span className="text-slate-400">Heartbeat Interval</span>
+          <span className="text-slate-300">1s active</span>
         </div>
       </div>
     </div>

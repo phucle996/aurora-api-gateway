@@ -153,6 +153,8 @@ func (h *NodeHandler) Heartbeat(c *gin.Context) {
 		return
 	}
 
+	payload.IP = c.ClientIP()
+
 	ctx := c.Request.Context()
 	directive, err := h.service.RecordHeartbeat(ctx, *payload)
 	if err != nil {

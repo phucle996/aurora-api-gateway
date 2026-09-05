@@ -52,21 +52,21 @@ export function GeneralSettingsSection() {
             </div>
 
             <div className="flex items-center justify-between py-1 border-b border-[#152030]/60">
-              <span className="text-slate-400">Cluster Mode</span>
-              <span className="text-slate-200">Raft (3 controllers)</span>
+              <span className="text-slate-400">Cluster Architecture</span>
+              <span className="text-slate-200">HA NGINX Cluster</span>
             </div>
 
             <div className="flex items-center justify-between py-1 border-b border-[#152030]/60">
-              <span className="text-slate-400">Controller Leader</span>
+              <span className="text-slate-400">HA Gateway</span>
               <div className="flex items-center gap-1.5">
                 <span className="w-2 h-2 bg-emerald-400 inline-block" />
-                <span className="text-emerald-400 font-semibold">cp-01</span>
+                <span className="text-emerald-400 font-semibold">aurora-lb (:8090)</span>
               </div>
             </div>
 
             <div className="flex items-center justify-between py-1">
-              <span className="text-slate-400">Registered Nodes</span>
-              <span className="text-slate-200">47 (45 ready, 2 offline)</span>
+              <span className="text-slate-400">State Persistence</span>
+              <span className="text-slate-200">SQLite (WAL Mode)</span>
             </div>
           </div>
         </div>

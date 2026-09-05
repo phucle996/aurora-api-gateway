@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   Search,
   RotateCw,
-  MoreHorizontal,
   ChevronLeft,
   ChevronRight,
   ArrowUpDown,
@@ -53,20 +52,20 @@ export function NodesTable({
 }: NodesTableProps) {
   const nodes = nodesProp || [];
   const [searchQuery, setSearchQuery] = useState('');
-  const [regionFilter, setRegionFilter] = useState('ALL');
   const [roleFilter, setRoleFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = () => {
+    if (isRefreshing) return;
     setIsRefreshing(true);
     if (onRefresh) {
       onRefresh();
     }
     setTimeout(() => {
       setIsRefreshing(false);
-    }, 400);
+    }, 650);
   };
 
   const filteredNodes = nodes.filter((node) => {
@@ -74,16 +73,13 @@ export function NodesTable({
       node.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       node.ip.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (node.hostname && node.hostname.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (node.region && node.region.toLowerCase().includes(searchQuery.toLowerCase())) ||
       node.ruleset.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesRegion =
-      regionFilter === 'ALL' || node.region === regionFilter;
     const matchesRole = roleFilter === 'ALL' || node.role.includes(roleFilter);
     const matchesStatus =
       statusFilter === 'ALL' || node.status === statusFilter;
 
-    return matchesSearch && matchesRegion && matchesRole && matchesStatus;
+    return matchesSearch && matchesRole && matchesStatus;
   });
 
   return (
@@ -124,24 +120,6 @@ export function NodesTable({
           />
         </div>
 
-        {/* Region Filter */}
-        <select
-          value={regionFilter}
-          onChange={(e) => setRegionFilter(e.target.value)}
-          className="bg-[#0E1726] border border-[#1C293D] px-2.5 py-1 text-xs text-slate-300 font-mono focus:outline-none focus:border-emerald-500 cursor-pointer"
-        >
-          <option value="ALL">All Regions</option>
-          <option value="SG">Singapore (SG)</option>
-          <option value="JP">Japan (JP)</option>
-          <option value="DE">Germany (DE)</option>
-          <option value="US">United States (US)</option>
-          <option value="VN">Vietnam (VN)</option>
-          <option value="IN">India (IN)</option>
-          <option value="AU">Australia (AU)</option>
-          <option value="GB">Great Britain (GB)</option>
-          <option value="CA">Canada (CA)</option>
-        </select>
-
         {/* Role Filter */}
         <select
           value={roleFilter}
@@ -165,6 +143,13 @@ export function NodesTable({
           <option value="Not Ready">Not Ready</option>
           <option value="Draining">Draining</option>
         </select>
+      </div>
+
+      {/* Refresh Progress Indicator Line */}
+      <div className="h-0.5 w-full bg-[#152030] overflow-hidden relative">
+        {isRefreshing && (
+          <div className="h-full bg-gradient-to-r from-transparent via-emerald-400 to-transparent w-full animate-pulse transition-all duration-300" />
+        )}
       </div>
 
       {/* Table Container */}
@@ -192,14 +177,17 @@ export function NodesTable({
               <th className="py-2.5 px-3 font-medium">RPS</th>
               <th className="py-2.5 px-3 font-medium">Connections</th>
               <th className="py-2.5 px-3 font-medium">Last Heartbeat</th>
-              <th className="py-2.5 px-3 font-medium">Sync</th>
-              <th className="py-2.5 px-3 font-medium text-right">Actions</th>
+              <th className="py-2.5 px-3 font-medium text-right">Sync</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#152030] text-xs font-mono">
-            {isLoading ? (
+          <tbody
+            className={`divide-y divide-[#152030] text-xs font-mono transition-opacity duration-300 ${
+              isRefreshing ? 'opacity-60' : 'opacity-100'
+            }`}
+          >
+            {isLoading && nodes.length === 0 ? (
               <tr>
-                <td colSpan={12} className="py-12 text-center text-slate-500">
+                <td colSpan={11} className="py-12 text-center text-slate-500">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <RotateCw className="w-5 h-5 animate-spin text-emerald-400" />
                     <span>Loading cluster nodes...</span>
@@ -208,7 +196,7 @@ export function NodesTable({
               </tr>
             ) : filteredNodes.length === 0 ? (
               <tr>
-                <td colSpan={12} className="py-12 text-center text-slate-500">
+                <td colSpan={11} className="py-12 text-center text-slate-500">
                   {nodes.length === 0
                     ? 'No nodes registered in the cluster yet. Nodes authenticate securely via mTLS.'
                     : 'No nodes found matching the filter criteria.'}
@@ -274,7 +262,7 @@ export function NodesTable({
                     </td>
 
                     {/* Sync */}
-                    <td className="py-2 px-3">
+                    <td className="py-2 px-3 text-right">
                       {node.sync === 'In Sync' ? (
                         <span className="inline-flex items-center px-2 py-0.5 bg-emerald-950/40 border border-emerald-500/40 text-emerald-400 text-[10px]">
                           In Sync
@@ -284,19 +272,6 @@ export function NodesTable({
                           {node.sync || 'Syncing'}
                         </span>
                       )}
-                    </td>
-
-                    {/* Actions */}
-                    <td className="py-2 px-3 text-right">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                        }}
-                        className="p-1 hover:bg-[#152030] text-slate-400 hover:text-white transition-colors cursor-pointer"
-                      >
-                        <MoreHorizontal className="w-4 h-4" />
-                      </button>
                     </td>
                   </tr>
                 );

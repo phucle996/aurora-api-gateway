@@ -1,10 +1,6 @@
 package integration_test
 
 import (
-	"aurora-waf.local/control-plane/infra"
-	"aurora-waf.local/control-plane/internal/app"
-	"aurora-waf.local/control-plane/internal/config"
-	"aurora-waf.local/control-plane/internal/domain/entity"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -14,6 +10,11 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"aurora-waf.local/control-plane/infra"
+	"aurora-waf.local/control-plane/internal/app"
+	"aurora-waf.local/control-plane/internal/config"
+	"aurora-waf.local/control-plane/internal/domain/entity"
 
 	"github.com/gin-gonic/gin"
 )
@@ -199,5 +200,37 @@ func TestNodeHeartbeatWorkflow(t *testing.T) {
 	if node.RequestsPerSecond != "320.0" {
 		t.Errorf("kỳ vọng RequestsPerSecond = '320.0', nhận: %s", node.RequestsPerSecond)
 	}
-}
 
+	// 6. Kiểm tra node mới chưa từng tồn tại (như node-01 trong Docker cluster) tự động ghi danh qua heartbeat
+	hbNew := entity.NodeHeartbeatPayload{
+		NodeID:            "node-01",
+		Timestamp:         time.Now().Unix(),
+		CPUUsage:          10.0,
+		MemoryUsage:       40.0,
+		RequestsPerSecond: 150.0,
+		ActiveConnections: 12,
+	}
+	reqNew := httptest.NewRequest("POST", "/api/v1/nodes/node-01/heartbeat", bytes.NewReader(hbNew.MarshalBinary()))
+	reqNew.Header.Set("Content-Type", "application/x-protobuf")
+	reqNew.Header.Set("Authorization", "Bearer "+token)
+	wNew := httptest.NewRecorder()
+	mux.ServeHTTP(wNew, reqNew)
+	if wNew.Code != http.StatusOK {
+		t.Fatalf("kỳ vọng node mới ghi danh thành công với 200 OK, nhận: %d, body: %s", wNew.Code, wNew.Body.String())
+	}
+
+	reqNewDetail := httptest.NewRequest("GET", "/api/v1/nodes/node-01", nil)
+	reqNewDetail.Header.Set("Authorization", "Bearer "+token)
+	wNewDetail := httptest.NewRecorder()
+	mux.ServeHTTP(wNewDetail, reqNewDetail)
+	if wNewDetail.Code != http.StatusOK {
+		t.Fatalf("kỳ vọng node mới truy vấn được với 200 OK, nhận: %d", wNewDetail.Code)
+	}
+	var newNode entity.ClusterNodeRecord
+	if err := json.Unmarshal(wNewDetail.Body.Bytes(), &newNode); err != nil {
+		t.Fatal(err)
+	}
+	if newNode.ID != "node-01" || newNode.Status != "Ready" {
+		t.Errorf("dữ liệu node mới không hợp lệ: %+v", newNode)
+	}
+}

@@ -1,13 +1,14 @@
 package repository
 
 import (
-	"aurora-waf.local/control-plane/internal/domain/entity"
-	"aurora-waf.local/control-plane/internal/domain/repo"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"time"
+
+	"aurora-waf.local/control-plane/internal/domain/entity"
+	"aurora-waf.local/control-plane/internal/domain/repo"
 )
 
 // sqliteNodeRepository hiện thực NodeRepository interface qua SQLite.
@@ -51,9 +52,9 @@ func (r *sqliteNodeRepository) ListNodes(ctx context.Context) ([]entity.ClusterN
 		n.active_release_id,
 		COALESCE('rev-' || n.active_release_id, 'none') AS ruleset,
 		CASE 
-			WHEN n.active_release_id IS NULL THEN 'Syncing'
-			WHEN lr.id IS NOT NULL AND n.active_release_id = lr.id THEN 'In Sync'
-			WHEN lr.id IS NOT NULL AND n.active_release_id != lr.id THEN 'Drift'
+			WHEN lr.id IS NULL THEN 'In Sync'
+			WHEN n.active_release_id IS NOT NULL AND n.active_release_id = lr.id THEN 'In Sync'
+			WHEN lr.id IS NOT NULL AND (n.active_release_id IS NULL OR n.active_release_id != lr.id) THEN 'Drift'
 			ELSE n.sync_status
 		END AS computed_sync,
 		n.join_method,
@@ -138,9 +139,9 @@ func (r *sqliteNodeRepository) GetNodeByID(ctx context.Context, id string) (*ent
 		n.active_release_id,
 		COALESCE('rev-' || n.active_release_id, 'none') AS ruleset,
 		CASE 
-			WHEN n.active_release_id IS NULL THEN 'Syncing'
-			WHEN lr.id IS NOT NULL AND n.active_release_id = lr.id THEN 'In Sync'
-			WHEN lr.id IS NOT NULL AND n.active_release_id != lr.id THEN 'Drift'
+			WHEN lr.id IS NULL THEN 'In Sync'
+			WHEN n.active_release_id IS NOT NULL AND n.active_release_id = lr.id THEN 'In Sync'
+			WHEN lr.id IS NOT NULL AND (n.active_release_id IS NULL OR n.active_release_id != lr.id) THEN 'Drift'
 			ELSE n.sync_status
 		END AS computed_sync,
 		n.join_method,
@@ -189,18 +190,24 @@ func (r *sqliteNodeRepository) GetNodeByID(ctx context.Context, id string) (*ent
 // UpdateHeartbeat cập nhật thời điểm heartbeat và trạng thái liveness mới nhất của node.
 // Tự động ghi danh (auto-register) node mới vào cluster nếu node chưa từng tồn tại.
 func (r *sqliteNodeRepository) UpdateHeartbeat(ctx context.Context, payload entity.NodeHeartbeatPayload) error {
+	nodeIP := payload.IP
+	if nodeIP == "" {
+		nodeIP = "127.0.0.1"
+	}
+
 	query := `
 	INSERT INTO cluster_nodes (
 		id, name, hostname, ip, role, status, version, active_release_id,
 		sync_status, join_method, certificate, last_heartbeat, created_at,
 		pending_command, reload_status
 	) VALUES (
-		?, ?, ?, '127.0.0.1', 'Edge Node', 'Ready', '0.4.1',
+		?, ?, ?, ?, 'Edge Node', 'Ready', '0.4.1',
 		CASE WHEN ? > 0 AND EXISTS(SELECT 1 FROM ruleset_releases WHERE id = ?) THEN ? ELSE NULL END,
 		'In Sync', 'Docker Container', 'mTLS Enrolled', datetime(?, 'unixepoch'), datetime(?, 'unixepoch'),
 		'none', 'idle'
 	)
 	ON CONFLICT(id) DO UPDATE SET 
+		ip = CASE WHEN ? != '' AND ? != '127.0.0.1' THEN ? ELSE ip END,
 		last_heartbeat = datetime(?, 'unixepoch'),
 		status = 'Ready',
 		reload_status = CASE 
@@ -214,9 +221,12 @@ func (r *sqliteNodeRepository) UpdateHeartbeat(ctx context.Context, payload enti
 
 	_, err := r.db.ExecContext(
 		ctx, query,
-		payload.NodeID, payload.NodeID, payload.NodeID,
+		// INSERT params:
+		payload.NodeID, payload.NodeID, payload.NodeID, nodeIP,
 		payload.ActiveReleaseID, payload.ActiveReleaseID, payload.ActiveReleaseID,
 		payload.Timestamp, payload.Timestamp,
+		// ON CONFLICT UPDATE params:
+		payload.IP, payload.IP, payload.IP,
 		payload.Timestamp,
 		payload.ActiveReleaseID, payload.ActiveReleaseID, payload.ActiveReleaseID,
 	)
@@ -481,5 +491,3 @@ func (r *sqliteNodeRepository) GetRecentMetricsHistory(ctx context.Context, node
 	}
 	return points, nil
 }
-
-

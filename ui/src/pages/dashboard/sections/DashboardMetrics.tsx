@@ -138,15 +138,15 @@ export function DashboardMetrics() {
       <div className="bg-[#0B1320] border border-[#152030] p-3.5 flex flex-col justify-between">
         <div>
           <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-[11px] font-mono">Cluster Mode</span>
+            <span className="text-[11px] font-mono">Cluster Topology</span>
             <div className="p-1.5 bg-indigo-950/40 border border-indigo-500/30 text-indigo-400">
               <Boxes className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-sm font-bold font-mono text-white">3 Controllers (Raft)</div>
+          <div className="text-sm font-bold font-mono text-white">HA NGINX Cluster</div>
           <div className="text-[10px] font-mono text-emerald-400 flex items-center gap-1 mt-1">
             <span className="w-1.5 h-1.5 bg-emerald-400 inline-block" />
-            <span>Leader: cp-01</span>
+            <span>LB: aurora-lb (:8090)</span>
           </div>
         </div>
         <div className="h-1.5 w-full bg-[#152030] mt-3">

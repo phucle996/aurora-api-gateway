@@ -17,6 +17,7 @@ type NodeHeartbeatPayload struct {
 	ActiveConnections int
 	RequestsPerSecond float64
 	ActiveReleaseID   int64
+	IP                string
 }
 
 // NodeMetricHistoryRecord đại diện cho 1 bản ghi rollup 1 phút được lưu vào bảng node_metrics_history.
