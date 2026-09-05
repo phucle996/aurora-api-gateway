@@ -33,23 +33,36 @@ func Auth(authService port.AuthService, staticToken string) gin.HandlerFunc {
 		authorized := false
 
 		// 1. Static operator token verification (constant time)
-		if hasStaticToken && strings.HasPrefix(authHeader, "Bearer ") {
-			actual := sha256.Sum256([]byte(authHeader))
-			if subtle.ConstantTimeCompare(expectedTokenHash[:], actual[:]) == 1 {
-				authorized = true
-				c.Set(CtxUserIDKey, "operator")
-				c.Set(CtxUsernameKey, "operator")
-				c.Set(CtxUserRoleKey, "admin")
+		queryToken := c.Query("token")
+		if hasStaticToken {
+			if strings.HasPrefix(authHeader, "Bearer ") {
+				actual := sha256.Sum256([]byte(authHeader))
+				if subtle.ConstantTimeCompare(expectedTokenHash[:], actual[:]) == 1 {
+					authorized = true
+					c.Set(CtxUserIDKey, "operator")
+					c.Set(CtxUsernameKey, "operator")
+					c.Set(CtxUserRoleKey, "admin")
+				}
+			} else if queryToken != "" {
+				queryHash := sha256.Sum256([]byte("Bearer " + queryToken))
+				if subtle.ConstantTimeCompare(expectedTokenHash[:], queryHash[:]) == 1 {
+					authorized = true
+					c.Set(CtxUserIDKey, "operator")
+					c.Set(CtxUsernameKey, "operator")
+					c.Set(CtxUserRoleKey, "admin")
+				}
 			}
 		}
 
-		// 2. JWT token verification (Bearer header or HttpOnly cookie)
+		// 2. JWT token verification (Bearer header, HttpOnly cookie, or URL query param)
 		if !authorized && authService != nil {
 			var token string
 			if strings.HasPrefix(authHeader, "Bearer ") {
 				token = strings.TrimPrefix(authHeader, "Bearer ")
 			} else if cookie, err := c.Cookie("aurora_token"); err == nil && cookie != "" {
 				token = cookie
+			} else if queryToken != "" {
+				token = queryToken
 			}
 
 			if token != "" {

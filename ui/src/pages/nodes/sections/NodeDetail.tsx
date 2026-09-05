@@ -11,19 +11,64 @@ import {
   X,
 } from 'lucide-react';
 import type { NodeItem } from './NodesTable';
-import { nodesApi } from '../../../lib/api';
+import { nodesApi, type NodeSyncLog } from '../../../lib/api';
 
 interface NodeDetailProps {
   node: NodeItem;
+  latestHeartbeatEvent?: any;
+  latestSyncEvent?: any;
   onClose?: () => void;
 }
 
-export function NodeDetail({ node, onClose }: NodeDetailProps) {
+export function NodeDetail({
+  node,
+  latestHeartbeatEvent,
+  latestSyncEvent,
+  onClose,
+}: NodeDetailProps) {
   const [activeTab, setActiveTab] = useState<'Overview' | 'Metrics' | 'Config' | 'Sync'>('Overview');
   const [metrics, setMetrics] = useState<any[]>([]);
   const [isLoadingMetrics, setIsLoadingMetrics] = useState(false);
   const [metricsError, setMetricsError] = useState<string | null>(null);
 
+  // State cho Tab Sync
+  const [syncLogs, setSyncLogs] = useState<NodeSyncLog[]>([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [heartbeatAckCount, setHeartbeatAckCount] = useState(1);
+  const [lastAckTime, setLastAckTime] = useState('Vừa xong');
+
+  // Lắng nghe sự kiện heartbeat từ SSE để merge in-place vào Heartbeat ACK và metrics
+  useEffect(() => {
+    if (!latestHeartbeatEvent || latestHeartbeatEvent.node_id !== node.id) return;
+
+    setHeartbeatAckCount((prev) => prev + 1);
+    setLastAckTime('Vừa xong');
+
+    // Nếu tab Metrics đang mở, cập nhật ngay điểm đo tức thời vào timeline
+    if (activeTab === 'Metrics' && latestHeartbeatEvent.rps != null) {
+      setMetrics((prev) => {
+        const newPt = {
+          timestamp: latestHeartbeatEvent.timestamp || Math.floor(Date.now() / 1000),
+          timeLabel: 'Now',
+          rps: latestHeartbeatEvent.rps,
+          activeConnections: latestHeartbeatEvent.active_conns || 0,
+        };
+        const updated = [...prev, newPt];
+        return updated.length > 20 ? updated.slice(updated.length - 20) : updated;
+      });
+    }
+  }, [latestHeartbeatEvent, node.id, activeTab]);
+
+  // Lắng nghe sự kiện sync thực tế từ SSE để append vào danh sách log
+  useEffect(() => {
+    if (!latestSyncEvent || latestSyncEvent.node_id !== node.id) return;
+    setSyncLogs((prev) => {
+      if (prev.some((item) => item.id === latestSyncEvent.id)) return prev;
+      return [latestSyncEvent, ...prev].slice(0, 30);
+    });
+  }, [latestSyncEvent, node.id]);
+
+  // Tải danh sách metrics lịch sử khi chuyển sang tab Metrics
   useEffect(() => {
     if (activeTab === 'Metrics' && node?.id) {
       setIsLoadingMetrics(true);
@@ -43,6 +88,26 @@ export function NodeDetail({ node, onClose }: NodeDetailProps) {
         })
         .finally(() => {
           setIsLoadingMetrics(false);
+        });
+    }
+  }, [activeTab, node?.id]);
+
+  // Tải lịch sử sync thực tế khi chuyển sang tab Sync
+  useEffect(() => {
+    if (activeTab === 'Sync' && node?.id) {
+      setIsLoadingLogs(true);
+      nodesApi
+        .getSyncHistory(node.id)
+        .then((logs) => {
+          if (Array.isArray(logs)) {
+            setSyncLogs(logs);
+          }
+        })
+        .catch((err) => {
+          console.error('Failed to load node sync history:', err);
+        })
+        .finally(() => {
+          setIsLoadingLogs(false);
         });
     }
   }, [activeTab, node?.id]);
@@ -321,26 +386,90 @@ export function NodeDetail({ node, onClose }: NodeDetailProps) {
         )}
 
         {activeTab === 'Sync' && (
-          <div className="space-y-3 font-mono text-xs">
-            <div className="flex items-center justify-between text-slate-400">
-              <span className="font-semibold">Sync History & Logs</span>
-              <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
+          <div className="space-y-4 font-mono text-xs">
+            {/* Heartbeat ACK Status Card (In-place Merging - Không tạo thêm dòng) */}
+            <div className="p-3 bg-[#080E18] border border-[#152030] space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  <span className="font-semibold text-emerald-400 text-xs">Heartbeat Liveness (ACK)</span>
+                </div>
+                <span className="text-[10px] text-emerald-400 font-mono px-1.5 py-0.5 bg-emerald-950/40 border border-emerald-500/30">
+                  ACK #{heartbeatAckCount}
+                </span>
+              </div>
+
+              <div className="text-[11px] text-slate-400 space-y-1.5 pt-1.5 border-t border-[#152030]/60">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Trạng thái:</span>
+                  <span className="text-emerald-300 font-semibold">Active & Healthy</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">ACK lần cuối:</span>
+                  <span className="text-slate-200">{lastAckTime}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Địa chỉ Node IP:</span>
+                  <span className="text-slate-300 font-mono">{node.ip}</span>
+                </div>
+              </div>
             </div>
-            <div className="space-y-2 text-[11px]">
-              <div className="p-2.5 bg-[#080E18] border border-[#152030] flex justify-between items-center">
-                <div>
-                  <div className="text-emerald-400 font-semibold">rev-128 applied</div>
-                  <div className="text-[10px] text-slate-500">All 32 policies compiled</div>
-                </div>
-                <span className="text-slate-500">08:41:02 UTC</span>
+
+            {/* Real Sync & Release History (Lịch sử đồng bộ thật từ CSDL) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="font-semibold">Lịch sử Chuyển đổi & Sync Release</span>
+                <span className="text-[10px] text-slate-500">Dữ liệu CSDL thật</span>
               </div>
-              <div className="p-2.5 bg-[#080E18] border border-[#152030] flex justify-between items-center">
-                <div>
-                  <div className="text-slate-300 font-semibold">Heartbeat ACK</div>
-                  <div className="text-[10px] text-slate-500">Latency: 1.2ms</div>
+
+              {isLoadingLogs ? (
+                <div className="py-6 text-center text-slate-500 flex items-center justify-center gap-2 text-[11px]">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                  <span>Đang tải lịch sử sync...</span>
                 </div>
-                <span className="text-slate-500">08:40:55 UTC</span>
-              </div>
+              ) : syncLogs.length === 0 ? (
+                <div className="p-4 bg-[#080E18] border border-[#152030] text-center text-slate-500 text-[11px] space-y-1">
+                  <div>Chưa có sự kiện chuyển đổi release nào.</div>
+                  <div className="text-[10px] text-slate-600">Node đang chạy đồng bộ với cấu hình ban đầu.</div>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-72 overflow-y-auto">
+                  {syncLogs.map((log) => (
+                    <div
+                      key={log.id}
+                      className="p-2.5 bg-[#080E18] border border-[#152030] flex justify-between items-start gap-2 text-[11px]"
+                    >
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              log.event_type === 'release_applied'
+                                ? 'bg-cyan-400'
+                                : log.event_type === 'reload_completed'
+                                ? 'bg-emerald-400'
+                                : 'bg-amber-400'
+                            }`}
+                          />
+                          <span className="font-semibold text-slate-200">
+                            {log.event_type === 'release_applied'
+                              ? `Release Applied ${log.release_id ? `#${log.release_id}` : ''}`
+                              : log.event_type === 'reload_completed'
+                              ? 'Reload Completed'
+                              : 'Drift Detected'}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-400">{log.message}</div>
+                      </div>
+                      <span className="text-[10px] text-slate-500 whitespace-nowrap shrink-0">
+                        {log.created_at}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

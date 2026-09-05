@@ -31,3 +31,7 @@ var NodeMetricsHistory string
 //go:embed 0009_cluster_node_commands.sql
 var ClusterNodeCommands string
 
+//go:embed 0010_node_sync_logs.sql
+var NodeSyncLogs string
+
+

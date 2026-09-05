@@ -13,6 +13,7 @@ import (
 type nodeService struct {
 	repo       repo.NodeRepository
 	metricsSvc domainService.MetricsService
+	eventHub   EventHub
 }
 
 // NewNodeService khởi tạo service quản lý workflow Cluster Nodes.
@@ -20,7 +21,18 @@ func NewNodeService(repo repo.NodeRepository, metricsSvc domainService.MetricsSe
 	return &nodeService{
 		repo:       repo,
 		metricsSvc: metricsSvc,
+		eventHub:   NewEventHub(),
 	}
+}
+
+// SubscribeEvents đăng ký nhận luồng sự kiện realtime từ hệ thống.
+func (s *nodeService) SubscribeEvents() (<-chan entity.SSEMessage, func()) {
+	return s.eventHub.Subscribe()
+}
+
+// ListNodeSyncLogs truy vấn danh sách log đồng bộ của một node.
+func (s *nodeService) ListNodeSyncLogs(ctx context.Context, nodeID string, limit int) ([]entity.NodeSyncLogRecord, error) {
+	return s.repo.ListNodeSyncLogs(ctx, nodeID, limit)
 }
 
 // ListNodes lấy danh sách tất cả các node từ repository và định dạng thời gian heartbeat.
@@ -143,6 +155,9 @@ func (s *nodeService) RecordHeartbeat(ctx context.Context, payload entity.NodeHe
 		payload.Timestamp = time.Now().Unix()
 	}
 
+	// 0. Lấy trạng thái trước đó của node để phát hiện State Transitions (release change, reload)
+	prevNode, _ := s.repo.GetNodeByID(ctx, payload.NodeID)
+
 	// 1. Cập nhật thời điểm heartbeat và liveness vào SQLite
 	if err := s.repo.UpdateHeartbeat(ctx, payload); err != nil {
 		return nil, fmt.Errorf("nodeService.RecordHeartbeat: %w", err)
@@ -176,11 +191,60 @@ func (s *nodeService) RecordHeartbeat(ctx context.Context, payload entity.NodeHe
 		action = "none"
 	}
 
-	// 4. Nếu node này vừa hoàn thành reload, kiểm tra xem có node kế tiếp trong hàng đợi rolling cluster không
+	// 4. Tính toán Sync Status và Ruleset Name cho realtime event
+	syncStatus := "In Sync"
+	if desiredRelease > 0 {
+		if payload.ActiveReleaseID != desiredRelease {
+			syncStatus = "Drift"
+		}
+	}
+	rulesetName := "none"
+	if payload.ActiveReleaseID > 0 {
+		rulesetName = fmt.Sprintf("rev-%d", payload.ActiveReleaseID)
+	}
+
+	// 5. Broadcast sự kiện node_heartbeat tới tất cả các client đang xem trang Nodes
+	if s.eventHub != nil {
+		s.eventHub.Broadcast("node_heartbeat", entity.NodeHeartbeatEvent{
+			NodeID:      payload.NodeID,
+			IP:          payload.IP,
+			Status:      "Ready",
+			RPS:         payload.RequestsPerSecond,
+			ActiveConns: payload.ActiveConnections,
+			Sync:        syncStatus,
+			Ruleset:     rulesetName,
+			Timestamp:   payload.Timestamp,
+		})
+	}
+
+	// 6. Phát hiện và ghi nhận sự kiện đồng bộ thực tế vào node_sync_logs
+	if prevNode == nil {
+		// Node mới tham gia cluster lần đầu
+		if logRec, err := s.repo.InsertSyncLog(ctx, payload.NodeID, "release_applied", nil, fmt.Sprintf("Node %s tham gia cụm và kích hoạt heartbeat", payload.NodeID)); err == nil && s.eventHub != nil {
+			s.eventHub.Broadcast("node_sync", logRec)
+		}
+	} else {
+		// Đổi release
+		if payload.ActiveReleaseID > 0 && (prevNode.ActiveReleaseID == nil || *prevNode.ActiveReleaseID != payload.ActiveReleaseID) {
+			msg := fmt.Sprintf("Node áp dụng thành công ruleset release #%d", payload.ActiveReleaseID)
+			relID := payload.ActiveReleaseID
+			if logRec, err := s.repo.InsertSyncLog(ctx, payload.NodeID, "release_applied", &relID, msg); err == nil && s.eventHub != nil {
+				s.eventHub.Broadcast("node_sync", logRec)
+			}
+		}
+		// Vừa hoàn thành reload
+		if prevNode.ReloadStatus == "reloading" {
+			msg := "Hoàn tất reload worker NGINX áp dụng cấu hình mới"
+			if logRec, err := s.repo.InsertSyncLog(ctx, payload.NodeID, "reload_completed", nil, msg); err == nil && s.eventHub != nil {
+				s.eventHub.Broadcast("node_sync", logRec)
+			}
+		}
+	}
+
+	// 7. Nếu node này vừa hoàn thành reload, kích hoạt node kế tiếp trong hàng đợi rolling cluster
 	node, err := s.repo.GetNodeByID(ctx, payload.NodeID)
 	if err == nil && node != nil && node.ReloadStatus == "completed" {
 		pending, reloading, _, _ := s.repo.GetRollingNodesStatus(ctx)
-		// Chỉ kích hoạt node tiếp theo nếu hiện tại không có node nào đang reloading và còn node pending
 		if len(reloading) == 0 && len(pending) > 0 {
 			nextNodeID := pending[0]
 			_ = s.repo.SetNodeCommand(ctx, nextNodeID, "reload_process", "pending")

@@ -48,6 +48,7 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	r.GET("/api/v1/rule-releases/:id", authMidd, m.RuleHandler.ReleaseDetail) // Trạng thái release
 
 	// Quản lý Cluster Nodes (danh sách và trạng thái các NGINX data plane nodes)
+	r.GET("/api/v1/events/stream", authMidd, m.NodeHandler.EventsStream)   // Server-Sent Events (SSE) realtime metrics & liveness stream
 	r.GET("/api/v1/nodes", authMidd, m.NodeHandler.List)                   // Danh sách nodes trong cluster
 	r.GET("/api/v1/nodes/rolling-status", authMidd, m.NodeHandler.GetRollingStatus) // Trạng thái tiến trình rolling reload
 	r.POST("/api/v1/nodes/rolling-reload", authMidd, m.NodeHandler.RollingReloadCluster) // Kích hoạt rolling reload toàn cụm
@@ -55,6 +56,7 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	r.POST("/api/v1/nodes/:id/reload", authMidd, m.NodeHandler.ReloadNode) // Đặt lệnh reload cho 1 node
 	r.POST("/api/v1/nodes/:id/heartbeat", authMidd, m.NodeHandler.Heartbeat) // Heartbeat telemetry đẩy từ Node (Protobuf binary)
 	r.GET("/api/v1/nodes/:id/metrics", authMidd, m.MetricsHandler.GetNodeMetrics) // Timeline metrics của node
+	r.GET("/api/v1/nodes/:id/sync-history", authMidd, m.NodeHandler.GetSyncLogs) // Lịch sử đồng bộ thực tế của node
 
 	// Cấu hình tích hợp hệ thống (System Settings & Telemetry Integrations)
 	r.GET("/api/v1/settings/integrations/metrics", authMidd, m.MetricsHandler.GetConfig)          // Lấy cấu hình Telemetry hiện tại

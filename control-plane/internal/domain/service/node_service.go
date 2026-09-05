@@ -13,4 +13,6 @@ type NodeService interface {
 	TriggerNodeReload(ctx context.Context, nodeID string) error
 	TriggerClusterRollingReload(ctx context.Context) (*entity.ClusterRollingStatus, error)
 	GetClusterRollingStatus(ctx context.Context) (*entity.ClusterRollingStatus, error)
+	ListNodeSyncLogs(ctx context.Context, nodeID string, limit int) ([]entity.NodeSyncLogRecord, error)
+	SubscribeEvents() (<-chan entity.SSEMessage, func())
 }

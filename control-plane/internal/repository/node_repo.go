@@ -491,3 +491,55 @@ func (r *sqliteNodeRepository) GetRecentMetricsHistory(ctx context.Context, node
 	}
 	return points, nil
 }
+
+// InsertSyncLog lưu lại sự kiện đồng bộ thực tế của node vào bảng node_sync_logs.
+func (r *sqliteNodeRepository) InsertSyncLog(ctx context.Context, nodeID string, eventType string, releaseID *int64, message string) (*entity.NodeSyncLogRecord, error) {
+	query := `
+	INSERT INTO node_sync_logs (node_id, event_type, release_id, message, created_at)
+	VALUES (?, ?, ?, ?, datetime('now'))
+	RETURNING id, node_id, event_type, release_id, message, created_at;`
+
+	var rec entity.NodeSyncLogRecord
+	err := r.db.QueryRowContext(ctx, query, nodeID, eventType, releaseID, message).
+		Scan(&rec.ID, &rec.NodeID, &rec.EventType, &rec.ReleaseID, &rec.Message, &rec.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("InsertSyncLog node %s: %w", nodeID, err)
+	}
+	return &rec, nil
+}
+
+// ListNodeSyncLogs truy vấn danh sách log đồng bộ của một node theo thứ tự mới nhất trước.
+func (r *sqliteNodeRepository) ListNodeSyncLogs(ctx context.Context, nodeID string, limit int) ([]entity.NodeSyncLogRecord, error) {
+	if limit <= 0 {
+		limit = 30
+	}
+	query := `
+	SELECT id, node_id, event_type, release_id, message, created_at
+	FROM node_sync_logs
+	WHERE node_id = ?
+	ORDER BY id DESC
+	LIMIT ?;`
+
+	rows, err := r.db.QueryContext(ctx, query, nodeID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("ListNodeSyncLogs node %s: %w", nodeID, err)
+	}
+	defer rows.Close()
+
+	var logs []entity.NodeSyncLogRecord
+	for rows.Next() {
+		var l entity.NodeSyncLogRecord
+		if err := rows.Scan(&l.ID, &l.NodeID, &l.EventType, &l.ReleaseID, &l.Message, &l.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan NodeSyncLogRecord: %w", err)
+		}
+		logs = append(logs, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if logs == nil {
+		logs = []entity.NodeSyncLogRecord{}
+	}
+	return logs, nil
+}
+

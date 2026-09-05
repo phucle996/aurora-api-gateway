@@ -33,9 +33,21 @@ export interface NodeMetricPoint {
   activeConnections: number;
 }
 
+export interface NodeSyncLog {
+  id: number;
+  node_id: string;
+  event_type: 'release_applied' | 'reload_completed' | 'drift_detected';
+  release_id?: number;
+  message: string;
+  created_at: string;
+}
+
 export const nodesApi = {
   list: () => api.get<NodeRecord[]>('/api/v1/nodes'),
   getById: (id: string) => api.get<NodeRecord>(`/api/v1/nodes/${id}`),
   getMetrics: (id: string) =>
     api.get<NodeMetricPoint[]>(`/api/v1/nodes/${id}/metrics`),
+  getSyncHistory: (id: string) =>
+    api.get<NodeSyncLog[]>(`/api/v1/nodes/${id}/sync-history`),
 };
+

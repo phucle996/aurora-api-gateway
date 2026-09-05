@@ -44,3 +44,14 @@ type ClusterRollingStatus struct {
 	CompletedNodes []string `json:"completedNodes"`
 	Message        string   `json:"message"`
 }
+
+// NodeSyncLogRecord đại diện cho một sự kiện thay đổi trạng thái đồng bộ thực tế của node trong cluster.
+type NodeSyncLogRecord struct {
+	ID        int64  `json:"id"`
+	NodeID    string `json:"node_id"`
+	EventType string `json:"event_type"` // "release_applied" | "reload_completed" | "drift_detected"
+	ReleaseID *int64 `json:"release_id,omitempty"`
+	Message   string `json:"message"`
+	CreatedAt string `json:"created_at"`
+}
+

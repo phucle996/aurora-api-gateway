@@ -213,4 +213,53 @@ func (h *NodeHandler) GetRollingStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, status)
 }
 
+// EventsStream mở luồng HTTP Server-Sent Events (SSE) để truyền dữ liệu thời gian thực tới UI.
+func (h *NodeHandler) EventsStream(c *gin.Context) {
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+
+	eventChan, unsubscribe := h.service.SubscribeEvents()
+	defer unsubscribe()
+
+	// Gửi một gói tin ping ban đầu để xác lập kết nối
+	c.SSEvent("ping", gin.H{"status": "connected"})
+	c.Writer.Flush()
+
+	clientDone := c.Request.Context().Done()
+
+	for {
+		select {
+		case <-clientDone:
+			// Client đóng tab, chuyển trang, hoặc ngắt mạng
+			return
+		case msg, ok := <-eventChan:
+			if !ok {
+				return
+			}
+			c.SSEvent(msg.Event, msg.Data)
+			c.Writer.Flush()
+		}
+	}
+}
+
+// GetSyncLogs xử lý HTTP GET /api/v1/nodes/:id/sync-history:
+// Trả về danh sách các bản ghi lịch sử đồng bộ thực tế của node.
+func (h *NodeHandler) GetSyncLogs(c *gin.Context) {
+	nodeID := c.Param("id")
+	if nodeID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Mã định danh node không được để trống"})
+		return
+	}
+
+	logs, err := h.service.ListNodeSyncLogs(c.Request.Context(), nodeID, 30)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi truy vấn lịch sử sync: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, logs)
+}
+
 
