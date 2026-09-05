@@ -7,8 +7,8 @@ request bằng policy đã nạp cục bộ.
 Trạng thái: **runtime bootstrap chạy được**. React nhúng trong Go controller; NGINX
 dynamic module gọi Rust runtime để allow/block theo exact-path policy. Đã kiểm tra
 reload và controller outage. Đã có [Rules backend](docs/RULES_BACKEND.md): SQLite revisions,
-exact-path compiler, ABI v3 và journaled activation CLI. [Create Rule](docs/CREATE_RULE.md)
-đã nối React → Go → SQLite, kèm list/detail/history thật; lưu không đồng nghĩa deploy.
+exact-path compiler, ABI v3 và journaled activation CLI. Đã nối React → Go → SQLite,
+kèm list/detail/history thật; lưu không đồng nghĩa deploy.
 Chưa có SQLi/XSS, body inspection, full compiler hoặc fleet
 management. Xem [runtime contract](docs/RUNTIME.md); chưa dùng cho production.
 
@@ -53,13 +53,13 @@ examples/                Policy minh họa, chưa được engine thực thi
 
 ## Tài liệu
 
-- [Validation ý tưởng](docs/VALIDATION.md): khả thi, giới hạn, lựa chọn.
-- [Phạm vi sản phẩm](docs/PRODUCT.md) và [kiến trúc](docs/ARCHITECTURE.md).
-- [Roadmap stage → phase → task](ROADMAP.md): dependency và tiêu chí hoàn thành.
-- [Rule language](docs/RULES.md), [snapshot](docs/SNAPSHOTS.md), [FFI](docs/FFI.md).
-- [Management API](docs/API.md) và [threat model](docs/THREAT_MODEL.md).
-- [Development](docs/DEVELOPMENT.md), [testing](docs/TESTING.md), [deployment](docs/DEPLOYMENT.md).
-- [Observability](docs/OBSERVABILITY.md), [ADRs](docs/adr/README.md).
-- [Đóng góp](CONTRIBUTING.md), [bảo mật](SECURITY.md), [changelog](CHANGELOG.md).
+- [Kiến trúc hệ thống](docs/ARCHITECTURE.md) và [mô hình đe dọa](docs/THREAT_MODEL.md).
+- [High Availability & Zero-Downtime Reload](docs/HA_ZERO_DOWNTIME.md).
+- [Giám sát & Telemetry (Standalone / Prometheus)](docs/OBSERVABILITY.md).
+- [Kiểm thử tải cao & Báo cáo Audit](docs/METRICS_PRESSURE_AUDIT.md).
+- [Rules Backend & SQLite Architecture](docs/RULES_BACKEND.md).
+- [NGINX Runtime Contract](docs/RUNTIME.md) và [C ABI FFI v3](docs/FFI.md).
+- [Hướng dẫn phát triển](docs/DEVELOPMENT.md), [kiểm thử](docs/TESTING.md) và [toolchain](docs/TOOLCHAIN.md).
+- [Hướng dẫn chạy cục bộ](docs/LOCAL_RUN.md).
 
 Chưa chọn license phân phối; không mặc định dự án đã được cấp phép open source.

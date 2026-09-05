@@ -38,8 +38,4 @@ export const nodesApi = {
   getById: (id: string) => api.get<NodeRecord>(`/api/v1/nodes/${id}`),
   getMetrics: (id: string) =>
     api.get<NodeMetricPoint[]>(`/api/v1/nodes/${id}/metrics`),
-  generateBootstrapToken: () =>
-    api.post<{ token: string; expires_at: string }>(
-      '/api/v1/nodes/bootstrap-token'
-    ),
 };

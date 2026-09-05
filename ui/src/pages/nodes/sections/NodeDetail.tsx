@@ -7,11 +7,11 @@ import {
   AlertCircle,
   Copy,
   Check,
-  Info,
   ArrowRight,
   Activity,
   Sliders,
   RefreshCw,
+  Shield,
 } from 'lucide-react';
 import type { NodeItem } from './NodesTable';
 import { nodesApi } from '../../../lib/api';
@@ -22,7 +22,7 @@ interface NodeDetailProps {
 
 export function NodeDetail({ node }: NodeDetailProps) {
   const [activeTab, setActiveTab] = useState<'Overview' | 'Metrics' | 'Config' | 'Sync'>('Overview');
-  const [copiedJoinCmd, setCopiedJoinCmd] = useState(false);
+  const [copiedMtlsCmd, setCopiedMtlsCmd] = useState(false);
   const [metrics, setMetrics] = useState<any[]>([]);
   const [isLoadingMetrics, setIsLoadingMetrics] = useState(false);
   const [metricsError, setMetricsError] = useState<string | null>(null);
@@ -50,12 +50,12 @@ export function NodeDetail({ node }: NodeDetailProps) {
     }
   }, [activeTab, node?.id]);
 
-  const joinCommand = `aurora-waf join --controller https://waf-control.example.com \\\n  --token awf_${node.name}_bootstrap_token`;
+  const mtlsVerifyCommand = `curl -s --cacert /etc/aurora-waf/certs/ca.crt \\\n  --cert /etc/aurora-waf/certs/node.crt \\\n  --key /etc/aurora-waf/certs/node.key \\\n  https://control-plane.internal:8080/api/v1/rule-releases/active`;
 
   const handleCopyCommand = () => {
-    navigator.clipboard.writeText(joinCommand);
-    setCopiedJoinCmd(true);
-    setTimeout(() => setCopiedJoinCmd(false), 2000);
+    navigator.clipboard.writeText(mtlsVerifyCommand);
+    setCopiedMtlsCmd(true);
+    setTimeout(() => setCopiedMtlsCmd(false), 2000);
   };
 
   return (
@@ -217,41 +217,41 @@ export function NodeDetail({ node }: NodeDetailProps) {
               </div>
             </div>
 
-            {/* Join Node (Automatic Registration) Box */}
+            {/* mTLS Node Authentication Box */}
             <div className="p-3.5 bg-[#080E18] border border-[#152030] space-y-3 font-mono">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-cyan-400">
-                <Info className="w-3.5 h-3.5" />
-                <span>Join Node (Automatic Registration)</span>
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
+                <Shield className="w-3.5 h-3.5" />
+                <span>Node Authentication (mTLS Enrolled)</span>
               </div>
               <p className="text-[11px] text-slate-400 leading-relaxed font-sans">
-                NGINX nodes join the cluster automatically using a secure bootstrap token. Generate a token and run the join command on the node. The node will appear here after registration.
+                NGINX nodes authenticate with the Control Plane using mutual TLS (mTLS). Certificates in <code className="text-emerald-300">/etc/aurora-waf/certs</code> verify node identity without requiring tokens.
               </p>
 
               <div className="space-y-2 text-[11px] text-slate-300">
                 <div className="flex items-start gap-2">
-                  <span className="w-4 h-4 bg-[#152030] text-cyan-400 flex items-center justify-center text-[10px] shrink-0">
+                  <span className="w-4 h-4 bg-[#152030] text-emerald-400 flex items-center justify-center text-[10px] shrink-0">
                     1
                   </span>
-                  <span>Generate a bootstrap token (valid for 24 hours)</span>
+                  <span>Provision certificate bundle (<code className="text-slate-200">ca.crt</code>, <code className="text-slate-200">node.crt</code>, <code className="text-slate-200">node.key</code>)</span>
                 </div>
 
                 <div className="flex items-start gap-2">
-                  <span className="w-4 h-4 bg-[#152030] text-cyan-400 flex items-center justify-center text-[10px] shrink-0">
+                  <span className="w-4 h-4 bg-[#152030] text-emerald-400 flex items-center justify-center text-[10px] shrink-0">
                     2
                   </span>
-                  <span>Run the join command on the NGINX node:</span>
+                  <span>Verify mTLS handshake & active policy pull:</span>
                 </div>
 
                 {/* Code Block */}
                 <div className="relative p-2.5 bg-[#04070D] border border-[#1C293D] text-[10px] text-emerald-300 font-mono overflow-x-auto">
-                  <pre className="whitespace-pre-wrap">{joinCommand}</pre>
+                  <pre className="whitespace-pre-wrap">{mtlsVerifyCommand}</pre>
                   <button
                     type="button"
                     onClick={handleCopyCommand}
                     className="absolute top-2 right-2 p-1 bg-[#152030] hover:bg-[#1C293D] text-slate-300 hover:text-white transition-colors cursor-pointer"
-                    title="Copy join command"
+                    title="Copy verify command"
                   >
-                    {copiedJoinCmd ? (
+                    {copiedMtlsCmd ? (
                       <Check className="w-3 h-3 text-emerald-400" />
                     ) : (
                       <Copy className="w-3 h-3" />
@@ -260,10 +260,10 @@ export function NodeDetail({ node }: NodeDetailProps) {
                 </div>
 
                 <div className="flex items-start gap-2">
-                  <span className="w-4 h-4 bg-[#152030] text-cyan-400 flex items-center justify-center text-[10px] shrink-0">
+                  <span className="w-4 h-4 bg-[#152030] text-emerald-400 flex items-center justify-center text-[10px] shrink-0">
                     3
                   </span>
-                  <span>Node appears automatically after registration</span>
+                  <span>Node daemon boots via <code className="text-slate-200">systemctl start aurora-waf-nginx</code></span>
                 </div>
               </div>
             </div>
@@ -296,7 +296,7 @@ export function NodeDetail({ node }: NodeDetailProps) {
                     <span className="w-1.5 h-1.5 bg-slate-500" />
                     <span>Registration time</span>
                   </div>
-                  <span className="text-slate-500">{node.created_at || 'Bootstrapped'}</span>
+                  <span className="text-slate-500">{node.created_at || 'mTLS Enrolled'}</span>
                 </div>
               </div>
             </div>

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   Search,
   RotateCw,
-  Key,
   MoreHorizontal,
   ChevronLeft,
   ChevronRight,
@@ -43,7 +42,6 @@ interface NodesTableProps {
   onRefresh?: () => void;
   selectedNodeId: string;
   onSelectNode: (node: NodeItem) => void;
-  onOpenGenerateToken: () => void;
 }
 
 export function NodesTable({
@@ -52,7 +50,6 @@ export function NodesTable({
   onRefresh,
   selectedNodeId,
   onSelectNode,
-  onOpenGenerateToken,
 }: NodesTableProps) {
   const nodes = nodesProp || [];
   const [searchQuery, setSearchQuery] = useState('');
@@ -109,15 +106,6 @@ export function NodesTable({
               className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-emerald-400' : 'text-slate-400'}`}
             />
             <span>Refresh</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onOpenGenerateToken}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 border border-emerald-500 text-xs font-semibold text-white transition-colors cursor-pointer shadow-sm"
-          >
-            <Key className="w-3.5 h-3.5" />
-            <span>Generate Join Token</span>
           </button>
         </div>
       </div>
@@ -222,7 +210,7 @@ export function NodesTable({
               <tr>
                 <td colSpan={12} className="py-12 text-center text-slate-500">
                   {nodes.length === 0
-                    ? 'No nodes registered in the cluster yet. Use "Generate Join Token" to onboard a node.'
+                    ? 'No nodes registered in the cluster yet. Nodes authenticate securely via mTLS.'
                     : 'No nodes found matching the filter criteria.'}
                 </td>
               </tr>

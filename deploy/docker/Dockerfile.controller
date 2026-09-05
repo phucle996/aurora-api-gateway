@@ -1,0 +1,23 @@
+FROM ubuntu:latest
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY build/aurora-controller /app/aurora-controller
+COPY target/release/aurora-compile /app/aurora-compile
+COPY deploy/docker/entrypoint-controller.sh /entrypoint.sh
+
+RUN chmod +x /entrypoint.sh /app/aurora-controller /app/aurora-compile && mkdir -p /data
+
+ENV AURORA_HTTP_ADDR="0.0.0.0:8080"
+ENV AURORA_SQLITE_PATH="/data/aurora.db"
+ENV AURORA_ADMIN_TOKEN_FILE="/data/admin.token"
+ENV AURORA_COMPILER_PATH="/app/aurora-compile"
+
+EXPOSE 8080
+
+ENTRYPOINT ["/entrypoint.sh"]

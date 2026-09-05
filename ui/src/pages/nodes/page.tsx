@@ -2,14 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { NodesStats } from './sections/NodesStats';
 import { NodesTable, type NodeItem } from './sections/NodesTable';
 import { NodeDetail } from './sections/NodeDetail';
-import { GenerateTokenModal } from './sections/GenerateTokenModal';
 import { nodesApi } from '../../lib/api';
 
 export default function NodesPage() {
   const [nodes, setNodes] = useState<NodeItem[]>([]);
   const [selectedNode, setSelectedNode] = useState<NodeItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isTokenModalOpen, setIsTokenModalOpen] = useState(false);
 
   const fetchNodes = useCallback(async () => {
     setIsLoading(true);
@@ -49,7 +47,6 @@ export default function NodesPage() {
             onRefresh={fetchNodes}
             selectedNodeId={selectedNode?.id || ''}
             onSelectNode={(node) => setSelectedNode(node)}
-            onOpenGenerateToken={() => setIsTokenModalOpen(true)}
           />
         </div>
 
@@ -62,12 +59,6 @@ export default function NodesPage() {
           </div>
         )}
       </div>
-
-      {/* Generate Token Modal */}
-      <GenerateTokenModal
-        isOpen={isTokenModalOpen}
-        onClose={() => setIsTokenModalOpen(false)}
-      />
     </div>
   );
 }

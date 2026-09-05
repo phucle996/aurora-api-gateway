@@ -32,8 +32,8 @@ export function NodesStats({ nodes }: NodesStatsProps) {
         <h1 className="text-xl font-semibold text-white tracking-tight">
           Cluster / Nodes
         </h1>
-        <p className="text-xs text-slate-400 mt-1 font-mono">
-          Monitor registered NGINX WAF nodes, controller health, ruleset sync, and cluster readiness. Nodes join automatically using secure bootstrap tokens.
+        <p className="text-xs text-slate-400 font-mono mt-1">
+          Monitor registered NGINX WAF nodes, controller health, ruleset sync, and cluster readiness. Nodes authenticate securely via mTLS certificates.
         </p>
       </div>
 

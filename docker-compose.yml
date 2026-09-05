@@ -1,0 +1,81 @@
+services:
+  controller:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.controller
+    container_name: aurora-controller
+    ports:
+      - "8080:8080"
+    volumes:
+      - controller-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/readyz"]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+      start_period: 2s
+
+  node-01:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.node
+    container_name: aurora-node-01
+    environment:
+      - CONTROLLER_URL=http://controller:8080
+      - NODE_ID=node-01
+      - AUTH_TOKEN=71b268cadc82c2ecfff176c7dfd5c4ac77a0e6a3cd0ae3a7d87b1b9bb686b994
+    ports:
+      - "8091:80"
+    depends_on:
+      controller:
+        condition: service_healthy
+    restart: unless-stopped
+
+  node-02:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.node
+    container_name: aurora-node-02
+    environment:
+      - CONTROLLER_URL=http://controller:8080
+      - NODE_ID=node-02
+      - AUTH_TOKEN=71b268cadc82c2ecfff176c7dfd5c4ac77a0e6a3cd0ae3a7d87b1b9bb686b994
+    ports:
+      - "8092:80"
+    depends_on:
+      controller:
+        condition: service_healthy
+    restart: unless-stopped
+
+  node-03:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.node
+    container_name: aurora-node-03
+    environment:
+      - CONTROLLER_URL=http://controller:8080
+      - NODE_ID=node-03
+      - AUTH_TOKEN=71b268cadc82c2ecfff176c7dfd5c4ac77a0e6a3cd0ae3a7d87b1b9bb686b994
+    ports:
+      - "8093:80"
+    depends_on:
+      controller:
+        condition: service_healthy
+    restart: unless-stopped
+
+  lb:
+    image: nginx:alpine
+    container_name: aurora-lb
+    ports:
+      - "8090:80"
+    volumes:
+      - ./deploy/docker/nginx-lb.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - node-01
+      - node-02
+      - node-03
+    restart: unless-stopped
+
+volumes:
+  controller-data:
