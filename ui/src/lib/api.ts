@@ -158,8 +158,35 @@ export const rateLimitsApi = {
 export const nodesApi = {
   list: () => api.get<any[]>('/api/v1/nodes'),
   getById: (id: string) => api.get<any>(`/api/v1/nodes/${id}`),
+  getMetrics: (id: string) => api.get<any[]>(`/api/v1/nodes/${id}/metrics`),
   generateBootstrapToken: () =>
     api.post<{ token: string; expires_at: string }>(
       '/api/v1/nodes/bootstrap-token'
     ),
 };
+
+/**
+ * Settings & Integrations API
+ */
+export const integrationsApi = {
+  getMetricsConfig: () =>
+    api.get<{
+      mode: 'standalone' | 'prometheus' | 'disabled';
+      prometheus_url: string;
+      prometheus_job: string;
+      updated_at: string;
+    }>('/api/v1/settings/integrations/metrics'),
+
+  updateMetricsConfig: (payload: {
+    mode: string;
+    prometheus_url: string;
+    prometheus_job: string;
+  }) => api.put<any>('/api/v1/settings/integrations/metrics', payload),
+
+  testPrometheus: (url: string) =>
+    api.post<{ success: boolean; message: string; latency_ms: number }>(
+      '/api/v1/settings/integrations/metrics/test',
+      { url }
+    ),
+};
+

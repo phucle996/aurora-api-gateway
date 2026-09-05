@@ -36,6 +36,12 @@ type Module struct {
 	// --- Cluster Node handlers ---
 	ListNodes  gin.HandlerFunc // GET  /api/v1/nodes
 	NodeDetail gin.HandlerFunc // GET  /api/v1/nodes/:id
+
+	// --- Metrics & Integration handlers ---
+	GetMetricsConfig           gin.HandlerFunc // GET  /api/v1/settings/integrations/metrics
+	UpdateMetricsConfig        gin.HandlerFunc // PUT  /api/v1/settings/integrations/metrics
+	TestPrometheusConnection   gin.HandlerFunc // POST /api/v1/settings/integrations/metrics/test
+	GetNodeMetrics             gin.HandlerFunc // GET  /api/v1/nodes/:id/metrics
 }
 
 // NewModule khởi tạo toàn bộ chuỗi dependency của ứng dụng theo thứ tự:
@@ -61,6 +67,9 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	nodeRepo := repository.NewNodeRepository(readerDB)
 	nodeSvc := service.NewNodeService(nodeRepo)
 
+	settingsRepo := repository.NewSettingsRepository(writerDB)
+	metricsSvc := service.NewMetricsService(settingsRepo)
+
 	createDefHdr := handler.CreateRuleDefinition(ruleSvc)
 	listRulesHdr := handler.ListRules(ruleSvc)
 	createRuleHdr := handler.CreateRule(ruleSvc)
@@ -72,21 +81,29 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	releaseDetailHdr := handler.ReleaseDetail(ruleSvc)
 	listNodesHdr := handler.ListNodes(nodeSvc)
 	nodeDetailHdr := handler.GetNodeByID(nodeSvc)
+	getMetricsCfgHdr := handler.GetMetricsConfig(metricsSvc)
+	updateMetricsCfgHdr := handler.UpdateMetricsConfig(metricsSvc)
+	testPrometheusHdr := handler.TestPrometheusConnection(metricsSvc)
+	getNodeMetricsHdr := handler.GetNodeMetrics(metricsSvc)
 
 	return &Module{
-		StatusHandler:        statusHdr,
-		AuthHandler:          authHdr,
-		AuthService:          authSvc,
-		CreateRuleDefinition: createDefHdr,
-		ListRules:            listRulesHdr,
-		CreateRule:           createRuleHdr,
-		RuleStats:            ruleStatsHdr,
-		RuleDetail:           ruleDetailHdr,
-		UpdateRule:           updateRuleHdr,
-		RuleHistory:          ruleHistoryHdr,
-		PublishRules:         publishRulesHdr,
-		ReleaseDetail:        releaseDetailHdr,
-		ListNodes:            listNodesHdr,
-		NodeDetail:           nodeDetailHdr,
+		StatusHandler:            statusHdr,
+		AuthHandler:              authHdr,
+		AuthService:              authSvc,
+		CreateRuleDefinition:     createDefHdr,
+		ListRules:                listRulesHdr,
+		CreateRule:               createRuleHdr,
+		RuleStats:                ruleStatsHdr,
+		RuleDetail:               ruleDetailHdr,
+		UpdateRule:               updateRuleHdr,
+		RuleHistory:              ruleHistoryHdr,
+		PublishRules:             publishRulesHdr,
+		ReleaseDetail:            releaseDetailHdr,
+		ListNodes:                listNodesHdr,
+		NodeDetail:               nodeDetailHdr,
+		GetMetricsConfig:         getMetricsCfgHdr,
+		UpdateMetricsConfig:      updateMetricsCfgHdr,
+		TestPrometheusConnection: testPrometheusHdr,
+		GetNodeMetrics:           getNodeMetricsHdr,
 	}
 }

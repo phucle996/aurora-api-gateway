@@ -6,6 +6,7 @@ import { NotificationsSettingsSection } from './sections/NotificationsSettingsSe
 import { LoggingSettingsSection } from './sections/LoggingSettingsSection';
 import { BackupRestoreSettingsSection } from './sections/BackupRestoreSettingsSection';
 import { DangerZoneSection } from './sections/DangerZoneSection';
+import { IntegrationsSettingsSection } from './sections/IntegrationsSettingsSection';
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('General');
@@ -38,17 +39,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {activeTab === 'Integrations' && (
-        <div className="p-6 bg-[#0B1320] border border-[#152030] font-mono text-xs space-y-3">
-          <div className="text-sm font-semibold text-white">Cluster Integrations & Webhooks</div>
-          <p className="text-slate-400">
-            Connect your SIEM, Prometheus exporter, Grafana dashboards, and Kubernetes ingress operators.
-          </p>
-          <div className="p-3 bg-[#080E18] border border-[#1C293D] text-emerald-400">
-            ● Prometheus Metrics Endpoint: <code>http://127.0.0.1:8080/metrics</code> (Enabled)
-          </div>
-        </div>
-      )}
+      {activeTab === 'Integrations' && <IntegrationsSettingsSection />}
 
       {activeTab === 'Cluster' && (
         <div className="p-6 bg-[#0B1320] border border-[#152030] font-mono text-xs space-y-3">

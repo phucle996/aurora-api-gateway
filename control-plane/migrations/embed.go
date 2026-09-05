@@ -21,3 +21,7 @@ var Users string
 
 //go:embed 0006_cluster_nodes.sql
 var ClusterNodes string
+
+//go:embed 0007_system_settings.sql
+var SystemSettings string
+

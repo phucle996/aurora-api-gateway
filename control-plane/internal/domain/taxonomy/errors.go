@@ -30,3 +30,14 @@ var (
 	// ErrUserNotFound phát sinh khi tài khoản người dùng không tồn tại
 	ErrUserNotFound = errors.New("user not found")
 )
+
+// ─── Metrics & Integration Domain Errors ──────────────────────────────────────
+
+var (
+	// ErrMetricsUnavailable phát sinh khi máy chủ Prometheus không khả dụng hoặc phản hồi lỗi
+	ErrMetricsUnavailable = errors.New("metrics provider unavailable or unreachable")
+
+	// ErrMetricsDisabled phát sinh khi tích hợp metrics đang ở trạng thái tắt
+	ErrMetricsDisabled = errors.New("metrics integration is disabled")
+)
+

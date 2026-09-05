@@ -48,7 +48,14 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	r.GET("/api/v1/rule-releases/:id", authMidd, m.ReleaseDetail)   // Trạng thái release
 
 	// Quản lý Cluster Nodes (danh sách và trạng thái các NGINX data plane nodes)
-	r.GET("/api/v1/nodes", authMidd, m.ListNodes)        // Danh sách nodes trong cluster
-	r.GET("/api/v1/nodes/:id", authMidd, m.NodeDetail)   // Chi tiết 1 node
+	r.GET("/api/v1/nodes", authMidd, m.ListNodes)              // Danh sách nodes trong cluster
+	r.GET("/api/v1/nodes/:id", authMidd, m.NodeDetail)         // Chi tiết 1 node
+	r.GET("/api/v1/nodes/:id/metrics", authMidd, m.GetNodeMetrics) // Timeline metrics của node
+
+	// Cấu hình tích hợp hệ thống (System Settings & Telemetry Integrations)
+	r.GET("/api/v1/settings/integrations/metrics", authMidd, m.GetMetricsConfig)          // Lấy cấu hình Telemetry hiện tại
+	r.PUT("/api/v1/settings/integrations/metrics", authMidd, m.UpdateMetricsConfig)       // Chuyển đổi giữa Lab/Standalone và Production
+	r.POST("/api/v1/settings/integrations/metrics/test", authMidd, m.TestPrometheusConnection) // Kiểm tra kết nối tới Prometheus
 }
+
 
