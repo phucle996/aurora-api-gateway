@@ -41,3 +41,11 @@ var (
 	ErrMetricsDisabled = errors.New("metrics integration is disabled")
 )
 
+// ─── Settings Domain Errors ───────────────────────────────────────────────────
+
+var (
+	// ErrSettingsStorage phát sinh khi có lỗi truy vấn hoặc lưu trữ cấu hình hệ thống
+	ErrSettingsStorage = errors.New("system settings storage error")
+)
+
+

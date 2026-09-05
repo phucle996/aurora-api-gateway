@@ -3,6 +3,7 @@ package repository
 import (
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	"aurora-waf.local/control-plane/internal/domain/repo"
+	"aurora-waf.local/control-plane/internal/domain/taxonomy"
 	"context"
 	"database/sql"
 	"fmt"
@@ -40,7 +41,7 @@ func (r *sqliteSettingsRepository) GetMetricsConfig(ctx context.Context) (*entit
 	for rows.Next() {
 		var key, val, updatedAt string
 		if err := rows.Scan(&key, &val, &updatedAt); err != nil {
-			return nil, err
+			return nil, taxonomy.ErrSettingsStorage
 		}
 		cfg.UpdatedAt = updatedAt
 		switch key {
@@ -52,7 +53,10 @@ func (r *sqliteSettingsRepository) GetMetricsConfig(ctx context.Context) (*entit
 			cfg.PrometheusJob = val
 		}
 	}
-	return cfg, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, taxonomy.ErrSettingsStorage
+	}
+	return cfg, nil
 }
 
 // SaveMetricsConfig lưu cấu hình tích hợp metrics vào bảng system_settings.
