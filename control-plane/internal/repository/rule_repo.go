@@ -2,6 +2,7 @@ package repository
 
 import (
 	"aurora-waf.local/control-plane/internal/domain/entity"
+	"aurora-waf.local/control-plane/internal/domain/repo"
 	"aurora-waf.local/control-plane/internal/domain/taxonomy"
 	"context"
 	"crypto/sha256"
@@ -24,8 +25,9 @@ type ruleRepository struct {
 	reader *sql.DB // Kết nối cơ sở dữ liệu cho thao tác đọc dữ liệu
 }
 
-// NewRuleRepository khởi tạo đối tượng repository với hai kết nối đọc và ghi riêng biệt.
-func NewRuleRepository(writer, reader *sql.DB) *ruleRepository {
+// NewRuleRepository khởi tạo đối tượng repository với hai kết nối đọc và ghi riêng biệt,
+// trả về interface repo.RuleRepository để các tầng trên phụ thuộc vào abstraction thay vì struct cụ thể.
+func NewRuleRepository(writer, reader *sql.DB) repo.RuleRepository {
 	return &ruleRepository{writer: writer, reader: reader}
 }
 
