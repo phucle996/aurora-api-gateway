@@ -13,15 +13,16 @@ import {
 export interface NodeItem {
   id: string;
   name: string;
+  hostname?: string;
   ip: string;
-  region: string;
-  regionFull: string;
+  region?: string;
+  regionFull?: string;
   role: string;
   status: 'Ready' | 'Not Ready' | 'Draining';
   version: string;
   ruleset: string;
-  rps: string;
-  connections: string;
+  rps?: string;
+  connections?: string;
   lastHeartbeat: string;
   sync: 'In Sync' | 'Drift' | 'Syncing';
   cpuUsage: number;
@@ -279,17 +280,23 @@ export const INITIAL_NODES: NodeItem[] = [
 ];
 
 interface NodesTableProps {
+  nodes?: NodeItem[];
+  isLoading?: boolean;
+  onRefresh?: () => void;
   selectedNodeId: string;
   onSelectNode: (node: NodeItem) => void;
   onOpenGenerateToken: () => void;
 }
 
 export function NodesTable({
+  nodes: nodesProp,
+  isLoading = false,
+  onRefresh,
   selectedNodeId,
   onSelectNode,
   onOpenGenerateToken,
 }: NodesTableProps) {
-  const [nodes, setNodes] = useState<NodeItem[]>(INITIAL_NODES);
+  const nodes = nodesProp && nodesProp.length > 0 ? nodesProp : INITIAL_NODES;
   const [searchQuery, setSearchQuery] = useState('');
   const [regionFilter, setRegionFilter] = useState('ALL');
   const [roleFilter, setRoleFilter] = useState('ALL');
@@ -299,6 +306,9 @@ export function NodesTable({
 
   const handleRefresh = () => {
     setIsRefreshing(true);
+    if (onRefresh) {
+      onRefresh();
+    }
     setTimeout(() => {
       setIsRefreshing(false);
     }, 400);
@@ -308,7 +318,8 @@ export function NodesTable({
     const matchesSearch =
       node.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       node.ip.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      node.region.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (node.hostname && node.hostname.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (node.region && node.region.toLowerCase().includes(searchQuery.toLowerCase())) ||
       node.ruleset.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesRegion =
@@ -422,7 +433,7 @@ export function NodesTable({
                 </div>
               </th>
               <th className="py-2.5 px-3 font-medium">IP Address</th>
-              <th className="py-2.5 px-3 font-medium">Region</th>
+              <th className="py-2.5 px-3 font-medium">Hostname</th>
               <th className="py-2.5 px-3 font-medium">Role</th>
               <th className="py-2.5 px-3 font-medium">
                 <div className="flex items-center gap-1 cursor-pointer hover:text-slate-200">
@@ -460,8 +471,8 @@ export function NodesTable({
                   {/* IP Address */}
                   <td className="py-2 px-3 text-slate-300">{node.ip}</td>
 
-                  {/* Region */}
-                  <td className="py-2 px-3 text-slate-400">{node.region}</td>
+                  {/* Hostname */}
+                  <td className="py-2 px-3 text-slate-400">{node.hostname || node.region || 'localhost'}</td>
 
                   {/* Role */}
                   <td className="py-2 px-3 text-slate-300">Edge</td>

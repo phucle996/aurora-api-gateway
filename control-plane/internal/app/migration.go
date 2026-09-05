@@ -23,7 +23,7 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return err
 	}
-	if version > 5 {
+	if version > 6 {
 		return fmt.Errorf("unsupported database schema version %d", version)
 	}
 	if version == 0 {
@@ -74,6 +74,20 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 			return fmt.Errorf("seed admin user: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version) VALUES(5)"); err != nil {
+			return err
+		}
+	}
+	if version < 6 {
+		if _, err := tx.ExecContext(ctx, migrations.ClusterNodes); err != nil {
+			return fmt.Errorf("cluster nodes schema: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT OR IGNORE INTO cluster_nodes (id, name, hostname, ip, role, status, version, sync_status, join_method, certificate)
+			VALUES ('node-local-01', 'node-local-01', 'localhost', '127.0.0.1', 'Edge Node', 'Ready', '0.4.1', 'In Sync', 'Systemd Service', 'mTLS Enrolled')
+		`); err != nil {
+			return fmt.Errorf("seed local cluster node: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version) VALUES(6)"); err != nil {
 			return err
 		}
 	}

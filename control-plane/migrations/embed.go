@@ -18,3 +18,6 @@ var RuleDefinitions string
 
 //go:embed 0005_users.sql
 var Users string
+
+//go:embed 0006_cluster_nodes.sql
+var ClusterNodes string

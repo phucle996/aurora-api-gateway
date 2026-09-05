@@ -13,7 +13,18 @@ import {
   ArrowDownRight,
 } from 'lucide-react';
 
-export function NodesStats() {
+import type { NodeItem } from './NodesTable';
+
+interface NodesStatsProps {
+  nodes?: NodeItem[];
+}
+
+export function NodesStats({ nodes }: NodesStatsProps) {
+  const registeredCount = nodes ? nodes.length : 1;
+  const readyCount = nodes ? nodes.filter((n) => n.status === 'Ready').length : 1;
+  const notReadyCount = nodes ? nodes.filter((n) => n.status !== 'Ready').length : 0;
+  const ruleset = (nodes && nodes.length > 0 && nodes[0].ruleset) || 'rev-1';
+
   return (
     <div className="space-y-4">
       {/* Title & Description */}
@@ -47,8 +58,8 @@ export function NodesStats() {
             <Layers className="w-4 h-4 text-slate-500" />
           </div>
           <div>
-            <div className="text-lg font-bold font-mono text-white">3</div>
-            <div className="text-[10px] font-mono text-slate-500 mt-0.5">No change</div>
+            <div className="text-lg font-bold font-mono text-white">1</div>
+            <div className="text-[10px] font-mono text-slate-500 mt-0.5">Local Primary</div>
           </div>
         </div>
 
@@ -59,10 +70,9 @@ export function NodesStats() {
             <HardDrive className="w-4 h-4 text-slate-500" />
           </div>
           <div>
-            <div className="text-lg font-bold font-mono text-white">47</div>
+            <div className="text-lg font-bold font-mono text-white">{registeredCount}</div>
             <div className="text-[10px] font-mono text-emerald-400 flex items-center gap-0.5 mt-0.5">
-              <ArrowUpRight className="w-3 h-3 inline" />
-              <span>+3 vs. last month</span>
+              <span>Active in Cluster</span>
             </div>
           </div>
         </div>
@@ -74,10 +84,9 @@ export function NodesStats() {
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
           </div>
           <div>
-            <div className="text-lg font-bold font-mono text-emerald-400">45</div>
+            <div className="text-lg font-bold font-mono text-emerald-400">{readyCount}</div>
             <div className="text-[10px] font-mono text-emerald-400 flex items-center gap-0.5 mt-0.5">
-              <ArrowUpRight className="w-3 h-3 inline" />
-              <span>+4 vs. last month</span>
+              <span>Online & Protecting</span>
             </div>
           </div>
         </div>
@@ -89,10 +98,9 @@ export function NodesStats() {
             <AlertTriangle className="w-4 h-4 text-rose-400" />
           </div>
           <div>
-            <div className="text-lg font-bold font-mono text-rose-400">2</div>
+            <div className="text-lg font-bold font-mono text-rose-400">{notReadyCount}</div>
             <div className="text-[10px] font-mono text-rose-400 flex items-center gap-0.5 mt-0.5">
-              <ArrowDownRight className="w-3 h-3 inline" />
-              <span>-1 vs. last month</span>
+              <span>{notReadyCount === 0 ? 'Healthy' : 'Requires Attention'}</span>
             </div>
           </div>
         </div>
@@ -104,8 +112,8 @@ export function NodesStats() {
             <FileCode2 className="w-4 h-4 text-slate-500" />
           </div>
           <div>
-            <div className="text-lg font-bold font-mono text-cyan-400">rev-128</div>
-            <div className="text-[10px] font-mono text-slate-500 mt-0.5">No change</div>
+            <div className="text-lg font-bold font-mono text-cyan-400">{ruleset}</div>
+            <div className="text-[10px] font-mono text-slate-500 mt-0.5">Active Release</div>
           </div>
         </div>
       </div>

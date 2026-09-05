@@ -32,6 +32,10 @@ type Module struct {
 	RuleHistory          gin.HandlerFunc // GET  /api/v1/rules/:id/history
 	PublishRules         gin.HandlerFunc // POST /api/v1/rule-releases
 	ReleaseDetail        gin.HandlerFunc // GET  /api/v1/rule-releases/:id
+
+	// --- Cluster Node handlers ---
+	ListNodes  gin.HandlerFunc // GET  /api/v1/nodes
+	NodeDetail gin.HandlerFunc // GET  /api/v1/nodes/:id
 }
 
 // NewModule khởi tạo toàn bộ chuỗi dependency của ứng dụng theo thứ tự:
@@ -54,6 +58,9 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	ruleRepo := repository.NewRuleRepository(writerDB, readerDB)
 	ruleSvc := service.NewRuleService(ruleRepo, cfg.CompilerPath)
 
+	nodeRepo := repository.NewNodeRepository(readerDB)
+	nodeSvc := service.NewNodeService(nodeRepo)
+
 	createDefHdr := handler.CreateRuleDefinition(ruleSvc)
 	listRulesHdr := handler.ListRules(ruleSvc)
 	createRuleHdr := handler.CreateRule(ruleSvc)
@@ -63,6 +70,8 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	ruleHistoryHdr := handler.RuleHistory(ruleSvc)
 	publishRulesHdr := handler.PublishRules(ruleSvc)
 	releaseDetailHdr := handler.ReleaseDetail(ruleSvc)
+	listNodesHdr := handler.ListNodes(nodeSvc)
+	nodeDetailHdr := handler.GetNodeByID(nodeSvc)
 
 	return &Module{
 		StatusHandler:        statusHdr,
@@ -77,5 +86,7 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 		RuleHistory:          ruleHistoryHdr,
 		PublishRules:         publishRulesHdr,
 		ReleaseDetail:        releaseDetailHdr,
+		ListNodes:            listNodesHdr,
+		NodeDetail:           nodeDetailHdr,
 	}
 }

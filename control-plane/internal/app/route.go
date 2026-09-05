@@ -46,4 +46,9 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	// Phát hành (publish) bộ rule để NGINX áp dụng
 	r.POST("/api/v1/rule-releases", authMidd, m.PublishRules)       // Tạo release mới
 	r.GET("/api/v1/rule-releases/:id", authMidd, m.ReleaseDetail)   // Trạng thái release
+
+	// Quản lý Cluster Nodes (danh sách và trạng thái các NGINX data plane nodes)
+	r.GET("/api/v1/nodes", authMidd, m.ListNodes)        // Danh sách nodes trong cluster
+	r.GET("/api/v1/nodes/:id", authMidd, m.NodeDetail)   // Chi tiết 1 node
 }
+
