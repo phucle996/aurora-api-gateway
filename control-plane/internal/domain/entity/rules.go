@@ -192,9 +192,3 @@ type CreateRuleDefinitionResult struct {
 	RuntimeReady  bool
 	RuntimeIssues []string
 }
-
-type CreateRuleFieldError struct {
-	Fields map[string]string
-}
-
-func (e *CreateRuleFieldError) Error() string { return "invalid rule definition" }
