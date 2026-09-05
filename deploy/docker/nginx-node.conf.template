@@ -1,4 +1,6 @@
 load_module /opt/modules/ngx_http_aurora_waf_module.so;
+env NODE_ROLE;
+env NODE_VERSION;
 worker_processes 2;
 worker_rlimit_nofile 65535;
 pid /var/run/nginx.pid;
@@ -10,6 +12,9 @@ events {
 }
 
 http {
+    include /etc/nginx/access-trusted-proxies.conf;
+    real_ip_header X-Real-IP;
+    real_ip_recursive off;
     access_log /var/log/nginx/access.log;
     sendfile on;
     lingering_close always;
@@ -23,12 +28,13 @@ http {
         server_name localhost;
 
         aurora_waf on;
-        aurora_waf_policy /etc/nginx/active-policy.json;
+        aurora_waf_policy /var/lib/aurora-policy/active-policy.json;
+        aurora_access_policy /var/lib/aurora-policy/active-access.json;
         aurora_waf_mode enforce;
         aurora_waf_controller ${CONTROLLER_URL};
         aurora_waf_node_id ${NODE_ID};
         aurora_waf_token ${AUTH_TOKEN};
-        aurora_waf_heartbeat_interval 1;
+        aurora_waf_heartbeat_interval ${HEARTBEAT_INTERVAL};
 
         add_header X-Aurora-Node "${NODE_ID}" always;
         add_header X-Aurora-Generation $aurora_waf_generation always;
@@ -40,8 +46,22 @@ http {
             try_files $uri =404;
         }
 
+        location = /_aurora/config {
+            default_type text/plain;
+            alias /etc/nginx/nginx.conf;
+        }
+
         location = /metrics {
             aurora_waf_metrics;
         }
+    }
+    # Keep workload server first for the existing telemetry config inheritance.
+    server {
+        listen 127.0.0.1:9081;
+        aurora_waf on;
+        aurora_waf_policy /var/lib/aurora-policy/active-policy.json;
+        aurora_access_policy /var/lib/aurora-policy/active-access.json;
+        location = /generation { return 200 "$aurora_waf_generation"; }
+        location = /access-generation { return 200 "$aurora_access_generation"; }
     }
 }

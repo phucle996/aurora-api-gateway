@@ -7,7 +7,8 @@
 //!   hoặc quét mảng vòng lặp trên từng request, đảm bảo tốc độ tra cứu tức thời O(1) và an toàn tuyệt đối
 //!   trong môi trường đa luồng của NGINX worker.
 
-use serde::Deserialize;
+pub mod access;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 /// Dung lượng tối đa của một tệp chính sách (64KB = 65,536 bytes)
@@ -40,10 +41,27 @@ struct Policy {
     /// Danh sách các luật bảo vệ chi tiết (dùng cho Schema v2)
     #[serde(default)]
     rules: Option<Vec<Rule>>,
+    #[serde(default)]
+    policies: Option<Vec<ScopedPolicy>>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ScopedPolicy {
+    id: u64,
+    host: String,
+    path_prefix: String,
+    priority: u32,
+    rules: Vec<Rule>,
+}
+struct ScopeEngine {
+    host: Vec<u8>,
+    prefix: Vec<u8>,
+    engine: Engine,
 }
 
 /// Định nghĩa một luật bảo vệ WAF trong Schema v2
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct Rule {
     /// Mã số định danh duy nhất của luật
@@ -59,7 +77,7 @@ struct Rule {
 }
 
 /// Hành vi xử lý của luật bảo vệ
-#[derive(Deserialize, Clone, Copy)]
+#[derive(Deserialize, Serialize, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
 enum Action {
     /// Cho phép gói tin đi qua
@@ -96,6 +114,7 @@ pub struct Engine {
     generation: u64,
     /// Bảng băm chứa quyết định đã được tính toán sẵn cho từng đường dẫn URL
     decisions: HashMap<Vec<u8>, Decision>,
+    scopes: Vec<ScopeEngine>,
 }
 
 impl Engine {
@@ -108,6 +127,66 @@ impl Engine {
 
         // Bước 2: Giải mã chuỗi byte JSON thành struct Policy
         let policy: Policy = serde_json::from_slice(bytes).map_err(|_| Error::InvalidPolicy)?;
+
+        // Cluster policy scope is bounded (64); all maps are built before worker
+        // activation. First matching scope wins, lower priority then policy ID.
+        if policy.schema_version == 3 {
+            if policy.block_paths.is_some() || policy.rules.is_some() {
+                return Err(Error::InvalidPolicy);
+            }
+            let generation = policy
+                .generation
+                .filter(|g| *g > 0 && *g <= i64::MAX as u64)
+                .ok_or(Error::InvalidPolicy)?;
+            let mut policies = policy.policies.ok_or(Error::InvalidPolicy)?;
+            if policies.len() > 64 || policies.iter().map(|p| p.rules.len()).sum::<usize>() > 1024 {
+                return Err(Error::InvalidPolicy);
+            }
+            policies.sort_by_key(|p| (p.priority, p.id));
+            let mut ids = HashSet::new();
+            let mut scopes = Vec::new();
+            for p in policies {
+                if p.id == 0
+                    || !ids.insert(p.id)
+                    || p.priority > 1_000_000
+                    || p.host.is_empty()
+                    || p.host.len() > 253
+                    || (p.host != "*"
+                        && p.host.split('.').any(|label| {
+                            label.is_empty()
+                                || label.len() > 63
+                                || label.starts_with('-')
+                                || label.ends_with('-')
+                                || !label.bytes().all(|b| {
+                                    b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-'
+                                })
+                        }))
+                    || !p.path_prefix.starts_with('/')
+                    || p.path_prefix.len() > MAX_PATH_BYTES
+                    || p.path_prefix
+                        .bytes()
+                        .any(|b| b <= 32 || b >= 127 || b"%?#\\*".contains(&b))
+                    || p.path_prefix.contains("//")
+                    || p.path_prefix.split('/').any(|s| s == "." || s == "..")
+                {
+                    return Err(Error::InvalidPolicy);
+                }
+                let bytes = serde_json::to_vec(&serde_json::json!({"schema_version":2,"generation":generation,"rules":p.rules})).map_err(|_| Error::InvalidPolicy)?;
+                scopes.push(ScopeEngine {
+                    host: p.host.into_bytes(),
+                    prefix: p.path_prefix.into_bytes(),
+                    engine: Self::from_policy(&bytes)?,
+                });
+            }
+            return Ok(Self {
+                generation,
+                decisions: HashMap::new(),
+                scopes,
+            });
+        }
+        if policy.policies.is_some() {
+            return Err(Error::InvalidPolicy);
+        }
 
         // Bước 3: Phân nhánh xử lý theo phiên bản Schema Version
         let (generation, mut rules) = match policy.schema_version {
@@ -214,6 +293,7 @@ impl Engine {
         Ok(Self {
             generation,
             decisions,
+            scopes: Vec::new(),
         })
     }
 
@@ -225,6 +305,13 @@ impl Engine {
     /// So khớp đường dẫn gói tin HTTP (path) với bảng quyết định để đưa ra phán quyết xử lý.
     /// Độ phức tạp thuật toán đạt O(1) nhờ tra cứu trực tiếp trong HashMap.
     pub fn evaluate(&self, path: &[u8]) -> Result<Decision, Error> {
+        if !self.scopes.is_empty() {
+            return Err(Error::InvalidRequest);
+        }
+        self.evaluate_request(b"", path)
+    }
+
+    pub fn evaluate_request(&self, host: &[u8], path: &[u8]) -> Result<Decision, Error> {
         // Kiểm tra tính hợp lệ của đường dẫn HTTP gửi vào:
         // - Không được rỗng
         // - Không vượt quá 8KB
@@ -232,6 +319,20 @@ impl Engine {
         // - Không chứa byte NUL (0x00)
         if path.is_empty() || path.len() > MAX_PATH_BYTES || path[0] != b'/' || path.contains(&0) {
             return Err(Error::InvalidRequest);
+        }
+
+        if host.len() > 253 || host.contains(&0) {
+            return Err(Error::InvalidRequest);
+        }
+        for scope in &self.scopes {
+            let prefix = scope.prefix.as_slice();
+            let in_path = path.starts_with(prefix)
+                && (prefix.ends_with(b"/")
+                    || path.len() == prefix.len()
+                    || path.get(prefix.len()) == Some(&b'/'));
+            if (scope.host == b"*" || scope.host.eq_ignore_ascii_case(host)) && in_path {
+                return scope.engine.evaluate(path);
+            }
         }
 
         // Tra cứu trong bảng băm:
@@ -254,6 +355,63 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cluster_scope_priority_and_isolation() {
+        let bytes=br#"{"schema_version":3,"generation":1000000000001,"policies":[
+          {"id":2,"host":"*","path_prefix":"/","priority":100,"rules":[{"id":1,"path":"/admin/private","action":"block","score":5,"priority":0}]},
+          {"id":1,"host":"admin.test","path_prefix":"/admin","priority":0,"rules":[{"id":1,"path":"/admin/private","action":"log","score":5,"priority":0}]}]}"#;
+        let old = Engine::from_policy(bytes).unwrap();
+        let new = Engine::from_policy(
+            br#"{"schema_version":3,"generation":1000000000002,"policies":[]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            old.evaluate_request(b"ADMIN.TEST", b"/admin/private")
+                .unwrap()
+                .action,
+            0
+        );
+        assert_eq!(
+            old.evaluate_request(b"ADMIN.TEST", b"/admin/private")
+                .unwrap()
+                .log_matches,
+            1
+        );
+        assert_eq!(
+            old.evaluate_request(b"other.test", b"/admin/private")
+                .unwrap()
+                .action,
+            1
+        );
+        assert_eq!(old.evaluate(b"/admin/private"), Err(Error::InvalidRequest));
+        assert_eq!(
+            new.evaluate_request(b"other.test", b"/admin/private")
+                .unwrap()
+                .action,
+            0
+        );
+        assert_eq!(
+            old.evaluate_request(b"other.test", b"/admin/private")
+                .unwrap()
+                .action,
+            1
+        );
+        for bad in ["/../admin", "/admin*", "//admin"] {
+            let invalid = String::from_utf8(bytes.to_vec())
+                .unwrap()
+                .replace("\"/admin\"", &format!("\"{bad}\""));
+            assert!(Engine::from_policy(invalid.as_bytes()).is_err());
+        }
+        let boundary=Engine::from_policy(br#"{"schema_version":3,"generation":1,"policies":[{"id":1,"host":"*","path_prefix":"/admin","priority":0,"rules":[{"id":1,"path":"/administrator","action":"block","score":0,"priority":0}]}]}"#).unwrap();
+        assert_eq!(
+            boundary
+                .evaluate_request(b"any.test", b"/administrator")
+                .unwrap()
+                .action,
+            0
+        );
+    }
 
     /// Kiểm tra tính tương thích ngược và giới hạn biên của Schema v1
     #[test]

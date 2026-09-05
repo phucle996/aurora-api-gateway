@@ -13,6 +13,8 @@ type NodeHeartbeatEvent struct {
 	Status      string  `json:"status"`
 	RPS         float64 `json:"rps"`
 	ActiveConns int     `json:"active_conns"`
+	CPUUsage    float64 `json:"cpu_usage"`
+	MemoryUsage float64 `json:"memory_usage"`
 	Sync        string  `json:"sync"`
 	Ruleset     string  `json:"ruleset"`
 	Timestamp   int64   `json:"timestamp"`

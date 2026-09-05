@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { X } from 'lucide-react';
 import { getAuthToken } from '../../../lib/fetcher';
 
 interface SavedDetail {
@@ -11,7 +12,7 @@ interface SavedDetail {
 }
 interface SavedHistory { version: number; action: string; enabled: boolean; actor: string; updated_at: string }
 
-export function SavedRuleDetail({ id }: { id: string }) {
+export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => void }) {
   const [detail, setDetail] = useState<SavedDetail | null>(null);
   const [history, setHistory] = useState<SavedHistory[]>([]);
   const [error, setError] = useState('');
@@ -34,11 +35,37 @@ export function SavedRuleDetail({ id }: { id: string }) {
     })();
     return () => controller.abort();
   }, [id, retry]);
+
+  if (!id) return null;
+
   return <aside className="xl:col-span-5 bg-[#0B1320] border border-[#172338] p-4 text-xs space-y-4 select-text" aria-label="Saved rule detail">
-    {error ? <div role="alert">{error} <button onClick={() => setRetry(retry + 1)}>Retry read</button></div> :
-      !id ? <p>Select a saved rule.</p> : !detail ? <p role="status">Loading saved revision…</p> : <>
-      <h2 className="text-base text-white font-semibold">{detail.name}</h2>
-      <p>Rule #{detail.id} · revision {detail.version} · {detail.enabled ? 'Enabled definition' : 'Disabled definition'}</p>
+    {error ? (
+      <div className="flex justify-between items-start">
+        <div role="alert">{error} <button onClick={() => setRetry(retry + 1)} className="text-emerald-400 underline ml-2">Retry</button></div>
+        {onClose && <button type="button" onClick={onClose} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>}
+      </div>
+    ) : !detail ? (
+      <div className="flex justify-between items-start">
+        <p role="status">Loading saved revision…</p>
+        {onClose && <button type="button" onClick={onClose} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>}
+      </div>
+    ) : <>
+      <div className="flex items-start justify-between gap-3 pb-2 border-b border-[#172338]">
+        <div>
+          <h2 className="text-base text-white font-semibold">{detail.name}</h2>
+          <p className="text-slate-400">Rule #{detail.id} · revision {detail.version} · {detail.enabled ? 'Enabled definition' : 'Disabled definition'}</p>
+        </div>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 hover:bg-[#152338] text-slate-400 hover:text-white transition-colors cursor-pointer"
+            title="Đóng chi tiết"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
       <p className="text-cyan-300">Saved definition — this view does not assert deployment or NGINX activation.</p>
       <p className={detail.runtime_ready ? 'text-emerald-400' : 'text-amber-300'}>{detail.runtime_ready ? 'Compatible with current exact-path runtime. Publish/NGINX validation still required.' : 'Not publishable by the current runtime.'}</p>
       {detail.runtime_issues.length > 0 && <ul className="list-disc pl-5 text-amber-300">{detail.runtime_issues.map(issue => <li key={issue}>{issue}</li>)}</ul>}

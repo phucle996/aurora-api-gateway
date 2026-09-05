@@ -5,6 +5,7 @@ import (
 	port "aurora-waf.local/control-plane/internal/domain/service"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -46,9 +47,10 @@ func (h *NodeHandler) List(c *gin.Context) {
 			"version":           node.Version,
 			"active_release_id": node.ActiveReleaseID,
 			"ruleset":           node.Ruleset,
-			"sync":              node.SyncStatus,
-			"lastHeartbeat":     node.LastHeartbeat,
-			"created_at":        node.CreatedAt,
+			"sync":                   node.SyncStatus,
+			"lastHeartbeat":          node.LastHeartbeat,
+			"lastHeartbeatTimestamp": node.LastHeartbeatTimestamp,
+			"created_at":             node.CreatedAt,
 			"joinMethod":        node.JoinMethod,
 			"certificate":       node.Certificate,
 			"policySync":        node.PolicySync,
@@ -100,9 +102,10 @@ func (h *NodeHandler) GetByID(c *gin.Context) {
 		"version":           node.Version,
 		"active_release_id": node.ActiveReleaseID,
 		"ruleset":           node.Ruleset,
-		"sync":              node.SyncStatus,
-		"lastHeartbeat":     node.LastHeartbeat,
-		"created_at":        node.CreatedAt,
+		"sync":                   node.SyncStatus,
+		"lastHeartbeat":          node.LastHeartbeat,
+		"lastHeartbeatTimestamp": node.LastHeartbeatTimestamp,
+		"created_at":             node.CreatedAt,
 		"joinMethod":        node.JoinMethod,
 		"certificate":       node.Certificate,
 		"policySync":        node.PolicySync,
@@ -227,6 +230,10 @@ func (h *NodeHandler) EventsStream(c *gin.Context) {
 	c.SSEvent("ping", gin.H{"status": "connected"})
 	c.Writer.Flush()
 
+	// Ticker ping định kỳ 15s giữ luồng SSE luôn thông suốt qua mọi proxy
+	keepAliveTicker := time.NewTicker(15 * time.Second)
+	defer keepAliveTicker.Stop()
+
 	clientDone := c.Request.Context().Done()
 
 	for {
@@ -234,6 +241,9 @@ func (h *NodeHandler) EventsStream(c *gin.Context) {
 		case <-clientDone:
 			// Client đóng tab, chuyển trang, hoặc ngắt mạng
 			return
+		case <-keepAliveTicker.C:
+			c.SSEvent("ping", gin.H{"status": "keepalive"})
+			c.Writer.Flush()
 		case msg, ok := <-eventChan:
 			if !ok {
 				return
@@ -260,6 +270,29 @@ func (h *NodeHandler) GetSyncLogs(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, logs)
+}
+
+// GetConfig xử lý HTTP GET /api/v1/nodes/:id/config:
+// Kéo trực tiếp nội dung file cấu hình NGINX (/etc/nginx/nginx.conf) từ node container.
+func (h *NodeHandler) GetConfig(c *gin.Context) {
+	nodeID := c.Param("id")
+	if nodeID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Mã định danh node không được để trống"})
+		return
+	}
+
+	config, err := h.service.GetNodeConfig(c.Request.Context(), nodeID)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"node_id":    nodeID,
+		"path":       "/etc/nginx/nginx.conf",
+		"config":     config,
+		"fetched_at": time.Now().UTC().Format(time.RFC3339),
+	})
 }
 
 

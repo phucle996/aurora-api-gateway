@@ -1,157 +1,51 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Save, ChevronRight } from 'lucide-react';
-import { PolicyInfoSection } from './sections/PolicyInfoSection';
-import { ScopeAssignmentSection } from './sections/ScopeAssignmentSection';
-import { RuleGroupsSection } from './sections/RuleGroupsSection';
-import { ResponseLoggingSection } from './sections/ResponseLoggingSection';
-import { PolicySummaryPanel } from './sections/PolicySummaryPanel';
+import React,{useEffect,useRef,useState} from 'react';
+import {Link,useNavigate,useSearchParams} from 'react-router-dom';
+import {policiesApi,type PolicyDraft,type PolicyRule} from '../../lib/api/policies';
 
-export default function CreatePolicyPage() {
-  const navigate = useNavigate();
-
-  // Form State initialized with values from screenshot mockup
-  const [policyName, setPolicyName] = useState('Admin Console Strict');
-  const [description, setDescription] = useState(
-    'High-security policy for administrative interfaces with strict enforcement and enhanced protection against common attack vectors.'
-  );
-  const [mode, setMode] = useState('Blocking');
-  const [priority, setPriority] = useState('High');
-  const [status, setStatus] = useState('Draft');
-
-  const [hostScope, setHostScope] = useState('admin.aurora.local');
-  const [pathPattern, setPathPattern] = useState('/admin/*');
-  const [assignedApp, setAssignedApp] = useState('Administrative Console');
-  const [tags, setTags] = useState<string[]>(['admin', 'critical', 'internal']);
-
-  const [selectedGroupNames, setSelectedGroupNames] = useState<string[]>([
-    'SQL Injection',
-    'XSS',
-    'Path Traversal',
-    'Command Injection',
-    'Bad Bot Protection',
-    'Sensitive Endpoint Protection',
-    'Rate Limiting',
-  ]);
-
-  const [defaultAction, setDefaultAction] = useState('Block');
-  const [returnStatus, setReturnStatus] = useState(403);
-  const [eventLogging, setEventLogging] = useState('Enabled');
-  const [auditTrail, setAuditTrail] = useState('Enabled');
-  const [previewMode, setPreviewMode] = useState(false);
-
-  const handleToggleGroup = (name: string) => {
-    setSelectedGroupNames((prev) =>
-      prev.includes(name) ? prev.filter((g) => g !== name) : [...prev, name]
-    );
-  };
-
-  const handleAddTag = (tag: string) => {
-    if (tag && !tags.includes(tag)) {
-      setTags([...tags, tag]);
-    }
-  };
-
-  const handleRemoveTag = (tagToRemove: string) => {
-    setTags(tags.filter((t) => t !== tagToRemove));
-  };
-
-  const handleCreatePolicy = () => {
-    // In a full application, submit API mutation here
-    navigate('/policies');
-  };
-
-  const handleSaveDraft = () => {
-    navigate('/policies');
-  };
-
-  return (
-    <div className="p-6 space-y-4 font-sans selection:bg-emerald-500/30 selection:text-emerald-200">
-      {/* Breadcrumbs & Header Section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-[#152030]">
-        <div className="space-y-1">
-          <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-400">
-            <Link to="/policies" className="hover:text-emerald-400 transition-colors">
-              Policies
-            </Link>
-            <ChevronRight className="w-3 h-3 text-slate-600" />
-            <span className="text-slate-200 font-semibold">Create Policy</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-white tracking-tight">
-              Create WAF Policy
-            </h1>
-            <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-blue-950/80 text-cyan-400 border border-cyan-700 uppercase">
-              NEW RULESET
-            </span>
-          </div>
-          <p className="text-xs text-slate-400 font-mono">
-            Define enforcement rules, rate limits, and custom response behaviors for applications.
-          </p>
-        </div>
-      </div>
-
-      {/* 2-Column Main Form Body */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* Left Form Column (8 columns) */}
-        <div className="lg:col-span-8 space-y-4">
-          <PolicyInfoSection
-            policyName={policyName}
-            onPolicyNameChange={setPolicyName}
-            description={description}
-            onDescriptionChange={setDescription}
-            mode={mode}
-            onModeChange={setMode}
-            priority={priority}
-            onPriorityChange={setPriority}
-            status={status}
-            onStatusChange={setStatus}
-          />
-
-          <ScopeAssignmentSection
-            hostScope={hostScope}
-            onHostScopeChange={setHostScope}
-            pathPattern={pathPattern}
-            onPathPatternChange={setPathPattern}
-            assignedApp={assignedApp}
-            onAssignedAppChange={setAssignedApp}
-            tags={tags}
-            onAddTag={handleAddTag}
-            onRemoveTag={handleRemoveTag}
-          />
-
-          <RuleGroupsSection
-            selectedGroupNames={selectedGroupNames}
-            onToggleGroup={handleToggleGroup}
-          />
-
-          <ResponseLoggingSection
-            defaultAction={defaultAction}
-            onDefaultActionChange={setDefaultAction}
-            returnStatus={returnStatus}
-            onReturnStatusChange={setReturnStatus}
-            eventLogging={eventLogging}
-            onEventLoggingChange={setEventLogging}
-            auditTrail={auditTrail}
-            onAuditTrailChange={setAuditTrail}
-            previewMode={previewMode}
-            onPreviewModeToggle={() => setPreviewMode(!previewMode)}
-          />
-        </div>
-
-        {/* Right Summary Panel Column (4 columns) */}
-        <PolicySummaryPanel
-          policyName={policyName}
-          scope={hostScope}
-          mode={mode}
-          priority={priority}
-          status={status}
-          assignedApp={assignedApp}
-          selectedGroups={selectedGroupNames}
-          onCreatePolicy={handleCreatePolicy}
-          onSaveDraft={handleSaveDraft}
-        />
-      </div>
-    </div>
-  );
+export default function CreatePolicyPage(){
+ const [params]=useSearchParams();const navigate=useNavigate();
+ const source=params.get('edit')||params.get('clone');const editing=params.has('edit');
+ const [form,setForm]=useState<PolicyDraft>({name:'',description:'',host:'*',path_prefix:'/',mode:'mixed',priority:100,rule_ids:[],expected_version:0});
+ const [rules,setRules]=useState<PolicyRule[]>([]);const [ready,setReady]=useState(false);const [busy,setBusy]=useState(false);const [error,setError]=useState('');
+ const retry=useRef<{body:string;key:string}|null>(null);
+ useEffect(()=>{let live=true;setReady(false);
+  Promise.all([policiesApi.catalog(),source?policiesApi.detail(Number(source)):Promise.resolve([])]).then(([catalog,rows])=>{
+   if(!live)return;setRules(catalog);
+   if(source){const p=rows[0];if(!p)throw Error('Policy not found');const d=p.document;setForm({name:d.name+(editing?'':' (copy)'),description:d.description,host:d.host,path_prefix:d.path_prefix,mode:d.mode,priority:d.priority,rule_ids:d.rule_ids,expected_version:editing?p.version:0})}
+   setReady(true);
+  }).catch(e=>{if(live)setError(e instanceof Error?e.message:String(e))});return()=>{live=false};
+ },[source,editing]);
+ async function save(e:React.FormEvent){
+  e.preventDefault();if(busy||!ready)return;const body=JSON.stringify(form);
+  if(retry.current?.body!==body)retry.current={body,key:crypto.randomUUID()};
+  setBusy(true);setError('');
+  try{await policiesApi.save(editing?Number(source):null,form,retry.current.key);retry.current=null;navigate('/policies')}catch(e){setError(e instanceof Error?e.message:String(e))}finally{setBusy(false)}
+ }
+ const groups=[...new Set(rules.map(r=>r.group))];
+ return <form onSubmit={save} className="p-6 space-y-4">
+  <Link to="/policies" className="text-emerald-400">← Policies</Link>
+  <h1 className="text-xl font-bold">{editing?'Edit policy draft':source?'Clone policy':'Create policy'}</h1>
+  <p className="text-sm text-slate-400">Applies cluster-wide after preview and publish. Saving captures the current revisions of selected rules. No traffic changes on save.</p>
+  {error&&<p role="alert" className="text-rose-300">{error}</p>}
+  {!ready&&!error&&<p>Loading policy and rule catalog…</p>}
+  <fieldset disabled={!ready||busy} className="space-y-4 disabled:opacity-50">
+   <section className="grid md:grid-cols-2 gap-4 bg-[#0B1320] border border-[#172338] p-4">
+    <label className="space-y-1">Name<input required maxLength={120} className="block w-full bg-slate-950 border border-slate-700 p-2" value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></label>
+    <label className="space-y-1">Priority (lower wins)<input type="number" required min={0} max={1000000} className="block w-full bg-slate-950 border border-slate-700 p-2" value={form.priority} onChange={e=>setForm({...form,priority:Number(e.target.value)})}/></label>
+    <label className="space-y-1">Host (* for all)<input required maxLength={253} className="block w-full bg-slate-950 border border-slate-700 p-2" value={form.host} onChange={e=>setForm({...form,host:e.target.value})}/></label>
+    <label className="space-y-1">Path prefix<input required maxLength={8192} className="block w-full bg-slate-950 border border-slate-700 p-2" value={form.path_prefix} onChange={e=>setForm({...form,path_prefix:e.target.value})}/></label>
+    <label>Mode<select className="block w-full bg-slate-950 border border-slate-700 p-2" value={form.mode} onChange={e=>setForm({...form,mode:e.target.value as PolicyDraft['mode']})}><option value="mixed">Mixed — respect rule actions</option><option value="detect">Detect — log matches, never block</option><option value="block">Block — preserve allow rules, block other matches</option></select></label>
+    <label>Description<textarea maxLength={2000} className="block w-full bg-slate-950 border border-slate-700 p-2" value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/></label>
+   </section>
+   <p className="text-xs text-slate-400">Host is exact and case-insensitive. /admin matches /admin and /admin/…, not /administrator. First matching policy wins; unmatched rule paths are allowed. Rules currently match exact normalized paths. Blocking response is 403; challenge, rate-limit and custom responses are not supported here.</p>
+   <section className="border border-[#172338] p-4 space-y-3"><h2>Rule groups — select actual saved rules ({form.rule_ids.length})</h2>
+    {rules.length===0&&<p>No rules yet. <Link to="/rules/create" className="text-emerald-400">Create a rule</Link> first.</p>}
+    {groups.map(group=><div key={group} className="border-b border-slate-800 pb-3"><div className="flex justify-between"><h3>{group}</h3><button type="button" className="text-emerald-400 text-xs" onClick={()=>{const ids=rules.filter(r=>r.group===group).map(r=>r.id);const all=ids.every(id=>form.rule_ids.includes(id));setForm({...form,rule_ids:all?form.rule_ids.filter(id=>!ids.includes(id)):[...new Set([...form.rule_ids,...ids])]})}}>Toggle group</button></div>
+     {rules.filter(r=>r.group===group).map(r=><label key={r.id} className="flex items-center gap-2 text-sm py-1"><input type="checkbox" checked={form.rule_ids.includes(r.id)} onChange={()=>setForm({...form,rule_ids:form.rule_ids.includes(r.id)?form.rule_ids.filter(id=>id!==r.id):[...form.rule_ids,r.id]})}/>{r.name} · v{r.version} · {r.action}{(!r.enabled||!r.runtime_ready)&&<span className="text-amber-400">Draft only: {r.enabled?'unsupported runtime conditions':'disabled rule'}</span>}</label>)}
+    </div>)}
+   </section>
+   <p className="text-xs text-slate-400">Audit revisions are always retained. Log actions use the existing bounded NGINX audit log, not a fabricated security-event feed.</p>
+   <button className="bg-emerald-700 px-4 py-2" type="submit">{busy?'Saving…':'Save draft'}</button>
+  </fieldset>
+ </form>;
 }

@@ -18,7 +18,20 @@ typedef struct {
     uint32_t log_matches;
     uint32_t reserved;
 } AuroraDecision;
+typedef struct AuroraAccessEngine AuroraAccessEngine;
+typedef struct {
+    const uint8_t *ip; size_t ip_len;
+    const uint8_t *host; size_t host_len;
+    const uint8_t *path; size_t path_len;
+    const uint8_t *method; size_t method_len;
+    uint64_t now;
+} AuroraAccessInput;
+uint32_t aurora_access_create(const uint8_t *data, size_t len, AuroraAccessEngine **out);
+void aurora_access_destroy(AuroraAccessEngine *engine);
+uint64_t aurora_access_generation(const AuroraAccessEngine *engine);
+uint32_t aurora_access_evaluate(const AuroraAccessEngine *engine, const AuroraAccessInput *input, AuroraDecision *out);
 uint32_t aurora_waf_evaluate_v3(const AuroraEngine *engine, const uint8_t *path, size_t len, AuroraDecision *out);
+uint32_t aurora_waf_evaluate_v4(const AuroraEngine *engine, const uint8_t *host, size_t host_len, const uint8_t *path, size_t len, AuroraDecision *out);
 uint64_t aurora_waf_generation(const AuroraEngine *engine);
 /* Status: 0 OK, 1 invalid input/policy, 2 panic. Action: 0 allow, 1 block. */
 uint32_t aurora_waf_create(const uint8_t *data, size_t len, AuroraEngine **out);

@@ -24,7 +24,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Kiểm tra tính hợp lệ: schema version (1 hoặc 2), số lượng luật tối đa 1024,
     // định dạng đường dẫn chuẩn hóa (canonical path), không chứa ký tự escape hoặc xung đột.
     // Dữ liệu ở đây là JSON IR độc lập nền tảng (Portable JSON IR), không phải bộ nhớ nội bộ của Rust.
-    Engine::from_policy(&bytes).map_err(|_| "invalid or unsupported policy")?;
+    if std::env::args().nth(1).as_deref() == Some("--access") {
+        aurora_engine::access::AccessEngine::from_snapshot(&bytes)
+            .map_err(|_| "invalid access snapshot")?;
+    } else {
+        Engine::from_policy(&bytes).map_err(|_| "invalid or unsupported policy")?;
+    }
 
     // Bước 4: Xuất toàn bộ dữ liệu chính sách đã kiểm định ra Stdout cho Control Plane
     io::stdout().write_all(&bytes)?;

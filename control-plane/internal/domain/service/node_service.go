@@ -9,6 +9,7 @@ import (
 type NodeService interface {
 	ListNodes(ctx context.Context) ([]entity.ClusterNodeRecord, error)
 	GetNodeByID(ctx context.Context, id string) (*entity.ClusterNodeRecord, error)
+	GetNodeConfig(ctx context.Context, nodeID string) (string, error)
 	RecordHeartbeat(ctx context.Context, payload entity.NodeHeartbeatPayload) (*entity.NodeCommandDirective, error)
 	TriggerNodeReload(ctx context.Context, nodeID string) error
 	TriggerClusterRollingReload(ctx context.Context) (*entity.ClusterRollingStatus, error)

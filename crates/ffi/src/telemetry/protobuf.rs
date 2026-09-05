@@ -8,12 +8,14 @@ pub struct HeartbeatPayload {
     pub active_connections: i64,
     pub requests_per_second: f64,
     pub active_release_id: i64,
+    pub version: String,
+    pub role: String,
 }
 
 impl HeartbeatPayload {
     /// Tuần tự hóa HeartbeatPayload sang Protocol Buffers wire format thô không cần thư viện bên thứ 3.
     pub fn to_protobuf_bytes(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(64);
+        let mut buf = Vec::with_capacity(96);
 
         // Tag 1: node_id (string, wire type 2)
         if !self.node_id.is_empty() {
@@ -56,6 +58,20 @@ impl HeartbeatPayload {
         if self.active_release_id != 0 {
             encode_tag(&mut buf, 7, 0);
             encode_varint(&mut buf, self.active_release_id as u64);
+        }
+
+        // Tag 8: version (string, wire type 2)
+        if !self.version.is_empty() {
+            encode_tag(&mut buf, 8, 2);
+            encode_varint(&mut buf, self.version.len() as u64);
+            buf.extend_from_slice(self.version.as_bytes());
+        }
+
+        // Tag 9: role (string, wire type 2)
+        if !self.role.is_empty() {
+            encode_tag(&mut buf, 9, 2);
+            encode_varint(&mut buf, self.role.len() as u64);
+            buf.extend_from_slice(self.role.as_bytes());
         }
 
         buf

@@ -2,6 +2,13 @@
 
 NGINX ?= $(shell command -v nginx)
 
+.PHONY: policy-agent policies-test
+policy-agent:
+	cd control-plane && go build -buildvcs=false -o ../build/aurora-policy-agent ./cmd/policy-agent
+
+policies-test: module compiler policy-agent
+	cd control-plane && AURORA_TEST_COMPILER="$(CURDIR)/target/release/aurora-compile" AURORA_TEST_NGINX="$(NGINX)" AURORA_TEST_MODULE="$(CURDIR)/build/modules/ngx_http_aurora_waf_module.so" go test -race -count=1 ./internal/test/integration -run TestPolicy
+
 .PHONY: metrics-pressure-test metrics-audit-test
 metrics-pressure-test: module compiler
 	cd control-plane && go build -buildvcs=false -o ../build/aurora-controller-perf ./cmd

@@ -88,9 +88,10 @@ func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
 	router.NoRoute(gin.WrapH(ui))
 
 	return &App{db: pools, metrics: module.MetricsService, server: &http.Server{
-		Addr: cfg.HTTPAddr, Handler: router,
-		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second,
-		WriteTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second,
+		Addr:              cfg.HTTPAddr,
+		Handler:           router,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}}, nil
 }
 

@@ -34,4 +34,8 @@ var ClusterNodeCommands string
 //go:embed 0010_node_sync_logs.sql
 var NodeSyncLogs string
 
+//go:embed 0011_policies.sql
+var Policies string
 
+//go:embed 0012_access.sql
+var Access string

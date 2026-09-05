@@ -16,6 +16,8 @@ func TestNodeHeartbeatProtobufRoundTrip(t *testing.T) {
 		ActiveConnections: 142,
 		RequestsPerSecond: 2850.75,
 		ActiveReleaseID:   12,
+		Version:           "0.4.1",
+		Role:              "Edge Node",
 	}
 
 	data := original.MarshalBinary()
@@ -23,9 +25,9 @@ func TestNodeHeartbeatProtobufRoundTrip(t *testing.T) {
 		t.Fatal("kỳ vọng dữ liệu binary khác rỗng")
 	}
 
-	// Xác nhận payload siêu nhẹ (dưới 60 bytes)
-	if len(data) > 60 {
-		t.Errorf("kích thước protobuf quá lớn: %d bytes (kỳ vọng <= 60 bytes)", len(data))
+	// Xác nhận payload siêu nhẹ (dưới 100 bytes khi có đủ version và role)
+	if len(data) > 100 {
+		t.Errorf("kích thước protobuf quá lớn: %d bytes (kỳ vọng <= 100 bytes)", len(data))
 	}
 
 	decoded, err := entity.UnmarshalNodeHeartbeat(data)

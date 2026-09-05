@@ -1,0 +1,10 @@
+CREATE TABLE access_objects (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL CHECK(kind IN ('rule','group','dataset')), version INTEGER NOT NULL, document TEXT NOT NULL CHECK(json_valid(document)), deleted INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')));
+CREATE TABLE access_revisions (object_id INTEGER NOT NULL REFERENCES access_objects(id), version INTEGER NOT NULL, kind TEXT NOT NULL, document TEXT NOT NULL, deleted INTEGER NOT NULL, actor TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), PRIMARY KEY(object_id,version));
+CREATE TABLE access_releases (id INTEGER PRIMARY KEY AUTOINCREMENT, payload BLOB NOT NULL, digest TEXT NOT NULL, actor TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')));
+CREATE TABLE access_head (singleton INTEGER PRIMARY KEY CHECK(singleton=1), release_id INTEGER NOT NULL REFERENCES access_releases(id));
+CREATE TABLE access_receipts (actor TEXT NOT NULL, request_key TEXT NOT NULL, request_hash TEXT NOT NULL, result TEXT NOT NULL, PRIMARY KEY(actor,request_key));
+CREATE TABLE access_reports (node_id TEXT PRIMARY KEY REFERENCES cluster_nodes(id) ON DELETE CASCADE, release_id INTEGER NOT NULL REFERENCES access_releases(id), phase TEXT NOT NULL, message TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')));
+CREATE TABLE access_events (node_id TEXT NOT NULL, event_key TEXT NOT NULL, release_id INTEGER NOT NULL REFERENCES access_releases(id), rule_id INTEGER NOT NULL, ip TEXT NOT NULL, action TEXT NOT NULL, reputation INTEGER NOT NULL, alert INTEGER NOT NULL, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), PRIMARY KEY(node_id,event_key));
+CREATE INDEX access_events_recent ON access_events(created_at DESC);
+CREATE TRIGGER access_release_immutable BEFORE UPDATE ON access_releases BEGIN SELECT RAISE(ABORT,'immutable access release'); END;
+CREATE TRIGGER access_revision_immutable BEFORE UPDATE ON access_revisions BEGIN SELECT RAISE(ABORT,'immutable access revision'); END;

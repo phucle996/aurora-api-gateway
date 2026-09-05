@@ -29,7 +29,8 @@ export default function RulesPage() {
   const [loading, setLoading] = useState(true);
   const [retry, setRetry] = useState(0);
   const after = params.get('after') || '';
-  const selected = rules.find(rule => rule.id === params.get('selected'))?.id || rules[0]?.id || '';
+  const selectedParam = params.get('selected');
+  const selected = selectedParam ? (rules.find(rule => rule.id === selectedParam)?.id || '') : '';
 
   useEffect(() => {
     const controller = new AbortController(); setLoading(true); setError(''); setRules([]); setNext(''); setStats(null); setTotal(null);
@@ -96,7 +97,14 @@ export default function RulesPage() {
           rules={rows}
           total={total}
           selectedId={selected}
-          onSelect={id => setParams(p => { p.set('selected', id); return p; })}
+          onSelect={id => setParams(p => {
+            if (p.get('selected') === id) {
+              p.delete('selected');
+            } else {
+              p.set('selected', id);
+            }
+            return p;
+          })}
           searchQuery={search}
           onSearchChange={value => { setSearch(value); setParams({}); }}
           categoryFilter={category}
@@ -108,7 +116,12 @@ export default function RulesPage() {
           statusFilter={status}
           onStatusFilterChange={value => { setStatus(value); setParams({}); }}
         />
-        {!loading && !error && <SavedRuleDetail id={selected} />}
+        {!loading && !error && selected && (
+          <SavedRuleDetail
+            id={selected}
+            onClose={() => setParams(p => { p.delete('selected'); return p; })}
+          />
+        )}
       </div>
       <div className="flex gap-4 text-sm">
         <button disabled={!after || loading} onClick={() => setParams({})}>First page</button>

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"aurora-waf.local/control-plane/internal/access"
 	"aurora-waf.local/control-plane/internal/config"
 	port "aurora-waf.local/control-plane/internal/domain/service"
 	"aurora-waf.local/control-plane/internal/repository"
@@ -13,6 +14,8 @@ import (
 // Nó được khởi tạo một lần duy nhất khi ứng dụng khởi động,
 // sau đó RegisterRoutes gắn các handler vào đúng URL tương ứng.
 type Module struct {
+	AccessHandler  *access.Handler
+	PolicyHandler  *handler.PolicyHandler
 	StatusHandler  *handler.StatusHandler
 	AuthHandler    *handler.AuthHandler
 	AuthService    port.AuthService // Xác thực JWT — cần tham chiếu trong middleware
@@ -42,6 +45,8 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	ruleRepo := repository.NewRuleRepository(writerDB, readerDB)
 	ruleSvc := service.NewRuleService(ruleRepo, cfg.CompilerPath)
 	ruleHdr := handler.NewRuleHandler(ruleSvc)
+	policyRepo := repository.NewPolicyRepository(writerDB, readerDB)
+	policyHdr := &handler.PolicyHandler{Save: service.PolicySaveService{Repository: policyRepo}, Publish: service.PolicyPublishService{Repository: policyRepo, Compiler: cfg.CompilerPath}, Read: service.PolicyReadService{Repository: policyRepo}, Sync: service.PolicySyncService{Repository: policyRepo}}
 
 	nodeRepo := repository.NewNodeRepository(writerDB)
 	settingsRepo := repository.NewSettingsRepository(writerDB)
@@ -51,6 +56,8 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	metricsHdr := handler.NewMetricsHandler(metricsSvc)
 
 	return &Module{
+		AccessHandler:  &access.Handler{ChangeService: access.ChangeService{Repository: access.Repository{Writer: writerDB, Reader: readerDB}, Compiler: cfg.CompilerPath}, ReadService: access.Repository{Writer: writerDB, Reader: readerDB}, StatusService: access.Repository{Writer: writerDB, Reader: readerDB}, SyncService: access.Repository{Writer: writerDB, Reader: readerDB}, ReportService: access.Repository{Writer: writerDB, Reader: readerDB}, MatchService: access.Repository{Writer: writerDB, Reader: readerDB}, ActivityService: access.Repository{Writer: writerDB, Reader: readerDB}},
+		PolicyHandler:  policyHdr,
 		StatusHandler:  statusHdr,
 		AuthHandler:    authHdr,
 		AuthService:    authSvc,

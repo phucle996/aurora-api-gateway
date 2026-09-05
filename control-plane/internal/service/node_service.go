@@ -7,6 +7,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"time"
 )
 
@@ -54,6 +57,7 @@ func (s *nodeService) ListNodes(ctx context.Context) ([]entity.ClusterNodeRecord
 		node.Status = "Not Ready"
 		node.Uptime = "Offline"
 		if err == nil {
+			node.LastHeartbeatTimestamp = t.Unix()
 			diff := now.Sub(t)
 			if diff < time.Minute {
 				node.LastHeartbeat = fmt.Sprintf("%ds ago", int(diff.Seconds()))
@@ -68,7 +72,7 @@ func (s *nodeService) ListNodes(ctx context.Context) ([]entity.ClusterNodeRecord
 				node.Uptime = "Offline"
 			} else {
 				node.Status = "Ready"
-				node.Uptime = "Active"
+				node.Uptime = formatNodeUptime(node.CreatedAt, now)
 			}
 		}
 
@@ -110,6 +114,7 @@ func (s *nodeService) GetNodeByID(ctx context.Context, id string) (*entity.Clust
 	node.Status = "Not Ready"
 	node.Uptime = "Offline"
 	if parseErr == nil {
+		node.LastHeartbeatTimestamp = t.Unix()
 		diff := now.Sub(t)
 		if diff < time.Minute {
 			node.LastHeartbeat = fmt.Sprintf("%ds ago", int(diff.Seconds()))
@@ -124,7 +129,7 @@ func (s *nodeService) GetNodeByID(ctx context.Context, id string) (*entity.Clust
 			node.Uptime = "Offline"
 		} else {
 			node.Status = "Ready"
-			node.Uptime = "Active"
+			node.Uptime = formatNodeUptime(node.CreatedAt, now)
 		}
 	}
 
@@ -144,6 +149,76 @@ func (s *nodeService) GetNodeByID(ctx context.Context, id string) (*entity.Clust
 		node.RequestsPerSecond = "0"
 	}
 	return node, nil
+}
+
+// GetNodeConfig truy vấn trực tiếp file cấu hình NGINX thật (/etc/nginx/nginx.conf) từ node container.
+func (s *nodeService) GetNodeConfig(ctx context.Context, nodeID string) (string, error) {
+	node, err := s.repo.GetNodeByID(ctx, nodeID)
+	if err != nil {
+		return "", fmt.Errorf("nodeService.GetNodeConfig: %w", err)
+	}
+	if node == nil {
+		return "", errors.New("node không tồn tại trong cluster")
+	}
+
+	// Thử các endpoint khả dụng của node theo thứ tự:
+	// 1. IP của node
+	// 2. Domain / Hostname của node
+	// Không gán cứng port (tự động theo scheme/host hoặc port tuỳ biến đi kèm)
+	formatEndpoint := func(host string) string {
+		h := strings.TrimSpace(host)
+		if h == "" {
+			return ""
+		}
+		if strings.HasPrefix(h, "http://") || strings.HasPrefix(h, "https://") {
+			return fmt.Sprintf("%s/_aurora/config", strings.TrimRight(h, "/"))
+		}
+		return fmt.Sprintf("http://%s/_aurora/config", strings.TrimRight(h, "/"))
+	}
+
+	targets := make([]string, 0, 2)
+	if ep := formatEndpoint(node.IP); ep != "" {
+		targets = append(targets, ep)
+	}
+	if ep := formatEndpoint(node.Hostname); ep != "" && (len(targets) == 0 || ep != targets[0]) {
+		targets = append(targets, ep)
+	}
+
+	client := &http.Client{
+		Timeout: 3 * time.Second,
+	}
+
+	var lastErr error
+	for _, targetURL := range targets {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			body, err := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			return string(body), nil
+		}
+		resp.Body.Close()
+		lastErr = fmt.Errorf("node trả về mã HTTP %d từ %s", resp.StatusCode, targetURL)
+	}
+
+	if lastErr == nil {
+		lastErr = errors.New("không thể phân giải địa chỉ mạng của node")
+	}
+	return "", fmt.Errorf("không thể kéo file cấu hình từ node %s: %w", nodeID, lastErr)
 }
 
 // RecordHeartbeat tiếp nhận và xử lý gói tin Push Heartbeat Telemetry gửi từ Node, đồng thời trả về chỉ thị lệnh từ Control Plane.
@@ -203,14 +278,16 @@ func (s *nodeService) RecordHeartbeat(ctx context.Context, payload entity.NodeHe
 		rulesetName = fmt.Sprintf("rev-%d", payload.ActiveReleaseID)
 	}
 
-	// 5. Broadcast sự kiện node_heartbeat tới tất cả các client đang xem trang Nodes
+	// 5. Đưa nhịp tim vào hàng đợi gom batch để phát sóng chung 1 event duy nhất
 	if s.eventHub != nil {
-		s.eventHub.Broadcast("node_heartbeat", entity.NodeHeartbeatEvent{
+		s.eventHub.QueueHeartbeat(entity.NodeHeartbeatEvent{
 			NodeID:      payload.NodeID,
 			IP:          payload.IP,
 			Status:      "Ready",
 			RPS:         payload.RequestsPerSecond,
 			ActiveConns: payload.ActiveConnections,
+			CPUUsage:    payload.CPUUsage,
+			MemoryUsage: payload.MemoryUsage,
 			Sync:        syncStatus,
 			Ruleset:     rulesetName,
 			Timestamp:   payload.Timestamp,
@@ -330,3 +407,39 @@ func (s *nodeService) GetClusterRollingStatus(ctx context.Context) (*entity.Clus
 		Message:        msg,
 	}, nil
 }
+
+// formatNodeUptime chuyển đổi mốc thời gian đăng ký (CreatedAt) thành chuỗi thời gian uptime thực tế.
+func formatNodeUptime(createdAtStr string, now time.Time) string {
+	if createdAtStr == "" {
+		return "0s"
+	}
+	tc, err := time.Parse(time.RFC3339Nano, createdAtStr)
+	if err != nil {
+		tc, err = time.ParseInLocation("2006-01-02 15:04:05", createdAtStr, time.UTC)
+	}
+	if err != nil {
+		return "0s"
+	}
+
+	diff := now.Sub(tc)
+	if diff < 0 {
+		diff = 0
+	}
+
+	days := int(diff.Hours()) / 24
+	hours := int(diff.Hours()) % 24
+	minutes := int(diff.Minutes()) % 60
+	seconds := int(diff.Seconds()) % 60
+
+	if days > 0 {
+		return fmt.Sprintf("%dd %dh %dm", days, hours, minutes)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("%dh %dm %ds", hours, minutes, seconds)
+	}
+	if minutes > 0 {
+		return fmt.Sprintf("%dm %ds", minutes, seconds)
+	}
+	return fmt.Sprintf("%ds", seconds)
+}
+

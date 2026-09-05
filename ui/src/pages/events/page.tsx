@@ -212,7 +212,7 @@ const initialEvents: EventItem[] = [
 
 export default function SecurityEventsPage() {
   const [events] = useState<EventItem[]>(initialEvents);
-  const [selectedEventId, setSelectedEventId] = useState<string>('1');
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [actionFilter, setActionFilter] = useState('All Actions');
   const [severityFilter, setSeverityFilter] = useState('All Severities');
@@ -220,7 +220,7 @@ export default function SecurityEventsPage() {
   const [timeFilter, setTimeFilter] = useState('Last 24 Hours');
 
   const selectedEvent =
-    events.find((e) => e.id === selectedEventId) || events[0];
+    events.find((e) => e.id === selectedEventId) || null;
 
   const filteredEvents = events.filter((e) => {
     const matchesSearch =
@@ -264,8 +264,8 @@ export default function SecurityEventsPage() {
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
             <EventsTable
               events={filteredEvents}
-              selectedId={selectedEventId}
-              onSelect={setSelectedEventId}
+              selectedId={selectedEventId || ''}
+              onSelect={(id) => setSelectedEventId(selectedEventId === id ? null : id)}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
               actionFilter={actionFilter}
@@ -278,7 +278,12 @@ export default function SecurityEventsPage() {
               onTimeFilterChange={setTimeFilter}
             />
 
-            <EventDetail event={selectedEvent} />
+            {selectedEvent && (
+              <EventDetail
+                event={selectedEvent}
+                onClose={() => setSelectedEventId(null)}
+              />
+            )}
           </div>
     </div>
   );

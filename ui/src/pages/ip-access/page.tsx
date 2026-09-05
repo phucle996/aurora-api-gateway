@@ -1,190 +1,45 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Plus, ChevronDown } from 'lucide-react';
-import { IpAccessStats } from './sections/IpAccessStats';
-import { IpAccessTable, AccessRuleItem } from './sections/IpAccessTable';
+import React,{useCallback,useEffect,useRef,useState} from 'react';
+import {Link,useSearchParams} from 'react-router-dom';
+import {accessApi,type AccessObject,type AccessRuleDocument,type AccessStatus,type AccessActivity,type AccessChange} from '../../lib/api/access';
 
-const initialAccessRules: AccessRuleItem[] = [
-  {
-    id: '1',
-    type: 'BLOCK',
-    value: '203.0.113.10',
-    countryOrAsn: 'US',
-    countryFlag: '🇺🇸',
-    scope: 'Global',
-    reason: 'SQL injection attempts',
-    status: 'Active',
-  },
-  {
-    id: '2',
-    type: 'ALLOW',
-    value: '198.51.100.0/24',
-    scope: 'API',
-    reason: 'Trusted partner network',
-    status: 'Active',
-  },
-  {
-    id: '3',
-    type: 'BLOCK',
-    value: '45.142.212.0/23',
-    countryOrAsn: 'RU',
-    countryFlag: '🇷🇺',
-    scope: 'Global',
-    reason: 'Known malicious network',
-    status: 'Active',
-  },
-  {
-    id: '4',
-    type: 'TEMP BAN',
-    value: '185.220.101.45',
-    countryOrAsn: 'DE',
-    countryFlag: '🇩🇪',
-    scope: 'Global',
-    reason: 'Brute force login',
-    status: 'Active',
-    expiresAt: '2026-06-20 14:30',
-  },
-  {
-    id: '5',
-    type: 'ALLOW',
-    value: '192.0.2.15',
-    scope: 'Admin',
-    reason: 'Office IP',
-    status: 'Active',
-  },
-  {
-    id: '6',
-    type: 'BLOCK',
-    value: '2606:4700:4700::1111',
-    scope: 'Global',
-    reason: 'Bad bot (Cloudflare)',
-    status: 'Active',
-  },
-  {
-    id: '7',
-    type: 'GEO BLOCK',
-    value: 'CN',
-    countryOrAsn: 'China',
-    countryFlag: '🇨🇳',
-    scope: 'Global',
-    reason: 'High risk country',
-    status: 'Active',
-  },
-  {
-    id: '8',
-    type: 'ASN BLOCK',
-    value: 'AS14061',
-    countryOrAsn: 'DigitalOcean',
-    scope: 'Global',
-    reason: 'Frequent abuse',
-    status: 'Active',
-  },
-  {
-    id: '9',
-    type: 'TEMP BAN',
-    value: '104.21.16.89',
-    countryOrAsn: 'US',
-    countryFlag: '🇺🇸',
-    scope: 'Login',
-    reason: 'Too many requests',
-    status: 'Active',
-    expiresAt: '2026-06-20 16:10',
-  },
-  {
-    id: '10',
-    type: 'ALLOW',
-    value: '2001:db8::/32',
-    scope: 'Global',
-    reason: 'Internal network',
-    status: 'Active',
-  },
-];
-
-export default function IpAccessPage() {
-  const [rules] = useState<AccessRuleItem[]>(initialAccessRules);
-  const [activeTab, setActiveTab] = useState('All Rules');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [typeFilter, setTypeFilter] = useState('All Types');
-  const [statusFilter, setStatusFilter] = useState('All Status');
-
-  const filteredRules = rules.filter((rule) => {
-    // Tab filter
-    if (activeTab === 'Allowlist' && rule.type !== 'ALLOW') return false;
-    if (activeTab === 'Blocklist' && rule.type !== 'BLOCK') return false;
-    if (activeTab === 'Temporary Bans' && rule.type !== 'TEMP BAN') return false;
-    if (activeTab === 'Geo Rules' && rule.type !== 'GEO BLOCK') return false;
-    if (activeTab === 'ASN Rules' && rule.type !== 'ASN BLOCK') return false;
-
-    // Search query
-    const matchesSearch =
-      rule.value.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      rule.reason.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (rule.countryOrAsn &&
-        rule.countryOrAsn.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      rule.scope.toLowerCase().includes(searchQuery.toLowerCase());
-
-    // Type filter
-    const matchesType =
-      typeFilter === 'All Types' || rule.type === typeFilter;
-
-    // Status filter
-    const matchesStatus =
-      statusFilter === 'All Status' || rule.status === statusFilter;
-
-    return matchesSearch && matchesType && matchesStatus;
-  });
-
-  const handleResetFilters = () => {
-    setSearchQuery('');
-    setTypeFilter('All Types');
-    setStatusFilter('All Status');
-    setActiveTab('All Rules');
-  };
-
-  return (
-    <div className="p-6 space-y-4">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-[#152030]">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-white tracking-tight font-sans">
-              IP & Access Control
-            </h1>
-            <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-700 uppercase">
-              ACTIVE FIREWALL
-            </span>
-          </div>
-          <p className="text-xs text-slate-400 mt-0.5 font-mono">
-            Manage allowlist, blocklist and access rules for your infrastructure.
-          </p>
-        </div>
-
-        <Link
-          to="/ip-access/create"
-          className="bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-semibold px-3.5 py-2 flex items-center gap-1.5 transition-colors cursor-pointer uppercase tracking-wider font-sans w-fit"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Rule</span>
-          <ChevronDown className="w-3.5 h-3.5 opacity-80" />
-        </Link>
-      </div>
-
-      {/* 4 Summary Stat Cards Section */}
-      <IpAccessStats />
-
-      {/* Table Section */}
-      <IpAccessTable
-        rules={filteredRules}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        typeFilter={typeFilter}
-        onTypeFilterChange={setTypeFilter}
-        statusFilter={statusFilter}
-        onStatusFilterChange={setStatusFilter}
-        onResetFilters={handleResetFilters}
-      />
-    </div>
-  );
+export default function IpAccessPage(){
+ const [params,setParams]=useSearchParams();const tab=params.get('tab')||'rules';
+ const [items,setItems]=useState<AccessObject[]>([]);const [status,setStatus]=useState<AccessStatus|null>(null);const [activity,setActivity]=useState<AccessActivity[]>([]);
+ const [search,setSearch]=useState('');const [filter,setFilter]=useState('all');const [error,setError]=useState('');const [notice,setNotice]=useState('');const [busy,setBusy]=useState(false);
+ const [selected,setSelected]=useState<AccessObject|null>(null);const [history,setHistory]=useState<AccessObject[]>([]);
+ const [editor,setEditor]=useState<{id:number;version:number;release:number;kind:'group'|'dataset';name:string;text:string}|null>(null);
+ const receipt=useRef<{body:string;key:string}|null>(null);
+ const refresh=useCallback(async()=>{const [rows,s,events]=await Promise.all([accessApi.list(),accessApi.status(),accessApi.activity()]);setItems(rows);setStatus(s);setActivity(events)},[]);
+ useEffect(()=>{const load=()=>refresh().catch(e=>setError(String(e)));void load();const timer=setInterval(()=>void load(),5000);return()=>clearInterval(timer)},[refresh]);
+ useEffect(()=>{let live=true;setHistory([]);if(selected)accessApi.list(selected.id,true).then(rows=>{if(live)setHistory(rows)}).catch(e=>{if(live)setError(String(e))});return()=>{live=false}},[selected]);
+ async function change(command:AccessChange){if(busy)return;setBusy(true);setError('');const body=JSON.stringify(command);if(receipt.current?.body!==body)receipt.current={body,key:crypto.randomUUID()};try{const result=await accessApi.change(command,receipt.current.key);receipt.current=null;setNotice(`Saved. Deployment ${result.release_id} requested.`);setEditor(null);setSelected(null);await refresh()}catch(e){setError(e instanceof Error?e.message:String(e))}finally{setBusy(false)}}
+ const rules=items.filter(x=>x.kind==='rule');const now=Math.floor(Date.now()/1000);
+ const filtered=rules.filter(x=>{const d=x.document as AccessRuleDocument;return `${d.name} ${d.values.join(' ')} ${d.host} ${d.description}`.toLowerCase().includes(search.toLowerCase())&&(filter==='all'||filter===d.action||filter==='expired'&&d.expires_at>0&&d.expires_at<=now||filter==='disabled'&&!d.enabled||filter==='temporary'&&d.action==='block'&&d.expires_at>now||filter===d.source)});
+ const applied=status?.nodes.filter(n=>n.release_id===status.release_id&&n.phase==='observed').length||0;
+ return <div className="p-6 space-y-4">
+  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#172338] pb-4"><div><h1 className="text-xl font-bold">IP & Access Control</h1><p className="text-xs text-slate-400">Manage real network access rules, groups and imported Geo/ASN coverage.</p></div><Link to="/ip-access/create" className="bg-emerald-600 px-4 py-2 text-sm">Add Rule</Link></div>
+  {error&&<div role="alert" className="text-rose-300">{error} <button className="underline" onClick={()=>{setError('');void refresh().catch(e=>setError(String(e)))}}>Refresh</button></div>}
+  {notice&&<p role="status" className="text-emerald-300">{notice}</p>}
+  {!status&&!error&&<p>Loading access configuration…</p>}
+  <div className="grid sm:grid-cols-4 gap-3">{[['Total rules',rules.length],['Allowlist',rules.filter(x=>(x.document as AccessRuleDocument).action==='allow').length],['Blocklist',rules.filter(x=>(x.document as AccessRuleDocument).action==='block').length],['Temporary bans',rules.filter(x=>{const d=x.document as AccessRuleDocument;return d.action==='block'&&d.enabled&&d.expires_at>now}).length]].map(([name,value])=><div key={name} className="border border-[#172338] bg-[#0B1320] p-4"><p className="text-xs text-slate-400">{name}</p><p className="text-2xl">{value}</p></div>)}</div>
+  {status&&<details className="text-sm border border-[#172338] p-3"><summary className="cursor-pointer">Deployment: {status.release_id?`${applied}/${status.nodes.length} nodes observed`:'No changes published'}{status.nodes.length===0?' · No nodes registered':''}</summary><p className="text-xs text-slate-400 my-2">A fresh local connection observed the snapshot. Old connections may still be draining; offline nodes retain their last configuration.</p>{status.nodes.map(n=><p key={n.id} className="text-xs py-1">{n.id} · {n.phase} · {n.message}</p>)}</details>}
+  <nav className="flex flex-wrap gap-2 border-b border-[#172338] pb-2">{[['rules','Access rules'],['groups','IP groups'],['datasets','Geo / ASN datasets'],['activity','Access Activity']].map(([value,label])=><button key={value} onClick={()=>{setParams({tab:value});setEditor(null)}} className={`px-3 py-2 text-sm ${tab===value?'bg-emerald-950 text-emerald-300':'text-slate-400'}`}>{label}</button>)}</nav>
+  {tab==='rules'&&<>
+   <div className="flex flex-wrap gap-3"><input aria-label="Search access rules" placeholder="Search rules, IP, host…" value={search} onChange={e=>setSearch(e.target.value)} className="bg-[#0B1320] border border-[#172338] p-2 text-sm"/><select aria-label="Filter access rules" className="bg-[#0B1320] border border-[#172338] p-2 text-sm" value={filter} onChange={e=>setFilter(e.target.value)}>{[['all','All rules'],['allow','Allowlist'],['block','Blocklist'],['temporary','Temporary bans'],['country','Geo rules'],['asn','ASN rules'],['disabled','Disabled'],['expired','Expired']].map(([v,l])=><option key={v} value={v}>{l}</option>)}</select><button className="text-sm text-emerald-400" onClick={()=>{const blob=new Blob([JSON.stringify(items,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='access-configuration.json';a.click();URL.revokeObjectURL(url)}}>Export configuration</button></div>
+   <div className="overflow-auto border border-[#172338]"><table className="w-full text-sm text-left"><thead className="bg-[#0B1320] text-slate-400"><tr>{['Rule','Source','Scope','Priority','Status','Actions'].map(h=><th key={h} className="p-3">{h}</th>)}</tr></thead><tbody>{filtered.map(item=>{const d=item.document as AccessRuleDocument;return <tr key={item.id} className="border-t border-[#172338]"><td className="p-3"><button onClick={()=>setSelected(item)} className="text-emerald-300">{d.name}</button><p className="text-xs">{d.action.toUpperCase()}</p></td><td className="p-3 max-w-60 break-words">{d.source}: {d.values.join(', ')}</td><td className="p-3">{d.host}{d.path_prefix}<p className="text-xs text-slate-400">{d.method} · {d.schedule}</p></td><td className="p-3">{d.priority}</td><td className="p-3">{!d.enabled?'Disabled':d.expires_at&&d.expires_at<=now?'Expired':'Enabled'}{d.expires_at>0&&<p className="text-xs text-slate-400">Until {new Date(d.expires_at*1000).toLocaleString()}</p>}</td><td className="p-3"><div className="flex flex-wrap gap-3"><Link to={`/ip-access/create?edit=${item.id}`}>Edit</Link><Link to={`/ip-access/create?clone=${item.id}`}>Clone</Link><button disabled={busy||!status} onClick={()=>void change({id:item.id,kind:'rule',expected_version:item.version,expected_release:status!.release_id,delete:false,document:{...d,enabled:!d.enabled}})}>{d.enabled?'Disable':'Enable'}</button><button className="text-rose-300" disabled={busy||!status} onClick={()=>{if(confirm(`Delete access rule “${d.name}” and apply this change?`))void change({id:item.id,kind:'rule',expected_version:item.version,expected_release:status!.release_id,delete:true,document:null})}}>Delete</button></div></td></tr>})}</tbody></table>{filtered.length===0&&<p className="p-5 text-slate-400">No matching access rules.</p>}</div>
+  </>}
+  {(tab==='groups'||tab==='datasets')&&<section className="space-y-3">
+   <p className="text-sm text-slate-400">{tab==='groups'?'Groups contain actual IPv4/IPv6 addresses or CIDRs. Updating a group also deploys every enabled rule that uses it.':'Import CIDR, country code, ASN rows from your own data source. Matching uses the union of imported networks for each country/ASN. Coverage is limited to imported rows; each compiled snapshot is limited to 64 KiB.'}</p>
+   <button disabled={!status||busy} className="bg-emerald-700 px-3 py-2 text-sm" onClick={()=>setEditor({id:0,version:0,release:status!.release_id,kind:tab==='groups'?'group':'dataset',name:'',text:''})}>Add {tab==='groups'?'group':'dataset'}</button>
+   {items.filter(x=>x.kind===(tab==='groups'?'group':'dataset')).map(item=><div key={item.id} className="flex flex-wrap justify-between gap-3 border border-[#172338] p-3 text-sm"><span>{item.document.name} · {'networks' in item.document?item.document.networks.length:0} networks · v{item.version}</span><div className="flex gap-3"><button disabled={!status} onClick={()=>setEditor({id:item.id,version:item.version,release:status!.release_id,kind:item.kind as 'group'|'dataset',name:item.document.name,text:('networks' in item.document?item.document.networks:[]).map(n=>typeof n==='string'?n:`${n.cidr},${n.country},${n.asn}`).join('\n')})}>Edit</button><button onClick={()=>setSelected(item)}>History</button><button className="text-rose-300" disabled={busy||!status} onClick={()=>{if(confirm(`Delete ${item.document.name}? Enabled references must be removed first.`))void change({id:item.id,kind:item.kind,expected_version:item.version,expected_release:status!.release_id,delete:true,document:null})}}>Delete</button></div></div>)}
+   {editor&&<form className="border border-[#172338] bg-[#0B1320] p-4 space-y-3" onSubmit={e=>{e.preventDefault();try{const lines=editor.text.split('\n').map(s=>s.trim()).filter(Boolean);const networks=editor.kind==='group'?lines:lines.map(line=>{const [cidr,country='',asn='',...extra]=line.split(',').map(s=>s.trim());if(extra.length)throw Error('Expected CIDR,country,ASN');return {cidr,country,asn}});void change({id:editor.id,kind:editor.kind,expected_version:editor.version,expected_release:editor.release,delete:false,document:{name:editor.name,networks}})}catch(err){setError(String(err))}}}>
+    <label className="block text-sm">Name / dataset provenance<input required maxLength={120} className="block w-full bg-slate-950 border border-slate-700 p-2 mt-1" value={editor.name} onChange={e=>setEditor({...editor,name:e.target.value})}/></label>
+    <label className="block text-sm">{editor.kind==='group'?'Networks (one per line)':'Networks (CIDR,country,ASN; one per line, no header)'}<textarea required rows={8} className="block w-full bg-slate-950 border border-slate-700 p-2 mt-1 font-mono" value={editor.text} onChange={e=>setEditor({...editor,text:e.target.value})}/></label>
+    <label className="block text-sm">Load text / CSV file<input type="file" accept=".csv,.txt" className="block mt-1" onChange={async e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>65536){setError('Import exceeds 64 KiB');return}try{setEditor({...editor,text:await file.text()})}catch(err){setError(String(err))}}}/></label>
+    <div className="flex gap-3"><button disabled={busy} className="bg-emerald-700 px-3 py-2">Save & apply</button><button type="button" onClick={()=>setEditor(null)}>Cancel</button></div>
+   </form>}
+  </section>}
+  {tab==='activity'&&<section className="space-y-3"><p className="text-xs text-slate-400">Latest 200 sampled matches. Alerts and reputation flags are derived from the rule revision that actually handled the request. Delivery retries do not create duplicates.</p>{activity.length===0&&<p>No recorded access matches.</p>}<div className="overflow-auto"><table className="w-full text-left text-sm"><thead><tr>{['Time','Node','IP','Rule / release','Action','Flags'].map(h=><th key={h} className="p-2">{h}</th>)}</tr></thead><tbody>{activity.map((e,i)=><tr key={i} className="border-t border-[#172338]"><td className="p-2">{new Date(e.created_at).toLocaleString()}</td><td className="p-2">{e.node_id}</td><td className="p-2">{e.ip}</td><td className="p-2">{e.rule_id} / {e.release_id}</td><td className="p-2">{e.action}</td><td className="p-2 text-amber-300">{e.alert?'Alert ':''}{e.reputation?`Risk score: ${e.risk_score}`:''}</td></tr>)}</tbody></table></div></section>}
+  {selected&&<aside className="border border-[#172338] bg-[#0B1320] p-4 space-y-3"><div className="flex justify-between"><h2>{selected.document.name} · Revision history</h2><button onClick={()=>setSelected(null)}>Close</button></div>{history.map(row=><details key={row.version}><summary className="cursor-pointer text-sm">v{row.version} · {row.deleted?'Deleted':'Saved'} · {row.actor} · {new Date(row.updated_at).toLocaleString()}</summary><pre className="text-xs overflow-auto max-h-64 p-3">{JSON.stringify(row.document,null,2)}</pre>{!row.deleted&&selected.kind==='rule'&&row.version!==selected.version&&<button disabled={busy||!status} className="text-sm text-emerald-400" onClick={()=>{if(confirm(`Restore revision ${row.version} and apply it?`))void change({id:selected.id,kind:'rule',expected_version:selected.version,expected_release:status!.release_id,delete:false,document:row.document})}}>Restore & apply</button>}</details>)}</aside>}
+ </div>
 }

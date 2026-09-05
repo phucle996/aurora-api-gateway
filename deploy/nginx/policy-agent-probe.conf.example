@@ -1,0 +1,12 @@
+# Include inside http {}. Keep this listener loopback-only. The policy path must
+# match the workload's aurora_waf_policy and the agent --policy argument.
+server {
+    listen 127.0.0.1:9081;
+    server_name localhost;
+    aurora_waf on;
+    aurora_waf_policy /etc/aurora-waf/active-policy.json;
+    location = /generation {
+        default_type text/plain;
+        return 200 "$aurora_waf_generation";
+    }
+}

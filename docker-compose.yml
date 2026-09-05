@@ -17,6 +17,11 @@ services:
       start_period: 2s
 
   node-01:
+    networks:
+      - default
+      - access-ingress
+    volumes:
+      - node-01-policy:/var/lib/aurora-policy
     build:
       context: .
       dockerfile: deploy/docker/Dockerfile.node
@@ -24,6 +29,7 @@ services:
     environment:
       - CONTROLLER_URL=http://controller:8080
       - NODE_ID=node-01
+      - TRUSTED_PROXY_CIDRS=172.29.253.2/32
       - AUTH_TOKEN=71b268cadc82c2ecfff176c7dfd5c4ac77a0e6a3cd0ae3a7d87b1b9bb686b994
     ports:
       - "8091:80"
@@ -33,6 +39,11 @@ services:
     restart: unless-stopped
 
   node-02:
+    networks:
+      - default
+      - access-ingress
+    volumes:
+      - node-02-policy:/var/lib/aurora-policy
     build:
       context: .
       dockerfile: deploy/docker/Dockerfile.node
@@ -40,6 +51,7 @@ services:
     environment:
       - CONTROLLER_URL=http://controller:8080
       - NODE_ID=node-02
+      - TRUSTED_PROXY_CIDRS=172.29.253.2/32
       - AUTH_TOKEN=71b268cadc82c2ecfff176c7dfd5c4ac77a0e6a3cd0ae3a7d87b1b9bb686b994
     ports:
       - "8092:80"
@@ -49,6 +61,11 @@ services:
     restart: unless-stopped
 
   node-03:
+    networks:
+      - default
+      - access-ingress
+    volumes:
+      - node-03-policy:/var/lib/aurora-policy
     build:
       context: .
       dockerfile: deploy/docker/Dockerfile.node
@@ -56,6 +73,7 @@ services:
     environment:
       - CONTROLLER_URL=http://controller:8080
       - NODE_ID=node-03
+      - TRUSTED_PROXY_CIDRS=172.29.253.2/32
       - AUTH_TOKEN=71b268cadc82c2ecfff176c7dfd5c4ac77a0e6a3cd0ae3a7d87b1b9bb686b994
     ports:
       - "8093:80"
@@ -65,6 +83,9 @@ services:
     restart: unless-stopped
 
   lb:
+    networks:
+      access-ingress:
+        ipv4_address: 172.29.253.2
     image: nginx:alpine
     container_name: aurora-lb
     ports:
@@ -79,3 +100,13 @@ services:
 
 volumes:
   controller-data:
+  node-01-policy:
+  node-02-policy:
+  node-03-policy:
+
+# The ingress bridge gives the trusted LB a stable, exclusive source identity.
+networks:
+  access-ingress:
+    ipam:
+      config:
+        - subnet: 172.29.253.0/24

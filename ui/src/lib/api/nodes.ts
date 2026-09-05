@@ -49,5 +49,9 @@ export const nodesApi = {
     api.get<NodeMetricPoint[]>(`/api/v1/nodes/${id}/metrics`),
   getSyncHistory: (id: string) =>
     api.get<NodeSyncLog[]>(`/api/v1/nodes/${id}/sync-history`),
+  getConfig: (id: string) =>
+    api.get<{ node_id: string; path: string; config: string; fetched_at: string }>(
+      `/api/v1/nodes/${id}/config`
+    ),
 };
 

@@ -64,7 +64,7 @@ export function EventsTable({
   onTimeFilterChange,
 }: EventsTableProps) {
   return (
-    <div className="xl:col-span-7 bg-[#0B1320] border border-[#172338] p-4 space-y-3">
+    <div className={`${selectedId ? 'xl:col-span-7' : 'xl:col-span-12'} bg-[#0B1320] border border-[#172338] p-4 space-y-3 transition-all duration-200`}>
       {/* Title & Count */}
       <div className="flex items-center justify-between pb-2 border-b border-[#172338]">
         <div className="flex items-center gap-2">

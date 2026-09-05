@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import {
   Search,
   RotateCw,
-  ChevronLeft,
-  ChevronRight,
   ArrowUpDown,
   Filter,
 } from 'lucide-react';
@@ -22,6 +20,7 @@ export interface NodeItem {
   rps?: string;
   connections?: string;
   lastHeartbeat: string;
+  lastHeartbeatTimestamp?: number;
   sync: 'In Sync' | 'Drift' | 'Syncing';
   cpuUsage: number;
   memoryUsage: number;
@@ -227,7 +226,7 @@ export function NodesTable({
                     <td className="py-2 px-3 text-slate-400">{node.hostname || node.region || 'localhost'}</td>
 
                     {/* Role */}
-                    <td className="py-2 px-3 text-slate-300">{node.role || 'Edge'}</td>
+                    <td className="py-2 px-3 text-slate-300">{node.role || 'Edge Node'}</td>
 
                     {/* Status */}
                     <td className="py-2 px-3">
@@ -281,32 +280,10 @@ export function NodesTable({
         </table>
       </div>
 
-      {/* Pagination Footer */}
-      <div className="p-3 bg-[#080E18] border-t border-[#152030] flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-slate-400">
+      {/* Table Footer */}
+      <div className="p-3 bg-[#080E18] border-t border-[#152030] flex items-center justify-between text-xs font-mono text-slate-400">
         <div>
-          Showing {filteredNodes.length > 0 ? 1 : 0}-{filteredNodes.length} of {filteredNodes.length} nodes
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            className="p-1 hover:bg-[#0E1726] border border-[#1C293D] text-slate-400 disabled:opacity-30 cursor-pointer"
-            disabled
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
-            className="px-2.5 py-1 bg-emerald-600 border border-emerald-500 text-white font-bold cursor-pointer"
-          >
-            1
-          </button>
-          <button
-            type="button"
-            className="p-1 hover:bg-[#0E1726] border border-[#1C293D] text-slate-400 disabled:opacity-30 cursor-pointer"
-            disabled
-          >
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
+          Tổng số: <span className="text-slate-200 font-semibold">{filteredNodes.length}</span> node
         </div>
       </div>
     </div>

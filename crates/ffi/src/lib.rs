@@ -14,6 +14,7 @@ use std::{
     ptr, slice,
 };
 
+pub mod access;
 pub mod telemetry;
 
 /// Mã trạng thái trả về cho caller C:
@@ -124,6 +125,56 @@ pub unsafe extern "C" fn aurora_waf_evaluate_v3(
         // Đường dẫn URL không hợp lệ: trả về mã INVALID (1)
         Ok(Err(_)) => INVALID,
         // Bắt được panic: trả về mã PANIC (2)
+        Err(_) => PANIC,
+    }
+}
+
+/// Host-aware evaluation; existing value-only Decision layout is unchanged.
+/// # Safety
+/// Engine and nonempty input buffers must be valid for the call; out must be writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn aurora_waf_evaluate_v4(
+    engine: *const Engine,
+    host: *const u8,
+    host_len: usize,
+    path: *const u8,
+    len: usize,
+    out: *mut Decision,
+) -> u32 {
+    if out.is_null() {
+        return INVALID;
+    }
+    unsafe {
+        *out = Decision {
+            action: 1,
+            ..Decision::default()
+        };
+    }
+    if engine.is_null()
+        || path.is_null()
+        || len == 0
+        || len > MAX_PATH_BYTES
+        || host_len > 253
+        || (host_len > 0 && host.is_null())
+    {
+        return INVALID;
+    }
+    match catch_unwind(AssertUnwindSafe(|| unsafe {
+        let host = if host_len == 0 {
+            &[]
+        } else {
+            slice::from_raw_parts(host, host_len)
+        };
+        (&*engine).evaluate_request(host, slice::from_raw_parts(path, len))
+    })) {
+        Ok(Ok(decision)) => {
+            telemetry::record_evaluation(decision.action);
+            unsafe {
+                *out = decision;
+            }
+            OK
+        }
+        Ok(Err(_)) => INVALID,
         Err(_) => PANIC,
     }
 }

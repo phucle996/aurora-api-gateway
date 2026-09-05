@@ -18,6 +18,8 @@ type NodeHeartbeatPayload struct {
 	RequestsPerSecond float64
 	ActiveReleaseID   int64
 	IP                string
+	Version           string
+	Role              string
 }
 
 // NodeMetricHistoryRecord đại diện cho 1 bản ghi rollup 1 phút được lưu vào bảng node_metrics_history.
@@ -60,6 +62,14 @@ func (p *NodeHeartbeatPayload) MarshalBinary() []byte {
 	if p.ActiveReleaseID != 0 {
 		b = protowire.AppendTag(b, 7, protowire.VarintType)
 		b = protowire.AppendVarint(b, uint64(p.ActiveReleaseID))
+	}
+	if p.Version != "" {
+		b = protowire.AppendTag(b, 8, protowire.BytesType)
+		b = protowire.AppendString(b, p.Version)
+	}
+	if p.Role != "" {
+		b = protowire.AppendTag(b, 9, protowire.BytesType)
+		b = protowire.AppendString(b, p.Role)
 	}
 	return b
 }
@@ -126,6 +136,20 @@ func UnmarshalNodeHeartbeat(b []byte) (*NodeHeartbeatPayload, error) {
 				return nil, errors.New("invalid active_release_id varint in protobuf")
 			}
 			p.ActiveReleaseID = int64(v)
+			b = b[n:]
+		case 8: // Version
+			v, n := protowire.ConsumeString(b)
+			if n < 0 {
+				return nil, errors.New("invalid version string in protobuf")
+			}
+			p.Version = v
+			b = b[n:]
+		case 9: // Role
+			v, n := protowire.ConsumeString(b)
+			if n < 0 {
+				return nil, errors.New("invalid role string in protobuf")
+			}
+			p.Role = v
 			b = b[n:]
 		default:
 			n := protowire.ConsumeFieldValue(num, typ, b)

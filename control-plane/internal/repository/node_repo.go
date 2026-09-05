@@ -99,7 +99,13 @@ func (r *sqliteNodeRepository) ListNodes(ctx context.Context) ([]entity.ClusterN
 		); err != nil {
 			return nil, fmt.Errorf("quét bản ghi node thất bại: %w", err)
 		}
-		item.PolicySync = "Successful"
+		if item.SyncStatus == "Drift" {
+			item.PolicySync = "Drift Detected"
+		} else if item.SyncStatus == "Syncing" {
+			item.PolicySync = "Syncing"
+		} else {
+			item.PolicySync = "Synchronized"
+		}
 		nodes = append(nodes, item)
 	}
 
@@ -183,7 +189,13 @@ func (r *sqliteNodeRepository) GetNodeByID(ctx context.Context, id string) (*ent
 		}
 		return nil, fmt.Errorf("truy vấn node %s thất bại: %w", id, err)
 	}
-	item.PolicySync = "Successful"
+	if item.SyncStatus == "Drift" {
+		item.PolicySync = "Drift Detected"
+	} else if item.SyncStatus == "Syncing" {
+		item.PolicySync = "Syncing"
+	} else {
+		item.PolicySync = "Synchronized"
+	}
 	return &item, nil
 }
 
@@ -201,13 +213,15 @@ func (r *sqliteNodeRepository) UpdateHeartbeat(ctx context.Context, payload enti
 		sync_status, join_method, certificate, last_heartbeat, created_at,
 		pending_command, reload_status
 	) VALUES (
-		?, ?, ?, ?, 'Edge Node', 'Ready', '0.4.1',
+		?, ?, ?, ?, 'Edge Node', 'Ready',
+		CASE WHEN ? != '' THEN ? ELSE '1.30.4' END,
 		CASE WHEN ? > 0 AND EXISTS(SELECT 1 FROM ruleset_releases WHERE id = ?) THEN ? ELSE NULL END,
 		'In Sync', 'Docker Container', 'mTLS Enrolled', datetime(?, 'unixepoch'), datetime(?, 'unixepoch'),
 		'none', 'idle'
 	)
 	ON CONFLICT(id) DO UPDATE SET 
 		ip = CASE WHEN ? != '' AND ? != '127.0.0.1' THEN ? ELSE ip END,
+		version = CASE WHEN ? != '' THEN ? ELSE version END,
 		last_heartbeat = datetime(?, 'unixepoch'),
 		status = 'Ready',
 		reload_status = CASE 
@@ -223,10 +237,12 @@ func (r *sqliteNodeRepository) UpdateHeartbeat(ctx context.Context, payload enti
 		ctx, query,
 		// INSERT params:
 		payload.NodeID, payload.NodeID, payload.NodeID, nodeIP,
+		payload.Version, payload.Version,
 		payload.ActiveReleaseID, payload.ActiveReleaseID, payload.ActiveReleaseID,
 		payload.Timestamp, payload.Timestamp,
 		// ON CONFLICT UPDATE params:
 		payload.IP, payload.IP, payload.IP,
+		payload.Version, payload.Version,
 		payload.Timestamp,
 		payload.ActiveReleaseID, payload.ActiveReleaseID, payload.ActiveReleaseID,
 	)

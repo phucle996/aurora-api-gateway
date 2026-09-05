@@ -14,12 +14,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY build/nginx-runtime /opt/nginx
 COPY build/modules/ngx_http_aurora_waf_module.so /opt/modules/ngx_http_aurora_waf_module.so
+COPY build/aurora-policy-agent /usr/local/bin/aurora-policy-agent
 COPY deploy/docker/nginx-node.conf.template /etc/nginx/nginx-node.conf.template
 COPY deploy/docker/entrypoint-node.sh /entrypoint.sh
 COPY deploy/demo/ok /deploy/demo/ok
 COPY deploy/demo/__aurora_blocked /deploy/demo/__aurora_blocked
 
-RUN chmod +x /entrypoint.sh /opt/nginx/usr/sbin/nginx
+RUN chmod +x /entrypoint.sh /opt/nginx/usr/sbin/nginx /usr/local/bin/aurora-policy-agent
 
 EXPOSE 80
 

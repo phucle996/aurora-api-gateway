@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  MoreHorizontal,
+  X,
   Copy,
   Check,
   Search,
@@ -16,9 +16,10 @@ import { EventItem } from './EventsTable';
 
 interface EventDetailProps {
   event: EventItem;
+  onClose?: () => void;
 }
 
-export function EventDetail({ event }: EventDetailProps) {
+export function EventDetail({ event, onClose }: EventDetailProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopyEventId = () => {
@@ -54,12 +55,16 @@ export function EventDetail({ event }: EventDetailProps) {
           </div>
         </div>
 
-        <button
-          type="button"
-          className="p-1 text-slate-400 hover:text-slate-200 hover:bg-[#152338] transition-colors cursor-pointer"
-        >
-          <MoreHorizontal className="w-4 h-4" />
-        </button>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 text-slate-400 hover:text-slate-200 hover:bg-[#152338] transition-colors cursor-pointer"
+            title="Đóng chi tiết sự kiện"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Overview Group */}

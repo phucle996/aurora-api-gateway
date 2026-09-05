@@ -8,7 +8,7 @@ export interface PolicyItem {
   mode: 'Mixed' | 'Block' | 'Detect';
   ruleSetsCount: number;
   lastUpdated: string;
-  status: 'Active' | 'Draft' | 'Disabled';
+  status: 'Published' | 'Draft' | 'Disabled';
   description: string;
   priority: 'High' | 'Medium' | 'Low';
   assignedEnv?: string;
@@ -35,7 +35,7 @@ export function PoliciesTable({
   onStatusFilterChange,
 }: PoliciesTableProps) {
   return (
-    <div className="xl:col-span-7 bg-[#0B1320] border border-[#172338] p-4 space-y-3">
+    <div className={`${selectedId ? 'xl:col-span-7' : 'xl:col-span-12'} bg-[#0B1320] border border-[#172338] p-4 space-y-3 transition-all duration-200`}>
       {/* Table Header Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#172338]">
         <div className="flex items-center gap-2">
@@ -68,7 +68,7 @@ export function PoliciesTable({
               className="appearance-none bg-[#0E1726] border border-[#1C293D] pl-2.5 pr-6 py-1 text-xs text-slate-300 focus:outline-none focus:border-emerald-500 transition-colors font-mono cursor-pointer"
             >
               <option>All Statuses</option>
-              <option>Active</option>
+              <option>Published</option>
               <option>Draft</option>
               <option>Disabled</option>
             </select>
@@ -141,7 +141,7 @@ export function PoliciesTable({
                   <td className="py-2.5 px-3 whitespace-nowrap font-mono">
                     <span
                       className={`px-1.5 py-0.5 text-[10px] font-bold border uppercase ${
-                        p.status === 'Active'
+                        p.status === 'Published'
                           ? 'bg-emerald-950 text-emerald-400 border-emerald-700'
                           : p.status === 'Draft'
                           ? 'bg-slate-900 text-slate-300 border-slate-700'
@@ -157,7 +157,9 @@ export function PoliciesTable({
                       className="p-1 text-slate-500 hover:text-slate-200 hover:bg-[#18263D] transition-colors"
                       onClick={(e) => {
                         e.stopPropagation();
+                        onSelect(p.id);
                       }}
+                      aria-label={`View ${p.name}`}
                     >
                       <MoreHorizontal className="w-3.5 h-3.5" />
                     </button>

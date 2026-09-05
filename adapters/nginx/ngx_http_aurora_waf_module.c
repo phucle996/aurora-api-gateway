@@ -9,6 +9,8 @@
 typedef struct {
     ngx_flag_t enabled;      /* Bật/tắt WAF (on/off) */
     ngx_uint_t mode;         /* Chế độ hoạt động: enforce (chặn) hoặc audit (chỉ log) */
+    ngx_str_t access_policy;
+    AuroraAccessEngine *access_engine;
     ngx_str_t policy;        /* Đường dẫn tới file policy snapshot */
     ngx_str_t controller;    /* URL của Control Plane (VD: http://127.0.0.1:8080) */
     ngx_str_t node_id;       /* ID của Node (VD: node-local-01) */
@@ -76,6 +78,10 @@ static ngx_command_t ngx_http_aurora_commands[] = {
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_aurora_conf_t, enabled),
       NULL },
+    { ngx_string("aurora_access_policy"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_str_slot, NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_aurora_conf_t, access_policy), NULL },
     { ngx_string("aurora_waf_policy"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_str_slot,
@@ -177,6 +183,76 @@ ngx_http_aurora_cleanup(void *data)
     aurora_waf_destroy(data);
 }
 
+
+static void ngx_http_aurora_access_cleanup(void *data) { aurora_access_destroy(data); }
+
+/* Access snapshot loader owns its independent handle and cleanup boundary. */
+static char *ngx_http_aurora_merge_access(ngx_conf_t *cf, ngx_http_aurora_conf_t *prev, ngx_http_aurora_conf_t *conf)
+{
+    ngx_pool_cleanup_t *cleanup;
+    struct stat st;
+    int fd;
+    ssize_t n;
+    size_t used = 0;
+    u_char *bytes;
+    uint32_t status;
+    ngx_conf_merge_str_value(conf->access_policy, prev->access_policy, "");
+    if (conf->access_policy.len == 0) { return NGX_CONF_OK; }
+    if (((ngx_http_core_loc_conf_t *) ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module))->satisfy == NGX_HTTP_SATISFY_ANY) {
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "Aurora access requires satisfy all");
+        return NGX_CONF_ERROR;
+    }
+    if (prev->access_engine && conf->access_policy.data == prev->access_policy.data) {
+        conf->access_engine = prev->access_engine;
+        return NGX_CONF_OK;
+    }
+    /* Chuẩn hóa đường dẫn đầy đủ của file policy */
+    if (ngx_conf_full_name(cf->cycle, &conf->access_policy, 0) != NGX_OK) { return NGX_CONF_ERROR; }
+
+    /* Mở file policy dạng non-blocking, chỉ đọc */
+    fd = open((char *) conf->access_policy.data, O_RDONLY|O_NONBLOCK);
+    if (fd == -1) {
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, ngx_errno, "cannot open Aurora policy %V", &conf->access_policy);
+        return NGX_CONF_ERROR;
+    }
+
+    /* Kiểm tra file hợp lệ và giới hạn kích thước an toàn (1 byte .. 64KB) */
+    if (fstat(fd, &st) == -1 || !S_ISREG(st.st_mode) || st.st_size <= 0 || st.st_size > 65536) {
+        close(fd);
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "Aurora policy must be a regular file of 1..65536 bytes");
+        return NGX_CONF_ERROR;
+    }
+
+    /* Cấp phát bộ nhớ tạm từ pool để đọc nội dung file policy */
+    bytes = ngx_pnalloc(cf->temp_pool, 65537);
+    if (bytes == NULL) { close(fd); return NGX_CONF_ERROR; }
+
+    /* Đọc toàn bộ nội dung file policy, xử lý ngắt tín hiệu EINTR */
+    while (used < 65537) {
+        n = read(fd, bytes + used, 65537 - used);
+        if (n == -1 && errno == EINTR) { continue; }
+        if (n <= 0) { break; }
+        used += (size_t) n;
+    }
+    close(fd);
+    if (n < 0 || used != (size_t) st.st_size) { return NGX_CONF_ERROR; }
+
+    /* Đăng ký cleanup handler để giải phóng Rust engine khi pool NGINX bị hủy */
+    cleanup = ngx_pool_cleanup_add(cf->pool, 0);
+    if (cleanup == NULL) { return NGX_CONF_ERROR; }
+
+    /* Gọi FFI tạo instance Rust AuroraEngine từ bytes policy đã đọc */
+    status = aurora_access_create(bytes, used, &conf->access_engine);
+    if (status != 0) {
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "invalid Aurora policy %V (status %ui)", &conf->access_policy, (ngx_uint_t) status);
+        return NGX_CONF_ERROR;
+    }
+
+    cleanup->handler = ngx_http_aurora_access_cleanup;
+    cleanup->data = conf->access_engine;
+    return NGX_CONF_OK;
+}
+
 /*
  * Gộp cấu hình từ block cha xuống block con và khởi tạo Rust WAF Engine từ file policy.
  */
@@ -200,6 +276,8 @@ ngx_http_aurora_merge_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_conf_merge_str_value(conf->node_id, prev->node_id, "");
     ngx_conf_merge_str_value(conf->token, prev->token, "");
     ngx_conf_merge_uint_value(conf->interval, prev->interval, 10);
+
+    if (ngx_http_aurora_merge_access(cf, prev, conf) != NGX_CONF_OK) { return NGX_CONF_ERROR; }
 
     /* Nếu WAF không được kích hoạt, bỏ qua các bước nạp policy */
     if (!conf->enabled) { return NGX_CONF_OK; }
@@ -283,12 +361,34 @@ ngx_http_aurora_handler(ngx_http_request_t *r)
     uint32_t status;
     AuroraDecision decision;
     ngx_log_t log;
+    ngx_str_t host = r->headers_in.server;
 
-    /* Nếu WAF không bật tại location này, chuyển tiếp cho handler tiếp theo */
-    if (!conf->enabled) { return NGX_DECLINED; }
 
     /* Gọi FFI sang Rust core để đánh giá đường dẫn URI chuẩn hóa */
-    status = aurora_waf_evaluate_v3(conf->engine, r->uri.data, r->uri.len, &decision);
+    if (host.len == 0) {
+        ngx_http_core_srv_conf_t *server = ngx_http_get_module_srv_conf(r, ngx_http_core_module);
+        host = server->server_name;
+    }
+    if (conf->access_engine) {
+        AuroraAccessInput input;
+        input.ip = r->connection->addr_text.data; input.ip_len = r->connection->addr_text.len;
+        input.host = host.data; input.host_len = host.len;
+        input.path = r->uri.data; input.path_len = r->uri.len;
+        input.method = r->method_name.data; input.method_len = r->method_name.len;
+        input.now = (uint64_t) ngx_time();
+        status = aurora_access_evaluate(conf->access_engine, &input, &decision);
+        if (status != 0 || decision.action > 1) { return NGX_HTTP_SERVICE_UNAVAILABLE; }
+        if (aurora_log_second != ngx_time()) { aurora_log_second = ngx_time(); aurora_log_count = 0; }
+        if (decision.log_matches && aurora_log_count < 100) {
+            aurora_log_count++;
+            log = *r->connection->log; log.handler = NULL;
+            ngx_log_error(NGX_LOG_NOTICE, &log, 0, "AuroraAccess generation=%uL rule=%uL ip=%V",
+                decision.generation, decision.rule_id, &r->connection->addr_text);
+        }
+        if (decision.action == 1) { return NGX_HTTP_FORBIDDEN; }
+    }
+    if (!conf->enabled) { return NGX_DECLINED; }
+    status = aurora_waf_evaluate_v4(conf->engine, host.data, host.len, r->uri.data, r->uri.len, &decision);
     if (status != 0 || decision.action > 1) {
         /*
          * Xử lý lỗi engine / panic:
@@ -363,6 +463,11 @@ ngx_http_aurora_variables(ngx_conf_t *cf)
     ngx_http_variable_t *v = ngx_http_add_variable(cf, &name, NGX_HTTP_VAR_NOCACHEABLE);
     if (v == NULL) { return NGX_ERROR; }
     v->get_handler = ngx_http_aurora_generation;
+    ngx_str_t access_name = ngx_string("aurora_access_generation");
+    v = ngx_http_add_variable(cf, &access_name, NGX_HTTP_VAR_NOCACHEABLE);
+    if (v == NULL) { return NGX_ERROR; }
+    v->get_handler = ngx_http_aurora_generation;
+    v->data = 1;
     return NGX_OK;
 }
 
@@ -373,7 +478,7 @@ ngx_http_aurora_generation(ngx_http_request_t *r, ngx_http_variable_value_t *v, 
     u_char *p = ngx_pnalloc(r->pool, NGX_INT64_LEN);
     (void) data;
     if (p == NULL) { return NGX_ERROR; }
-    v->len = ngx_sprintf(p, "%uL", aurora_waf_generation(conf->engine)) - p;
+    v->len = ngx_sprintf(p, "%uL", (data == 1 ? aurora_access_generation(conf->access_engine) : aurora_waf_generation(conf->engine))) - p;
     v->data = p;
     v->valid = 1;
     v->no_cacheable = 1;

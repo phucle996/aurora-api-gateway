@@ -15,8 +15,9 @@ type ClusterNodeRecord struct {
 	ActiveReleaseID   *int64  `json:"active_release_id,omitempty"`
 	Ruleset           string  `json:"ruleset"`
 	SyncStatus        string  `json:"sync"` // "In Sync" | "Drift" | "Syncing"
-	LastHeartbeat     string  `json:"lastHeartbeat"`
-	CreatedAt         string  `json:"created_at"`
+	LastHeartbeat          string  `json:"lastHeartbeat"`
+	LastHeartbeatTimestamp int64   `json:"lastHeartbeatTimestamp"`
+	CreatedAt              string  `json:"created_at"`
 	JoinMethod        string  `json:"joinMethod"`
 	Certificate       string  `json:"certificate"`
 	PolicySync        string  `json:"policySync"`
