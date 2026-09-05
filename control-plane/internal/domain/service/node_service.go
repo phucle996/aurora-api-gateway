@@ -9,4 +9,5 @@ import (
 type NodeService interface {
 	ListNodes(ctx context.Context) ([]entity.ClusterNodeRecord, error)
 	GetNodeByID(ctx context.Context, id string) (*entity.ClusterNodeRecord, error)
+	RecordHeartbeat(ctx context.Context, payload entity.NodeHeartbeatPayload) error
 }

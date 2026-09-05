@@ -5,22 +5,25 @@ import (
 	"aurora-waf.local/control-plane/internal/domain/repo"
 	domainService "aurora-waf.local/control-plane/internal/domain/service"
 	"context"
+	"errors"
 	"fmt"
 	"time"
 )
 
 type nodeService struct {
-	repo repo.NodeRepository
+	repo       repo.NodeRepository
+	metricsSvc domainService.MetricsService
 }
 
 // NewNodeService khởi tạo service quản lý workflow Cluster Nodes.
-func NewNodeService(repo repo.NodeRepository) domainService.NodeService {
-	return &nodeService{repo: repo}
+func NewNodeService(repo repo.NodeRepository, metricsSvc domainService.MetricsService) domainService.NodeService {
+	return &nodeService{
+		repo:       repo,
+		metricsSvc: metricsSvc,
+	}
 }
 
 // ListNodes lấy danh sách tất cả các node từ repository và định dạng thời gian heartbeat.
-// Thiết kế thuần nhất (Uniform Node Handling): Đối xử với mọi node bình đẳng theo đúng
-// dữ liệu trạng thái từ database, không hardcode logic cục bộ hay đọc file riêng lẻ.
 func (s *nodeService) ListNodes(ctx context.Context) ([]entity.ClusterNodeRecord, error) {
 	// 1. Truy vấn danh sách node từ repository
 	nodes, err := s.repo.ListNodes(ctx)
@@ -28,24 +31,44 @@ func (s *nodeService) ListNodes(ctx context.Context) ([]entity.ClusterNodeRecord
 		return nil, fmt.Errorf("nodeService.ListNodes: %w", err)
 	}
 
-	// 2. Chuẩn hóa hiển thị thời gian tương đối cho LastHeartbeat
+	// 2. Chuẩn hóa hiển thị thời gian tương đối cho LastHeartbeat và trạng thái liveness
 	now := time.Now().UTC()
 	for i := range nodes {
-		if t, err := time.Parse(time.RFC3339, nodes[i].LastHeartbeat); err == nil {
+		node := &nodes[i]
+		if t, err := time.Parse(time.RFC3339, node.LastHeartbeat); err == nil {
 			diff := now.Sub(t)
 			if diff < time.Minute {
-				nodes[i].LastHeartbeat = fmt.Sprintf("%ds ago", int(diff.Seconds()))
+				node.LastHeartbeat = fmt.Sprintf("%ds ago", int(diff.Seconds()))
 			} else if diff < time.Hour {
-				nodes[i].LastHeartbeat = fmt.Sprintf("%dm ago", int(diff.Minutes()))
+				node.LastHeartbeat = fmt.Sprintf("%dm ago", int(diff.Minutes()))
 			} else {
-				nodes[i].LastHeartbeat = fmt.Sprintf("%dh ago", int(diff.Hours()))
+				node.LastHeartbeat = fmt.Sprintf("%dh ago", int(diff.Hours()))
+			}
+
+			if diff > 45*time.Second {
+				node.Status = "Not Ready"
+				node.Uptime = "Offline"
+			} else {
+				node.Status = "Ready"
+				node.Uptime = "Active"
 			}
 		}
 
-		// Khởi tạo các trường hiển thị mặc định thống nhất cho toàn bộ các node
-		nodes[i].ActiveConnections = "0"
-		nodes[i].RequestsPerSecond = "0"
-		nodes[i].Uptime = "Active"
+		// Nạp dữ liệu đo đạc thực tế từ In-Memory Ring Buffer thay vì gán tĩnh
+		if s.metricsSvc != nil {
+			if pt := s.metricsSvc.GetLatestMetricPoint(node.ID); pt != nil {
+				node.CPUUsage = pt.CPUUsage
+				node.MemoryUsage = pt.MemoryUsage
+				node.ActiveConnections = fmt.Sprintf("%d", pt.ActiveConnections)
+				node.RequestsPerSecond = fmt.Sprintf("%.1f", pt.RPS)
+			} else {
+				node.ActiveConnections = "0"
+				node.RequestsPerSecond = "0"
+			}
+		} else {
+			node.ActiveConnections = "0"
+			node.RequestsPerSecond = "0"
+		}
 	}
 
 	return nodes, nil
@@ -61,8 +84,76 @@ func (s *nodeService) GetNodeByID(ctx context.Context, id string) (*entity.Clust
 		return nil, nil
 	}
 
-	node.ActiveConnections = "0"
-	node.RequestsPerSecond = "0"
-	node.Uptime = "Active"
+	now := time.Now().UTC()
+	if t, err := time.Parse(time.RFC3339, node.LastHeartbeat); err == nil {
+		diff := now.Sub(t)
+		if diff < time.Minute {
+			node.LastHeartbeat = fmt.Sprintf("%ds ago", int(diff.Seconds()))
+		} else if diff < time.Hour {
+			node.LastHeartbeat = fmt.Sprintf("%dm ago", int(diff.Minutes()))
+		} else {
+			node.LastHeartbeat = fmt.Sprintf("%dh ago", int(diff.Hours()))
+		}
+
+		if diff > 45*time.Second {
+			node.Status = "Not Ready"
+			node.Uptime = "Offline"
+		} else {
+			node.Status = "Ready"
+			node.Uptime = "Active"
+		}
+	}
+
+	// Nạp dữ liệu đo đạc thực tế từ In-Memory Ring Buffer
+	if s.metricsSvc != nil {
+		if pt := s.metricsSvc.GetLatestMetricPoint(node.ID); pt != nil {
+			node.CPUUsage = pt.CPUUsage
+			node.MemoryUsage = pt.MemoryUsage
+			node.ActiveConnections = fmt.Sprintf("%d", pt.ActiveConnections)
+			node.RequestsPerSecond = fmt.Sprintf("%.1f", pt.RPS)
+		} else {
+			node.ActiveConnections = "0"
+			node.RequestsPerSecond = "0"
+		}
+	} else {
+		node.ActiveConnections = "0"
+		node.RequestsPerSecond = "0"
+	}
 	return node, nil
+}
+
+// RecordHeartbeat tiếp nhận và xử lý gói tin Push Heartbeat Telemetry gửi từ Node.
+func (s *nodeService) RecordHeartbeat(ctx context.Context, payload entity.NodeHeartbeatPayload) error {
+	if payload.NodeID == "" {
+		return errors.New("node_id không được để trống")
+	}
+	if payload.Timestamp <= 0 {
+		payload.Timestamp = time.Now().Unix()
+	}
+
+	// 1. Cập nhật thời điểm heartbeat và liveness vào SQLite
+	if err := s.repo.UpdateHeartbeat(ctx, payload); err != nil {
+		return fmt.Errorf("nodeService.RecordHeartbeat: %w", err)
+	}
+
+	// 2. Đẩy điểm đo tức thời vào In-Memory Ring Buffer trong MetricsService
+	if s.metricsSvc != nil {
+		now := time.Now().Unix()
+		minutesAgo := int(float64(now-payload.Timestamp) / 60.0)
+		label := fmt.Sprintf("-%dm", minutesAgo)
+		if minutesAgo <= 0 {
+			label = "Now"
+		}
+
+		s.metricsSvc.PushMetricPoint(payload.NodeID, entity.NodeMetricPoint{
+			Timestamp:         payload.Timestamp,
+			TimeLabel:         label,
+			RPS:               payload.RequestsPerSecond,
+			CPUUsage:          payload.CPUUsage,
+			MemoryUsage:       payload.MemoryUsage,
+			ActiveConnections: payload.ActiveConnections,
+		})
+	}
+
+	return nil
 }

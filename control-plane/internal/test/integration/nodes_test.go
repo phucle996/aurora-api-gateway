@@ -5,6 +5,7 @@ import (
 	"aurora-waf.local/control-plane/internal/app"
 	"aurora-waf.local/control-plane/internal/config"
 	"aurora-waf.local/control-plane/internal/domain/entity"
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -105,3 +107,90 @@ func TestListNodesWorkflow(t *testing.T) {
 		t.Errorf("kỳ vọng mã 404 cho node không tồn tại, nhận được: %d", wNotFound.Code)
 	}
 }
+
+func TestNodeHeartbeatWorkflow(t *testing.T) {
+	mux := nodesFixture(t)
+	token := "nodes-test-token-at-least-32-bytes"
+
+	// 1. Kiểm tra từ chối định dạng JSON: bắt buộc 100% Protobuf binary wire format
+	reqJSON := httptest.NewRequest("POST", "/api/v1/nodes/node-local-01/heartbeat", bytes.NewBufferString(`{"status":"online"}`))
+	reqJSON.Header.Set("Content-Type", "application/json")
+	reqJSON.Header.Set("Authorization", "Bearer "+token)
+	wJSON := httptest.NewRecorder()
+	mux.ServeHTTP(wJSON, reqJSON)
+	if wJSON.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("kỳ vọng mã 415 khi gửi application/json, nhận: %d", wJSON.Code)
+	}
+
+	// 2. Kiểm tra từ chối binary rác/hỏng
+	reqCorrupt := httptest.NewRequest("POST", "/api/v1/nodes/node-local-01/heartbeat", bytes.NewReader([]byte{0xFF, 0xFF, 0xFF, 0xFF}))
+	reqCorrupt.Header.Set("Content-Type", "application/x-protobuf")
+	reqCorrupt.Header.Set("Authorization", "Bearer "+token)
+	wCorrupt := httptest.NewRecorder()
+	mux.ServeHTTP(wCorrupt, reqCorrupt)
+	if wCorrupt.Code != http.StatusBadRequest {
+		t.Fatalf("kỳ vọng mã 400 khi gửi binary không hợp lệ, nhận: %d", wCorrupt.Code)
+	}
+
+	// 3. Kiểm tra từ chối khi node_id không khớp URL path
+	mismatchPayload := entity.NodeHeartbeatPayload{
+		NodeID:    "other-node",
+		Timestamp: time.Now().Unix(),
+	}
+	reqMismatch := httptest.NewRequest("POST", "/api/v1/nodes/node-local-01/heartbeat", bytes.NewReader(mismatchPayload.MarshalBinary()))
+	reqMismatch.Header.Set("Content-Type", "application/x-protobuf")
+	reqMismatch.Header.Set("Authorization", "Bearer "+token)
+	wMismatch := httptest.NewRecorder()
+	mux.ServeHTTP(wMismatch, reqMismatch)
+	if wMismatch.Code != http.StatusBadRequest {
+		t.Fatalf("kỳ vọng mã 400 khi node_id không khớp URL, nhận: %d", wMismatch.Code)
+	}
+
+	// 4. Gửi heartbeat Protobuf binary hợp lệ thành công
+	hb := entity.NodeHeartbeatPayload{
+		NodeID:            "node-local-01",
+		Timestamp:         time.Now().Unix(),
+		CPUUsage:          22.5,
+		MemoryUsage:       65.0,
+		RequestsPerSecond: 320.0,
+		ActiveConnections: 42,
+	}
+	protoBytes := hb.MarshalBinary()
+	reqValid := httptest.NewRequest("POST", "/api/v1/nodes/node-local-01/heartbeat", bytes.NewReader(protoBytes))
+	reqValid.Header.Set("Content-Type", "application/x-protobuf")
+	reqValid.Header.Set("Authorization", "Bearer "+token)
+	wValid := httptest.NewRecorder()
+	mux.ServeHTTP(wValid, reqValid)
+	if wValid.Code != http.StatusNoContent {
+		t.Fatalf("kỳ vọng mã 204 No Content khi gửi protobuf thành công, nhận: %d, body: %s", wValid.Code, wValid.Body.String())
+	}
+
+	// 5. Kiểm tra chi tiết node sau khi cập nhật heartbeat
+	reqDetail := httptest.NewRequest("GET", "/api/v1/nodes/node-local-01", nil)
+	reqDetail.Header.Set("Authorization", "Bearer "+token)
+	wDetail := httptest.NewRecorder()
+	mux.ServeHTTP(wDetail, reqDetail)
+	if wDetail.Code != http.StatusOK {
+		t.Fatalf("kỳ vọng mã 200 lấy thông tin node, nhận: %d", wDetail.Code)
+	}
+	var node entity.ClusterNodeRecord
+	if err := json.Unmarshal(wDetail.Body.Bytes(), &node); err != nil {
+		t.Fatal(err)
+	}
+	if node.Status != "Ready" {
+		t.Errorf("kỳ vọng node status là 'Ready', nhận: %s", node.Status)
+	}
+	if node.CPUUsage != 22.5 {
+		t.Errorf("kỳ vọng CPUUsage = 22.5, nhận: %f", node.CPUUsage)
+	}
+	if node.MemoryUsage != 65.0 {
+		t.Errorf("kỳ vọng MemoryUsage = 65.0, nhận: %f", node.MemoryUsage)
+	}
+	if node.ActiveConnections != "42" {
+		t.Errorf("kỳ vọng ActiveConnections = '42', nhận: %s", node.ActiveConnections)
+	}
+	if node.RequestsPerSecond != "320.0" {
+		t.Errorf("kỳ vọng RequestsPerSecond = '320.0', nhận: %s", node.RequestsPerSecond)
+	}
+}
+

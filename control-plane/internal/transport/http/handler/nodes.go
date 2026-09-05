@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"aurora-waf.local/control-plane/internal/domain/entity"
 	port "aurora-waf.local/control-plane/internal/domain/service"
+	"io"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -112,3 +114,51 @@ func (h *NodeHandler) GetByID(c *gin.Context) {
 		"uptime":            node.Uptime,
 	})
 }
+
+// Heartbeat tiếp nhận gói tin Push Heartbeat Telemetry (bắt buộc 100% Protobuf binary wire format).
+func (h *NodeHandler) Heartbeat(c *gin.Context) {
+	nodeID := c.Param("id")
+	if nodeID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Mã node không được để trống"})
+		return
+	}
+
+	// Bắt buộc 100% định dạng application/x-protobuf, loại bỏ hoàn toàn fallback JSON
+	contentType := c.GetHeader("Content-Type")
+	if contentType != "application/x-protobuf" {
+		c.JSON(http.StatusUnsupportedMediaType, gin.H{
+			"error": "Định dạng không được hỗ trợ: bắt buộc application/x-protobuf",
+		})
+		return
+	}
+
+	// Đọc dữ liệu nhị phân (giới hạn tối đa 4KB)
+	body, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, 4096))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Không thể đọc dữ liệu binary hoặc payload vượt quá 4KB"})
+		return
+	}
+
+	payload, err := entity.UnmarshalNodeHeartbeat(body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Giải mã Protobuf binary thất bại: " + err.Error()})
+		return
+	}
+
+	// Đảm bảo node_id trong path khớp với payload
+	if payload.NodeID == "" {
+		payload.NodeID = nodeID
+	} else if payload.NodeID != nodeID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Mã node trong đường dẫn không khớp với dữ liệu gói tin"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	if err := h.service.RecordHeartbeat(ctx, *payload); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ghi nhận heartbeat thất bại: " + err.Error()})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+

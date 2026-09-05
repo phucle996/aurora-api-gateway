@@ -97,21 +97,14 @@ rules-init chỉ tạo token/snapshot nếu chưa tồn tại, không overwrite.
 control-plane/data/admin.token (0600, gitignored), không in ra terminal. Không đưa
 token vào React bundle, git hay URL. Go vẫn chạy systemd user và phục vụ UI trực tiếp.
 
-Sau khi gọi publish thành công, dùng ID release từ response:
+Sau khi gọi publish thành công, release được chốt trạng thái `ready`.
+Các node NGINX (dù chạy cùng server hay trên các server từ xa) kết nối và đồng bộ
+chính sách qua HTTP API có xác thực Bearer Token, độc lập hoàn toàn với filesystem máy chủ.
 
-```bash
-build/aurora-activate --release 1
-curl -i http://127.0.0.1:8090/__aurora_blocked
-```
-
-Bootstrap dùng schema v1 từ examples/runtime-policy.json. Publish thay thế toàn bộ
-ruleset; để giữ block demo cần tạo rule /__aurora_blocked trước publish. Không auto
-import mock UI hoặc seed SQLi/XSS rồi tuyên bố đã bảo vệ.
-
-Default DB control-plane/data/aurora.db, active build/runtime/active-policy.json.
-NGINX config phải tham chiếu đúng active file. Các paths/NGINX binary/prefix/config
-do operator tin cậy cấu hình; fixed reload unit aurora-waf-nginx.service.
-Chỉ dùng private local filesystem trong cùng trust domain với user service.
+Kiến trúc phân tán qua mạng (Network-first):
+- Data Plane không truy cập trực tiếp SQLite hay filesystem cục bộ của Control Plane.
+- NGINX nodes đẩy Heartbeat/Telemetry và tải Policy qua HTTP API.
+- Trạng thái đồng bộ giữa các Node (In Sync / Config Drift) được tính toán tự động qua Heartbeat.
 
 ## Atomic activation / recovery
 

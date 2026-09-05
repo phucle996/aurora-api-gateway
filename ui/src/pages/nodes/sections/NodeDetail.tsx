@@ -268,42 +268,35 @@ export function NodeDetail({ node }: NodeDetailProps) {
               </div>
             </div>
 
-            {/* Recent Events Section */}
+            {/* Recent Status Section */}
             <div className="p-3 bg-[#080E18] border border-[#152030] space-y-2.5 font-mono text-xs">
               <div className="flex items-center justify-between">
-                <span className="font-semibold text-slate-200">Recent Events</span>
-                <button
-                  type="button"
-                  className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
-                >
-                  <span>View all</span>
-                  <ArrowRight className="w-3 h-3" />
-                </button>
+                <span className="font-semibold text-slate-200">Recent Status</span>
               </div>
 
               <div className="space-y-2 text-[11px]">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-slate-300">
-                    <span className="w-1.5 h-1.5 bg-emerald-400" />
-                    <span>edge-06 registered</span>
+                    <span className={`w-1.5 h-1.5 ${node.status === 'Ready' ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                    <span>{node.name} liveness</span>
                   </div>
-                  <span className="text-slate-500">2026-09-05 08:36 UTC</span>
+                  <span className="text-slate-400">{node.status} ({node.lastHeartbeat})</span>
                 </div>
 
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-slate-300">
-                    <span className="w-1.5 h-1.5 bg-emerald-400" />
-                    <span>Policy rev-128 published</span>
+                    <span className="w-1.5 h-1.5 bg-cyan-400" />
+                    <span>Active ruleset</span>
                   </div>
-                  <span className="text-slate-500">2026-09-05 08:41 UTC</span>
+                  <span className="text-slate-400">{node.ruleset} ({node.sync})</span>
                 </div>
 
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-slate-300">
-                    <span className="w-1.5 h-1.5 bg-rose-400" />
-                    <span>edge-04 missed heartbeat</span>
+                    <span className="w-1.5 h-1.5 bg-slate-500" />
+                    <span>Registration time</span>
                   </div>
-                  <span className="text-slate-500">2026-09-05 08:39 UTC</span>
+                  <span className="text-slate-500">{node.created_at || 'Bootstrapped'}</span>
                 </div>
               </div>
             </div>
@@ -340,54 +333,59 @@ export function NodeDetail({ node }: NodeDetailProps) {
               <>
                 <div className="p-3 bg-[#080E18] border border-[#152030]">
                   <div className="text-slate-400 mb-2 font-semibold flex items-center justify-between">
-                    <span>RPS Timeline (Last 1 hr)</span>
+                    <span>RPS Timeline (Real-time Live)</span>
                     <Activity className="w-3.5 h-3.5 text-emerald-400" />
                   </div>
-                  <div className="h-28 flex items-end gap-1 pt-2">
-                    {(metrics.length > 0
-                      ? metrics
-                      : [45, 60, 52, 78, 65, 90, 85, 95, 70, 80, 75, 88, 92, 100, 85, 70, 65, 80, 95, 88].map(
-                          (v, i) => ({
-                            timeLabel: `-${20 - i}m`,
-                            rps: v * 35,
-                            cpuUsage: 20,
-                            memoryUsage: 35,
-                          })
-                        )
-                    ).map((pt: any, i: number) => {
-                      const maxRPS = 4000;
-                      const heightPercent = Math.min(100, Math.max(15, (pt.rps / maxRPS) * 100));
-                      return (
-                        <div
-                          key={i}
-                          className="flex-1 bg-emerald-500/70 hover:bg-emerald-400 transition-colors cursor-pointer"
-                          style={{ height: `${heightPercent}%` }}
-                          title={`Thời điểm: ${pt.timeLabel}\nRPS: ${Math.round(pt.rps)} req/s\nCPU: ${pt.cpuUsage?.toFixed(1)}%\nRAM: ${pt.memoryUsage?.toFixed(1)}%`}
-                        />
-                      );
-                    })}
-                  </div>
-                  <div className="flex justify-between text-[10px] text-slate-500 mt-2">
-                    <span>{metrics[0]?.timeLabel || '-60m'}</span>
-                    <span>{metrics[Math.floor(metrics.length / 2)]?.timeLabel || '-30m'}</span>
-                    <span>{metrics[metrics.length - 1]?.timeLabel || 'Now'}</span>
-                  </div>
+                  {metrics.length === 0 ? (
+                    <div className="py-8 text-center text-slate-500 font-mono text-[11px] space-y-1">
+                      <div>Chưa nhận được gói tin telemetry nào từ node này.</div>
+                      <div className="text-slate-600 text-[10px]">
+                        Đang chờ NGINX Data Plane đẩy protobuf heartbeat định kỳ qua module tích hợp...
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="h-28 flex items-end gap-1 pt-2">
+                        {metrics.map((pt: any, i: number) => {
+                          const maxRPS = Math.max(50, ...metrics.map((m: any) => m.rps || 0));
+                          const heightPercent = Math.min(100, Math.max(8, ((pt.rps || 0) / maxRPS) * 100));
+                          return (
+                            <div
+                              key={i}
+                              className="flex-1 bg-emerald-500/70 hover:bg-emerald-400 transition-colors cursor-pointer"
+                              style={{ height: `${heightPercent}%` }}
+                              title={`Thời điểm: ${pt.timeLabel}\nRPS: ${Math.round(pt.rps)} req/s\nCPU: ${pt.cpuUsage?.toFixed(1)}%\nRAM: ${pt.memoryUsage?.toFixed(1)}%`}
+                            />
+                          );
+                        })}
+                      </div>
+                      <div className="flex justify-between text-[10px] text-slate-500 mt-2">
+                        <span>{metrics[0]?.timeLabel || '-10m'}</span>
+                        <span>{metrics[Math.floor(metrics.length / 2)]?.timeLabel || '-5m'}</span>
+                        <span>{metrics[metrics.length - 1]?.timeLabel || 'Now'}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="p-3 bg-[#080E18] border border-[#152030]">
-                  <div className="text-slate-400 mb-2 font-semibold">Memory & Cache Pressure</div>
+                  <div className="text-slate-400 mb-2 font-semibold">Tài nguyên tức thời</div>
                   <div className="space-y-2 text-xs">
                     <div className="flex justify-between">
-                      <span className="text-slate-500">Shared Dict Size:</span>
-                      <span className="text-slate-200">128 MB</span>
+                      <span className="text-slate-500">CPU Usage:</span>
+                      <span className="text-emerald-400">{(node.cpuUsage ?? 0).toFixed(1)}%</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-500">Dict Utilized:</span>
-                      <span className="text-emerald-400">{node.memoryUsage || 34.2}%</span>
+                      <span className="text-slate-500">Memory Usage:</span>
+                      <span className="text-cyan-400">{(node.memoryUsage ?? 0).toFixed(1)}%</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Active Connections:</span>
-                      <span className="text-slate-200">{node.activeConnections || '142'}</span>
+                      <span className="text-slate-200">{node.activeConnections || '0'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Requests per Second:</span>
+                      <span className="text-slate-200">{node.requestsPerSecond || '0'} req/s</span>
                     </div>
                   </div>
                 </div>

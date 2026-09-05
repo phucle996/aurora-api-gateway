@@ -12,4 +12,6 @@ type MetricsService interface {
 	SaveConfig(ctx context.Context, cfg entity.MetricsIntegrationConfig) error
 	TestPrometheus(ctx context.Context, url string) (*entity.TestConnectionResult, error)
 	GetNodeMetrics(ctx context.Context, nodeID string) ([]entity.NodeMetricPoint, error)
+	PushMetricPoint(nodeID string, pt entity.NodeMetricPoint)
+	GetLatestMetricPoint(nodeID string) *entity.NodeMetricPoint
 }

@@ -142,7 +142,7 @@ func OpenSQLitePool(ctx context.Context, path string) (*DBPool, error) {
 	}, nil
 }
 
-// OpenSQLite là hàm tiện ích cho các công cụ CLI đơn giản (ví dụ: aurora-activate)
+// OpenSQLite là hàm tiện ích cho các kịch bản kiểm thử hoặc thao tác đơn giản
 // vốn không cần pool đọc riêng. Nó mở 2 pool rồi đóng Reader ngay lập tức,
 // chỉ giữ lại Writer duy nhất để dùng.
 //

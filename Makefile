@@ -17,7 +17,6 @@ go-check: ui-build compiler
 	cd control-plane && AURORA_TEST_COMPILER="$(CURDIR)/target/release/aurora-compile" go test ./...
 	cd control-plane && go vet ./...
 	cd control-plane && go build -buildvcs=false -o ../build/aurora-controller ./cmd
-	cd control-plane && go build -buildvcs=false -o ../build/aurora-activate ./cmd/aurora-activate
 
 compiler:
 	cargo build --locked -p aurora-engine --bin aurora-compile --release

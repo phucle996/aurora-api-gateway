@@ -51,7 +51,7 @@ func TestSQLiteRestartAndConnectionSettings(t *testing.T) {
 		t.Fatalf("value = %q, err = %v", value, err)
 	}
 	var count int
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil || count != 7 {
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil || count != 8 {
 		t.Fatalf("migration count = %d, err = %v", count, err)
 	}
 	// Force replacement connections to verify per-connection settings survive churn.

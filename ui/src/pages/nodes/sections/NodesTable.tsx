@@ -34,6 +34,7 @@ export interface NodeItem {
   certificate: string;
   policySync: string;
   lastSyncTime: string;
+  created_at?: string;
 }
 
 interface NodesTableProps {

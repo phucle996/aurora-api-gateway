@@ -10,6 +10,10 @@ typedef struct {
     ngx_flag_t enabled;      /* Bật/tắt WAF (on/off) */
     ngx_uint_t mode;         /* Chế độ hoạt động: enforce (chặn) hoặc audit (chỉ log) */
     ngx_str_t policy;        /* Đường dẫn tới file policy snapshot */
+    ngx_str_t controller;    /* URL của Control Plane (VD: http://127.0.0.1:8080) */
+    ngx_str_t node_id;       /* ID của Node (VD: node-local-01) */
+    ngx_str_t token;         /* Bearer token xác thực */
+    ngx_uint_t interval;     /* Chu kỳ gửi heartbeat (giây) */
     AuroraEngine *engine;    /* Con trỏ tới instance Rust engine tương ứng với policy */
 } ngx_http_aurora_conf_t;
 
@@ -21,6 +25,9 @@ static ngx_int_t ngx_http_aurora_handler(ngx_http_request_t *r);
 static void ngx_http_aurora_cleanup(void *data);
 static ngx_int_t ngx_http_aurora_variables(ngx_conf_t *cf);
 static ngx_int_t ngx_http_aurora_generation(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
+static ngx_int_t ngx_http_aurora_init_process(ngx_cycle_t *cycle);
+static void ngx_http_aurora_exit_process(ngx_cycle_t *cycle);
+
 /* Best-effort match summaries: cap per-worker output, never queue raw requests. */
 static time_t aurora_log_second;
 static ngx_uint_t aurora_log_count;
@@ -41,6 +48,10 @@ static ngx_conf_enum_t ngx_http_aurora_modes[] = {
  * - aurora_waf: on | off
  * - aurora_waf_policy: <đường_dẫn_file_policy>
  * - aurora_waf_mode: enforce | audit
+ * - aurora_waf_controller: <url_control_plane>
+ * - aurora_waf_node_id: <id_node>
+ * - aurora_waf_token: <bearer_token>
+ * - aurora_waf_heartbeat_interval: <giây>
  */
 static ngx_command_t ngx_http_aurora_commands[] = {
     { ngx_string("aurora_waf"),
@@ -61,6 +72,30 @@ static ngx_command_t ngx_http_aurora_commands[] = {
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_aurora_conf_t, mode),
       ngx_http_aurora_modes },
+    { ngx_string("aurora_waf_controller"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_str_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_aurora_conf_t, controller),
+      NULL },
+    { ngx_string("aurora_waf_node_id"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_str_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_aurora_conf_t, node_id),
+      NULL },
+    { ngx_string("aurora_waf_token"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_str_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_aurora_conf_t, token),
+      NULL },
+    { ngx_string("aurora_waf_heartbeat_interval"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_num_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_aurora_conf_t, interval),
+      NULL },
     ngx_null_command
 };
 
@@ -89,10 +124,10 @@ ngx_module_t ngx_http_aurora_waf_module = {
     NGX_HTTP_MODULE,               /* module type */
     NULL,                          /* init master */
     NULL,                          /* init module */
-    NULL,                          /* init process */
+    ngx_http_aurora_init_process,  /* init process */
     NULL,                          /* init thread */
     NULL,                          /* exit thread */
-    NULL,                          /* exit process */
+    ngx_http_aurora_exit_process,  /* exit process */
     NULL,                          /* exit master */
     NGX_MODULE_V1_PADDING
 };
@@ -107,6 +142,7 @@ ngx_http_aurora_create_conf(ngx_conf_t *cf)
     if (conf == NULL) { return NULL; }
     conf->enabled = NGX_CONF_UNSET;
     conf->mode = NGX_CONF_UNSET_UINT;
+    conf->interval = NGX_CONF_UNSET_UINT;
     return conf;
 }
 
@@ -138,6 +174,10 @@ ngx_http_aurora_merge_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_conf_merge_value(conf->enabled, prev->enabled, 0);
     ngx_conf_merge_uint_value(conf->mode, prev->mode, 0);
     ngx_conf_merge_str_value(conf->policy, prev->policy, "");
+    ngx_conf_merge_str_value(conf->controller, prev->controller, "");
+    ngx_conf_merge_str_value(conf->node_id, prev->node_id, "");
+    ngx_conf_merge_str_value(conf->token, prev->token, "");
+    ngx_conf_merge_uint_value(conf->interval, prev->interval, 10);
 
     /* Nếu WAF không được kích hoạt, bỏ qua các bước nạp policy */
     if (!conf->enabled) { return NGX_CONF_OK; }
@@ -314,3 +354,71 @@ ngx_http_aurora_generation(ngx_http_request_t *r, ngx_http_variable_value_t *v, 
     v->not_found = 0;
     return NGX_OK;
 }
+
+/*
+ * Khởi tạo tiến trình NGINX worker:
+ * Chỉ Worker 0 (hoặc single process) khởi chạy background telemetry thread.
+ */
+static ngx_int_t
+ngx_http_aurora_init_process(ngx_cycle_t *cycle)
+{
+    if (ngx_process == NGX_PROCESS_SINGLE || ngx_worker == 0) {
+        char *controller = NULL;
+        char *node_id = NULL;
+        char *token = NULL;
+        uint32_t interval = 10;
+        int64_t release_id = 0;
+
+        if (cycle->conf_ctx) {
+            ngx_http_conf_ctx_t *ctx = (ngx_http_conf_ctx_t *) cycle->conf_ctx[ngx_http_module.index];
+            if (ctx && ctx->loc_conf) {
+                ngx_http_aurora_conf_t *conf = ctx->loc_conf[ngx_http_aurora_waf_module.ctx_index];
+                if (conf) {
+                    if (conf->controller.len > 0) {
+                        u_char *c = ngx_pcalloc(cycle->pool, conf->controller.len + 1);
+                        if (c) {
+                            ngx_memcpy(c, conf->controller.data, conf->controller.len);
+                            controller = (char *) c;
+                        }
+                    }
+                    if (conf->node_id.len > 0) {
+                        u_char *n = ngx_pcalloc(cycle->pool, conf->node_id.len + 1);
+                        if (n) {
+                            ngx_memcpy(n, conf->node_id.data, conf->node_id.len);
+                            node_id = (char *) n;
+                        }
+                    }
+                    if (conf->token.len > 0) {
+                        u_char *t = ngx_pcalloc(cycle->pool, conf->token.len + 1);
+                        if (t) {
+                            ngx_memcpy(t, conf->token.data, conf->token.len);
+                            token = (char *) t;
+                        }
+                    }
+                    if (conf->interval != NGX_CONF_UNSET_UINT && conf->interval > 0) {
+                        interval = (uint32_t) conf->interval;
+                    }
+                    if (conf->engine) {
+                        release_id = (int64_t) aurora_waf_generation(conf->engine);
+                    }
+                }
+            }
+        }
+
+        aurora_waf_start_telemetry(controller, node_id, token, interval, release_id);
+    }
+    return NGX_OK;
+}
+
+/*
+ * Khi tiến trình NGINX worker dừng:
+ * Dừng background telemetry thread an toàn.
+ */
+static void
+ngx_http_aurora_exit_process(ngx_cycle_t *cycle)
+{
+    if (ngx_process == NGX_PROCESS_SINGLE || ngx_worker == 0) {
+        aurora_waf_stop_telemetry();
+    }
+}
+

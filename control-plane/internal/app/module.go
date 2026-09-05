@@ -42,12 +42,11 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	ruleSvc := service.NewRuleService(ruleRepo, cfg.CompilerPath)
 	ruleHdr := handler.NewRuleHandler(ruleSvc)
 
-	nodeRepo := repository.NewNodeRepository(readerDB)
-	nodeSvc := service.NewNodeService(nodeRepo)
-	nodeHdr := handler.NewNodeHandler(nodeSvc)
-
+	nodeRepo := repository.NewNodeRepository(writerDB)
 	settingsRepo := repository.NewSettingsRepository(writerDB)
-	metricsSvc := service.NewMetricsService(settingsRepo)
+	metricsSvc := service.NewMetricsService(settingsRepo, nodeRepo)
+	nodeSvc := service.NewNodeService(nodeRepo, metricsSvc)
+	nodeHdr := handler.NewNodeHandler(nodeSvc)
 	metricsHdr := handler.NewMetricsHandler(metricsSvc)
 
 	return &Module{

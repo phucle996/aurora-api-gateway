@@ -25,3 +25,6 @@ var ClusterNodes string
 //go:embed 0007_system_settings.sql
 var SystemSettings string
 
+//go:embed 0008_node_metrics_history.sql
+var NodeMetricsHistory string
+

@@ -10,4 +10,8 @@ import (
 type NodeRepository interface {
 	ListNodes(ctx context.Context) ([]entity.ClusterNodeRecord, error)
 	GetNodeByID(ctx context.Context, id string) (*entity.ClusterNodeRecord, error)
+	UpdateHeartbeat(ctx context.Context, payload entity.NodeHeartbeatPayload) error
+	BatchInsertMetricsHistory(ctx context.Context, records []entity.NodeMetricHistoryRecord) error
+	CleanupExpiredMetricsHistory(ctx context.Context, retentionDays int) error
+	GetRecentMetricsHistory(ctx context.Context, nodeID string, limit int) ([]entity.NodeMetricPoint, error)
 }

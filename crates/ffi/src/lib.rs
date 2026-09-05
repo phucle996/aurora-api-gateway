@@ -14,6 +14,8 @@ use std::{
     ptr, slice,
 };
 
+pub mod telemetry;
+
 /// Mã trạng thái trả về cho caller C:
 /// - OK (0): Thao tác thành công
 const OK: u32 = 0;
@@ -107,6 +109,9 @@ pub unsafe extern "C" fn aurora_waf_evaluate_v3(
         return INVALID;
     }
 
+    // Ghi nhận request phục vụ đo lường RPS realtime trong telemetry
+    telemetry::record_evaluation();
+
     // Bước 3: Gọi hàm evaluate của Engine trong khối bọc an toàn catch_unwind
     match catch_unwind(AssertUnwindSafe(|| unsafe {
         (&*engine).evaluate(slice::from_raw_parts(path, len))
@@ -186,3 +191,55 @@ pub unsafe extern "C" fn aurora_waf_destroy(engine: *mut Engine) {
         }));
     }
 }
+
+/// Khởi chạy Background Telemetry Thread từ NGINX Worker 0.
+///
+/// # Safety
+/// - `controller_url`, `node_id`, `token` là chuỗi C kết thúc bằng null ('\0') hoặc null.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn aurora_waf_start_telemetry(
+    controller_url: *const std::ffi::c_char,
+    node_id: *const std::ffi::c_char,
+    token: *const std::ffi::c_char,
+    interval_seconds: u32,
+    active_release_id: i64,
+) -> u32 {
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        let url = if !controller_url.is_null() {
+            unsafe { std::ffi::CStr::from_ptr(controller_url).to_string_lossy().to_string() }
+        } else {
+            std::env::var("AURORA_SERVER_URL").unwrap_or_else(|_| "http://127.0.0.1:8080".into())
+        };
+
+        let nid = if !node_id.is_null() {
+            unsafe { std::ffi::CStr::from_ptr(node_id).to_string_lossy().to_string() }
+        } else {
+            std::env::var("AURORA_NODE_ID").unwrap_or_else(|_| "node-local-01".into())
+        };
+
+        let tok = if !token.is_null() {
+            unsafe { std::ffi::CStr::from_ptr(token).to_string_lossy().to_string() }
+        } else {
+            std::env::var("AURORA_AUTH_TOKEN").unwrap_or_default()
+        };
+
+        let interval = if interval_seconds > 0 {
+            interval_seconds
+        } else {
+            std::env::var("AURORA_HEARTBEAT_INTERVAL")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(10)
+        };
+
+        telemetry::start_telemetry(&url, &nid, &tok, interval, active_release_id);
+    }));
+    OK
+}
+
+/// Dừng Background Telemetry Thread khi NGINX Worker tắt.
+#[unsafe(no_mangle)]
+pub extern "C" fn aurora_waf_stop_telemetry() {
+    let _ = catch_unwind(AssertUnwindSafe(telemetry::stop_telemetry));
+}
+

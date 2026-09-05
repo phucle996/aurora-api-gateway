@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 )
 
 // sqliteNodeRepository hiện thực NodeRepository interface qua SQLite.
@@ -176,3 +177,159 @@ func (r *sqliteNodeRepository) GetNodeByID(ctx context.Context, id string) (*ent
 	item.PolicySync = "Successful"
 	return &item, nil
 }
+
+// UpdateHeartbeat cập nhật thời điểm heartbeat và trạng thái liveness mới nhất của node.
+func (r *sqliteNodeRepository) UpdateHeartbeat(ctx context.Context, payload entity.NodeHeartbeatPayload) error {
+	query := `
+	UPDATE cluster_nodes
+	SET 
+		last_heartbeat = datetime(?, 'unixepoch'),
+		status = 'Ready',
+		active_release_id = CASE 
+			WHEN ? > 0 AND EXISTS(SELECT 1 FROM ruleset_releases WHERE id = ?) THEN ? 
+			ELSE active_release_id 
+		END
+	WHERE id = ?;`
+
+	res, err := r.db.ExecContext(ctx, query, payload.Timestamp, payload.ActiveReleaseID, payload.ActiveReleaseID, payload.ActiveReleaseID, payload.NodeID)
+	if err != nil {
+		return fmt.Errorf("cập nhật heartbeat node %s thất bại: %w", payload.NodeID, err)
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("không tìm thấy node %s để cập nhật heartbeat", payload.NodeID)
+	}
+	return nil
+}
+
+// BatchInsertMetricsHistory ghi gom cụm (batch) các điểm đo rollup vào bảng node_metrics_history.
+func (r *sqliteNodeRepository) BatchInsertMetricsHistory(ctx context.Context, records []entity.NodeMetricHistoryRecord) error {
+	if len(records) == 0 {
+		return nil
+	}
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT OR REPLACE INTO node_metrics_history 
+		(node_id, timestamp, cpu_usage, memory_usage, active_connections, requests_per_second)
+		VALUES (?, ?, ?, ?, ?, ?);
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, rec := range records {
+		if _, err := stmt.ExecContext(ctx, rec.NodeID, rec.Timestamp, rec.CPUUsage, rec.MemoryUsage, rec.ActiveConnections, rec.RequestsPerSecond); err != nil {
+			return fmt.Errorf("lưu batch metric history cho node %s thất bại: %w", rec.NodeID, err)
+		}
+	}
+
+	return tx.Commit()
+}
+
+// CleanupExpiredMetricsHistory tự động dọn dẹp các bản ghi metrics cũ quá số ngày retentionDays (mặc định 7 ngày).
+// Thực hiện xóa theo từng batch nhỏ (500 bản ghi/mẻ) kết hợp pacing (nghỉ 30ms giữa các mẻ)
+// nhằm giải phóng write lock cho SQLite, tránh gây nghẽn database hoặc tăng đột biến kích thước WAL.
+func (r *sqliteNodeRepository) CleanupExpiredMetricsHistory(ctx context.Context, retentionDays int) error {
+	if retentionDays <= 0 {
+		retentionDays = 7
+	}
+	modifier := fmt.Sprintf("-%d days", retentionDays)
+	batchSize := 500
+
+	query := `
+	DELETE FROM node_metrics_history
+	WHERE rowid IN (
+		SELECT rowid
+		FROM node_metrics_history
+		WHERE timestamp < strftime('%s', 'now', ?)
+		LIMIT ?
+	);`
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		res, err := r.db.ExecContext(ctx, query, modifier, batchSize)
+		if err != nil {
+			return fmt.Errorf("dọn dẹp batch metrics history hết hạn thất bại: %w", err)
+		}
+
+		rows, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+
+		// Nếu không còn dòng nào hết hạn hoặc mẻ vừa xóa ít hơn batchSize -> đã dọn sạch toàn bộ
+		if rows == 0 || rows < int64(batchSize) {
+			break
+		}
+
+		// Pacing: nhường write lock cho các workflow khác (như ghi metrics hoặc update rule)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(30 * time.Millisecond):
+		}
+	}
+
+	return nil
+}
+
+// GetRecentMetricsHistory lấy tối đa limit bản ghi lịch sử gần nhất và sắp xếp theo thời gian tăng dần.
+func (r *sqliteNodeRepository) GetRecentMetricsHistory(ctx context.Context, nodeID string, limit int) ([]entity.NodeMetricPoint, error) {
+	if limit <= 0 {
+		limit = 60
+	}
+	query := `
+	WITH recent AS (
+		SELECT timestamp, cpu_usage, memory_usage, active_connections, requests_per_second
+		FROM node_metrics_history
+		WHERE node_id = ?
+		ORDER BY timestamp DESC
+		LIMIT ?
+	)
+	SELECT timestamp, cpu_usage, memory_usage, active_connections, requests_per_second
+	FROM recent
+	ORDER BY timestamp ASC;`
+
+	rows, err := r.db.QueryContext(ctx, query, nodeID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("truy vấn lịch sử metrics node %s thất bại: %w", nodeID, err)
+	}
+	defer rows.Close()
+
+	var points []entity.NodeMetricPoint
+	now := time.Now().Unix()
+	for rows.Next() {
+		var p entity.NodeMetricPoint
+		if err := rows.Scan(&p.Timestamp, &p.CPUUsage, &p.MemoryUsage, &p.ActiveConnections, &p.RPS); err != nil {
+			return nil, fmt.Errorf("quét bản ghi lịch sử metric thất bại: %w", err)
+		}
+		minutesAgo := int(float64(now-p.Timestamp) / 60.0)
+		p.TimeLabel = fmt.Sprintf("-%dm", minutesAgo)
+		if minutesAgo <= 0 {
+			p.TimeLabel = "Now"
+		}
+		points = append(points, p)
+	}
+	if points == nil {
+		points = []entity.NodeMetricPoint{}
+	}
+	return points, nil
+}
+
+

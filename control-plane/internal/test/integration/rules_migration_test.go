@@ -51,7 +51,7 @@ func TestRulesV2UpgradePreservesAuthority(t *testing.T) {
 			if err = db.QueryRow("SELECT max(version) FROM schema_migrations").Scan(&version); err != nil {
 				t.Fatal(err)
 			}
-			want := 7
+			want := 8
 			if pending {
 				want = 2
 			}
