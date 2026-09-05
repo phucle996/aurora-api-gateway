@@ -36,249 +36,6 @@ export interface NodeItem {
   lastSyncTime: string;
 }
 
-export const INITIAL_NODES: NodeItem[] = [
-  {
-    id: 'edge-01',
-    name: 'edge-01',
-    ip: '10.0.1.11',
-    region: 'SG',
-    regionFull: 'Singapore (SG)',
-    role: 'Edge Node',
-    status: 'Ready',
-    version: '0.4.1',
-    ruleset: 'rev-128',
-    rps: '3.2K',
-    connections: '12,431',
-    lastHeartbeat: '1s ago',
-    sync: 'In Sync',
-    cpuUsage: 28,
-    memoryUsage: 42,
-    activeConnections: '12,431',
-    requestsPerSecond: '3,245',
-    uptime: '14 days 6 hours',
-    joinMethod: 'Bootstrap Token',
-    certificate: 'mTLS Enrolled',
-    policySync: 'Successful',
-    lastSyncTime: '2026-09-05 08:41 UTC',
-  },
-  {
-    id: 'edge-02',
-    name: 'edge-02',
-    ip: '10.0.1.12',
-    region: 'JP',
-    regionFull: 'Tokyo, Japan (JP)',
-    role: 'Edge Node',
-    status: 'Ready',
-    version: '0.4.1',
-    ruleset: 'rev-128',
-    rps: '2.7K',
-    connections: '8,210',
-    lastHeartbeat: '2s ago',
-    sync: 'In Sync',
-    cpuUsage: 31,
-    memoryUsage: 38,
-    activeConnections: '8,210',
-    requestsPerSecond: '2,740',
-    uptime: '12 days 2 hours',
-    joinMethod: 'Bootstrap Token',
-    certificate: 'mTLS Enrolled',
-    policySync: 'Successful',
-    lastSyncTime: '2026-09-05 08:41 UTC',
-  },
-  {
-    id: 'edge-03',
-    name: 'edge-03',
-    ip: '10.0.1.13',
-    region: 'DE',
-    regionFull: 'Frankfurt, Germany (DE)',
-    role: 'Edge Node',
-    status: 'Ready',
-    version: '0.4.1',
-    ruleset: 'rev-128',
-    rps: '1.9K',
-    connections: '6,985',
-    lastHeartbeat: '1s ago',
-    sync: 'In Sync',
-    cpuUsage: 22,
-    memoryUsage: 35,
-    activeConnections: '6,985',
-    requestsPerSecond: '1,920',
-    uptime: '18 days 11 hours',
-    joinMethod: 'Bootstrap Token',
-    certificate: 'mTLS Enrolled',
-    policySync: 'Successful',
-    lastSyncTime: '2026-09-05 08:41 UTC',
-  },
-  {
-    id: 'edge-04',
-    name: 'edge-04',
-    ip: '10.0.1.14',
-    region: 'US',
-    regionFull: 'N. Virginia, USA (US)',
-    role: 'Edge Node',
-    status: 'Not Ready',
-    version: '0.4.0',
-    ruleset: 'rev-126',
-    rps: '—',
-    connections: '—',
-    lastHeartbeat: '2m ago',
-    sync: 'Drift',
-    cpuUsage: 0,
-    memoryUsage: 0,
-    activeConnections: '0',
-    requestsPerSecond: '0',
-    uptime: 'Down (Heartbeat missed)',
-    joinMethod: 'Bootstrap Token',
-    certificate: 'Certificate Expiring',
-    policySync: 'Failed',
-    lastSyncTime: '2026-09-05 08:39 UTC',
-  },
-  {
-    id: 'edge-05',
-    name: 'edge-05',
-    ip: '10.0.1.15',
-    region: 'VN',
-    regionFull: 'Ho Chi Minh City, Vietnam (VN)',
-    role: 'Edge Node',
-    status: 'Ready',
-    version: '0.4.1',
-    ruleset: 'rev-128',
-    rps: '1.4K',
-    connections: '5,771',
-    lastHeartbeat: '1s ago',
-    sync: 'In Sync',
-    cpuUsage: 19,
-    memoryUsage: 29,
-    activeConnections: '5,771',
-    requestsPerSecond: '1,420',
-    uptime: '9 days 4 hours',
-    joinMethod: 'Bootstrap Token',
-    certificate: 'mTLS Enrolled',
-    policySync: 'Successful',
-    lastSyncTime: '2026-09-05 08:41 UTC',
-  },
-  {
-    id: 'edge-06',
-    name: 'edge-06',
-    ip: '10.0.1.16',
-    region: 'IN',
-    regionFull: 'Mumbai, India (IN)',
-    role: 'Edge Node',
-    status: 'Ready',
-    version: '0.4.1',
-    ruleset: 'rev-128',
-    rps: '1.1K',
-    connections: '4,908',
-    lastHeartbeat: '3s ago',
-    sync: 'In Sync',
-    cpuUsage: 15,
-    memoryUsage: 24,
-    activeConnections: '4,908',
-    requestsPerSecond: '1,150',
-    uptime: '5 days 18 hours',
-    joinMethod: 'Bootstrap Token',
-    certificate: 'mTLS Enrolled',
-    policySync: 'Successful',
-    lastSyncTime: '2026-09-05 08:41 UTC',
-  },
-  {
-    id: 'edge-07',
-    name: 'edge-07',
-    ip: '10.0.1.17',
-    region: 'AU',
-    regionFull: 'Sydney, Australia (AU)',
-    role: 'Edge Node',
-    status: 'Ready',
-    version: '0.4.1',
-    ruleset: 'rev-128',
-    rps: '980',
-    connections: '3,412',
-    lastHeartbeat: '2s ago',
-    sync: 'In Sync',
-    cpuUsage: 14,
-    memoryUsage: 21,
-    activeConnections: '3,412',
-    requestsPerSecond: '980',
-    uptime: '11 days 7 hours',
-    joinMethod: 'Bootstrap Token',
-    certificate: 'mTLS Enrolled',
-    policySync: 'Successful',
-    lastSyncTime: '2026-09-05 08:41 UTC',
-  },
-  {
-    id: 'edge-08',
-    name: 'edge-08',
-    ip: '10.0.1.18',
-    region: 'GB',
-    regionFull: 'London, United Kingdom (GB)',
-    role: 'Edge Node',
-    status: 'Ready',
-    version: '0.4.1',
-    ruleset: 'rev-128',
-    rps: '1.6K',
-    connections: '6,231',
-    lastHeartbeat: '5s ago',
-    sync: 'In Sync',
-    cpuUsage: 24,
-    memoryUsage: 36,
-    activeConnections: '6,231',
-    requestsPerSecond: '1,640',
-    uptime: '14 days 1 hour',
-    joinMethod: 'Bootstrap Token',
-    certificate: 'mTLS Enrolled',
-    policySync: 'Successful',
-    lastSyncTime: '2026-09-05 08:41 UTC',
-  },
-  {
-    id: 'edge-09',
-    name: 'edge-09',
-    ip: '10.0.1.19',
-    region: 'CA',
-    regionFull: 'Central, Canada (CA)',
-    role: 'Edge Node',
-    status: 'Ready',
-    version: '0.4.1',
-    ruleset: 'rev-128',
-    rps: '1.2K',
-    connections: '5,044',
-    lastHeartbeat: '4s ago',
-    sync: 'In Sync',
-    cpuUsage: 18,
-    memoryUsage: 30,
-    activeConnections: '5,044',
-    requestsPerSecond: '1,210',
-    uptime: '8 days 19 hours',
-    joinMethod: 'Bootstrap Token',
-    certificate: 'mTLS Enrolled',
-    policySync: 'Successful',
-    lastSyncTime: '2026-09-05 08:41 UTC',
-  },
-  {
-    id: 'edge-10',
-    name: 'edge-10',
-    ip: '10.0.1.20',
-    region: 'DE',
-    regionFull: 'Frankfurt 2, Germany (DE)',
-    role: 'Edge Node',
-    status: 'Ready',
-    version: '0.4.1',
-    ruleset: 'rev-128',
-    rps: '1.8K',
-    connections: '7,652',
-    lastHeartbeat: '2s ago',
-    sync: 'In Sync',
-    cpuUsage: 25,
-    memoryUsage: 39,
-    activeConnections: '7,652',
-    requestsPerSecond: '1,830',
-    uptime: '15 days 3 hours',
-    joinMethod: 'Bootstrap Token',
-    certificate: 'mTLS Enrolled',
-    policySync: 'Successful',
-    lastSyncTime: '2026-09-05 08:41 UTC',
-  },
-];
-
 interface NodesTableProps {
   nodes?: NodeItem[];
   isLoading?: boolean;
@@ -296,7 +53,7 @@ export function NodesTable({
   onSelectNode,
   onOpenGenerateToken,
 }: NodesTableProps) {
-  const nodes = nodesProp && nodesProp.length > 0 ? nodesProp : INITIAL_NODES;
+  const nodes = nodesProp || [];
   const [searchQuery, setSearchQuery] = useState('');
   const [regionFilter, setRegionFilter] = useState('ALL');
   const [roleFilter, setRoleFilter] = useState('ALL');
@@ -451,99 +208,120 @@ export function NodesTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-[#152030] text-xs font-mono">
-            {filteredNodes.map((node) => {
-              const isSelected = selectedNodeId === node.id;
-              return (
-                <tr
-                  key={node.id}
-                  onClick={() => onSelectNode(node)}
-                  className={`cursor-pointer transition-colors ${
-                    isSelected
-                      ? 'bg-emerald-950/20 border-l-2 border-l-emerald-400'
-                      : 'hover:bg-[#0E1726]/60'
-                  }`}
-                >
-                  {/* Node Name */}
-                  <td className="py-2 px-3 font-medium text-slate-100 flex items-center gap-2">
-                    <span className="text-white font-mono">{node.name}</span>
-                  </td>
+            {isLoading ? (
+              <tr>
+                <td colSpan={12} className="py-12 text-center text-slate-500">
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <RotateCw className="w-5 h-5 animate-spin text-emerald-400" />
+                    <span>Loading cluster nodes...</span>
+                  </div>
+                </td>
+              </tr>
+            ) : filteredNodes.length === 0 ? (
+              <tr>
+                <td colSpan={12} className="py-12 text-center text-slate-500">
+                  {nodes.length === 0
+                    ? 'No nodes registered in the cluster yet. Use "Generate Join Token" to onboard a node.'
+                    : 'No nodes found matching the filter criteria.'}
+                </td>
+              </tr>
+            ) : (
+              filteredNodes.map((node) => {
+                const isSelected = selectedNodeId === node.id;
+                return (
+                  <tr
+                    key={node.id}
+                    onClick={() => onSelectNode(node)}
+                    className={`cursor-pointer transition-colors ${
+                      isSelected
+                        ? 'bg-emerald-950/20 border-l-2 border-l-emerald-400'
+                        : 'hover:bg-[#0E1726]/60'
+                    }`}
+                  >
+                    {/* Node Name */}
+                    <td className="py-2 px-3 font-medium text-slate-100 flex items-center gap-2">
+                      <span className="text-white font-mono">{node.name}</span>
+                    </td>
 
-                  {/* IP Address */}
-                  <td className="py-2 px-3 text-slate-300">{node.ip}</td>
+                    {/* IP Address */}
+                    <td className="py-2 px-3 text-slate-300">{node.ip}</td>
 
-                  {/* Hostname */}
-                  <td className="py-2 px-3 text-slate-400">{node.hostname || node.region || 'localhost'}</td>
+                    {/* Hostname */}
+                    <td className="py-2 px-3 text-slate-400">{node.hostname || node.region || 'localhost'}</td>
 
-                  {/* Role */}
-                  <td className="py-2 px-3 text-slate-300">Edge</td>
+                    {/* Role */}
+                    <td className="py-2 px-3 text-slate-300">{node.role || 'Edge'}</td>
 
-                  {/* Status */}
-                  <td className="py-2 px-3">
-                    {node.status === 'Ready' ? (
-                      <span className="inline-flex items-center px-2 py-0.5 bg-emerald-950/60 border border-emerald-500/50 text-emerald-400 text-[10px]">
-                        Ready
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 bg-rose-950/60 border border-rose-500/50 text-rose-400 text-[10px]">
-                        Not Ready
-                      </span>
-                    )}
-                  </td>
+                    {/* Status */}
+                    <td className="py-2 px-3">
+                      {node.status === 'Ready' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 bg-emerald-950/60 border border-emerald-500/50 text-emerald-400 text-[10px]">
+                          Ready
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 bg-rose-950/60 border border-rose-500/50 text-rose-400 text-[10px]">
+                          Not Ready
+                        </span>
+                      )}
+                    </td>
 
-                  {/* Version */}
-                  <td className="py-2 px-3 text-slate-400">{node.version}</td>
+                    {/* Version */}
+                    <td className="py-2 px-3 text-slate-400">{node.version}</td>
 
-                  {/* Ruleset */}
-                  <td className="py-2 px-3 text-cyan-400">{node.ruleset}</td>
+                    {/* Ruleset */}
+                    <td className="py-2 px-3 text-cyan-400">{node.ruleset}</td>
 
-                  {/* RPS */}
-                  <td className="py-2 px-3 text-slate-200">{node.rps}</td>
+                    {/* RPS */}
+                    <td className="py-2 px-3 text-slate-200">{node.rps || node.requestsPerSecond}</td>
 
-                  {/* Connections */}
-                  <td className="py-2 px-3 text-slate-200">
-                    {node.connections}
-                  </td>
+                    {/* Connections */}
+                    <td className="py-2 px-3 text-slate-200">
+                      {node.connections || node.activeConnections}
+                    </td>
 
-                  {/* Last Heartbeat */}
-                  <td className="py-2 px-3 text-slate-400">
-                    {node.lastHeartbeat}
-                  </td>
+                    {/* Last Heartbeat */}
+                    <td className="py-2 px-3 text-slate-400">
+                      {node.lastHeartbeat}
+                    </td>
 
-                  {/* Sync */}
-                  <td className="py-2 px-3">
-                    {node.sync === 'In Sync' ? (
-                      <span className="inline-flex items-center px-2 py-0.5 bg-emerald-950/40 border border-emerald-500/40 text-emerald-400 text-[10px]">
-                        In Sync
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 bg-amber-950/40 border border-amber-500/40 text-amber-400 text-[10px]">
-                        Drift
-                      </span>
-                    )}
-                  </td>
+                    {/* Sync */}
+                    <td className="py-2 px-3">
+                      {node.sync === 'In Sync' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 bg-emerald-950/40 border border-emerald-500/40 text-emerald-400 text-[10px]">
+                          In Sync
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 bg-amber-950/40 border border-amber-500/40 text-amber-400 text-[10px]">
+                          {node.sync || 'Syncing'}
+                        </span>
+                      )}
+                    </td>
 
-                  {/* Actions */}
-                  <td className="py-2 px-3 text-right">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                      }}
-                      className="p-1 hover:bg-[#152030] text-slate-400 hover:text-white transition-colors cursor-pointer"
-                    >
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
+                    {/* Actions */}
+                    <td className="py-2 px-3 text-right">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                        }}
+                        className="p-1 hover:bg-[#152030] text-slate-400 hover:text-white transition-colors cursor-pointer"
+                      >
+                        <MoreHorizontal className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>
 
       {/* Pagination Footer */}
       <div className="p-3 bg-[#080E18] border-t border-[#152030] flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-slate-400">
-        <div>Showing 1-10 of 47 nodes</div>
+        <div>
+          Showing {filteredNodes.length > 0 ? 1 : 0}-{filteredNodes.length} of {filteredNodes.length} nodes
+        </div>
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -560,31 +338,8 @@ export function NodesTable({
           </button>
           <button
             type="button"
-            className="px-2.5 py-1 bg-[#0E1726] border border-[#1C293D] hover:bg-[#152030] text-slate-300 cursor-pointer"
-          >
-            2
-          </button>
-          <button
-            type="button"
-            className="px-2.5 py-1 bg-[#0E1726] border border-[#1C293D] hover:bg-[#152030] text-slate-300 cursor-pointer"
-          >
-            3
-          </button>
-          <button
-            type="button"
-            className="px-2.5 py-1 bg-[#0E1726] border border-[#1C293D] hover:bg-[#152030] text-slate-300 cursor-pointer"
-          >
-            4
-          </button>
-          <button
-            type="button"
-            className="px-2.5 py-1 bg-[#0E1726] border border-[#1C293D] hover:bg-[#152030] text-slate-300 cursor-pointer"
-          >
-            5
-          </button>
-          <button
-            type="button"
-            className="p-1 hover:bg-[#0E1726] border border-[#1C293D] text-slate-400 cursor-pointer"
+            className="p-1 hover:bg-[#0E1726] border border-[#1C293D] text-slate-400 disabled:opacity-30 cursor-pointer"
+            disabled
           >
             <ChevronRight className="w-3.5 h-3.5" />
           </button>

@@ -20,10 +20,10 @@ interface NodesStatsProps {
 }
 
 export function NodesStats({ nodes }: NodesStatsProps) {
-  const registeredCount = nodes ? nodes.length : 1;
-  const readyCount = nodes ? nodes.filter((n) => n.status === 'Ready').length : 1;
+  const registeredCount = nodes ? nodes.length : 0;
+  const readyCount = nodes ? nodes.filter((n) => n.status === 'Ready').length : 0;
   const notReadyCount = nodes ? nodes.filter((n) => n.status !== 'Ready').length : 0;
-  const ruleset = (nodes && nodes.length > 0 && nodes[0].ruleset) || 'rev-1';
+  const ruleset = (nodes && nodes.length > 0 && nodes[0].ruleset) || '—';
 
   return (
     <div className="space-y-4">
