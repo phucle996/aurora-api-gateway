@@ -21,6 +21,46 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// RuleHandler bao đóng các HTTP endpoint xử lý cho WAF Rules và Releases.
+type RuleHandler struct {
+	service         port.RuleService
+	createFn        gin.HandlerFunc
+	updateFn        gin.HandlerFunc
+	listFn          gin.HandlerFunc
+	detailFn        gin.HandlerFunc
+	historyFn       gin.HandlerFunc
+	statsFn         gin.HandlerFunc
+	publishFn       gin.HandlerFunc
+	releaseDetailFn gin.HandlerFunc
+	createDefFn     gin.HandlerFunc
+}
+
+// NewRuleHandler khởi tạo RuleHandler với service tương ứng.
+func NewRuleHandler(s port.RuleService) *RuleHandler {
+	return &RuleHandler{
+		service:         s,
+		createFn:        CreateRule(s),
+		updateFn:        UpdateRule(s),
+		listFn:          ListRules(s),
+		detailFn:        RuleDetail(s),
+		historyFn:       RuleHistory(s),
+		statsFn:         RuleStats(s),
+		publishFn:       PublishRules(s),
+		releaseDetailFn: ReleaseDetail(s),
+		createDefFn:     CreateRuleDefinition(s),
+	}
+}
+
+func (h *RuleHandler) Create(c *gin.Context)           { h.createFn(c) }
+func (h *RuleHandler) Update(c *gin.Context)           { h.updateFn(c) }
+func (h *RuleHandler) List(c *gin.Context)             { h.listFn(c) }
+func (h *RuleHandler) Detail(c *gin.Context)           { h.detailFn(c) }
+func (h *RuleHandler) History(c *gin.Context)          { h.historyFn(c) }
+func (h *RuleHandler) Stats(c *gin.Context)            { h.statsFn(c) }
+func (h *RuleHandler) Publish(c *gin.Context)          { h.publishFn(c) }
+func (h *RuleHandler) ReleaseDetail(c *gin.Context)    { h.releaseDetailFn(c) }
+func (h *RuleHandler) CreateDefinition(c *gin.Context) { h.createDefFn(c) }
+
 // ─── 1. Create Rule (POST /api/v1/rules — Đăng ký luật bảo vệ cơ bản) ──────────
 
 // CreateRule tiếp nhận yêu cầu tạo mới một luật bảo vệ WAF thế hệ 1 (theo đường dẫn tĩnh).
