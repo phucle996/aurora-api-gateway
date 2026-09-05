@@ -26,4 +26,21 @@ type ClusterNodeRecord struct {
 	ActiveConnections string  `json:"activeConnections"`
 	RequestsPerSecond string  `json:"requestsPerSecond"`
 	Uptime            string  `json:"uptime"`
+	PendingCommand    string  `json:"pendingCommand,omitempty"`
+	ReloadStatus      string  `json:"reloadStatus,omitempty"`
+}
+
+// NodeCommandDirective đại diện cho chỉ thị gửi từ Control Plane xuống Node qua response của Heartbeat.
+type NodeCommandDirective struct {
+	Action           string `json:"action"` // "none" | "reload_process" | "sync_policy"
+	DesiredReleaseID int64  `json:"desired_release_id,omitempty"`
+}
+
+// ClusterRollingStatus đại diện cho tiến trình thực hiện Rolling Reload tuần tự trên toàn cụm.
+type ClusterRollingStatus struct {
+	Active         bool     `json:"active"`
+	CurrentNodeID  string   `json:"currentNodeId,omitempty"`
+	PendingNodes   []string `json:"pendingNodes"`
+	CompletedNodes []string `json:"completedNodes"`
+	Message        string   `json:"message"`
 }

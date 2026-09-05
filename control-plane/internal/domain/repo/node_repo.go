@@ -14,4 +14,8 @@ type NodeRepository interface {
 	BatchInsertMetricsHistory(ctx context.Context, records []entity.NodeMetricHistoryRecord) error
 	CleanupExpiredMetricsHistory(ctx context.Context, retentionDays int) error
 	GetRecentMetricsHistory(ctx context.Context, nodeID string, limit int) ([]entity.NodeMetricPoint, error)
+	SetNodeCommand(ctx context.Context, nodeID string, cmd string, reloadStatus string) error
+	GetNodeCommandAndLatestRelease(ctx context.Context, nodeID string) (string, int64, error)
+	SetClusterRollingReload(ctx context.Context, nodeIDs []string) error
+	GetRollingNodesStatus(ctx context.Context) (pending []string, reloading []string, completed []string, err error)
 }

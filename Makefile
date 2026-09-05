@@ -2,6 +2,14 @@
 
 NGINX ?= $(shell command -v nginx)
 
+.PHONY: metrics-pressure-test metrics-audit-test
+metrics-pressure-test: module compiler
+	cd control-plane && go build -buildvcs=false -o ../build/aurora-controller-perf ./cmd
+	NGINX="$(NGINX)" node scripts/test-metrics-pressure.mjs
+
+metrics-audit-test:
+	cd control-plane && AURORA_METRICS_AUDIT=1 go test -race -count=1 -v ./internal/test/integration -run TestAudit
+
 .PHONY: create-rule-test
 create-rule-test: go-check
 	node ui/tests/create-rule.mjs
@@ -54,6 +62,15 @@ module:
 
 module-test: module
 	NGINX="$(NGINX)" node scripts/test-nginx-module.mjs
+
+standalone-test: module
+	node scripts/test-standalone-e2e.mjs
+
+prometheus-test: module
+	node scripts/test-prometheus-e2e.mjs
+
+rolling-test: module
+	node scripts/test-rolling-reload-e2e.mjs
 
 nginx-check:
 	test -n "$(NGINX)"

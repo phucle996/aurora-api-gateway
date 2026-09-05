@@ -19,12 +19,13 @@ type Module struct {
 	RuleHandler    *handler.RuleHandler
 	NodeHandler    *handler.NodeHandler
 	MetricsHandler *handler.MetricsHandler
+	MetricsService port.MetricsService
 }
 
 // NewModule khởi tạo toàn bộ chuỗi dependency của ứng dụng theo thứ tự:
-//   1. Repository (sử dụng đúng writerDB hoặc readerDB tùy loại workflow)
-//   2. Service    (nhận repository và chứa logic nghiệp vụ)
-//   3. Handler    (bao đóng service thành Handler struct)
+//  1. Repository (sử dụng đúng writerDB hoặc readerDB tùy loại workflow)
+//  2. Service    (nhận repository và chứa logic nghiệp vụ)
+//  3. Handler    (bao đóng service thành Handler struct)
 //
 // writerDB dùng cho các mutation (tạo/sửa/publish rule).
 // readerDB dùng cho các query (list/detail/stats/history).
@@ -56,5 +57,6 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 		RuleHandler:    ruleHdr,
 		NodeHandler:    nodeHdr,
 		MetricsHandler: metricsHdr,
+		MetricsService: metricsSvc,
 	}
 }

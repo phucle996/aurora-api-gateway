@@ -25,6 +25,7 @@ type metricsService struct {
 	mu             sync.RWMutex
 	currentConfig  entity.MetricsIntegrationConfig
 	activeProvider MetricsProvider
+	closed         bool
 }
 
 // NewMetricsService khởi tạo service quản lý điều phối tích hợp Telemetry và Metrics theo mô hình Strategy.
@@ -87,21 +88,32 @@ func (s *metricsService) SaveConfig(ctx context.Context, cfg entity.MetricsInteg
 		}
 	}
 
+	// One owner serializes durable commit and provider installation. Readers cannot
+	// retain an old provider across Stop; HTTP cancellation never owns its lifetime.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return fmt.Errorf("metrics service closed")
+	}
+	changed := cfg.Mode != s.currentConfig.Mode || cfg.PrometheusURL != s.currentConfig.PrometheusURL || cfg.PrometheusJob != s.currentConfig.PrometheusJob
+	if changed && s.activeProvider != nil {
+		if err := s.activeProvider.Stop(); err != nil {
+			_ = s.activeProvider.Start(context.Background())
+			return err
+		}
+	}
 	// 3. Lưu vào repository
 	if err := s.repo.SaveMetricsConfig(ctx, cfg); err != nil {
+		if changed {
+			_ = s.activeProvider.Start(context.Background())
+		}
 		return err
 	}
 
 	// 4. Hot-swap Provider nếu cấu hình thay đổi
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if cfg.Mode != s.currentConfig.Mode || cfg.PrometheusURL != s.currentConfig.PrometheusURL || cfg.PrometheusJob != s.currentConfig.PrometheusJob {
-		if s.activeProvider != nil {
-			_ = s.activeProvider.Stop()
-		}
+	if changed {
 		s.activeProvider = s.createProvider(cfg)
-		_ = s.activeProvider.Start(ctx)
+		_ = s.activeProvider.Start(context.Background())
 		s.currentConfig = cfg
 	}
 
@@ -167,8 +179,8 @@ func (s *metricsService) PushMetricPoint(nodeID string, pt entity.NodeMetricPoin
 
 	// 2. Chuyển tiếp tới Active Provider (nếu là standalone thì gom batch rollup/ring buffer, nếu khác thì no-op)
 	s.mu.RLock()
+	defer s.mu.RUnlock()
 	provider := s.activeProvider
-	s.mu.RUnlock()
 
 	if provider != nil {
 		provider.PushMetricPoint(nodeID, pt)
@@ -185,8 +197,8 @@ func (s *metricsService) GetLatestMetricPoint(nodeID string) *entity.NodeMetricP
 	}
 
 	s.mu.RLock()
+	defer s.mu.RUnlock()
 	provider := s.activeProvider
-	s.mu.RUnlock()
 
 	if provider != nil {
 		return provider.GetLatestMetricPoint(nodeID)
@@ -197,11 +209,22 @@ func (s *metricsService) GetLatestMetricPoint(nodeID string) *entity.NodeMetricP
 // GetNodeMetrics trích xuất Timeline metrics cho Node từ Active Provider.
 func (s *metricsService) GetNodeMetrics(ctx context.Context, nodeID string) ([]entity.NodeMetricPoint, error) {
 	s.mu.RLock()
+	defer s.mu.RUnlock()
 	provider := s.activeProvider
-	s.mu.RUnlock()
 
 	if provider == nil {
 		return []entity.NodeMetricPoint{}, nil
 	}
 	return provider.GetNodeTimeline(ctx, nodeID)
+}
+
+// Close runs after HTTP drain and before SQLite pools close.
+func (s *metricsService) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return nil
+	}
+	s.closed = true
+	return s.activeProvider.Stop()
 }

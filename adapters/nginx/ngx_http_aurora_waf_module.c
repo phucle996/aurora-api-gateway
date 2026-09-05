@@ -33,6 +33,20 @@ static ngx_int_t ngx_http_aurora_metrics_handler(ngx_http_request_t *r);
 /* Best-effort match summaries: cap per-worker output, never queue raw requests. */
 static time_t aurora_log_second;
 static ngx_uint_t aurora_log_count;
+static ngx_shm_zone_t *aurora_telemetry_zone;
+
+/* Telemetry alone is shared across workers/reloads. Policy handles stay COW. */
+static ngx_int_t
+ngx_http_aurora_telemetry_zone_init(ngx_shm_zone_t *zone, void *previous)
+{
+    ngx_slab_pool_t *pool = (ngx_slab_pool_t *) zone->shm.addr;
+    if (previous) { zone->data = previous; return NGX_OK; }
+    if (zone->shm.exists) { zone->data = pool->data; return NGX_OK; }
+    zone->data = ngx_slab_calloc(pool, 64);
+    if (!zone->data) { return NGX_ERROR; }
+    pool->data = zone->data;
+    return NGX_OK;
+}
 
 /*
  * Danh sách enum cho directive aurora_waf_mode:
@@ -327,6 +341,10 @@ ngx_http_aurora_init(ngx_conf_t *cf)
 
     /* Kiểm tra phiên bản ABI giữa C adapter và Rust FFI boundary */
     if (aurora_waf_abi_version() != 3) { return NGX_ERROR; }
+    ngx_str_t telemetry_name = ngx_string("aurora_telemetry_v1");
+    aurora_telemetry_zone = ngx_shared_memory_add(cf, &telemetry_name, 8 * ngx_pagesize, &ngx_http_aurora_waf_module);
+    if (aurora_telemetry_zone == NULL) { return NGX_ERROR; }
+    aurora_telemetry_zone->init = ngx_http_aurora_telemetry_zone_init;
 
     /* Đăng ký handler vào Access Phase của NGINX */
     main = ngx_http_conf_get_module_main_conf(cf, ngx_http_core_module);
@@ -370,6 +388,12 @@ ngx_http_aurora_generation(ngx_http_request_t *r, ngx_http_variable_value_t *v, 
 static ngx_int_t
 ngx_http_aurora_init_process(ngx_cycle_t *cycle)
 {
+    /* Loading the HTTP module without an http block creates no telemetry zone. */
+    if (aurora_telemetry_zone == NULL) { return NGX_OK; }
+    if (sizeof(ngx_atomic_t) != sizeof(uint64_t) ||
+        aurora_waf_bind_telemetry(aurora_telemetry_zone->data, 64, (void *) ngx_stat_active) != 0) {
+        return NGX_ERROR;
+    }
     if (ngx_process == NGX_PROCESS_SINGLE || ngx_worker == 0) {
         char *controller = NULL;
         char *node_id = NULL;
@@ -379,8 +403,22 @@ ngx_http_aurora_init_process(ngx_cycle_t *cycle)
 
         if (cycle->conf_ctx) {
             ngx_http_conf_ctx_t *ctx = (ngx_http_conf_ctx_t *) cycle->conf_ctx[ngx_http_module.index];
-            if (ctx && ctx->loc_conf) {
-                ngx_http_aurora_conf_t *conf = ctx->loc_conf[ngx_http_aurora_waf_module.ctx_index];
+            if (ctx) {
+                ngx_http_aurora_conf_t *conf = NULL;
+                if (ctx->loc_conf) {
+                    conf = ctx->loc_conf[ngx_http_aurora_waf_module.ctx_index];
+                }
+                /* Nếu chưa có ở cấp http, kiểm tra ở server block đầu tiên */
+                if ((!conf || conf->controller.len == 0) && ctx->main_conf) {
+                    ngx_http_core_main_conf_t *cmcf = ctx->main_conf[ngx_http_core_module.ctx_index];
+                    if (cmcf && cmcf->servers.nelts > 0) {
+                        ngx_http_core_srv_conf_t **cscfp = cmcf->servers.elts;
+                        if (cscfp && cscfp[0] && cscfp[0]->ctx && cscfp[0]->ctx->loc_conf) {
+                            conf = cscfp[0]->ctx->loc_conf[ngx_http_aurora_waf_module.ctx_index];
+                        }
+                    }
+                }
+
                 if (conf) {
                     if (conf->controller.len > 0) {
                         u_char *c = ngx_pcalloc(cycle->pool, conf->controller.len + 1);
@@ -518,5 +556,3 @@ ngx_http_aurora_metrics_handler(ngx_http_request_t *r)
 
     return ngx_http_output_filter(r, &out);
 }
-
-

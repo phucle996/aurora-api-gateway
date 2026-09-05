@@ -154,11 +154,61 @@ func (h *NodeHandler) Heartbeat(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	if err := h.service.RecordHeartbeat(ctx, *payload); err != nil {
+	directive, err := h.service.RecordHeartbeat(ctx, *payload)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ghi nhận heartbeat thất bại: " + err.Error()})
 		return
 	}
 
-	c.Status(http.StatusNoContent)
+	// Trả về HTTP 200 OK kèm chỉ thị lệnh (Directive) cho Data Plane Node
+	c.JSON(http.StatusOK, gin.H{
+		"action":             directive.Action,
+		"desired_release_id": directive.DesiredReleaseID,
+	})
 }
+
+// ReloadNode tiếp nhận yêu cầu POST /api/v1/nodes/:id/reload để kích hoạt reload một node cụ thể.
+func (h *NodeHandler) ReloadNode(c *gin.Context) {
+	nodeID := c.Param("id")
+	if nodeID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Mã node không được để trống"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	if err := h.service.TriggerNodeReload(ctx, nodeID); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Đã gửi lệnh reload tới node " + nodeID + ". Lệnh sẽ được thực thi tại chu kỳ heartbeat tiếp theo.",
+		"status":  "pending",
+	})
+}
+
+// RollingReloadCluster tiếp nhận yêu cầu POST /api/v1/nodes/rolling-reload để khởi động rolling reload tuần tự cả cụm.
+func (h *NodeHandler) RollingReloadCluster(c *gin.Context) {
+	ctx := c.Request.Context()
+	status, err := h.service.TriggerClusterRollingReload(ctx)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, status)
+}
+
+// GetRollingStatus tiếp nhận yêu cầu GET /api/v1/nodes/rolling-status để kiểm tra tiến trình rolling cluster.
+func (h *NodeHandler) GetRollingStatus(c *gin.Context) {
+	ctx := c.Request.Context()
+	status, err := h.service.GetClusterRollingStatus(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, status)
+}
+
 

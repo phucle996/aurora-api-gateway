@@ -23,7 +23,7 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return err
 	}
-	if version > 8 {
+	if version > 9 {
 		return fmt.Errorf("unsupported database schema version %d", version)
 	}
 	if version == 0 {
@@ -104,6 +104,14 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 			return fmt.Errorf("node metrics history schema: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version) VALUES(8)"); err != nil {
+			return err
+		}
+	}
+	if version < 9 {
+		if _, err := tx.ExecContext(ctx, migrations.ClusterNodeCommands); err != nil {
+			return fmt.Errorf("cluster node commands schema: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version) VALUES(9)"); err != nil {
 			return err
 		}
 	}

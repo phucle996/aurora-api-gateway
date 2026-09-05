@@ -35,7 +35,13 @@ func (s *nodeService) ListNodes(ctx context.Context) ([]entity.ClusterNodeRecord
 	now := time.Now().UTC()
 	for i := range nodes {
 		node := &nodes[i]
-		if t, err := time.Parse(time.RFC3339, node.LastHeartbeat); err == nil {
+		t, err := time.Parse(time.RFC3339Nano, node.LastHeartbeat)
+		if err != nil {
+			t, err = time.ParseInLocation("2006-01-02 15:04:05", node.LastHeartbeat, time.UTC)
+		}
+		node.Status = "Not Ready"
+		node.Uptime = "Offline"
+		if err == nil {
 			diff := now.Sub(t)
 			if diff < time.Minute {
 				node.LastHeartbeat = fmt.Sprintf("%ds ago", int(diff.Seconds()))
@@ -85,7 +91,13 @@ func (s *nodeService) GetNodeByID(ctx context.Context, id string) (*entity.Clust
 	}
 
 	now := time.Now().UTC()
-	if t, err := time.Parse(time.RFC3339, node.LastHeartbeat); err == nil {
+	t, parseErr := time.Parse(time.RFC3339Nano, node.LastHeartbeat)
+	if parseErr != nil {
+		t, parseErr = time.ParseInLocation("2006-01-02 15:04:05", node.LastHeartbeat, time.UTC)
+	}
+	node.Status = "Not Ready"
+	node.Uptime = "Offline"
+	if parseErr == nil {
 		diff := now.Sub(t)
 		if diff < time.Minute {
 			node.LastHeartbeat = fmt.Sprintf("%ds ago", int(diff.Seconds()))
@@ -122,10 +134,10 @@ func (s *nodeService) GetNodeByID(ctx context.Context, id string) (*entity.Clust
 	return node, nil
 }
 
-// RecordHeartbeat tiếp nhận và xử lý gói tin Push Heartbeat Telemetry gửi từ Node.
-func (s *nodeService) RecordHeartbeat(ctx context.Context, payload entity.NodeHeartbeatPayload) error {
+// RecordHeartbeat tiếp nhận và xử lý gói tin Push Heartbeat Telemetry gửi từ Node, đồng thời trả về chỉ thị lệnh từ Control Plane.
+func (s *nodeService) RecordHeartbeat(ctx context.Context, payload entity.NodeHeartbeatPayload) (*entity.NodeCommandDirective, error) {
 	if payload.NodeID == "" {
-		return errors.New("node_id không được để trống")
+		return nil, errors.New("node_id không được để trống")
 	}
 	if payload.Timestamp <= 0 {
 		payload.Timestamp = time.Now().Unix()
@@ -133,7 +145,7 @@ func (s *nodeService) RecordHeartbeat(ctx context.Context, payload entity.NodeHe
 
 	// 1. Cập nhật thời điểm heartbeat và liveness vào SQLite
 	if err := s.repo.UpdateHeartbeat(ctx, payload); err != nil {
-		return fmt.Errorf("nodeService.RecordHeartbeat: %w", err)
+		return nil, fmt.Errorf("nodeService.RecordHeartbeat: %w", err)
 	}
 
 	// 2. Đẩy điểm đo tức thời vào In-Memory Ring Buffer trong MetricsService
@@ -155,5 +167,102 @@ func (s *nodeService) RecordHeartbeat(ctx context.Context, payload entity.NodeHe
 		})
 	}
 
-	return nil
+	// 3. Lấy chỉ thị lệnh chờ thực thi và bản release mong muốn
+	action, desiredRelease, err := s.repo.GetNodeCommandAndLatestRelease(ctx, payload.NodeID)
+	if err != nil {
+		action = "none"
+	}
+	if action == "" {
+		action = "none"
+	}
+
+	// 4. Nếu node này vừa hoàn thành reload, kiểm tra xem có node kế tiếp trong hàng đợi rolling cluster không
+	node, err := s.repo.GetNodeByID(ctx, payload.NodeID)
+	if err == nil && node != nil && node.ReloadStatus == "completed" {
+		pending, reloading, _, _ := s.repo.GetRollingNodesStatus(ctx)
+		// Chỉ kích hoạt node tiếp theo nếu hiện tại không có node nào đang reloading và còn node pending
+		if len(reloading) == 0 && len(pending) > 0 {
+			nextNodeID := pending[0]
+			_ = s.repo.SetNodeCommand(ctx, nextNodeID, "reload_process", "pending")
+		}
+	}
+
+	return &entity.NodeCommandDirective{
+		Action:           action,
+		DesiredReleaseID: desiredRelease,
+	}, nil
+}
+
+// TriggerNodeReload yêu cầu thực hiện reload cho một node cụ thể.
+func (s *nodeService) TriggerNodeReload(ctx context.Context, nodeID string) error {
+	node, err := s.repo.GetNodeByID(ctx, nodeID)
+	if err != nil {
+		return fmt.Errorf("truy vấn node thất bại: %w", err)
+	}
+	if node == nil {
+		return fmt.Errorf("không tìm thấy node %s", nodeID)
+	}
+	return s.repo.SetNodeCommand(ctx, nodeID, "reload_process", "pending")
+}
+
+// TriggerClusterRollingReload kích hoạt chu trình rolling reload tuần tự trên toàn bộ cụm.
+func (s *nodeService) TriggerClusterRollingReload(ctx context.Context) (*entity.ClusterRollingStatus, error) {
+	nodes, err := s.repo.ListNodes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("truy vấn danh sách node thất bại: %w", err)
+	}
+	if len(nodes) == 0 {
+		return nil, errors.New("không có node nào trong cluster để thực hiện rolling reload")
+	}
+
+	nodeIDs := make([]string, 0, len(nodes))
+	for _, n := range nodes {
+		nodeIDs = append(nodeIDs, n.ID)
+	}
+
+	if err := s.repo.SetClusterRollingReload(ctx, nodeIDs); err != nil {
+		return nil, err
+	}
+
+	pending := []string{}
+	if len(nodeIDs) > 1 {
+		pending = nodeIDs[1:]
+	}
+
+	return &entity.ClusterRollingStatus{
+		Active:         true,
+		CurrentNodeID:  nodeIDs[0],
+		PendingNodes:   pending,
+		CompletedNodes: []string{},
+		Message:        fmt.Sprintf("Đã bắt đầu Rolling Reload tuần tự cho %d node trong cụm (Node bắt đầu: %s)", len(nodeIDs), nodeIDs[0]),
+	}, nil
+}
+
+// GetClusterRollingStatus trả về trạng thái tiến trình rolling reload hiện tại của cụm.
+func (s *nodeService) GetClusterRollingStatus(ctx context.Context) (*entity.ClusterRollingStatus, error) {
+	pending, reloading, completed, err := s.repo.GetRollingNodesStatus(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	active := len(pending) > 0 || len(reloading) > 0
+	current := ""
+	if len(reloading) > 0 {
+		current = reloading[0]
+	} else if len(pending) > 0 {
+		current = pending[0]
+	}
+
+	msg := "Hệ thống đang hoạt động ổn định, không có tiến trình rolling reload nào."
+	if active {
+		msg = fmt.Sprintf("Tiến trình Rolling Reload đang diễn ra: Node đang xử lý: %s, Còn lại: %d, Hoàn tất: %d", current, len(pending), len(completed))
+	}
+
+	return &entity.ClusterRollingStatus{
+		Active:         active,
+		CurrentNodeID:  current,
+		PendingNodes:   pending,
+		CompletedNodes: completed,
+		Message:        msg,
+	}, nil
 }

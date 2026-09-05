@@ -206,19 +206,31 @@ pub unsafe extern "C" fn aurora_waf_start_telemetry(
 ) -> u32 {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         let url = if !controller_url.is_null() {
-            unsafe { std::ffi::CStr::from_ptr(controller_url).to_string_lossy().to_string() }
+            unsafe {
+                std::ffi::CStr::from_ptr(controller_url)
+                    .to_string_lossy()
+                    .to_string()
+            }
         } else {
             std::env::var("AURORA_SERVER_URL").unwrap_or_else(|_| "http://127.0.0.1:8080".into())
         };
 
         let nid = if !node_id.is_null() {
-            unsafe { std::ffi::CStr::from_ptr(node_id).to_string_lossy().to_string() }
+            unsafe {
+                std::ffi::CStr::from_ptr(node_id)
+                    .to_string_lossy()
+                    .to_string()
+            }
         } else {
             std::env::var("AURORA_NODE_ID").unwrap_or_else(|_| "node-local-01".into())
         };
 
         let tok = if !token.is_null() {
-            unsafe { std::ffi::CStr::from_ptr(token).to_string_lossy().to_string() }
+            unsafe {
+                std::ffi::CStr::from_ptr(token)
+                    .to_string_lossy()
+                    .to_string()
+            }
         } else {
             std::env::var("AURORA_AUTH_TOKEN").unwrap_or_default()
         };
@@ -241,6 +253,22 @@ pub unsafe extern "C" fn aurora_waf_start_telemetry(
 #[unsafe(no_mangle)]
 pub extern "C" fn aurora_waf_stop_telemetry() {
     let _ = catch_unwind(AssertUnwindSafe(telemetry::stop_telemetry));
+}
+
+/// Bind adapter-owned shared telemetry counters before starting worker threads.
+/// # Safety
+/// See telemetry::bind: both aligned allocations must outlive the worker.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn aurora_waf_bind_telemetry(
+    shared: *mut std::ffi::c_void,
+    len: usize,
+    active: *mut std::ffi::c_void,
+) -> u32 {
+    if unsafe { telemetry::bind(shared.cast(), len, active.cast()) } {
+        OK
+    } else {
+        1
+    }
 }
 
 /// Xuất chuỗi định dạng văn bản Prometheus / OpenMetrics phục vụ endpoint /metrics của NGINX.
@@ -280,4 +308,3 @@ pub unsafe extern "C" fn aurora_waf_format_prometheus_metrics(
 
     OK
 }
-

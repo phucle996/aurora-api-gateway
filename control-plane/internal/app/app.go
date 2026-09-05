@@ -4,6 +4,7 @@ import (
 	"aurora-waf.local/control-plane/infra"
 	"aurora-waf.local/control-plane/internal/config"
 	"aurora-waf.local/control-plane/internal/console"
+	port "aurora-waf.local/control-plane/internal/domain/service"
 	"context"
 	"errors"
 	"fmt"
@@ -19,8 +20,9 @@ import (
 //   - db: cặp pool kết nối SQLite (Writer + Reader) — đóng khi tắt
 //   - server: HTTP server với tất cả các route đã đăng ký
 type App struct {
-	db     *infra.DBPool
-	server *http.Server
+	db      *infra.DBPool
+	server  *http.Server
+	metrics port.MetricsService
 }
 
 func init() {
@@ -79,12 +81,13 @@ func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
 	// Gin rọi route chưa khớp sẽ có bắt được vào đây (SPA fallback).
 	ui, err := console.NewHandler()
 	if err != nil {
+		_ = module.MetricsService.Close()
 		_ = pools.Close()
 		return nil, err
 	}
 	router.NoRoute(gin.WrapH(ui))
 
-	return &App{db: pools, server: &http.Server{
+	return &App{db: pools, metrics: module.MetricsService, server: &http.Server{
 		Addr: cfg.HTTPAddr, Handler: router,
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second,
 		WriteTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second,
@@ -113,6 +116,6 @@ func (a *App) Run(ctx context.Context) error {
 }
 
 // Close is called after Run has drained HTTP requests.
-func (a *App) Close() error { return a.db.Close() }
+func (a *App) Close() error { return errors.Join(a.metrics.Close(), a.db.Close()) }
 
 func (a *App) Handler() http.Handler { return a.server.Handler }

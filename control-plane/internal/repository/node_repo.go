@@ -60,7 +60,9 @@ func (r *sqliteNodeRepository) ListNodes(ctx context.Context) ([]entity.ClusterN
 		n.certificate,
 		n.last_heartbeat,
 		n.created_at,
-		COALESCE(j.updated_at, n.last_heartbeat) AS last_sync_time
+		COALESCE(j.updated_at, n.last_heartbeat) AS last_sync_time,
+		n.pending_command,
+		n.reload_status
 	FROM cluster_nodes n
 	LEFT JOIN latest_release lr ON 1=1
 	LEFT JOIN active_node_journal j ON 1=1
@@ -91,6 +93,8 @@ func (r *sqliteNodeRepository) ListNodes(ctx context.Context) ([]entity.ClusterN
 			&item.LastHeartbeat,
 			&item.CreatedAt,
 			&item.LastSyncTime,
+			&item.PendingCommand,
+			&item.ReloadStatus,
 		); err != nil {
 			return nil, fmt.Errorf("quét bản ghi node thất bại: %w", err)
 		}
@@ -143,7 +147,9 @@ func (r *sqliteNodeRepository) GetNodeByID(ctx context.Context, id string) (*ent
 		n.certificate,
 		n.last_heartbeat,
 		n.created_at,
-		COALESCE(j.updated_at, n.last_heartbeat) AS last_sync_time
+		COALESCE(j.updated_at, n.last_heartbeat) AS last_sync_time,
+		n.pending_command,
+		n.reload_status
 	FROM cluster_nodes n
 	LEFT JOIN latest_release lr ON 1=1
 	LEFT JOIN active_node_journal j ON 1=1
@@ -167,6 +173,8 @@ func (r *sqliteNodeRepository) GetNodeByID(ctx context.Context, id string) (*ent
 		&item.LastHeartbeat,
 		&item.CreatedAt,
 		&item.LastSyncTime,
+		&item.PendingCommand,
+		&item.ReloadStatus,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -185,6 +193,10 @@ func (r *sqliteNodeRepository) UpdateHeartbeat(ctx context.Context, payload enti
 	SET 
 		last_heartbeat = datetime(?, 'unixepoch'),
 		status = 'Ready',
+		reload_status = CASE 
+			WHEN reload_status = 'reloading' THEN 'completed'
+			ELSE reload_status
+		END,
 		active_release_id = CASE 
 			WHEN ? > 0 AND EXISTS(SELECT 1 FROM ruleset_releases WHERE id = ?) THEN ? 
 			ELSE active_release_id 
@@ -204,6 +216,132 @@ func (r *sqliteNodeRepository) UpdateHeartbeat(ctx context.Context, payload enti
 		return fmt.Errorf("không tìm thấy node %s để cập nhật heartbeat", payload.NodeID)
 	}
 	return nil
+}
+
+// SetNodeCommand đặt lệnh điều khiển chờ thực thi cho một node.
+func (r *sqliteNodeRepository) SetNodeCommand(ctx context.Context, nodeID string, cmd string, reloadStatus string) error {
+	query := `
+	UPDATE cluster_nodes
+	SET pending_command = ?, reload_status = ?
+	WHERE id = ?;`
+
+	res, err := r.db.ExecContext(ctx, query, cmd, reloadStatus, nodeID)
+	if err != nil {
+		return fmt.Errorf("đặt lệnh cho node %s thất bại: %w", nodeID, err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("không tìm thấy node %s", nodeID)
+	}
+	return nil
+}
+
+// GetNodeCommandAndLatestRelease lấy chỉ thị lệnh và bản release mới nhất cho node, đồng thời chuyển trạng thái.
+func (r *sqliteNodeRepository) GetNodeCommandAndLatestRelease(ctx context.Context, nodeID string) (string, int64, error) {
+	query := `
+	WITH latest_release AS (
+		SELECT id
+		FROM ruleset_releases
+		WHERE state = 'ready'
+		ORDER BY id DESC
+		LIMIT 1
+	)
+	SELECT 
+		n.pending_command,
+		COALESCE(lr.id, 0)
+	FROM cluster_nodes n
+	LEFT JOIN latest_release lr ON 1=1
+	WHERE n.id = ?;`
+
+	var cmd string
+	var desiredRelease int64
+	err := r.db.QueryRowContext(ctx, query, nodeID).Scan(&cmd, &desiredRelease)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "none", 0, nil
+		}
+		return "none", 0, err
+	}
+
+	// Nếu có lệnh pending, xóa pending_command và chuyển reload_status sang 'reloading'
+	if cmd != "" && cmd != "none" {
+		_, _ = r.db.ExecContext(ctx, `
+			UPDATE cluster_nodes 
+			SET pending_command = 'none', 
+			    reload_status = CASE WHEN pending_command = 'reload_process' THEN 'reloading' ELSE reload_status END
+			WHERE id = ?;
+		`, nodeID)
+	}
+
+	return cmd, desiredRelease, nil
+}
+
+// SetClusterRollingReload thiết lập quy trình rolling reload toàn cụm.
+func (r *sqliteNodeRepository) SetClusterRollingReload(ctx context.Context, nodeIDs []string) error {
+	if len(nodeIDs) == 0 {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Đưa tất cả các node trong danh sách về trạng thái 'pending'
+	for i, id := range nodeIDs {
+		cmd := "none"
+		reloadStatus := "pending"
+		// Node đầu tiên lập tức nhận lệnh reload_process
+		if i == 0 {
+			cmd = "reload_process"
+		}
+		_, err := tx.ExecContext(ctx, `
+			UPDATE cluster_nodes
+			SET pending_command = ?, reload_status = ?
+			WHERE id = ?;
+		`, cmd, reloadStatus, id)
+		if err != nil {
+			return fmt.Errorf("cập nhật trạng thái rolling node %s thất bại: %w", id, err)
+		}
+	}
+
+	return tx.Commit()
+}
+
+// GetRollingNodesStatus trả về danh sách các node ID theo từng trạng thái rolling.
+func (r *sqliteNodeRepository) GetRollingNodesStatus(ctx context.Context) (pending []string, reloading []string, completed []string, err error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, reload_status 
+		FROM cluster_nodes 
+		WHERE reload_status IN ('pending', 'reloading', 'completed')
+		ORDER BY name ASC;
+	`)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id, status string
+		if err := rows.Scan(&id, &status); err != nil {
+			return nil, nil, nil, err
+		}
+		switch status {
+		case "pending":
+			pending = append(pending, id)
+		case "reloading":
+			reloading = append(reloading, id)
+		case "completed":
+			completed = append(completed, id)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, nil, err
+	}
+	return pending, reloading, completed, nil
 }
 
 // BatchInsertMetricsHistory ghi gom cụm (batch) các điểm đo rollup vào bảng node_metrics_history.

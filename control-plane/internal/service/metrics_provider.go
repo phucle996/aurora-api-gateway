@@ -7,9 +7,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
+	"math"
 	"math/rand"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -31,17 +35,25 @@ type standaloneMetricsProvider struct {
 	nodeRepo      repo.NodeRepository
 	mu            sync.RWMutex
 	buffers       map[string][]entity.NodeMetricPoint
-	rollupBuckets map[string][]entity.NodeMetricPoint
+	rollupBuckets map[string]standaloneRollup
 
 	cancelFunc context.CancelFunc
 	wg         sync.WaitGroup
+}
+
+// Fixed-size accumulator per node; never retain every heartbeat until disk flush.
+type standaloneRollup struct {
+	count         uint64
+	cpu, mem, rps float64
+	connections   int
+	timestamp     int64
 }
 
 func newStandaloneProvider(nodeRepo repo.NodeRepository) *standaloneMetricsProvider {
 	return &standaloneMetricsProvider{
 		nodeRepo:      nodeRepo,
 		buffers:       make(map[string][]entity.NodeMetricPoint),
-		rollupBuckets: make(map[string][]entity.NodeMetricPoint),
+		rollupBuckets: make(map[string]standaloneRollup),
 	}
 }
 
@@ -67,7 +79,9 @@ func (p *standaloneMetricsProvider) Start(parentCtx context.Context) error {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				p.flushRollupBatch()
+				if err := p.flushRollupBatch(); err != nil {
+					slog.Error("metrics rollup failed; accumulated samples retained", "error", err)
+				}
 			}
 		}
 	}()
@@ -88,7 +102,9 @@ func (p *standaloneMetricsProvider) Start(parentCtx context.Context) error {
 				return
 			case <-time.After(nextCleanup):
 				if p.nodeRepo != nil {
-					_ = p.nodeRepo.CleanupExpiredMetricsHistory(context.Background(), 7)
+					cleanupCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+					_ = p.nodeRepo.CleanupExpiredMetricsHistory(cleanupCtx, 7)
+					cancel()
 				}
 			}
 		}
@@ -107,7 +123,7 @@ func (p *standaloneMetricsProvider) Stop() error {
 		cancel()
 		p.wg.Wait()
 		// Flush nốt phần còn lại trước khi dừng hẳn
-		p.flushRollupBatch()
+		return p.flushRollupBatch()
 	}
 	return nil
 }
@@ -125,7 +141,19 @@ func (p *standaloneMetricsProvider) PushMetricPoint(nodeID string, pt entity.Nod
 	p.buffers[nodeID] = buf
 
 	// 2. Tích lũy vào bucket để Rollup Worker gom ghi SQLite
-	p.rollupBuckets[nodeID] = append(p.rollupBuckets[nodeID], pt)
+	a := p.rollupBuckets[nodeID]
+	a.count++
+	// Online means keep sums bounded even if storage stays unavailable.
+	a.cpu += (pt.CPUUsage - a.cpu) / float64(a.count)
+	a.mem += (pt.MemoryUsage - a.mem) / float64(a.count)
+	a.rps += (pt.RPS - a.rps) / float64(a.count)
+	if pt.ActiveConnections > a.connections {
+		a.connections = pt.ActiveConnections
+	}
+	if pt.Timestamp > a.timestamp {
+		a.timestamp = pt.Timestamp
+	}
+	p.rollupBuckets[nodeID] = a
 }
 
 func (p *standaloneMetricsProvider) GetLatestMetricPoint(nodeID string) *entity.NodeMetricPoint {
@@ -154,7 +182,10 @@ func (p *standaloneMetricsProvider) GetNodeTimeline(ctx context.Context, nodeID 
 	// Nếu RAM chưa có (vừa restart), hydrate từ SQLite
 	if p.nodeRepo != nil {
 		history, err := p.nodeRepo.GetRecentMetricsHistory(ctx, nodeID, 60)
-		if err == nil && len(history) > 0 {
+		if err != nil {
+			return nil, err
+		}
+		if len(history) > 0 {
 			return history, nil
 		}
 	}
@@ -162,44 +193,34 @@ func (p *standaloneMetricsProvider) GetNodeTimeline(ctx context.Context, nodeID 
 	return []entity.NodeMetricPoint{}, nil
 }
 
-func (p *standaloneMetricsProvider) flushRollupBatch() {
+func (p *standaloneMetricsProvider) flushRollupBatch() error {
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	if len(p.rollupBuckets) == 0 || p.nodeRepo == nil {
-		p.mu.Unlock()
-		return
+		return nil
 	}
 
 	var batch []entity.NodeMetricHistoryRecord
-	for nodeID, pts := range p.rollupBuckets {
-		if len(pts) == 0 {
-			continue
-		}
-		var totalCPU, totalMem, totalRPS float64
-		var maxConns int
-		for _, pt := range pts {
-			totalCPU += pt.CPUUsage
-			totalMem += pt.MemoryUsage
-			totalRPS += pt.RPS
-			if pt.ActiveConnections > maxConns {
-				maxConns = pt.ActiveConnections
-			}
-		}
-		count := float64(len(pts))
+	for nodeID, a := range p.rollupBuckets {
 		batch = append(batch, entity.NodeMetricHistoryRecord{
 			NodeID:            nodeID,
-			Timestamp:         pts[len(pts)-1].Timestamp,
-			CPUUsage:          totalCPU / count,
-			MemoryUsage:       totalMem / count,
-			ActiveConnections: maxConns,
-			RequestsPerSecond: totalRPS / count,
+			Timestamp:         a.timestamp,
+			CPUUsage:          a.cpu,
+			MemoryUsage:       a.mem,
+			ActiveConnections: a.connections,
+			RequestsPerSecond: a.rps,
 		})
-		delete(p.rollupBuckets, nodeID)
 	}
-	p.mu.Unlock()
 
 	if len(batch) > 0 {
-		_ = p.nodeRepo.BatchInsertMetricsHistory(context.Background(), batch)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := p.nodeRepo.BatchInsertMetricsHistory(ctx, batch); err != nil {
+			return err
+		}
+		clear(p.rollupBuckets)
 	}
+	return nil
 }
 
 // ─── 2. Prometheus Provider (External Prometheus / VictoriaMetrics PromQL) ────
@@ -233,9 +254,9 @@ func (p *prometheusMetricsProvider) GetLatestMetricPoint(string) *entity.NodeMet
 func (p *prometheusMetricsProvider) GetNodeTimeline(ctx context.Context, nodeID string) ([]entity.NodeMetricPoint, error) {
 	now := time.Now().Unix()
 	start := now - 3600 // 1 giờ gần nhất
-	step := 60          // 60 giây
+	step := 15          // 15 giây để biểu đồ chi tiết và phản hồi ngay các mẫu đo mới
 
-	query := fmt.Sprintf(`aurora_node_cpu_percent{node_id="%s"}`, nodeID)
+	query := fmt.Sprintf(`{__name__=~"aurora_node_cpu_percent|aurora_node_memory_percent|aurora_node_active_connections|aurora_node_requests_per_second",node_id=%s,job=%s}`, strconv.Quote(nodeID), strconv.Quote(p.jobName))
 	u := fmt.Sprintf("%s/api/v1/query_range?query=%s&start=%d&end=%d&step=%d",
 		strings.TrimRight(p.promURL, "/"),
 		url.QueryEscape(query),
@@ -267,27 +288,83 @@ func (p *prometheusMetricsProvider) GetNodeTimeline(ctx context.Context, nodeID 
 		} `json:"data"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&promResp); err != nil || promResp.Status != "success" {
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024+1))
+	if err != nil || len(data) > 2*1024*1024 {
+		return nil, taxonomy.ErrMetricsUnavailable
+	}
+	if err := json.Unmarshal(data, &promResp); err != nil || promResp.Status != "success" || promResp.Data.ResultType != "matrix" {
 		return nil, taxonomy.ErrMetricsUnavailable
 	}
 
-	var points []entity.NodeMetricPoint
-	if len(promResp.Data.Result) > 0 {
-		for _, v := range promResp.Data.Result[0].Values {
-			if len(v) >= 2 {
-				tsFloat, ok1 := v[0].(float64)
-				valStr, ok2 := v[1].(string)
-				if ok1 && ok2 {
-					cpuVal, _ := strconv.ParseFloat(valStr, 64)
-					points = append(points, entity.NodeMetricPoint{
-						Timestamp: int64(tsFloat),
-						CPUUsage:  cpuVal,
-					})
-				}
+	points := []entity.NodeMetricPoint{}
+	byTime := map[int64]entity.NodeMetricPoint{}
+	fields := map[int64]uint8{}
+	seen := map[string]bool{}
+	instance := ""
+	for _, series := range promResp.Data.Result {
+		name := series.Metric["__name__"]
+		if series.Metric["node_id"] != nodeID || series.Metric["job"] != p.jobName || seen[name] {
+			return nil, taxonomy.ErrMetricsUnavailable
+		}
+		if len(seen) > 0 && instance != series.Metric["instance"] {
+			return nil, taxonomy.ErrMetricsUnavailable
+		}
+		seen[name] = true
+		instance = series.Metric["instance"]
+		var mask uint8
+		switch name {
+		case "aurora_node_cpu_percent":
+			mask = 1
+		case "aurora_node_memory_percent":
+			mask = 2
+		case "aurora_node_active_connections":
+			mask = 4
+		case "aurora_node_requests_per_second":
+			mask = 8
+		default:
+			return nil, taxonomy.ErrMetricsUnavailable
+		}
+		for _, v := range series.Values {
+			if len(v) != 2 {
+				return nil, taxonomy.ErrMetricsUnavailable
 			}
+			ts, ok := v[0].(float64)
+			raw, ok2 := v[1].(string)
+			val, parseErr := strconv.ParseFloat(raw, 64)
+			if !ok || !ok2 || parseErr != nil || math.IsNaN(val) || math.IsInf(val, 0) || val < 0 || math.IsNaN(ts) || math.IsInf(ts, 0) || ts < float64(start) || ts > float64(now) || ts != math.Trunc(ts) {
+				return nil, taxonomy.ErrMetricsUnavailable
+			}
+			if (mask == 1 || mask == 2) && val > 100 || mask == 4 && (val > 1e9 || val != math.Trunc(val)) {
+				return nil, taxonomy.ErrMetricsUnavailable
+			}
+			sec := int64(ts)
+			pt := byTime[sec]
+			pt.Timestamp = sec
+			pt.TimeLabel = time.Unix(sec, 0).UTC().Format("15:04:05")
+			if fields[sec]&mask != 0 {
+				return nil, taxonomy.ErrMetricsUnavailable
+			}
+			switch mask {
+			case 1:
+				pt.CPUUsage = val
+			case 2:
+				pt.MemoryUsage = val
+			case 4:
+				pt.ActiveConnections = int(val)
+			case 8:
+				pt.RPS = val
+			}
+			byTime[sec] = pt
+			fields[sec] |= mask
 		}
 	}
-
+	for ts, pt := range byTime {
+		if fields[ts] != 15 {
+			return nil, taxonomy.ErrMetricsUnavailable
+		}
+		points = append(points, pt)
+	}
+	sort.Slice(points, func(i, j int) bool { return points[i].Timestamp < points[j].Timestamp })
 	return points, nil
 }
 
@@ -299,9 +376,9 @@ func newDisabledProvider() *disabledMetricsProvider {
 	return &disabledMetricsProvider{}
 }
 
-func (p *disabledMetricsProvider) Start(context.Context) error                          { return nil }
-func (p *disabledMetricsProvider) Stop() error                                          { return nil }
-func (p *disabledMetricsProvider) PushMetricPoint(string, entity.NodeMetricPoint)       {}
+func (p *disabledMetricsProvider) Start(context.Context) error                         { return nil }
+func (p *disabledMetricsProvider) Stop() error                                         { return nil }
+func (p *disabledMetricsProvider) PushMetricPoint(string, entity.NodeMetricPoint)      {}
 func (p *disabledMetricsProvider) GetLatestMetricPoint(string) *entity.NodeMetricPoint { return nil }
 func (p *disabledMetricsProvider) GetNodeTimeline(context.Context, string) ([]entity.NodeMetricPoint, error) {
 	return nil, taxonomy.ErrMetricsDisabled

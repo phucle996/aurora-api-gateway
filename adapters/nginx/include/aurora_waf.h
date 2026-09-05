@@ -26,6 +26,9 @@ uint32_t aurora_waf_evaluate(const AuroraEngine *engine, const uint8_t *path, si
 void aurora_waf_destroy(AuroraEngine *engine);
 uint32_t aurora_waf_start_telemetry(const char *controller_url, const char *node_id, const char *token, uint32_t interval_seconds, int64_t active_release_id);
 void aurora_waf_stop_telemetry(void);
+/* x86_64/Linux: shared zeroed aligned 64-byte atomic storage; lifetime is the
+ * NGINX shared zone, never a request pool. active points to ngx_stat_active. */
+uint32_t aurora_waf_bind_telemetry(void *shared, size_t len, void *active);
 uint32_t aurora_waf_format_prometheus_metrics(const char *node_id, uint8_t *out_buf, size_t max_len, size_t *written_len);
 
 #ifdef __cplusplus

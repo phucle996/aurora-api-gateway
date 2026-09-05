@@ -102,8 +102,8 @@ func TestMetricsFlexibilityLabAndProduction(t *testing.T) {
 	rHb.Header.Set("Authorization", "Bearer "+token)
 	wHb := httptest.NewRecorder()
 	mux.ServeHTTP(wHb, rHb)
-	if wHb.Code != http.StatusNoContent {
-		t.Fatalf("kỳ vọng mã 204 khi push heartbeat protobuf, nhận: %d", wHb.Code)
+	if wHb.Code != http.StatusOK {
+		t.Fatalf("kỳ vọng mã 200 khi push heartbeat protobuf, nhận: %d", wHb.Code)
 	}
 
 	wMetrics := request("GET", "/api/v1/nodes/node-local-01/metrics", "")
@@ -147,21 +147,19 @@ func TestMetricsFlexibilityLabAndProduction(t *testing.T) {
 	mockProm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if strings.Contains(r.URL.Path, "query_range") {
-			_, _ = w.Write([]byte(`{
-				"status": "success",
-				"data": {
-					"resultType": "matrix",
-					"result": [
-						{
-							"metric": {"__name__": "aurora_node_cpu_percent", "node_id": "node-local-01"},
-							"values": [
-								[1741160000, "15.5"],
-								[1741160060, "18.2"]
-							]
-						}
-					]
+			if !strings.Contains(r.URL.Query().Get("query"), `job="aurora-waf"`) {
+				t.Error("missing job selector")
+			}
+			now := time.Now().Unix()
+			series := []any{}
+			for _, name := range []string{"aurora_node_cpu_percent", "aurora_node_memory_percent", "aurora_node_active_connections", "aurora_node_requests_per_second"} {
+				values := []any{[]any{now - 60, "15.5"}, []any{now, "18.2"}}
+				if name == "aurora_node_active_connections" {
+					values = []any{[]any{now - 60, "15"}, []any{now, "18"}}
 				}
-			}`))
+				series = append(series, map[string]any{"metric": map[string]string{"__name__": name, "node_id": "node-local-01", "job": "aurora-waf", "instance": "fixture"}, "values": values})
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"status": "success", "data": map[string]any{"resultType": "matrix", "result": series}})
 			return
 		}
 		_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[]}}`))
@@ -274,4 +272,3 @@ func TestBatchedMetricsHistoryCleanupWithPacing(t *testing.T) {
 		t.Fatalf("kỳ vọng còn lại 10 bản ghi mới, thực tế còn: %d", count)
 	}
 }
-

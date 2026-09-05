@@ -161,8 +161,15 @@ func TestNodeHeartbeatWorkflow(t *testing.T) {
 	reqValid.Header.Set("Authorization", "Bearer "+token)
 	wValid := httptest.NewRecorder()
 	mux.ServeHTTP(wValid, reqValid)
-	if wValid.Code != http.StatusNoContent {
-		t.Fatalf("kỳ vọng mã 204 No Content khi gửi protobuf thành công, nhận: %d, body: %s", wValid.Code, wValid.Body.String())
+	if wValid.Code != http.StatusOK {
+		t.Fatalf("kỳ vọng mã 200 OK khi gửi protobuf thành công, nhận: %d, body: %s", wValid.Code, wValid.Body.String())
+	}
+	var dirResp struct {
+		Action           string `json:"action"`
+		DesiredReleaseID int64  `json:"desired_release_id"`
+	}
+	if err := json.Unmarshal(wValid.Body.Bytes(), &dirResp); err != nil {
+		t.Fatalf("kỳ vọng parse được JSON directive từ heartbeat response: %v", err)
 	}
 
 	// 5. Kiểm tra chi tiết node sau khi cập nhật heartbeat

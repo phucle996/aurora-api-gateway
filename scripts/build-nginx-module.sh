@@ -29,7 +29,7 @@ if [[ ! -f /usr/include/pcre2.h ]]; then
     aurora_ld_flags="-L$aurora_root/build/nginx-deps/root/usr/lib/x86_64-linux-gnu"
 fi
 cd "$aurora_source/nginx-1.30.4"
-./configure --with-compat --without-http_gzip_module --with-cc-opt="$aurora_cc_flags" --with-ld-opt="$aurora_ld_flags" --add-dynamic-module="$aurora_root/adapters/nginx" > "$aurora_source/configure.log" 2>&1 || {
+./configure --with-compat --with-http_stub_status_module --without-http_gzip_module --with-cc-opt="$aurora_cc_flags" --with-ld-opt="$aurora_ld_flags" --add-dynamic-module="$aurora_root/adapters/nginx" > "$aurora_source/configure.log" 2>&1 || {
     tail -60 "$aurora_source/configure.log"
     exit 1
 }

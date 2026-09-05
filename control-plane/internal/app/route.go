@@ -49,7 +49,10 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 
 	// Quản lý Cluster Nodes (danh sách và trạng thái các NGINX data plane nodes)
 	r.GET("/api/v1/nodes", authMidd, m.NodeHandler.List)                   // Danh sách nodes trong cluster
+	r.GET("/api/v1/nodes/rolling-status", authMidd, m.NodeHandler.GetRollingStatus) // Trạng thái tiến trình rolling reload
+	r.POST("/api/v1/nodes/rolling-reload", authMidd, m.NodeHandler.RollingReloadCluster) // Kích hoạt rolling reload toàn cụm
 	r.GET("/api/v1/nodes/:id", authMidd, m.NodeHandler.GetByID)            // Chi tiết 1 node
+	r.POST("/api/v1/nodes/:id/reload", authMidd, m.NodeHandler.ReloadNode) // Đặt lệnh reload cho 1 node
 	r.POST("/api/v1/nodes/:id/heartbeat", authMidd, m.NodeHandler.Heartbeat) // Heartbeat telemetry đẩy từ Node (Protobuf binary)
 	r.GET("/api/v1/nodes/:id/metrics", authMidd, m.MetricsHandler.GetNodeMetrics) // Timeline metrics của node
 
