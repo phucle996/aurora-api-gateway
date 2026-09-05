@@ -14,50 +14,42 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// AuthHandler là người gác cổng (Quầy tiếp nhận và kiểm soát định danh) của toàn bộ hệ thống WAF.
-//
-// [Góc nhìn kinh tế / quản trị]:
-// Tương đương quầy kiểm soát hộ chiếu và phát thẻ căn cước tại sân bay hoặc tòa nhà ngân hàng:
-// - Tiếp nhận thông tin đăng nhập của nhân viên/quản trị viên.
-// - Kiểm tra tính hợp lệ của giấy tờ (username/mật khẩu).
-// - Cấp phát "thẻ căn cước điện tử" (JWT token) kèm hạn sử dụng để người dùng ra vào hệ thống.
+// AuthHandler xử lý các yêu cầu HTTP liên quan đến xác thực người dùng (đăng nhập, lấy thông tin phiên làm việc, đăng xuất).
+// Handler tiếp nhận HTTP Request, kiểm tra tính hợp lệ của dữ liệu đầu vào (Validation),
+// gọi tầng Service để thực thi nghiệp vụ và trả về kết quả qua HTTP response kèm Cookie bảo mật.
 type AuthHandler struct {
-	service port.AuthService // Cầu nối sang tầng xử lý nghiệp vụ xác thực (kiểm tra mật khẩu băm, ký số thẻ)
+	service port.AuthService // Cầu nối sang tầng Service để xử lý logic xác thực và quản lý token JWT
 }
 
-// NewAuthHandler khởi tạo bộ điều phối xác thực.
+// NewAuthHandler là hàm khởi tạo AuthHandler nhận vào đối tượng AuthService.
 func NewAuthHandler(service port.AuthService) *AuthHandler {
 	return &AuthHandler{service: service}
 }
 
-// ─── 1. Login (Xác thực thông tin & Cấp thẻ phiên làm việc) ───────────────────
+// ─── 1. Login (Xác thực thông tin tài khoản & Thiết lập phiên làm việc) ────────
 
-// Login tiếp nhận yêu cầu đăng nhập, đối soát mật khẩu và cấp phát thẻ phiên làm việc.
-//
-// [Góc nhìn kinh tế / an toàn thông tin]:
-// Giống như việc mở tài khoản giao dịch tại quầy:
-// - Không lưu bộ nhớ đệm (No-Store): Ngăn trình duyệt lưu trộm thông tin tài chính/mật khẩu trên máy tính dùng chung.
-// - Kiểm tra mẫu đơn (JSON only, tối đa 64KB): Tránh các hồ sơ rác làm nghẽn quầy phục vụ (chống tấn công DoS).
-// - Cấp thẻ căn cước kép: Vừa trả về mã token trong thân phản hồi, vừa cấp thẻ niêm phong (HttpOnly Cookie)
-//   vào két an toàn của trình duyệt để các đoạn mã độc không thể đánh cắp (chống tấn công đánh cắp phiên XSS/CSRF).
+// Login tiếp nhận thông tin tài khoản (username/password), xác thực qua tầng Service
+// và cấp phát token JWT cùng Cookie HttpOnly để duy trì phiên đăng nhập của người dùng.
 func (h *AuthHandler) Login(c *gin.Context) {
-	// Bước 1: Yêu cầu trình duyệt không lưu bộ đệm nhằm bảo mật thông tin nhạy cảm
+	// Bước 1: Thiết lập tiêu đề Cache-Control là 'no-store'
+	// Yêu cầu trình duyệt và các proxy trung gian tuyệt đối không lưu lại dữ liệu nhạy cảm này vào bộ nhớ đệm
 	c.Header("Cache-Control", "no-store")
 
-	// Bước 2: Kiểm tra định dạng dữ liệu gửi lên — bắt buộc phải là đơn chuẩn JSON
+	// Bước 2: Kiểm tra tiêu đề Content-Type — bắt buộc phải là application/json
 	contentType := c.GetHeader("Content-Type")
 	if strings.Split(contentType, ";")[0] != "application/json" {
 		c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "application/json required"})
 		return
 	}
 
-	// Bước 3: Giới hạn kích thước gói dữ liệu tối đa 64KB để phòng tránh tấn công làm nghẽn bộ nhớ
+	// Bước 3: Giới hạn kích thước tối đa của request body là 64KB (65536 bytes)
+	// Ngăn chặn các yêu cầu có dung lượng quá lớn làm cạn kiệt bộ nhớ máy chủ (tấn công DoS)
 	reader := http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
 	var req dto.LoginRequest
 	decoder := json.NewDecoder(reader)
-	decoder.DisallowUnknownFields() // Nghiêm cấm gửi thừa trường thông tin không rõ nguồn gốc
+	decoder.DisallowUnknownFields() // Nghiêm cấm các trường dữ liệu lạ ngoài cấu trúc LoginRequest
 
-	// Bước 4: Giải mã nội dung đơn đăng nhập từ JSON vào struct DTO
+	// Bước 4: Giải mã dữ liệu JSON vào struct req
 	if err := decoder.Decode(&req); err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
@@ -68,51 +60,52 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Đảm bảo không có dữ liệu rác đính kèm phía sau JSON chính
+	// Đảm bảo không có dữ liệu lạ bám theo sau đối tượng JSON chính
 	if err := decoder.Decode(new(any)); err != io.EOF {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "trailing JSON in request body"})
 		return
 	}
 
-	// Bước 5: Kiểm tra tính đầy đủ của thông tin cơ bản: không được để trống tài khoản hoặc mật khẩu
+	// Bước 5: Kiểm tra tính hợp lệ cơ bản của dữ liệu — không được để trống username hoặc password
 	if strings.TrimSpace(req.Username) == "" || req.Password == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "username and password are required"})
 		return
 	}
 
-	// Bước 6: Chuyển dữ liệu sang tầng nghiệp vụ để đối soát mật khẩu với cơ sở dữ liệu
+	// Bước 6: Gọi tầng Service để xác thực tài khoản và mật khẩu
+	// Service sẽ tìm người dùng trong CSDL và kiểm tra mật khẩu qua thuật toán băm Argon2id
 	result, err := h.service.Login(c.Request.Context(), entity.LoginInput{
 		Username: req.Username,
 		Password: req.Password,
 	})
 	if err != nil {
-		// Nếu thông tin sai lệch: Trả về lỗi 401 Unauthorized (Không được phép truy cập)
+		// Nếu tên đăng nhập không tồn tại hoặc sai mật khẩu, trả về HTTP 401 Unauthorized
 		if errors.Is(err, taxonomy.ErrInvalidCredentials) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
 			return
 		}
-		// Sự cố máy chủ nội bộ
+		// Các lỗi hệ thống khác trả về HTTP 500 Internal Server Error
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Authentication failed"})
 		return
 	}
 
-	// Bước 7: Cài đặt thẻ phiên (Cookie) vào trình duyệt của người dùng:
-	// - HttpOnly = true: Tuyệt đối cấm JavaScript đọc trộm, phòng chống mã độc đánh cắp tài khoản (XSS).
-	// - SameSite = Lax: Ngăn chặn các trang web lừa đảo lợi dụng phiên đăng nhập (CSRF).
-	// - Secure: Tự động kích hoạt khi kết nối qua giao thức mã hóa HTTPS.
+	// Bước 7: Cài đặt Cookie phiên đăng nhập (aurora_token) vào trình duyệt của người dùng:
+	// - HttpOnly = true: Ngăn không cho mã JavaScript trên trang đọc Cookie này (chống đánh cắp token qua XSS).
+	// - SameSite = Lax: Trình duyệt không gửi kèm Cookie khi người dùng bị chuyển hướng từ trang thứ ba (chống tấn công CSRF).
+	// - Secure: Tự động bật cờ Secure nếu kết nối hiện tại sử dụng HTTPS.
 	secure := c.Request.TLS != nil
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie(
 		"aurora_token",
 		result.Token,
-		int(result.ExpiresIn), // Thời hạn hiệu lực của thẻ (mặc định 24 giờ = 86400 giây)
+		int(result.ExpiresIn), // Thời gian hiệu lực của Cookie tính bằng giây (mặc định 24 giờ = 86400 giây)
 		"/",
 		"",
 		secure,
-		true, // HttpOnly
+		true, // Cờ HttpOnly bảo vệ Cookie
 	)
 
-	// Bước 8: Trả về phản hồi thành công inline bằng gin.H chứa token và thông tin nhận diện người dùng
+	// Bước 8: Trả về kết quả HTTP 200 OK chứa token JWT và thông tin tài khoản người dùng
 	c.JSON(http.StatusOK, gin.H{
 		"token":      result.Token,
 		"token_type": result.TokenType,
@@ -125,19 +118,14 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	})
 }
 
-// ─── 2. Me (Tra cứu thẻ căn cước & Phiên làm việc hiện tại) ───────────────────
+// ─── 2. Me (Tra cứu thông tin phiên làm việc hiện tại) ─────────────────────────
 
-// Me xác minh danh tính người gửi yêu cầu và trả về thông tin hồ sơ tài khoản hiện tại.
-//
-// [Góc nhìn kinh tế / quản trị]:
-// Giống như kiểm tra thẻ nhân viên khi đi qua cổng an ninh:
-// - Kiểm tra xem người này có xuất trình thẻ phiên (qua Header Bearer hoặc Cookie trình duyệt) hay không.
-// - Thẩm định chữ ký số xem thẻ có bị làm giả hoặc đã hết hạn (quá 24h) hay chưa.
-// - Đọc ra quyền hạn (Role: Quản trị viên hay Kỹ thuật viên) để cấp phép sử dụng tài nguyên.
+// Me xác định danh tính của người dùng đang gửi yêu cầu và trả về thông tin tài khoản tương ứng.
 func (h *AuthHandler) Me(c *gin.Context) {
+	// Không lưu bộ đệm để tránh rò rỉ dữ liệu cá nhân
 	c.Header("Cache-Control", "no-store")
 
-	// Ưu tiên 1: Đọc thông tin đã được cổng gác an ninh (Middleware) thẩm định và lưu sẵn vào Context
+	// Trường hợp 1: Nếu yêu cầu đã đi qua AuthMiddleware, thông tin người dùng đã được giải mã và lưu sẵn trong Context
 	if userID, exists := c.Get("user_id"); exists {
 		username, _ := c.Get("username")
 		role, _ := c.Get("role")
@@ -151,8 +139,9 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		return
 	}
 
-	// Ưu tiên 2: Tự động trích xuất chuỗi thẻ căn cước (Token):
-	// Tìm ở tiêu đề HTTP "Authorization: Bearer <token>" hoặc trong Cookie "aurora_token"
+	// Trường hợp 2: Trích xuất token trực tiếp từ tiêu đề HTTP hoặc từ Cookie
+	// - Ưu tiên đọc từ tiêu đề "Authorization: Bearer <token>"
+	// - Nếu không có, đọc từ Cookie mang tên "aurora_token"
 	token := ""
 	if authHeader := c.GetHeader("Authorization"); strings.HasPrefix(authHeader, "Bearer ") {
 		token = strings.TrimPrefix(authHeader, "Bearer ")
@@ -160,20 +149,20 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		token = cookie
 	}
 
-	// Nếu không tìm thấy thẻ ở bất kỳ đâu -> Từ chối yêu cầu (401 Unauthorized)
+	// Nếu không tìm thấy token ở cả hai vị trí, từ chối yêu cầu với HTTP 401 Unauthorized
 	if token == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing or invalid authorization"})
 		return
 	}
 
-	// Bước 3: Thẩm định chữ ký số và hạn dùng của token tại tầng dịch vụ nghiệp vụ
+	// Bước 3: Xác thực chữ ký số và hạn sử dụng của token thông qua tầng Service
 	claims, err := h.service.ValidateToken(token)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
 
-	// Bước 4: Trả về thông tin hồ sơ người dùng hợp lệ
+	// Bước 4: Token hợp lệ, trả về thông tin định danh của người dùng từ Claims
 	c.JSON(http.StatusOK, gin.H{
 		"user": gin.H{
 			"id":       claims.Subject,
@@ -183,28 +172,25 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	})
 }
 
-// ─── 3. Logout (Hủy phiên làm việc & Thu hồi thẻ căn cước) ───────────────────
+// ─── 3. Logout (Đăng xuất & Hủy phiên làm việc) ────────────────────────────────
 
-// Logout hủy phiên làm việc hiện tại của người dùng.
-//
-// [Góc nhìn kinh tế / quản trị]:
-// Giống như thủ tục trả thẻ ra vào và đóng sổ phiên giao dịch:
-// - Đặt thời gian sống của Cookie thành giá trị âm (-1), ra lệnh cho trình duyệt lập tức xóa thẻ khỏi bộ nhớ.
-// - Ngăn chặn người khác sử dụng lại máy tính này để truy cập trái phép vào tài nguyên an ninh WAF.
+// Logout xử lý hủy phiên đăng nhập hiện tại bằng cách xóa Cookie xác thực trên trình duyệt.
 func (h *AuthHandler) Logout(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 
-	// Thu hồi thẻ bằng cách ghi đè Cookie với hạn dùng -1 (Trình duyệt sẽ lập tức xóa bỏ)
+	// Xóa Cookie bằng cách gửi lại Cookie cùng tên với giá trị rỗng và thời gian sống là -1 (Max-Age < 0)
+	// Khi nhận được giá trị này, trình duyệt sẽ lập tức xóa bỏ Cookie khỏi bộ nhớ lưu trữ
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie(
 		"aurora_token",
 		"",
-		-1, // Hạn dùng âm -> Xóa Cookie ngay lập tức
+		-1, // Hạn dùng âm ra lệnh cho trình duyệt xóa Cookie ngay lập tức
 		"/",
 		"",
 		false,
 		true, // HttpOnly
 	)
 
+	// Phản hồi thông báo đăng xuất thành công
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
 }
