@@ -1,0 +1,131 @@
+import React from 'react';
+import { Link } from 'react-router-dom';
+
+export function DashboardNodesSummary() {
+  const nodes = [
+    {
+      name: 'edge-01',
+      ip: '203.0.113.10',
+      flag: '🇸🇬',
+      region: 'SG',
+      status: 'Online',
+      rps: '3.2K',
+      cpu: '28%',
+      memory: '42%',
+    },
+    {
+      name: 'edge-02',
+      ip: '198.51.100.25',
+      flag: '🇯🇵',
+      region: 'JP',
+      status: 'Online',
+      rps: '2.1K',
+      cpu: '16%',
+      memory: '37%',
+    },
+    {
+      name: 'edge-03',
+      ip: '192.0.2.15',
+      flag: '🇩🇪',
+      region: 'DE',
+      status: 'Online',
+      rps: '1.8K',
+      cpu: '24%',
+      memory: '41%',
+    },
+    {
+      name: 'edge-04',
+      ip: '203.0.113.77',
+      flag: '🇺🇸',
+      region: 'US',
+      status: 'Not Ready',
+      rps: '0',
+      cpu: '5%',
+      memory: '12%',
+    },
+    {
+      name: 'edge-05',
+      ip: '10.0.1.21',
+      flag: '🇻🇳',
+      region: 'VN',
+      status: 'Online',
+      rps: '2.7K',
+      cpu: '31%',
+      memory: '48%',
+    },
+  ];
+
+  return (
+    <div className="bg-[#0B1320] border border-[#152030] p-4 flex flex-col justify-between">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[#152030]">
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-semibold text-white font-mono">
+            NGINX Nodes
+          </span>
+          <div className="flex items-center gap-2 text-[11px] font-mono">
+            <span className="text-emerald-400 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 bg-emerald-400 inline-block" /> 10 Online
+            </span>
+            <span className="text-amber-400 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 bg-amber-400 inline-block" /> 1 Not Ready
+            </span>
+            <span className="text-rose-400 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 bg-rose-400 inline-block" /> 1 Offline
+            </span>
+          </div>
+        </div>
+
+        <Link
+          to="/nodes"
+          className="text-xs font-mono text-cyan-400 hover:text-cyan-300 transition-colors"
+        >
+          View All
+        </Link>
+      </div>
+
+      {/* Mini Table */}
+      <div className="py-2 overflow-x-auto">
+        <table className="w-full text-left border-collapse text-xs font-mono">
+          <thead>
+            <tr className="text-slate-500 border-b border-[#152030]">
+              <th className="py-1.5 font-normal">Name</th>
+              <th className="py-1.5 font-normal">IP Address</th>
+              <th className="py-1.5 font-normal">Region</th>
+              <th className="py-1.5 font-normal">Status</th>
+              <th className="py-1.5 font-normal">RPS</th>
+              <th className="py-1.5 font-normal">CPU</th>
+              <th className="py-1.5 font-normal">Memory</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#152030]/50">
+            {nodes.map((node) => (
+              <tr key={node.name} className="hover:bg-[#0E1726]/50">
+                <td className="py-2 text-white font-medium">{node.name}</td>
+                <td className="py-2 text-slate-300">{node.ip}</td>
+                <td className="py-2 text-slate-300">
+                  <span className="mr-1">{node.flag}</span>
+                  <span>{node.region}</span>
+                </td>
+                <td className="py-2">
+                  {node.status === 'Online' ? (
+                    <span className="text-emerald-400 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 bg-emerald-400 inline-block" /> Online
+                    </span>
+                  ) : (
+                    <span className="text-amber-400 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 bg-amber-400 inline-block" /> Not Ready
+                    </span>
+                  )}
+                </td>
+                <td className="py-2 text-slate-200">{node.rps}</td>
+                <td className="py-2 text-slate-300">{node.cpu}</td>
+                <td className="py-2 text-slate-300">{node.memory}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

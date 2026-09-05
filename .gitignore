@@ -1,0 +1,15 @@
+/target/
+/build/
+**/node_modules/
+**/dist/
+.env
+.env.*
+!.env.example
+*.log
+*.so
+*.a
+/control-plane/data/
+*.db
+*.db-wal
+*.db-shm
+/control-plane/internal/console/dist/

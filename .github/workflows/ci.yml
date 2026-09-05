@@ -1,0 +1,36 @@
+name: foundation
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: control-plane/go.mod
+          cache-dependency-path: control-plane/go.sum
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Rust toolchain
+        run: rustup show active-toolchain
+      - name: npm toolchain
+        working-directory: ui
+        run: npm install --global "$(node -p 'require("./package.json").packageManager')"
+      - run: make ui-install
+      - run: make check
+      - name: NGINX module build dependencies
+        run: sudo apt-get update && sudo apt-get install --yes libpcre2-dev
+      - run: make module
+      - name: Build matching NGINX test host
+        run: make -C build/nginx-source/nginx-1.30.4 -j2
+      - name: Module lifecycle integration
+        run: NGINX="$PWD/build/nginx-source/nginx-1.30.4/objs/nginx" node scripts/test-nginx-module.mjs
+      - name: Rules publication and activation under traffic
+        run: make rules-test NGINX="$PWD/build/nginx-source/nginx-1.30.4/objs/nginx"

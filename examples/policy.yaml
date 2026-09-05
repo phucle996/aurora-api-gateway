@@ -1,0 +1,20 @@
+# Design example only: not executable by the current scaffold.
+schema_version: 1
+id: example-web
+mode: detection_only
+limits:
+  body_bytes: 1048576
+  rule_count: 1000
+block_threshold: 10
+rules:
+  - id: DEMO-SQLI-1001
+    enabled: true
+    targets: [query]
+    transforms: [url_decode_once, lowercase_ascii]
+    operator:
+      regex: 'union\s+select'
+    action: score
+    score: 10
+    severity: high
+    tags: [sqli, demonstration]
+
