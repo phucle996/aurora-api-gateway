@@ -16,11 +16,13 @@ import RateLimitsPage from './pages/rate-limits/page';
 import NodesPage from './pages/nodes/page';
 import SettingsPage from './pages/settings/page';
 import ConsoleLayout from './layouts/ConsoleLayout';
+import { ThemeProvider } from './components/theme-provider';
 import './style.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter>
+    <ThemeProvider defaultTheme="dark" storageKey="aurora_theme">
+      <BrowserRouter>
       <Routes>
         {/* Unauthenticated / Standalone Pages */}
         <Route path="/login" element={<LoginPage />} />
@@ -70,6 +72,7 @@ createRoot(document.getElementById('root')!).render(
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>
+    </ThemeProvider>
   </StrictMode>
 );
 

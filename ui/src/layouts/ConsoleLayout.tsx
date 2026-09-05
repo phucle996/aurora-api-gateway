@@ -40,7 +40,7 @@ export function ConsoleLayout() {
   }
 
   return (
-    <div className="flex h-screen bg-[#070B12] text-slate-200 overflow-hidden font-sans select-none">
+    <div className="flex h-screen bg-slate-100 dark:bg-[#070B12] text-slate-900 dark:text-slate-200 overflow-hidden font-sans select-none">
       {/* Sidebar Navigation */}
       <ConsoleSidebar />
 
