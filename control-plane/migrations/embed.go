@@ -21,3 +21,8 @@ var Triggers string
 //
 //go:embed 0004_seeds.sql
 var Seeds string
+
+// Domains establishes domains table and initial seed data.
+//
+//go:embed 0005_domains.sql
+var Domains string

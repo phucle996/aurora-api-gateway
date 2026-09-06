@@ -4,3 +4,4 @@ export * from './nodes';
 export * from './integrations';
 export * from './ip-access';
 export * from './rate-limits';
+export * from './domains';

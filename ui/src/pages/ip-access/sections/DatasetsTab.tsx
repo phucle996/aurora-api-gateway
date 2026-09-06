@@ -543,7 +543,7 @@ export function DatasetsTab({
               className="mt-4 px-3.5 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold rounded-sm transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Import Dataset</span>
+              <span>Add Dataset</span>
             </button>
           )}
         </div>
@@ -577,7 +577,7 @@ export function DatasetsTab({
                         >
                           {doc.name}
                         </h3>
-                        <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                        <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-primary/10 text-primary border border-primary/20">
                           v{item.version}
                         </span>
                       </div>
@@ -586,7 +586,7 @@ export function DatasetsTab({
                       </p>
                       <div className="flex items-center gap-2 pt-0.5">
                         {hasCountry && hasAsn ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-secondary/15 text-secondary border border-secondary/30">
                             <Globe className="w-3 h-3" />
                             <span>GeoIP + ASN</span>
                           </span>
@@ -778,7 +778,7 @@ export function DatasetsTab({
                           <h3 className="text-sm font-bold text-foreground">
                             {doc.name}
                           </h3>
-                          <span className="px-2 py-0.5 text-[10px] font-mono rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                          <span className="px-2 py-0.5 text-[10px] font-mono rounded bg-primary/10 text-primary border border-primary/20">
                             v{viewAllItem.version}
                           </span>
                         </div>

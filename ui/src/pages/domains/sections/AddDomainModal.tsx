@@ -43,7 +43,7 @@ export function AddDomainModal({ isOpen, onClose, onAdd }: AddDomainModalProps) 
       status,
       tlsType,
       upstream: upstream.trim(),
-      tags: tags.length > 0 ? tags : ['api'],
+      tags,
       description: description.trim(),
       hstsEnabled: true,
       minTlsVersion: 'TLSv1.3',
@@ -69,7 +69,7 @@ export function AddDomainModal({ isOpen, onClose, onAdd }: AddDomainModalProps) 
         {/* Header */}
         <div className="px-6 py-4 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400">
+            <div className="p-1.5 rounded-lg bg-primary/10 border border-primary/20 text-primary">
               <Globe className="w-5 h-5" />
             </div>
             <div>
@@ -207,7 +207,7 @@ export function AddDomainModal({ isOpen, onClose, onAdd }: AddDomainModalProps) 
             </button>
             <button
               type="submit"
-              className="px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-xs transition-colors cursor-pointer"
+              className="px-4 py-2 rounded-md bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-xs transition-colors cursor-pointer"
             >
               Create Domain
             </button>

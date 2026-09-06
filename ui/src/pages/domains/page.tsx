@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Plus,
-  Upload,
   RefreshCw,
   Search,
   ChevronDown,
@@ -9,7 +9,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 import type { DomainItem, DomainStatus, TlsType } from './types';
-import { INITIAL_DOMAINS } from './mockData';
+import { domainsApi } from '../../lib/api';
 import { DomainsStats } from './sections/DomainsStats';
 import { DomainsTable } from './sections/DomainsTable';
 import { DomainDrawer } from './sections/DomainDrawer';
@@ -19,6 +19,7 @@ import { DeleteDomainDialog } from './sections/DeleteDomainDialog';
 import { ImportDomainsModal } from './sections/ImportDomainsModal';
 
 export default function DomainsPage() {
+  const navigate = useNavigate();
   const [domains, setDomains] = useState<DomainItem[]>(() => {
     try {
       const saved = localStorage.getItem('aurora_waf_domains');
@@ -26,13 +27,11 @@ export default function DomainsPage() {
     } catch {
       // ignore
     }
-    return INITIAL_DOMAINS;
+    return [];
   });
 
-  // Selected domain for side drawer (default to api.example.com to match mockup)
-  const [selectedDomainId, setSelectedDomainId] = useState<string | null>(
-    () => INITIAL_DOMAINS[0]?.id || null
-  );
+  // Selected domain for side drawer
+  const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
 
   // Search and filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -49,6 +48,28 @@ export default function DomainsPage() {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [editingDomain, setEditingDomain] = useState<DomainItem | null>(null);
   const [deletingDomain, setDeletingDomain] = useState<DomainItem | null>(null);
+
+  // Fetch from backend API
+  const loadDomainsFromApi = useCallback(async () => {
+    try {
+      const res = await domainsApi.list({ limit: 100 });
+      if (res && res.items) {
+        setDomains(res.items.map((item: any) => ({
+          ...item,
+          id: String(item.id),
+          tags: item.tags || [],
+          nodeBindings: item.nodeBindings || [],
+          recentActivities: item.recentActivities || [],
+        })));
+      }
+    } catch (err) {
+      console.warn('Backend /api/v1/domains failed to fetch:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadDomainsFromApi();
+  }, [loadDomainsFromApi]);
 
   // Persist helper
   const saveDomains = (updated: DomainItem[]) => {
@@ -230,18 +251,8 @@ export default function DomainsPage() {
         <div className="flex items-center gap-2.5">
           <button
             type="button"
-            onClick={() => setIsImportOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-card hover:bg-muted text-foreground text-xs font-medium transition-all duration-150 cursor-pointer shadow-xs active:scale-95"
-          >
-            <Upload className="w-3.5 h-3.5 text-muted-foreground" />
-            <span>Import</span>
-            <ChevronDown className="w-3 h-3 text-muted-foreground ml-0.5" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsAddOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition-all duration-150 cursor-pointer shadow-sm active:scale-95"
+            onClick={() => navigate('/domains/create')}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium transition-all duration-150 cursor-pointer shadow-sm active:scale-95"
           >
             <Plus className="w-4 h-4" />
             <span>Add Domain</span>

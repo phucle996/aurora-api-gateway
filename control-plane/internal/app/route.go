@@ -52,6 +52,9 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	// Route protected — phải vượt qua authMidd
 	r.GET("/api/v1/auth/me", authMidd, m.AuthHandler.Me) // Thông tin user hiện tại
 
+	// Quản lý Domain API
+	r.GET("/api/v1/domains", authMidd, m.DomainHandler.List) // Danh sách domain (filter, phân trang, stats)
+
 	// Quản lý Rule API v2 (schema mới, hỗ trợ điều kiện phức tạp)
 	r.POST("/api/v2/rules", authMidd, m.RuleHandler.CreateDefinition)
 	r.PUT("/api/v2/rules/:id", authMidd, m.RuleHandler.UpdateDefinition)

@@ -95,7 +95,7 @@ export function DomainDrawer({
             onClick={() => setActiveTab(tab)}
             className={`flex-1 py-2.5 text-center transition-colors duration-150 cursor-pointer ${
               activeTab === tab
-                ? 'text-blue-600 dark:text-blue-400 font-semibold'
+                ? 'text-primary font-semibold'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
@@ -105,7 +105,7 @@ export function DomainDrawer({
 
         {/* Sliding Indicator */}
         <div
-          className="absolute bottom-0 h-[2px] w-[23%] bg-blue-600 dark:bg-blue-400 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
+          className="absolute bottom-0 h-[2px] w-[23%] bg-primary transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
           style={{
             left: `${tabs.indexOf(activeTab) * 25 + 1}%`,
           }}
@@ -239,7 +239,7 @@ export function DomainDrawer({
                   onClick={() => onEdit(domain)}
                   className="flex items-center justify-center gap-2 py-2 px-3 border border-border rounded-lg bg-card hover:bg-muted text-foreground transition-all duration-150 cursor-pointer shadow-2xs hover:shadow-xs active:scale-98"
                 >
-                  <Pencil className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                  <Pencil className="w-3.5 h-3.5 text-primary" />
                   <span className="font-medium text-xs">Edit Domain</span>
                 </button>
 
@@ -281,7 +281,7 @@ export function DomainDrawer({
                 Statistics
               </h3>
               <div className="grid grid-cols-4 gap-2">
-                <div className="bg-card border border-border rounded-lg p-2.5 text-center shadow-2xs hover:border-blue-400/50 transition-colors">
+                <div className="bg-card border border-border rounded-lg p-2.5 text-center shadow-2xs hover:border-primary/50 transition-colors">
                   <div className="text-xl font-bold text-foreground">
                     {domain.rulesCount}
                   </div>
@@ -290,7 +290,7 @@ export function DomainDrawer({
                   </div>
                 </div>
 
-                <div className="bg-card border border-border rounded-lg p-2.5 text-center shadow-2xs hover:border-blue-400/50 transition-colors">
+                <div className="bg-card border border-border rounded-lg p-2.5 text-center shadow-2xs hover:border-primary/50 transition-colors">
                   <div className="text-xl font-bold text-foreground">
                     {domain.policiesCount}
                   </div>
@@ -299,7 +299,7 @@ export function DomainDrawer({
                   </div>
                 </div>
 
-                <div className="bg-card border border-border rounded-lg p-2.5 text-center shadow-2xs hover:border-blue-400/50 transition-colors">
+                <div className="bg-card border border-border rounded-lg p-2.5 text-center shadow-2xs hover:border-primary/50 transition-colors">
                   <div className="text-xl font-bold text-foreground">
                     {domain.ipRulesCount}
                   </div>
@@ -308,7 +308,7 @@ export function DomainDrawer({
                   </div>
                 </div>
 
-                <div className="bg-card border border-border rounded-lg p-2.5 text-center shadow-2xs hover:border-blue-400/50 transition-colors">
+                <div className="bg-card border border-border rounded-lg p-2.5 text-center shadow-2xs hover:border-primary/50 transition-colors">
                   <div className="text-xl font-bold text-foreground">
                     {domain.rateLimitsCount}
                   </div>
@@ -328,7 +328,7 @@ export function DomainDrawer({
                 <button
                   type="button"
                   onClick={() => alert(`Showing all audit log history for ${domain.domain}`)}
-                  className="text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 transition-colors cursor-pointer"
+                  className="text-xs font-medium text-primary hover:text-primary/80 transition-colors cursor-pointer"
                 >
                   View All
                 </button>
@@ -339,9 +339,9 @@ export function DomainDrawer({
                   domain.recentActivities.map((act) => {
                     const dotColor =
                       act.color === 'emerald'
-                        ? 'bg-emerald-500'
+                        ? 'bg-primary'
                         : act.color === 'blue'
-                        ? 'bg-blue-500'
+                        ? 'bg-secondary'
                         : act.color === 'purple'
                         ? 'bg-purple-500'
                         : 'bg-slate-400';
@@ -563,45 +563,32 @@ export function DomainDrawer({
               </div>
 
               <div className="space-y-2.5">
-                {(
-                  domain.nodeBindings || [
-                    {
-                      nodeId: 'node-sg-01',
-                      nodeName: 'SG Edge Controller 01',
-                      ip: '10.0.1.1',
-                      ports: [80, 443],
-                      status: 'Synced',
-                      lastSynced: '2025-08-26 10:14',
-                    },
-                    {
-                      nodeId: 'node-sg-02',
-                      nodeName: 'SG Edge Controller 02',
-                      ip: '10.0.1.2',
-                      ports: [80, 443],
-                      status: 'Synced',
-                      lastSynced: '2025-08-26 10:14',
-                    },
-                  ]
-                ).map((b) => (
-                  <div
-                    key={b.nodeId}
-                    className="p-2.5 rounded bg-muted/30 border border-border/70 flex items-center justify-between"
-                  >
-                    <div>
-                      <div className="font-semibold text-foreground text-xs flex items-center gap-1.5">
-                        <Server className="w-3.5 h-3.5 text-blue-500" />
-                        {b.nodeName}
+                {domain.nodeBindings && domain.nodeBindings.length > 0 ? (
+                  domain.nodeBindings.map((b) => (
+                    <div
+                      key={b.nodeId}
+                      className="p-2.5 rounded bg-muted/30 border border-border/70 flex items-center justify-between"
+                    >
+                      <div>
+                        <div className="font-semibold text-foreground text-xs flex items-center gap-1.5">
+                          <Server className="w-3.5 h-3.5 text-primary" />
+                          {b.nodeName}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                          {b.ip} • Ports: {b.ports.join(', ')}
+                        </div>
                       </div>
-                      <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
-                        {b.ip} • Ports: {b.ports.join(', ')}
-                      </div>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40">
+                        <CheckCircle2 className="w-3 h-3" />
+                        {b.status}
+                      </span>
                     </div>
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40">
-                      <CheckCircle2 className="w-3 h-3" />
-                      {b.status}
-                    </span>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="text-xs text-muted-foreground py-3 text-center">
+                    No edge nodes bound to this domain yet.
+                  </p>
+                )}
               </div>
             </div>
           </div>

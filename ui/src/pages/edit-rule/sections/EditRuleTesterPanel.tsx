@@ -171,7 +171,7 @@ export function EditRuleTesterPanel({ conditions, ruleId, logicMode = 'ALL' }: E
               type="button"
               disabled={isTesting}
               onClick={handleSend}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-70 text-white font-semibold transition-colors cursor-pointer shadow-xs"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-70 text-primary-foreground font-semibold transition-colors cursor-pointer shadow-xs"
             >
               {isTesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
               <span>{isTesting ? 'Testing...' : 'Send'}</span>

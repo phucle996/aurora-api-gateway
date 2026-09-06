@@ -564,7 +564,7 @@ export default function DatasetEntriesPage() {
               <h2 className="text-base font-bold text-foreground">
                 {doc.name}
               </h2>
-              <span className="px-2 py-0.5 rounded text-xs font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20">
+              <span className="px-2 py-0.5 rounded text-xs font-mono bg-primary/10 text-primary border border-primary/20">
                 v{item.version}
               </span>
             </div>
@@ -589,15 +589,15 @@ export default function DatasetEntriesPage() {
             <div className="text-[11px] text-muted-foreground">Type</div>
             <div className="mt-0.5">
               {hasCountry && hasAsn ? (
-                <span className="inline-block px-2.5 py-0.5 rounded text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                <span className="inline-block px-2.5 py-0.5 rounded text-xs font-medium bg-secondary/15 text-secondary border border-secondary/30">
                   GeoIP + ASN
                 </span>
               ) : hasCountry ? (
-                <span className="inline-block px-2.5 py-0.5 rounded text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span className="inline-block px-2.5 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary border border-primary/20">
                   GeoIP
                 </span>
               ) : (
-                <span className="inline-block px-2.5 py-0.5 rounded text-xs font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                <span className="inline-block px-2.5 py-0.5 rounded text-xs font-medium bg-muted text-foreground border border-border">
                   ASN
                 </span>
               )}
@@ -791,15 +791,15 @@ export default function DatasetEntriesPage() {
                       </td>
                       <td className="py-2.5 px-4 text-center whitespace-nowrap">
                         {net.country && net.asn ? (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-secondary/15 text-secondary border border-secondary/30">
                             GeoIP + ASN
                           </span>
                         ) : net.country ? (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary border border-primary/20">
                             GeoIP Only
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground border border-border">
                             ASN List
                           </span>
                         )}
@@ -913,7 +913,7 @@ export default function DatasetEntriesPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
         {/* About Dataset Entries */}
         <div className="flex items-start gap-3 bg-card border border-border p-4 rounded-lg shadow-xs">
-          <div className="w-8 h-8 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
+          <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shrink-0 mt-0.5">
             <Info className="w-4 h-4" />
           </div>
           <div>

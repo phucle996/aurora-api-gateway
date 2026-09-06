@@ -23,9 +23,9 @@ export function DomainsStats({
       id: 'total',
       label: 'Total Domains',
       value: total,
-      icon: <Globe className="w-5 h-5 text-blue-600 dark:text-blue-400" />,
-      iconBg: 'bg-blue-50 dark:bg-blue-950/50 border border-blue-100 dark:border-blue-900/40',
-      activeRing: 'ring-2 ring-blue-500/40',
+      icon: <Globe className="w-5 h-5 text-primary" />,
+      iconBg: 'bg-primary/10 border border-primary/20',
+      activeRing: 'ring-2 ring-primary/40',
       filterKey: null,
     },
     {

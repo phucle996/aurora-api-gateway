@@ -36,27 +36,27 @@ export function getTagStyle(tag: string): string {
     case 'internal':
       return 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800/40';
     case 'public':
-      return 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800/40';
+      return 'bg-secondary/15 text-secondary border-secondary/30';
     case 'staging':
       return 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-800/40';
     case 'auth':
       return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40';
     case 'secure':
-      return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/40';
+      return 'bg-primary/15 text-primary border-primary/30';
     case 'static':
       return 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800/40';
     case 'cdn':
       return 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800/40';
     case 'blog':
-      return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/40';
+      return 'bg-primary/15 text-primary border-primary/30';
     case 'dev':
-      return 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800/40';
+      return 'bg-secondary/15 text-secondary border-secondary/30';
     case 'b2b':
       return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40';
     case 'partner':
-      return 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800/40';
+      return 'bg-primary/15 text-primary border-primary/30';
     case 'shop':
-      return 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800/40';
+      return 'bg-secondary/15 text-secondary border-secondary/30';
     case 'ecommerce':
       return 'bg-pink-50 text-pink-700 border-pink-200 dark:bg-pink-950/40 dark:text-pink-300 dark:border-pink-800/40';
     default:
@@ -75,8 +75,8 @@ export function renderTlsBadge(tlsType: TlsType) {
       );
     case 'Custom Cert':
       return (
-        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800/50 shadow-xs">
-          <FileKey className="w-3 h-3 text-blue-600 dark:text-blue-400 shrink-0" />
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-secondary/15 text-secondary border border-secondary/30 shadow-xs">
+          <FileKey className="w-3 h-3 text-secondary shrink-0" />
           <span>Custom Cert</span>
         </span>
       );
@@ -177,7 +177,7 @@ export function DomainsTable({
                     onClick={() => onSelectDomain(item)}
                     className={`group cursor-pointer transition-all duration-150 hover:bg-muted/50 ${
                       isSelected
-                        ? 'bg-blue-50/60 dark:bg-blue-950/25 border-l-2 border-l-blue-600'
+                        ? 'bg-primary/10 border-l-2 border-l-primary'
                         : 'border-l-2 border-l-transparent'
                     }`}
                   >
@@ -239,7 +239,7 @@ export function DomainsTable({
 
                     {/* Rules count */}
                     <td className="px-3 py-2.5 text-center">
-                      <span className="inline-flex items-center justify-center min-w-[22px] px-1.5 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
+                      <span className="inline-flex items-center justify-center min-w-[22px] px-1.5 py-0.5 rounded text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
                         {item.rulesCount}
                       </span>
                     </td>
@@ -375,7 +375,7 @@ export function DomainsTable({
               onClick={() => setPage(p)}
               className={`w-7 h-7 rounded text-xs font-medium transition-colors cursor-pointer ${
                 page === p
-                  ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                  ? 'bg-primary text-primary-foreground font-semibold shadow-xs'
                   : 'border border-border hover:bg-muted text-foreground'
               }`}
             >

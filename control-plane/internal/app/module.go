@@ -24,6 +24,7 @@ type Module struct {
 	NodeHandler        *handler.NodeHandler
 	MetricsHandler     *handler.MetricsHandler
 	MetricsService     port.MetricsService
+	DomainHandler      *handler.DomainHandler
 }
 
 // NewModule khởi tạo toàn bộ chuỗi dependency của ứng dụng theo thứ tự:
@@ -55,6 +56,10 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	accessSvc := service.NewAccessService(accessRepo, cfg.CompilerPath)
 	accessHdr := handler.NewAccessHandler(accessSvc)
 
+	domainRepo := repository.NewDomainRepository(writerDB, readerDB)
+	domainSvc := service.NewDomainService(domainRepo)
+	domainHdr := handler.NewDomainHandler(domainSvc)
+
 	nodeRepo := repository.NewNodeRepository(writerDB)
 	settingsRepo := repository.NewSettingsRepository(writerDB)
 	metricsSvc := service.NewMetricsService(settingsRepo, nodeRepo)
@@ -67,11 +72,12 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 		AccessHandler:      accessHdr,
 		PolicyHandler:      policyHdr,
 		HealthcheckHandler: healthcheckHdr,
-		AuthHandler:    authHdr,
-		AuthService:    authSvc,
-		RuleHandler:    ruleHdr,
-		NodeHandler:    nodeHdr,
-		MetricsHandler: metricsHdr,
-		MetricsService: metricsSvc,
+		AuthHandler:        authHdr,
+		AuthService:        authSvc,
+		RuleHandler:        ruleHdr,
+		NodeHandler:        nodeHdr,
+		MetricsHandler:     metricsHdr,
+		MetricsService:     metricsSvc,
+		DomainHandler:      domainHdr,
 	}
 }

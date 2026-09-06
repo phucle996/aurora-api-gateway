@@ -694,10 +694,10 @@ export default function AddDatasetPage() {
                           </td>
                           <td className="px-4 py-2.5">
                             <span className={`text-[10px] font-semibold ${row.detectedType === "CIDR"
-                                ? "text-blue-400"
+                                ? "text-primary"
                                 : row.detectedType === "Integer"
-                                  ? "text-orange-400"
-                                  : "text-emerald-400"
+                                  ? "text-secondary"
+                                  : "text-primary"
                               }`}>
                               {row.detectedType}
                             </span>
@@ -746,7 +746,7 @@ export default function AddDatasetPage() {
                         label: "Enable automatic sync",
                         sub: "Automatically fetch based on the schedule.",
                         icon: RefreshCw,
-                        color: "text-blue-400",
+                        color: "text-primary",
                       },
                       {
                         key: "compileSnapshot" as const,
@@ -813,7 +813,7 @@ export default function AddDatasetPage() {
                     <button
                       onClick={handleCreate}
                       disabled={busy || !form.name.trim()}
-                      className="flex items-center gap-1.5 px-5 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-xs font-bold rounded-sm transition-colors"
+                      className="flex items-center gap-1.5 px-5 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-40 text-primary-foreground text-xs font-bold rounded-sm transition-colors"
                     >
                       {busy ? (
                         <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -943,7 +943,7 @@ export default function AddDatasetPage() {
             <button
               onClick={handleCreate}
               disabled={busy || !form.name.trim()}
-              className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-xs font-bold rounded-sm transition-colors flex items-center justify-center gap-1.5"
+              className="flex-1 py-2 bg-primary hover:bg-primary/90 disabled:opacity-40 text-primary-foreground text-xs font-bold rounded-sm transition-colors flex items-center justify-center gap-1.5"
             >
               {busy ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Database className="w-3.5 h-3.5" />}
               Create Dataset

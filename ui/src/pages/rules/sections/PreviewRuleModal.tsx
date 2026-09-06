@@ -655,7 +655,7 @@ end`;
               onClick={() => setActiveTab('logic')}
               className={`flex items-center gap-1.5 px-3 py-1.5 border-b-2 font-semibold transition-colors cursor-pointer ${
                 activeTab === 'logic'
-                  ? 'border-blue-600 text-blue-600 bg-blue-500/10 dark:border-blue-500 dark:text-blue-400'
+                  ? 'border-primary text-primary bg-primary/10'
                   : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
               }`}
             >
@@ -667,7 +667,7 @@ end`;
               onClick={() => setActiveTab('test')}
               className={`flex items-center gap-1.5 px-3 py-1.5 border-b-2 font-semibold transition-colors cursor-pointer ${
                 activeTab === 'test'
-                  ? 'border-blue-600 text-blue-600 bg-blue-500/10 dark:border-blue-500 dark:text-blue-400'
+                  ? 'border-primary text-primary bg-primary/10'
                   : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
               }`}
             >
@@ -679,7 +679,7 @@ end`;
               onClick={() => setActiveTab('result')}
               className={`flex items-center gap-1.5 px-3 py-1.5 border-b-2 font-semibold transition-colors cursor-pointer ${
                 activeTab === 'result'
-                  ? 'border-blue-600 text-blue-600 bg-blue-500/10 dark:border-blue-500 dark:text-blue-400'
+                  ? 'border-primary text-primary bg-primary/10'
                   : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
               }`}
             >
@@ -691,7 +691,7 @@ end`;
               onClick={() => setActiveTab('config')}
               className={`flex items-center gap-1.5 px-3 py-1.5 border-b-2 font-semibold transition-colors cursor-pointer ${
                 activeTab === 'config'
-                  ? 'border-blue-600 text-blue-600 bg-blue-500/10 dark:border-blue-500 dark:text-blue-400'
+                  ? 'border-primary text-primary bg-primary/10'
                   : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
               }`}
             >
@@ -719,7 +719,7 @@ end`;
                     </span>
                   </h3>
                   <span className="text-[11px] text-muted-foreground font-mono">
-                    Logic: <strong className="text-blue-600 dark:text-blue-400 font-bold">{detail.logic_mode ? detail.logic_mode.toUpperCase() : 'OR'}</strong>
+                    Logic: <strong className="text-primary font-bold">{detail.logic_mode ? detail.logic_mode.toUpperCase() : 'OR'}</strong>
                   </span>
                 </div>
 
@@ -870,7 +870,7 @@ end`;
                   <button
                     type="button"
                     onClick={() => { navigator.clipboard.writeText(`curl -i -X ${testMethod} "${testUrl}"`); }}
-                    className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline cursor-pointer flex items-center gap-1"
+                    className="text-[11px] text-primary hover:underline cursor-pointer flex items-center gap-1"
                   >
                     <Copy className="w-3 h-3" /> Copy command
                   </button>
@@ -897,7 +897,7 @@ end`;
                     <button
                       type="button"
                       onClick={() => setActiveTab('test')}
-                      className="text-xs text-blue-600 dark:text-blue-400 hover:underline cursor-pointer flex items-center gap-1"
+                      className="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1"
                     >
                       <Play className="w-3 h-3" /> Run another test
                     </button>
@@ -1116,7 +1116,7 @@ end`;
                       {testResult.matchedField && (
                         <div className="flex justify-between py-1 border-b border-border/50">
                           <span className="text-muted-foreground">Matched Field:</span>
-                          <span className="text-blue-600 dark:text-blue-400 font-semibold">{testResult.matchedField}</span>
+                          <span className="text-primary font-semibold">{testResult.matchedField}</span>
                         </div>
                       )}
                       {testResult.matchedPattern && (

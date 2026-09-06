@@ -44,6 +44,10 @@ export interface DomainItem {
   upstreamServers?: UpstreamServer[];
   upstreamAlgorithm?: 'round_robin' | 'ip_hash' | 'least_conn';
   healthCheckPath?: string;
+  httpVersion?: 'HTTP/1.1' | 'HTTP/2' | 'HTTP/1.0';
+  enableWebSocket?: boolean;
+  enableSse?: boolean;
+  enableGrpc?: boolean;
   rulesCount: number;
   policiesCount: number;
   ipRulesCount: number;

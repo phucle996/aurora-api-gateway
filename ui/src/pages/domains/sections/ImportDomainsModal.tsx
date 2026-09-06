@@ -48,7 +48,7 @@ export function ImportDomainsModal({
           policiesCount: item.policiesCount || 0,
           ipRulesCount: item.ipRulesCount || 0,
           rateLimitsCount: item.rateLimitsCount || 0,
-          tags: item.tags || ['imported'],
+          tags: item.tags || [],
           createdAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
           updatedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
           createdBy: 'admin',
@@ -74,7 +74,7 @@ export function ImportDomainsModal({
           policiesCount: 0,
           ipRulesCount: 0,
           rateLimitsCount: 0,
-          tags: ['imported'],
+          tags: [],
           createdAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
           updatedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
           createdBy: 'admin',
@@ -97,7 +97,7 @@ export function ImportDomainsModal({
       >
         <div className="px-6 py-4 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400">
+            <div className="p-1.5 rounded-lg bg-primary/10 border border-primary/20 text-primary">
               <Upload className="w-5 h-5" />
             </div>
             <div>
@@ -148,7 +148,7 @@ export function ImportDomainsModal({
             </button>
             <button
               type="submit"
-              className="px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+              className="px-4 py-2 rounded-md bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
             >
               <Upload className="w-3.5 h-3.5" />
               Import Now

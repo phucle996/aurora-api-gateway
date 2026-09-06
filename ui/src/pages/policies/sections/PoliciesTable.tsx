@@ -130,10 +130,10 @@ export function PoliciesTable({
                     <span
                       className={`px-1.5 py-0.5 text-[10px] font-sans font-bold border uppercase rounded-xs ${
                         p.mode === 'Block'
-                          ? 'bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                          ? 'bg-destructive/10 text-destructive border-destructive/20'
                           : p.mode === 'Detect'
-                          ? 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
-                          : 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                          ? 'bg-secondary/15 text-secondary border-secondary/30'
+                          : 'bg-primary/10 text-primary border-primary/20'
                       }`}
                     >
                       {p.mode}

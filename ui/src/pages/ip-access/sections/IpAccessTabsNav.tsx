@@ -127,7 +127,7 @@ export function IpAccessTabsNav({
             <button
               type="button"
               onClick={() => navigate('/ip-access/datasets/new')}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-sm shadow-xs transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold rounded-sm shadow-xs transition-colors cursor-pointer"
             >
               <PlusIcon />
               Add Dataset
