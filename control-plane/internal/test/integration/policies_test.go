@@ -219,3 +219,27 @@ func TestPolicyPublicationPinnedSnapshotAndSettlement(t *testing.T) {
 		t.Fatal(w.Code, w.Body)
 	}
 }
+
+func TestPolicyDraftWithoutPathPrefix(t *testing.T) {
+	_, router := policyFixture(t)
+	request := func(method, path, key, body, token string) *httptest.ResponseRecorder {
+		q := httptest.NewRequest(method, path, bytes.NewBufferString(body))
+		q.Header.Set("Content-Type", "application/json")
+		q.Header.Set("Idempotency-Key", key)
+		if token != "" {
+			q.Header.Set("Authorization", "Bearer "+token)
+		}
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, q)
+		return w
+	}
+	noPrefixBody := `{"name":"Policy Without Prefix","description":"test","host":"api.test","mode":"mixed","priority":50,"rule_ids":[1],"expected_version":0}`
+	w := request("POST", "/api/v1/policies", "create-no-prefix-01", noPrefixBody, "policy-test-token")
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body)
+	}
+	w = request("GET", "/api/v1/policies", "", "", "policy-test-token")
+	if w.Code != 200 || !bytes.Contains(w.Body.Bytes(), []byte("Policy Without Prefix")) {
+		t.Fatal(w.Code, w.Body)
+	}
+}

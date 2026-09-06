@@ -26,15 +26,20 @@ func NewNodeRepository(db *sql.DB) repo.NodeRepository {
 
 // ListNodes trả về danh sách tất cả các node đã đăng ký trong cluster.
 func (r *sqliteNodeRepository) ListNodes(ctx context.Context) ([]entity.ClusterNodeRecord, error) {
-	// CTE lấy bản phát hành sẵn sàng mới nhất (latest_release) và thông tin kích hoạt (active_node_journal)
+	// CTE lấy bản phát hành sẵn sàng mới nhất (latest_rule_release, latest_policy_release) và thông tin kích hoạt
 	// để tự động tính toán trạng thái sync_status (In Sync nếu trùng release mới nhất, Drift nếu bị lệch)
 	query := `
-	WITH latest_release AS (
+	WITH latest_rule_release AS (
 		SELECT id
 		FROM ruleset_releases
 		WHERE state = 'ready'
 		ORDER BY id DESC
 		LIMIT 1
+	),
+	latest_policy_release AS (
+		SELECT release_id AS id
+		FROM policy_cluster_head
+		WHERE singleton = 1
 	),
 	active_node_journal AS (
 		SELECT release_id, phase, updated_at
@@ -49,24 +54,27 @@ func (r *sqliteNodeRepository) ListNodes(ctx context.Context) ([]entity.ClusterN
 		n.role,
 		n.status,
 		n.version,
-		n.active_release_id,
-		COALESCE('rev-' || n.active_release_id, 'none') AS ruleset,
+		COALESCE(n.observed_release_id, CASE WHEN pnr.phase = 'observed' THEN pnr.release_id END, n.active_release_id) AS active_release_id,
+		CASE WHEN COALESCE(n.observed_release_id, CASE WHEN pnr.phase = 'observed' THEN pnr.release_id END, n.active_release_id, 0) > 0 THEN 'rev-' || COALESCE(n.observed_release_id, CASE WHEN pnr.phase = 'observed' THEN pnr.release_id END, n.active_release_id) ELSE 'none' END AS ruleset,
 		CASE 
-			WHEN lr.id IS NULL THEN 'In Sync'
-			WHEN n.active_release_id IS NOT NULL AND n.active_release_id = lr.id THEN 'In Sync'
-			WHEN lr.id IS NOT NULL AND (n.active_release_id IS NULL OR n.active_release_id != lr.id) THEN 'Drift'
-			ELSE n.sync_status
+			WHEN lpr.id IS NOT NULL THEN
+				CASE WHEN COALESCE(n.observed_release_id, CASE WHEN pnr.phase = 'observed' THEN pnr.release_id END) = lpr.id THEN 'In Sync' ELSE 'Drift' END
+			WHEN lrr.id IS NOT NULL THEN
+				CASE WHEN COALESCE(n.observed_release_id, n.active_release_id) = lrr.id THEN 'In Sync' ELSE 'Drift' END
+			ELSE 'In Sync'
 		END AS computed_sync,
 		n.join_method,
 		n.certificate,
-		n.last_heartbeat,
+		CASE WHEN n.observed_release_id IS NOT NULL THEN n.last_heartbeat ELSE '' END,
 		n.created_at,
-		COALESCE(j.updated_at, n.last_heartbeat) AS last_sync_time,
+		n.last_applied_at AS last_sync_time,
 		n.pending_command,
-		n.reload_status
+		n.reload_status, n.runtime_started_at, n.metrics_scope, n.worker_identity
 	FROM cluster_nodes n
-	LEFT JOIN latest_release lr ON 1=1
+	LEFT JOIN latest_rule_release lrr ON 1=1
+	LEFT JOIN latest_policy_release lpr ON 1=1
 	LEFT JOIN active_node_journal j ON 1=1
+	LEFT JOIN policy_node_reports pnr ON pnr.node_id = n.id
 	ORDER BY n.name ASC;`
 
 	rows, err := r.db.QueryContext(ctx, query)
@@ -95,7 +103,7 @@ func (r *sqliteNodeRepository) ListNodes(ctx context.Context) ([]entity.ClusterN
 			&item.CreatedAt,
 			&item.LastSyncTime,
 			&item.PendingCommand,
-			&item.ReloadStatus,
+			&item.ReloadStatus, &item.RuntimeStartedAt, &item.MetricsScope, &item.WorkerIdentity,
 		); err != nil {
 			return nil, fmt.Errorf("quét bản ghi node thất bại: %w", err)
 		}
@@ -122,12 +130,17 @@ func (r *sqliteNodeRepository) ListNodes(ctx context.Context) ([]entity.ClusterN
 // GetNodeByID lấy chi tiết một node cụ thể theo ID.
 func (r *sqliteNodeRepository) GetNodeByID(ctx context.Context, id string) (*entity.ClusterNodeRecord, error) {
 	query := `
-	WITH latest_release AS (
+	WITH latest_rule_release AS (
 		SELECT id
 		FROM ruleset_releases
 		WHERE state = 'ready'
 		ORDER BY id DESC
 		LIMIT 1
+	),
+	latest_policy_release AS (
+		SELECT release_id AS id
+		FROM policy_cluster_head
+		WHERE singleton = 1
 	),
 	active_node_journal AS (
 		SELECT release_id, phase, updated_at
@@ -142,24 +155,27 @@ func (r *sqliteNodeRepository) GetNodeByID(ctx context.Context, id string) (*ent
 		n.role,
 		n.status,
 		n.version,
-		n.active_release_id,
-		COALESCE('rev-' || n.active_release_id, 'none') AS ruleset,
+		COALESCE(n.observed_release_id, CASE WHEN pnr.phase = 'observed' THEN pnr.release_id END, n.active_release_id) AS active_release_id,
+		CASE WHEN COALESCE(n.observed_release_id, CASE WHEN pnr.phase = 'observed' THEN pnr.release_id END, n.active_release_id, 0) > 0 THEN 'rev-' || COALESCE(n.observed_release_id, CASE WHEN pnr.phase = 'observed' THEN pnr.release_id END, n.active_release_id) ELSE 'none' END AS ruleset,
 		CASE 
-			WHEN lr.id IS NULL THEN 'In Sync'
-			WHEN n.active_release_id IS NOT NULL AND n.active_release_id = lr.id THEN 'In Sync'
-			WHEN lr.id IS NOT NULL AND (n.active_release_id IS NULL OR n.active_release_id != lr.id) THEN 'Drift'
-			ELSE n.sync_status
+			WHEN lpr.id IS NOT NULL THEN
+				CASE WHEN COALESCE(n.observed_release_id, CASE WHEN pnr.phase = 'observed' THEN pnr.release_id END) = lpr.id THEN 'In Sync' ELSE 'Drift' END
+			WHEN lrr.id IS NOT NULL THEN
+				CASE WHEN COALESCE(n.observed_release_id, n.active_release_id) = lrr.id THEN 'In Sync' ELSE 'Drift' END
+			ELSE 'In Sync'
 		END AS computed_sync,
 		n.join_method,
 		n.certificate,
-		n.last_heartbeat,
+		CASE WHEN n.observed_release_id IS NOT NULL THEN n.last_heartbeat ELSE '' END,
 		n.created_at,
-		COALESCE(j.updated_at, n.last_heartbeat) AS last_sync_time,
+		n.last_applied_at AS last_sync_time,
 		n.pending_command,
-		n.reload_status
+		n.reload_status, n.runtime_started_at, n.metrics_scope, n.worker_identity
 	FROM cluster_nodes n
-	LEFT JOIN latest_release lr ON 1=1
+	LEFT JOIN latest_rule_release lrr ON 1=1
+	LEFT JOIN latest_policy_release lpr ON 1=1
 	LEFT JOIN active_node_journal j ON 1=1
+	LEFT JOIN policy_node_reports pnr ON pnr.node_id = n.id
 	WHERE n.id = ?
 	LIMIT 1;`
 
@@ -181,7 +197,7 @@ func (r *sqliteNodeRepository) GetNodeByID(ctx context.Context, id string) (*ent
 		&item.CreatedAt,
 		&item.LastSyncTime,
 		&item.PendingCommand,
-		&item.ReloadStatus,
+		&item.ReloadStatus, &item.RuntimeStartedAt, &item.MetricsScope, &item.WorkerIdentity,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -202,55 +218,34 @@ func (r *sqliteNodeRepository) GetNodeByID(ctx context.Context, id string) (*ent
 // UpdateHeartbeat cập nhật thời điểm heartbeat và trạng thái liveness mới nhất của node.
 // Tự động ghi danh (auto-register) node mới vào cluster nếu node chưa từng tồn tại.
 func (r *sqliteNodeRepository) UpdateHeartbeat(ctx context.Context, payload entity.NodeHeartbeatPayload) error {
-	nodeIP := payload.IP
-	if nodeIP == "" {
-		nodeIP = "127.0.0.1"
+	deployment := "Unknown"
+	if payload.MetricsScope == "container" {
+		deployment = "Docker Container"
+	} else if payload.MetricsScope == "host" {
+		deployment = "Systemd Service"
 	}
-
+	auth := payload.Authentication
+	if auth == "" {
+		auth = "Unknown"
+	}
 	query := `
-	INSERT INTO cluster_nodes (
-		id, name, hostname, ip, role, status, version, active_release_id,
-		sync_status, join_method, certificate, last_heartbeat, created_at,
-		pending_command, reload_status
-	) VALUES (
-		?, ?, ?, ?, 'Edge Node', 'Ready',
-		CASE WHEN ? != '' THEN ? ELSE '1.30.4' END,
-		CASE WHEN ? > 0 AND EXISTS(SELECT 1 FROM ruleset_releases WHERE id = ?) THEN ? ELSE NULL END,
-		'In Sync', 'Docker Container', 'mTLS Enrolled', datetime(?, 'unixepoch'), datetime(?, 'unixepoch'),
-		'none', 'idle'
-	)
-	ON CONFLICT(id) DO UPDATE SET 
-		ip = CASE WHEN ? != '' AND ? != '127.0.0.1' THEN ? ELSE ip END,
-		version = CASE WHEN ? != '' THEN ? ELSE version END,
-		last_heartbeat = datetime(?, 'unixepoch'),
-		status = 'Ready',
-		reload_status = CASE 
-			WHEN reload_status = 'reloading' THEN 'completed'
-			ELSE reload_status
-		END,
-		active_release_id = CASE 
-			WHEN ? > 0 AND EXISTS(SELECT 1 FROM ruleset_releases WHERE id = ?) THEN ? 
-			ELSE active_release_id 
-		END;`
-
-	_, err := r.db.ExecContext(
-		ctx, query,
-		// INSERT params:
-		payload.NodeID, payload.NodeID, payload.NodeID, nodeIP,
-		payload.Version, payload.Version,
-		payload.ActiveReleaseID, payload.ActiveReleaseID, payload.ActiveReleaseID,
-		payload.Timestamp, payload.Timestamp,
-		// ON CONFLICT UPDATE params:
-		payload.IP, payload.IP, payload.IP,
-		payload.Version, payload.Version,
-		payload.Timestamp,
-		payload.ActiveReleaseID, payload.ActiveReleaseID, payload.ActiveReleaseID,
-	)
-	if err != nil {
-		return fmt.Errorf("cập nhật heartbeat node %s thất bại: %w", payload.NodeID, err)
-	}
-
-	return nil
+    INSERT INTO cluster_nodes
+      (id,name,hostname,ip,role,status,version,sync_status,join_method,certificate,last_heartbeat,created_at,
+       observed_release_id,runtime_started_at,worker_identity,metrics_scope,last_applied_at)
+    VALUES (?,?,?,?,?,'Ready',?,'Syncing',?,?,datetime(?,'unixepoch'),datetime(?,'unixepoch'),?,?,?,?,
+            CASE WHEN ? > 0 THEN datetime(?,'unixepoch') ELSE '' END)
+    ON CONFLICT(id) DO UPDATE SET
+      hostname=excluded.hostname, ip=CASE WHEN excluded.ip != '' THEN excluded.ip ELSE cluster_nodes.ip END,
+      role=excluded.role, version=excluded.version, join_method=excluded.join_method, certificate=excluded.certificate,
+      last_heartbeat=excluded.last_heartbeat,status='Ready',
+      last_applied_at=CASE WHEN excluded.observed_release_id > 0 AND (cluster_nodes.observed_release_id IS NULL OR cluster_nodes.observed_release_id != excluded.observed_release_id) THEN excluded.last_heartbeat ELSE cluster_nodes.last_applied_at END,
+      observed_release_id=excluded.observed_release_id,
+      reload_status=CASE WHEN cluster_nodes.reload_status='reloading' AND cluster_nodes.worker_identity != '' AND excluded.worker_identity != '' AND cluster_nodes.worker_identity != excluded.worker_identity THEN 'completed' ELSE cluster_nodes.reload_status END,
+      runtime_started_at=excluded.runtime_started_at, worker_identity=excluded.worker_identity,metrics_scope=excluded.metrics_scope
+    WHERE cluster_nodes.observed_release_id IS NULL OR unixepoch(excluded.last_heartbeat) > unixepoch(cluster_nodes.last_heartbeat);`
+	_, err := r.db.ExecContext(ctx, query, payload.NodeID, payload.NodeID, payload.Hostname, payload.IP, payload.Role, payload.Version,
+		deployment, auth, payload.Timestamp, payload.Timestamp, payload.ActiveReleaseID, payload.RuntimeStartedAt, payload.WorkerIdentity, payload.MetricsScope, payload.ActiveReleaseID, payload.Timestamp)
+	return err
 }
 
 // SetNodeCommand đặt lệnh điều khiển chờ thực thi cho một node.
@@ -286,7 +281,7 @@ func (r *sqliteNodeRepository) GetNodeCommandAndLatestRelease(ctx context.Contex
 	)
 	SELECT 
 		n.pending_command,
-		COALESCE(lr.id, 0)
+		COALESCE((SELECT release_id FROM policy_cluster_head WHERE singleton=1), lr.id, 0)
 	FROM cluster_nodes n
 	LEFT JOIN latest_release lr ON 1=1
 	WHERE n.id = ?;`
@@ -393,8 +388,8 @@ func (r *sqliteNodeRepository) BatchInsertMetricsHistory(ctx context.Context, re
 
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT OR REPLACE INTO node_metrics_history 
-		(node_id, timestamp, cpu_usage, memory_usage, active_connections, requests_per_second)
-		VALUES (?, ?, ?, ?, ?, ?);
+		(node_id, timestamp, cpu_usage, memory_usage, active_connections, requests_per_second, metrics_scope)
+		VALUES (?, ?, ?, ?, ?, ?, ?);
 	`)
 	if err != nil {
 		return err
@@ -402,7 +397,7 @@ func (r *sqliteNodeRepository) BatchInsertMetricsHistory(ctx context.Context, re
 	defer stmt.Close()
 
 	for _, rec := range records {
-		if _, err := stmt.ExecContext(ctx, rec.NodeID, rec.Timestamp, rec.CPUUsage, rec.MemoryUsage, rec.ActiveConnections, rec.RequestsPerSecond); err != nil {
+		if _, err := stmt.ExecContext(ctx, rec.NodeID, rec.Timestamp, rec.CPUUsage, rec.MemoryUsage, rec.ActiveConnections, rec.RequestsPerSecond, rec.MetricsScope); err != nil {
 			return fmt.Errorf("lưu batch metric history cho node %s thất bại: %w", rec.NodeID, err)
 		}
 	}
@@ -469,13 +464,13 @@ func (r *sqliteNodeRepository) GetRecentMetricsHistory(ctx context.Context, node
 	}
 	query := `
 	WITH recent AS (
-		SELECT timestamp, cpu_usage, memory_usage, active_connections, requests_per_second
+		SELECT timestamp, cpu_usage, memory_usage, active_connections, requests_per_second, metrics_scope
 		FROM node_metrics_history
-		WHERE node_id = ?
+		WHERE node_id = ? AND timestamp >= unixepoch('now') - 3600 AND timestamp <= unixepoch('now')
 		ORDER BY timestamp DESC
 		LIMIT ?
 	)
-	SELECT timestamp, cpu_usage, memory_usage, active_connections, requests_per_second
+	SELECT timestamp, cpu_usage, memory_usage, active_connections, requests_per_second, metrics_scope
 	FROM recent
 	ORDER BY timestamp ASC;`
 
@@ -489,7 +484,7 @@ func (r *sqliteNodeRepository) GetRecentMetricsHistory(ctx context.Context, node
 	now := time.Now().Unix()
 	for rows.Next() {
 		var p entity.NodeMetricPoint
-		if err := rows.Scan(&p.Timestamp, &p.CPUUsage, &p.MemoryUsage, &p.ActiveConnections, &p.RPS); err != nil {
+		if err := rows.Scan(&p.Timestamp, &p.CPUUsage, &p.MemoryUsage, &p.ActiveConnections, &p.RPS, &p.MetricsScope); err != nil {
 			return nil, fmt.Errorf("quét bản ghi lịch sử metric thất bại: %w", err)
 		}
 		minutesAgo := int(float64(now-p.Timestamp) / 60.0)
@@ -559,3 +554,11 @@ func (r *sqliteNodeRepository) ListNodeSyncLogs(ctx context.Context, nodeID stri
 	return logs, nil
 }
 
+func (r *sqliteNodeRepository) GetHeartbeatState(ctx context.Context, nodeID string) (*entity.NodeHeartbeatState, error) {
+	var state entity.NodeHeartbeatState
+	err := r.db.QueryRowContext(ctx, `SELECT observed_release_id, CASE WHEN observed_release_id IS NULL THEN 0 ELSE COALESCE(unixepoch(last_heartbeat),0) END, reload_status,worker_identity FROM cluster_nodes WHERE id=?`, nodeID).Scan(&state.ActiveReleaseID, &state.Timestamp, &state.ReloadStatus, &state.WorkerIdentity)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return &state, err
+}

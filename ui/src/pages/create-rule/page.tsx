@@ -241,7 +241,7 @@ export default function CreateRulePage() {
                   type="button"
                   disabled={busy || uncertain}
                   onClick={() => navigate('/rules')}
-                  className="px-4 py-2 bg-slate-100 dark:bg-[#0E1726] hover:bg-slate-200 dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-mono transition-colors cursor-pointer"
+                  className="px-4 py-2 bg-slate-100 dark:bg-[#0E1726] hover:bg-slate-200 dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-sans rounded-sm transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -250,7 +250,7 @@ export default function CreateRulePage() {
                   type="button"
                   disabled={busy}
                   onClick={handleInitiateSubmit}
-                  className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-500 border border-blue-500 text-white text-xs font-bold font-mono transition-colors cursor-pointer shadow-sm"
+                  className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-500 border border-blue-500 text-white text-xs font-semibold font-sans rounded-sm transition-colors cursor-pointer shadow-sm"
                 >
                   <Save className="w-3.5 h-3.5" />
                   <span>{busy ? 'Saving…' : uncertain ? 'Retry same submission' : 'Create Rule'}</span>

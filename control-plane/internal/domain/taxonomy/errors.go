@@ -18,6 +18,38 @@ var (
 	ErrPublishUnavailable = errors.New("compiler unavailable or policy rejected")
 )
 
+// ─── Policy Domain Errors ─────────────────────────────────────────────────────
+
+var (
+	// ErrPolicyConflict phát sinh khi xung đột version policy hoặc cluster
+	ErrPolicyConflict = errors.New("policy or cluster revision changed; refresh before retrying")
+
+	// ErrPolicyInvalid phát sinh khi cấu hình policy không hợp lệ
+	ErrPolicyInvalid = errors.New("invalid policy: check name, scope, mode, priority and selected rules")
+
+	// ErrPolicyNotFound phát sinh khi không tìm thấy policy hoặc node
+	ErrPolicyNotFound = errors.New("policy or node not found")
+
+	// ErrPolicyUnsupported phát sinh khi phiên bản rule được chọn bị tắt hoặc không được runtime hỗ trợ
+	ErrPolicyUnsupported = errors.New("selected rule revision is disabled or unsupported by the runtime")
+)
+
+// ─── Access Domain Errors ─────────────────────────────────────────────────────
+
+var (
+	// ErrAccessInvalid phát sinh khi cấu hình access control không hợp lệ
+	ErrAccessInvalid = errors.New("invalid access configuration")
+
+	// ErrAccessConflict phát sinh khi xung đột version access object
+	ErrAccessConflict = errors.New("access configuration changed; refresh before retrying")
+
+	// ErrAccessMissing phát sinh khi không tìm thấy resource access
+	ErrAccessMissing = errors.New("access resource not found")
+
+	// ErrAccessCompiler phát sinh khi access compiler reject snapshot hoặc không khả dụng
+	ErrAccessCompiler = errors.New("access compiler rejected snapshot or is unavailable")
+)
+
 // ─── Auth Domain Errors ───────────────────────────────────────────────────────
 
 var (
@@ -47,5 +79,3 @@ var (
 	// ErrSettingsStorage phát sinh khi có lỗi truy vấn hoặc lưu trữ cấu hình hệ thống
 	ErrSettingsStorage = errors.New("system settings storage error")
 )
-
-

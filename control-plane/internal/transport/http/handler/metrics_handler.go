@@ -138,6 +138,7 @@ func (h *MetricsHandler) GetNodeMetrics(c *gin.Context) {
 		response = append(response, gin.H{
 			"timestamp":         pt.Timestamp,
 			"timeLabel":         pt.TimeLabel,
+			"metricsScope":      pt.MetricsScope,
 			"rps":               pt.RPS,
 			"cpuUsage":          pt.CPUUsage,
 			"memoryUsage":       pt.MemoryUsage,

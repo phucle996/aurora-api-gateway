@@ -7,11 +7,7 @@ import {
   Ban,
   Clock,
   CheckCircle2,
-  MoreHorizontal,
-  Plus,
-  ArrowUp,
-  ArrowDown,
-  Trash2,
+  Pencil,
 } from 'lucide-react';
 import { AddRuleModal } from './AddRuleModal';
 
@@ -37,7 +33,6 @@ export function PolicyRulesSection({
   availableCatalog = [],
   isLoading = false,
 }: PolicyRulesSectionProps) {
-  const [activeMenuId, setActiveMenuId] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const toggleRuleEnabled = (id: number) => {
@@ -46,28 +41,17 @@ export function PolicyRulesSection({
     );
   };
 
-  const moveRule = (index: number, direction: 'up' | 'down') => {
-    setRules((prev) => {
-      const next = [...prev];
-      const targetIndex = direction === 'up' ? index - 1 : index + 1;
-      if (targetIndex < 0 || targetIndex >= next.length) return prev;
-      const temp = next[index];
-      next[index] = next[targetIndex];
-      next[targetIndex] = temp;
-      return next;
-    });
-    setActiveMenuId(null);
-  };
+  const handleSaveRulesFromModal = (selectedIds: number[]) => {
+    // 1. Keep existing rules that are still selected (preserves order, enabled state, etc.)
+    const keptRules = rules.filter((r) => selectedIds.includes(r.id));
+    const keptIds = new Set(keptRules.map((r) => r.id));
 
-  const removeRule = (id: number) => {
-    setRules((prev) => prev.filter((r) => r.id !== id));
-    setActiveMenuId(null);
-  };
+    // 2. Newly selected rules from availableCatalog
+    const newlySelected = availableCatalog.filter(
+      (item) => selectedIds.includes(item.id) && !keptIds.has(item.id)
+    );
 
-  const handleAddRulesFromModal = (
-    items: { id: number; name: string; action: string; group?: string }[]
-  ) => {
-    const newItems: PolicyRuleItem[] = items.map((item) => {
+    const newRules: PolicyRuleItem[] = newlySelected.map((item) => {
       let type: PolicyRuleItem['type'] = 'custom';
       const act = (item.action || '').toLowerCase();
       const name = item.name.toLowerCase();
@@ -110,15 +94,15 @@ export function PolicyRulesSection({
       };
     });
 
-    setRules((prev) => [...prev, ...newItems]);
+    setRules([...keptRules, ...newRules]);
   };
 
   return (
-    <section className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-5 space-y-4 shadow-xs rounded-sm font-mono">
+    <section className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-5 space-y-4 shadow-xs rounded-sm font-sans">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
-            2. Policy Rules
+            3. Policy Rules
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Select and configure real rules from your catalog that will be applied by this policy.
@@ -138,15 +122,14 @@ export function PolicyRulesSection({
               <th className="py-2.5 px-3">Rule</th>
               <th className="py-2.5 px-3">Type</th>
               <th className="py-2.5 px-3">Action</th>
-              <th className="py-2.5 px-3 w-24">Status</th>
-              <th className="py-2.5 px-3 w-10 text-right"></th>
+              <th className="py-2.5 px-3 w-28 text-right pr-4">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-[#172338]/60">
             {isLoading ? (
               <tr>
                 <td
-                  colSpan={6}
+                  colSpan={5}
                   className="py-8 text-center text-slate-400 dark:text-slate-500"
                 >
                   <div className="flex items-center justify-center gap-2">
@@ -158,10 +141,10 @@ export function PolicyRulesSection({
             ) : rules.length === 0 ? (
               <tr>
                 <td
-                  colSpan={6}
+                  colSpan={5}
                   className="py-6 text-center text-slate-400 dark:text-slate-500"
                 >
-                  No rules configured in this policy. Click "+ Add Rule from Catalog" to add rules.
+                  No rules configured in this policy. Click "Edit Rules" to select rules from catalog.
                 </td>
               </tr>
             ) : (
@@ -243,13 +226,13 @@ export function PolicyRulesSection({
                   </td>
 
                   {/* Status Toggle */}
-                  <td className="py-3 px-3">
+                  <td className="py-3 px-3 text-right pr-4">
                     <button
                       type="button"
                       role="switch"
                       aria-checked={rule.enabled}
                       onClick={() => toggleRuleEnabled(rule.id)}
-                      className={`w-9 h-5 flex items-center p-0.5 rounded-full cursor-pointer transition-colors ${
+                      className={`inline-flex w-9 h-5 items-center p-0.5 rounded-full cursor-pointer transition-colors ${
                         rule.enabled ? 'bg-blue-600' : 'bg-slate-300 dark:bg-[#1C293D]'
                       }`}
                     >
@@ -259,52 +242,6 @@ export function PolicyRulesSection({
                         }`}
                       />
                     </button>
-                  </td>
-
-                  {/* 3-dots Menu */}
-                  <td className="py-3 px-3 text-right relative">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setActiveMenuId(activeMenuId === rule.id ? null : rule.id)
-                      }
-                      className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#152030] rounded-sm transition-colors cursor-pointer"
-                    >
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
-
-                    {/* Popover Menu */}
-                    {activeMenuId === rule.id && (
-                      <div className="absolute right-3 top-10 z-20 w-36 bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#1C293D] shadow-xl rounded-sm py-1 text-left text-xs font-mono">
-                        <button
-                          type="button"
-                          disabled={index === 0}
-                          onClick={() => moveRule(index, 'up')}
-                          className="w-full flex items-center gap-2 px-3 py-1.5 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#152030] disabled:opacity-40 cursor-pointer"
-                        >
-                          <ArrowUp className="w-3.5 h-3.5" />
-                          <span>Move Up</span>
-                        </button>
-                        <button
-                          type="button"
-                          disabled={index === rules.length - 1}
-                          onClick={() => moveRule(index, 'down')}
-                          className="w-full flex items-center gap-2 px-3 py-1.5 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#152030] disabled:opacity-40 cursor-pointer"
-                        >
-                          <ArrowDown className="w-3.5 h-3.5" />
-                          <span>Move Down</span>
-                        </button>
-                        <div className="my-1 border-t border-slate-100 dark:border-[#1C293D]" />
-                        <button
-                          type="button"
-                          onClick={() => removeRule(rule.id)}
-                          className="w-full flex items-center gap-2 px-3 py-1.5 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Remove</span>
-                        </button>
-                      </div>
-                    )}
                   </td>
                 </tr>
               ))
@@ -320,8 +257,8 @@ export function PolicyRulesSection({
           onClick={() => setIsModalOpen(true)}
           className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/30 dark:hover:bg-blue-950/50 border border-blue-300 dark:border-blue-500/40 text-blue-700 dark:text-blue-400 text-xs font-semibold rounded-sm transition-colors cursor-pointer"
         >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Add Rule from Catalog</span>
+          <Pencil className="w-3.5 h-3.5" />
+          <span>Edit Rules</span>
         </button>
 
         <span className="text-[11px] text-slate-400 dark:text-slate-500">
@@ -333,9 +270,9 @@ export function PolicyRulesSection({
       <AddRuleModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onAddRules={handleAddRulesFromModal}
+        onSaveRules={handleSaveRulesFromModal}
         catalog={availableCatalog}
-        existingRuleIds={rules.map((r) => r.id)}
+        selectedRuleIds={rules.map((r) => r.id)}
       />
     </section>
   );

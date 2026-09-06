@@ -4,6 +4,7 @@ import (
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	"aurora-waf.local/control-plane/internal/domain/repo"
 	domainService "aurora-waf.local/control-plane/internal/domain/service"
+	"aurora-waf.local/control-plane/internal/provider"
 	"context"
 	"fmt"
 	"net/http"
@@ -24,7 +25,7 @@ type metricsService struct {
 
 	mu             sync.RWMutex
 	currentConfig  entity.MetricsIntegrationConfig
-	activeProvider MetricsProvider
+	activeProvider provider.MetricsProvider
 	closed         bool
 }
 
@@ -46,23 +47,10 @@ func NewMetricsService(repo repo.SettingsRepository, nodeRepo repo.NodeRepositor
 		}
 	}
 	s.currentConfig = *cfg
-	s.activeProvider = s.createProvider(*cfg)
+	s.activeProvider = provider.NewMetricsProvider(*cfg, s.nodeRepo, s.httpClient)
 	_ = s.activeProvider.Start(context.Background())
 
 	return s
-}
-
-func (s *metricsService) createProvider(cfg entity.MetricsIntegrationConfig) MetricsProvider {
-	switch cfg.Mode {
-	case "standalone":
-		return newStandaloneProvider(s.nodeRepo)
-	case "prometheus":
-		return newPrometheusProvider(cfg.PrometheusURL, cfg.PrometheusJob, s.httpClient)
-	case "disabled":
-		return newDisabledProvider()
-	default:
-		return newDisabledProvider()
-	}
 }
 
 // GetConfig lấy cấu hình tích hợp metrics hiện tại.
@@ -112,7 +100,7 @@ func (s *metricsService) SaveConfig(ctx context.Context, cfg entity.MetricsInteg
 
 	// 4. Hot-swap Provider nếu cấu hình thay đổi
 	if changed {
-		s.activeProvider = s.createProvider(cfg)
+		s.activeProvider = provider.NewMetricsProvider(cfg, s.nodeRepo, s.httpClient)
 		_ = s.activeProvider.Start(context.Background())
 		s.currentConfig = cfg
 	}
@@ -174,6 +162,10 @@ func (s *metricsService) TestPrometheus(ctx context.Context, targetURL string) (
 func (s *metricsService) PushMetricPoint(nodeID string, pt entity.NodeMetricPoint) {
 	// 1. Luôn bảo toàn nhịp tim tức thời mới nhất của Node trong RAM
 	s.latestMu.Lock()
+	if old, ok := s.latestPoints[nodeID]; ok && old.Timestamp >= pt.Timestamp {
+		s.latestMu.Unlock()
+		return
+	}
 	s.latestPoints[nodeID] = pt
 	s.latestMu.Unlock()
 
@@ -192,7 +184,7 @@ func (s *metricsService) GetLatestMetricPoint(nodeID string) *entity.NodeMetricP
 	s.latestMu.RLock()
 	pt, ok := s.latestPoints[nodeID]
 	s.latestMu.RUnlock()
-	if ok {
+	if ok && time.Now().Unix()-pt.Timestamp <= 45 {
 		return &pt
 	}
 

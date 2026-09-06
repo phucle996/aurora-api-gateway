@@ -10,6 +10,12 @@ import (
 // NodeHeartbeatPayload chứa dữ liệu trạng thái và telemetry tức thời do Node gửi lên Control Plane.
 // Tuân thủ chuẩn Protocol Buffers binary wire format, đảm bảo gói tin siêu nhẹ (~40 bytes).
 type NodeHeartbeatPayload struct {
+	MetricsScope      string
+	Hostname          string
+	RuntimeStartedAt  int64
+	WorkerIdentity    string
+	MetricsAvailable  bool
+	Authentication    string
 	NodeID            string
 	Timestamp         int64
 	CPUUsage          float64
@@ -24,6 +30,7 @@ type NodeHeartbeatPayload struct {
 
 // NodeMetricHistoryRecord đại diện cho 1 bản ghi rollup 1 phút được lưu vào bảng node_metrics_history.
 type NodeMetricHistoryRecord struct {
+	MetricsScope      string
 	NodeID            string
 	Timestamp         int64
 	CPUUsage          float64
@@ -71,6 +78,20 @@ func (p *NodeHeartbeatPayload) MarshalBinary() []byte {
 		b = protowire.AppendTag(b, 9, protowire.BytesType)
 		b = protowire.AppendString(b, p.Role)
 	}
+	for tag, value := range map[protowire.Number]string{10: p.MetricsScope, 11: p.Hostname, 13: p.WorkerIdentity} {
+		if value != "" {
+			b = protowire.AppendTag(b, tag, protowire.BytesType)
+			b = protowire.AppendString(b, value)
+		}
+	}
+	b = protowire.AppendTag(b, 12, protowire.VarintType)
+	b = protowire.AppendVarint(b, uint64(p.RuntimeStartedAt))
+	b = protowire.AppendTag(b, 14, protowire.VarintType)
+	available := uint64(0)
+	if p.MetricsAvailable {
+		available = 1
+	}
+	b = protowire.AppendVarint(b, available)
 	return b
 }
 
@@ -87,6 +108,16 @@ func UnmarshalNodeHeartbeat(b []byte) (*NodeHeartbeatPayload, error) {
 			return nil, errors.New("invalid protobuf tag")
 		}
 		b = b[n:]
+		expected := protowire.VarintType
+		switch num {
+		case 1, 8, 9, 10, 11, 13:
+			expected = protowire.BytesType
+		case 3, 4, 6:
+			expected = protowire.Fixed64Type
+		}
+		if num >= 1 && num <= 14 && typ != expected {
+			return nil, errors.New("invalid heartbeat wire type")
+		}
 		switch num {
 		case 1: // NodeID
 			v, n := protowire.ConsumeString(b)
@@ -150,6 +181,31 @@ func UnmarshalNodeHeartbeat(b []byte) (*NodeHeartbeatPayload, error) {
 				return nil, errors.New("invalid role string in protobuf")
 			}
 			p.Role = v
+			b = b[n:]
+		case 10, 11, 13:
+			v, n := protowire.ConsumeString(b)
+			if n < 0 {
+				return nil, errors.New("invalid node metadata")
+			}
+			switch num {
+			case 10:
+				p.MetricsScope = v
+			case 11:
+				p.Hostname = v
+			case 13:
+				p.WorkerIdentity = v
+			}
+			b = b[n:]
+		case 12, 14:
+			v, n := protowire.ConsumeVarint(b)
+			if n < 0 {
+				return nil, errors.New("invalid runtime metadata")
+			}
+			if num == 12 {
+				p.RuntimeStartedAt = int64(v)
+			} else {
+				p.MetricsAvailable = v == 1
+			}
 			b = b[n:]
 		default:
 			n := protowire.ConsumeFieldValue(num, typ, b)

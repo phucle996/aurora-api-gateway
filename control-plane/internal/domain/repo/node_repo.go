@@ -8,6 +8,7 @@ import (
 // NodeRepository định nghĩa port truy xuất dữ liệu của workflow Cluster Nodes.
 // Áp dụng kiến trúc phẳng (Flat workflow): Chỉ trả về flat projection của chính workflow này.
 type NodeRepository interface {
+	GetHeartbeatState(ctx context.Context, nodeID string) (*entity.NodeHeartbeatState, error)
 	ListNodes(ctx context.Context) ([]entity.ClusterNodeRecord, error)
 	GetNodeByID(ctx context.Context, id string) (*entity.ClusterNodeRecord, error)
 	UpdateHeartbeat(ctx context.Context, payload entity.NodeHeartbeatPayload) error

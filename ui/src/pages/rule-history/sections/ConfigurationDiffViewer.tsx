@@ -6,6 +6,7 @@ interface ConfigurationDiffViewerProps {
   versions: RuleVersion[];
   fromVersion: number;
   toVersion: number;
+  ruleName?: string;
   onChangeFromVersion: (version: number) => void;
   onChangeToVersion: (version: number) => void;
 }
@@ -14,6 +15,7 @@ export function ConfigurationDiffViewer({
   versions,
   fromVersion,
   toVersion,
+  ruleName,
   onChangeFromVersion,
   onChangeToVersion,
 }: ConfigurationDiffViewerProps) {
@@ -26,7 +28,7 @@ export function ConfigurationDiffViewer({
   const getCleanConfig = (v?: RuleVersion) => {
     if (!v) return {};
     return {
-      name: v.description ? 'block-sql-injection' : 'rule',
+      name: ruleName || v.description || 'rule',
       priority: v.priority || 100,
       policy: v.policy || 'Default WAF Policy',
       description: v.description,
@@ -34,6 +36,7 @@ export function ConfigurationDiffViewer({
         field: c.field,
         operator: c.operator,
         value: c.value,
+        ...(c.headerName ? { header_name: c.headerName } : {}),
       })),
       action: {
         type: v.action,
@@ -85,14 +88,14 @@ export function ConfigurationDiffViewer({
           <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
             Configuration Diff
           </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">
-            Compare the changes between {fromObj?.versionLabel || `v${fromVersion}`} and{' '}
-            {toObj?.versionLabel || `v${toVersion}`}.
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-sans">
+            Compare the changes between <span className="font-mono">{fromObj?.versionLabel || `v${fromVersion}`}</span> and{' '}
+            <span className="font-mono">{toObj?.versionLabel || `v${toVersion}`}</span>.
           </p>
         </div>
 
         {/* Dropdowns */}
-        <div className="flex items-center gap-3 font-mono text-xs">
+        <div className="flex items-center gap-3 font-sans text-xs">
           <div className="flex items-center gap-1.5">
             <span className="text-slate-500 dark:text-slate-400 text-[11px]">From Version</span>
             <div className="relative">
@@ -135,9 +138,9 @@ export function ConfigurationDiffViewer({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Left Side: Previous Version */}
         <div className="border border-border rounded-xs overflow-hidden bg-slate-50/50 dark:bg-[#080E18]">
-          <div className="flex items-center justify-between px-3 py-2 bg-slate-100 dark:bg-[#0E1726] border-b border-border text-xs font-mono">
+          <div className="flex items-center justify-between px-3 py-2 bg-slate-100 dark:bg-[#0E1726] border-b border-border text-xs font-sans">
             <span className="text-slate-700 dark:text-slate-300 font-medium">
-              Previous Version ({fromObj?.versionLabel || `v${fromVersion}`})
+              Previous Version (<span className="font-mono">{fromObj?.versionLabel || `v${fromVersion}`}</span>)
             </span>
             <button
               type="button"
@@ -177,9 +180,9 @@ export function ConfigurationDiffViewer({
 
         {/* Right Side: Selected Version */}
         <div className="border border-border rounded-xs overflow-hidden bg-slate-50/50 dark:bg-[#080E18]">
-          <div className="flex items-center justify-between px-3 py-2 bg-slate-100 dark:bg-[#0E1726] border-b border-border text-xs font-mono">
+          <div className="flex items-center justify-between px-3 py-2 bg-slate-100 dark:bg-[#0E1726] border-b border-border text-xs font-sans">
             <span className="text-slate-700 dark:text-slate-300 font-medium">
-              Selected Version ({toObj?.versionLabel || `v${toVersion}`})
+              Selected Version (<span className="font-mono">{toObj?.versionLabel || `v${toVersion}`}</span>)
             </span>
             <button
               type="button"

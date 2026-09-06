@@ -33,7 +33,7 @@ export function RateLimitSummaryPanel(props: RateLimitSummaryProps) {
     : 'Global (All Paths)';
 
   return (
-    <div className="bg-[#0B1320] border border-[#152030] p-4 space-y-3 font-mono text-xs">
+    <div className="bg-[#0B1320] border border-[#152030] p-4 space-y-3 font-sans text-xs">
       <div className="text-sm font-semibold text-white">Summary</div>
 
       <div className="divide-y divide-[#152030] text-xs">

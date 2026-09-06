@@ -50,10 +50,15 @@ struct Policy {
 struct ScopedPolicy {
     id: u64,
     host: String,
+    #[serde(default = "default_path_prefix")]
     path_prefix: String,
     priority: u32,
     rules: Vec<Rule>,
 }
+fn default_path_prefix() -> String {
+    "/".to_string()
+}
+
 struct ScopeEngine {
     host: Vec<u8>,
     prefix: Vec<u8>,
@@ -411,6 +416,16 @@ mod tests {
                 .action,
             0
         );
+    }
+
+    #[test]
+    fn policy_without_path_prefix_defaults_to_root() {
+        let bytes = br#"{"schema_version":3,"generation":1,"policies":[
+          {"id":1,"host":"api.test","priority":0,"rules":[{"id":1,"path":"/api/login","action":"block","score":0,"priority":0}]}
+        ]}"#;
+        let e = Engine::from_policy(bytes).unwrap();
+        assert_eq!(e.evaluate_request(b"api.test", b"/api/login").unwrap().action, 1);
+        assert_eq!(e.evaluate_request(b"other.test", b"/api/login").unwrap().action, 0);
     }
 
     /// Kiểm tra tính tương thích ngược và giới hạn biên của Schema v1

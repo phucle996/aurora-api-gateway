@@ -28,7 +28,7 @@ export function BasicInfoSection({
   isLoadingPolicies = false,
 }: BasicInfoProps) {
   return (
-    <div className="bg-card border border-border p-4 space-y-4 font-mono text-xs text-foreground">
+    <div className="bg-card border border-border p-4 space-y-4 font-sans text-xs text-foreground">
       <div className="text-sm font-semibold text-foreground">
         1. Basic Information
       </div>

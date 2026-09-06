@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Search,
   RotateCw,
@@ -7,6 +7,9 @@ import {
 } from 'lucide-react';
 
 export interface NodeItem {
+  runtimeStartedAt?: number;
+  metricsScope?: string;
+  metricsAvailable?: boolean;
   id: string;
   name: string;
   hostname?: string;
@@ -37,7 +40,7 @@ export interface NodeItem {
 interface NodesTableProps {
   nodes?: NodeItem[];
   isLoading?: boolean;
-  onRefresh?: () => void;
+  onRefresh?: () => void | Promise<void>;
   selectedNodeId: string;
   onSelectNode: (node: NodeItem) => void;
 }
@@ -53,18 +56,48 @@ export function NodesTable({
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
-  const [currentPage, setCurrentPage] = useState(1);
+  const [sort, setSort] = useState<{field: 'name' | 'status'; direction: number}>({field:'name',direction:1});
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const handleRefresh = () => {
+  const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
+  const [indicator, setIndicator] = useState<{ top: number; height: number; visible: boolean }>({
+    top: 0,
+    height: 0,
+    visible: false,
+  });
+
+  const updateIndicatorPosition = () => {
+    if (!selectedNodeId) {
+      setIndicator((prev) => ({ ...prev, visible: false }));
+      return;
+    }
+    const row = rowRefs.current[selectedNodeId];
+    if (row) {
+      setIndicator({
+        top: row.offsetTop,
+        height: row.offsetHeight,
+        visible: true,
+      });
+    } else {
+      setIndicator((prev) => ({ ...prev, visible: false }));
+    }
+  };
+
+  useEffect(() => {
+    updateIndicatorPosition();
+    const rafId = requestAnimationFrame(updateIndicatorPosition);
+    return () => cancelAnimationFrame(rafId);
+  }, [selectedNodeId, nodesProp]);
+
+  useEffect(() => {
+    window.addEventListener('resize', updateIndicatorPosition);
+    return () => window.removeEventListener('resize', updateIndicatorPosition);
+  }, [selectedNodeId]);
+
+  const handleRefresh = async () => {
     if (isRefreshing) return;
     setIsRefreshing(true);
-    if (onRefresh) {
-      onRefresh();
-    }
-    setTimeout(() => {
-      setIsRefreshing(false);
-    }, 650);
+    try { await onRefresh?.(); } finally { setIsRefreshing(false); }
   };
 
   const filteredNodes = nodes.filter((node) => {
@@ -79,7 +112,7 @@ export function NodesTable({
       statusFilter === 'ALL' || node.status === statusFilter;
 
     return matchesSearch && matchesRole && matchesStatus;
-  });
+  }).sort((a,b) => sort.direction * a[sort.field].localeCompare(b[sort.field], undefined, {numeric:true}));
 
   return (
     <div className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#152030] flex flex-col shadow-xs rounded-sm transition-colors">
@@ -152,24 +185,35 @@ export function NodesTable({
       </div>
 
       {/* Table Container */}
-      <div className="overflow-x-auto font-sans">
-        <table className="w-full text-left border-collapse">
+      <div className="overflow-x-auto font-sans relative">
+        {/* Animated Selection Indicator Bar */}
+        <div
+          className="absolute left-0 w-[3.5px] bg-sky-500 dark:bg-emerald-400 rounded-r-xs pointer-events-none transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] z-10"
+          style={{
+            top: `${indicator.top}px`,
+            height: `${indicator.height}px`,
+            opacity: indicator.visible ? 1 : 0,
+            transform: 'translateZ(0)',
+          }}
+        />
+
+        <table className="w-full text-left border-collapse whitespace-nowrap">
           <thead>
             <tr className="border-b border-slate-200 dark:border-[#152030] bg-slate-50 dark:bg-[#0E1726]/70 text-xs font-sans text-slate-500 dark:text-slate-400">
               <th className="py-2.5 px-3 font-medium">
-                <div className="flex items-center gap-1 cursor-pointer hover:text-slate-700 dark:hover:text-slate-200">
+                <button type="button" onClick={() => setSort(prev => ({field: 'name', direction: prev.field === 'name' ? -prev.direction : 1}))} className="flex items-center gap-1 cursor-pointer hover:text-slate-700 dark:hover:text-slate-200">
                   <span>Node Name</span>
                   <ArrowUpDown className="w-3 h-3 text-slate-400 dark:text-slate-500" />
-                </div>
+                </button>
               </th>
               <th className="py-2.5 px-3 font-medium">IP Address</th>
               <th className="py-2.5 px-3 font-medium">Hostname</th>
               <th className="py-2.5 px-3 font-medium">Role</th>
               <th className="py-2.5 px-3 font-medium">
-                <div className="flex items-center gap-1 cursor-pointer hover:text-slate-700 dark:hover:text-slate-200">
+                <button type="button" onClick={() => setSort(prev => ({field: 'status', direction: prev.field === 'status' ? -prev.direction : 1}))} className="flex items-center gap-1 cursor-pointer hover:text-slate-700 dark:hover:text-slate-200">
                   <span>Status</span>
                   <ArrowUpDown className="w-3 h-3 text-slate-400 dark:text-slate-500" />
-                </div>
+                </button>
               </th>
               <th className="py-2.5 px-3 font-medium">Version</th>
               <th className="py-2.5 px-3 font-medium">Ruleset</th>
@@ -197,7 +241,7 @@ export function NodesTable({
               <tr>
                 <td colSpan={11} className="py-12 text-center text-slate-400 dark:text-slate-500">
                   {nodes.length === 0
-                    ? 'No nodes registered in the cluster yet. Nodes authenticate securely via mTLS.'
+                    ? 'No nodes registered in the cluster yet.'
                     : 'No nodes found matching the filter criteria.'}
                 </td>
               </tr>
@@ -207,26 +251,31 @@ export function NodesTable({
                 return (
                   <tr
                     key={node.id}
+                    ref={(el) => {
+                      rowRefs.current[node.id] = el;
+                    }}
                     onClick={() => onSelectNode(node)}
-                    className={`cursor-pointer transition-colors ${
+                    className={`cursor-pointer transition-colors duration-200 ${
                       isSelected
-                        ? 'bg-blue-50/70 dark:bg-emerald-950/20 border-l-2 border-l-blue-600 dark:border-l-emerald-400'
+                        ? 'bg-sky-50/80 dark:bg-emerald-950/25'
                         : 'hover:bg-slate-50 dark:hover:bg-[#0E1726]/60'
                     }`}
                   >
                     {/* Node Name */}
-                    <td className="py-2 px-3 font-medium text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                      <span className="text-slate-900 dark:text-white font-mono font-bold">{node.name}</span>
+                    <td className="py-2 px-3 font-medium text-slate-900 dark:text-slate-100">
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-900 dark:text-white font-mono font-bold">{node.name}</span>
+                      </div>
                     </td>
 
                     {/* IP Address */}
                     <td className="py-2 px-3 text-slate-700 dark:text-slate-300">{node.ip}</td>
 
                     {/* Hostname */}
-                    <td className="py-2 px-3 text-slate-500 dark:text-slate-400">{node.hostname || node.region || 'localhost'}</td>
+                    <td className="py-2 px-3 text-slate-500 dark:text-slate-400">{node.hostname || 'Unknown'}</td>
 
                     {/* Role */}
-                    <td className="py-2 px-3 text-slate-700 dark:text-slate-300">{node.role || 'Edge Node'}</td>
+                    <td className="py-2 px-3 text-slate-700 dark:text-slate-300">{node.role || 'Unknown'}</td>
 
                     {/* Status */}
                     <td className="py-2 px-3">
@@ -248,11 +297,11 @@ export function NodesTable({
                     <td className="py-2 px-3 text-blue-600 dark:text-cyan-400">{node.ruleset}</td>
 
                     {/* RPS */}
-                    <td className="py-2 px-3 text-slate-800 dark:text-slate-200">{node.rps || node.requestsPerSecond}</td>
+                    <td className="py-2 px-3 text-slate-800 dark:text-slate-200">{node.metricsAvailable ? node.requestsPerSecond : '—'}</td>
 
                     {/* Connections */}
                     <td className="py-2 px-3 text-slate-800 dark:text-slate-200">
-                      {node.connections || node.activeConnections}
+                      {node.metricsAvailable ? node.activeConnections : '—'}
                     </td>
 
                     {/* Last Heartbeat */}
@@ -262,13 +311,13 @@ export function NodesTable({
 
                     {/* Sync */}
                     <td className="py-2 px-3 text-right">
-                      {node.sync === 'In Sync' ? (
+                      {node.sync === 'In Sync' && node.status === 'Ready' ? (
                         <span className="inline-flex items-center px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-400 text-[10px] rounded-xs font-bold">
                           In Sync
                         </span>
                       ) : (
                         <span className="inline-flex items-center px-2 py-0.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/40 text-amber-700 dark:text-amber-400 text-[10px] rounded-xs font-bold">
-                          {node.sync || 'Syncing'}
+                          {node.status === 'Ready' ? node.sync : 'Unknown'}
                         </span>
                       )}
                     </td>

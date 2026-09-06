@@ -11,6 +11,7 @@ type MetricsIntegrationConfig struct {
 
 // NodeMetricPoint đại diện cho một điểm mẫu dữ liệu trên biểu đồ Timeline thời gian thực.
 type NodeMetricPoint struct {
+	MetricsScope      string
 	Timestamp         int64
 	TimeLabel         string // Ví dụ: "-60m", "-30m", "Now"
 	RPS               float64

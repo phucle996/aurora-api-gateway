@@ -118,7 +118,7 @@ export function EditRuleTesterPanel({ conditions, ruleId, logicMode = 'ALL' }: E
   };
 
   return (
-    <div className="bg-card border border-border p-4 flex flex-col font-mono text-xs text-foreground">
+    <div className="bg-card border border-border p-4 flex flex-col font-sans text-xs text-foreground">
       <div className="pb-2 border-b border-border">
         <div className="text-sm font-semibold text-foreground">Test Rule</div>
         <div className="text-[11px] text-muted-foreground font-sans mt-0.5">

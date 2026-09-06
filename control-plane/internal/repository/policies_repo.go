@@ -2,6 +2,7 @@ package repository
 
 import (
 	"aurora-waf.local/control-plane/internal/domain/entity"
+	"aurora-waf.local/control-plane/internal/domain/repo"
 	"aurora-waf.local/control-plane/internal/domain/taxonomy"
 	"context"
 	"crypto/sha256"
@@ -15,7 +16,7 @@ import (
 
 type PolicyRepository struct{ writer, reader *sql.DB }
 
-func NewPolicyRepository(writer, reader *sql.DB) *PolicyRepository {
+func NewPolicyRepository(writer, reader *sql.DB) repo.PolicyRepository {
 	return &PolicyRepository{writer, reader}
 }
 
@@ -43,6 +44,37 @@ type policySnapshotRule struct {
 	RuntimeReady bool   `json:"runtime_ready"`
 }
 
+type policySavePayload struct {
+	ExpectedVersion int64   `json:"expected_version"`
+	RestoreVersion  int64   `json:"restore_version,omitempty"`
+	Name            string  `json:"name"`
+	Description     string  `json:"description"`
+	Host            string  `json:"host"`
+	PathPrefix      string  `json:"path_prefix,omitempty"`
+	Mode            string  `json:"mode"`
+	Priority        int     `json:"priority"`
+	RuleIDs         []int64 `json:"rule_ids"`
+}
+
+type policySaveReceipt struct {
+	ID      int64 `json:"id"`
+	Version int64 `json:"version"`
+}
+
+type policyPublishPayload struct {
+	ExpectedVersion int64 `json:"expected_version"`
+	ExpectedRelease int64 `json:"expected_release"`
+	Disable         bool  `json:"disable"`
+}
+
+type policyPublishReceipt struct {
+	ReleaseID  int64           `json:"release_id"`
+	Digest     string          `json:"digest"`
+	Payload    json.RawMessage `json:"payload"`
+	Membership json.RawMessage `json:"membership"`
+	Preview    bool            `json:"preview"`
+}
+
 func (r *PolicyRepository) SavePolicy(ctx context.Context, c entity.SavePolicyCommand) (entity.SavePolicyResult, error) {
 	var out entity.SavePolicyResult
 	tx, err := r.writer.BeginTx(ctx, nil)
@@ -50,7 +82,18 @@ func (r *PolicyRepository) SavePolicy(ctx context.Context, c entity.SavePolicyCo
 		return out, err
 	}
 	defer tx.Rollback()
-	input, _ := json.Marshal(c)
+	inputPayload := policySavePayload{
+		ExpectedVersion: c.ExpectedVersion,
+		RestoreVersion:  c.RestoreVersion,
+		Name:            c.Name,
+		Description:     c.Description,
+		Host:            c.Host,
+		PathPrefix:      c.PathPrefix,
+		Mode:            c.Mode,
+		Priority:        c.Priority,
+		RuleIDs:         c.RuleIDs,
+	}
+	input, _ := json.Marshal(inputPayload)
 	hash := fmt.Sprintf("%x", sha256.Sum256(append([]byte(fmt.Sprint(c.ID)), input...)))
 	var oldHash, result string
 	err = tx.QueryRowContext(ctx, `SELECT request_hash,result FROM policy_receipts WHERE actor=? AND request_key=?`, c.Actor, c.RequestKey).Scan(&oldHash, &result)
@@ -58,7 +101,9 @@ func (r *PolicyRepository) SavePolicy(ctx context.Context, c entity.SavePolicyCo
 		if oldHash != hash {
 			return out, taxonomy.ErrPolicyConflict
 		}
-		err = json.Unmarshal([]byte(result), &out)
+		var rec policySaveReceipt
+		err = json.Unmarshal([]byte(result), &rec)
+		out = entity.SavePolicyResult{ID: rec.ID, Version: rec.Version}
 		return out, err
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
@@ -97,11 +142,35 @@ func (r *PolicyRepository) SavePolicy(ctx context.Context, c entity.SavePolicyCo
 			return out, err
 		}
 	} else {
-		snapshot := policySnapshot{Name: c.Name, Description: c.Description, Host: c.Host, PathPrefix: c.PathPrefix, Mode: c.Mode, Priority: c.Priority, RuleIDs: c.RuleIDs, Rules: []policySnapshotRule{}}
+		pathPrefix := c.PathPrefix
+		if pathPrefix == "" {
+			pathPrefix = "/"
+		}
+		snapshot := policySnapshot{Name: c.Name, Description: c.Description, Host: c.Host, PathPrefix: pathPrefix, Mode: c.Mode, Priority: c.Priority, RuleIDs: c.RuleIDs, Rules: []policySnapshotRule{}}
 		ids, _ := json.Marshal(c.RuleIDs)
-		rows, e := tx.QueryContext(ctx, `WITH selected AS (SELECT CAST(value AS INTEGER) id FROM json_each(?))
-   SELECT r.id,r.version,r.name,r.rule_group,r.path,r.action,r.score,r.priority,r.enabled,coalesce(d.runtime_ready,1)
-   FROM selected s JOIN rules r ON r.id=s.id LEFT JOIN rule_definitions d ON d.rule_id=r.id AND d.version=r.version ORDER BY r.id`, string(ids))
+		rows, e := tx.QueryContext(ctx, `
+			WITH selected AS (
+				SELECT CAST(value AS INTEGER) AS id
+				FROM json_each(?)
+			)
+			SELECT
+				r.id,
+				r.version,
+				r.name,
+				r.rule_group,
+				r.path,
+				r.action,
+				r.score,
+				r.priority,
+				r.enabled,
+				coalesce(d.runtime_ready, 1)
+			FROM selected s
+			JOIN rules r ON r.id = s.id
+			LEFT JOIN rule_definitions d ON d.rule_id = r.id AND d.version = r.version
+			WHERE NOT EXISTS (
+				SELECT 1 FROM rule_deletions WHERE rule_id = r.id
+			)
+			ORDER BY r.id`, string(ids))
 		if e != nil {
 			return out, e
 		}
@@ -146,7 +215,7 @@ func (r *PolicyRepository) SavePolicy(ctx context.Context, c entity.SavePolicyCo
 	if err != nil {
 		return out, err
 	}
-	receipt, _ := json.Marshal(out)
+	receipt, _ := json.Marshal(policySaveReceipt{ID: out.ID, Version: out.Version})
 	_, err = tx.ExecContext(ctx, `INSERT INTO policy_receipts VALUES(?,?,?,?)`, c.Actor, c.RequestKey, hash, string(receipt))
 	if err != nil {
 		return out, err
@@ -178,12 +247,18 @@ func (r *PolicyRepository) ReadPolicies(ctx context.Context, q entity.ReadPolici
 }
 func (r *PolicyRepository) PolicyCatalog(ctx context.Context) ([]entity.PolicyCatalogItem, error) {
 	out := []entity.PolicyCatalogItem{}
-	rows, err := r.reader.QueryContext(ctx, `WITH latest_policies AS (
-		SELECT id, json_extract(document, '$.name') AS name
-		FROM policies
-		ORDER BY id ASC
-	)
-	SELECT id, coalesce(name, 'policy-' || id) AS name FROM latest_policies`)
+	rows, err := r.reader.QueryContext(ctx, `
+		WITH latest_policies AS (
+			SELECT
+				id,
+				json_extract(document, '$.name') AS name
+			FROM policies
+			ORDER BY id ASC
+		)
+		SELECT
+			id,
+			coalesce(name, 'policy-' || id) AS name
+		FROM latest_policies`)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +275,7 @@ func (r *PolicyRepository) PolicyCatalog(ctx context.Context) ([]entity.PolicyCa
 
 func (r *PolicyRepository) PolicyRuleCatalog(ctx context.Context) ([]entity.PolicyCatalogRule, error) {
 	out := []entity.PolicyCatalogRule{}
-	rows, err := r.reader.QueryContext(ctx, `SELECT r.id,r.version,r.name,r.rule_group,r.action,r.enabled,coalesce(d.runtime_ready,1) FROM rules r LEFT JOIN rule_definitions d ON d.rule_id=r.id AND d.version=r.version ORDER BY r.id LIMIT 1024`)
+	rows, err := r.reader.QueryContext(ctx, `SELECT r.id,r.version,r.name,r.rule_group,r.action,r.enabled,coalesce(d.runtime_ready,1) FROM rules r LEFT JOIN rule_definitions d ON d.rule_id=r.id AND d.version=r.version WHERE NOT EXISTS(SELECT 1 FROM rule_deletions WHERE rule_id=r.id) ORDER BY r.id LIMIT 1024`)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +297,12 @@ func (r *PolicyRepository) PublishPolicy(ctx context.Context, c entity.PublishPo
 		return out, err
 	}
 	defer tx.Rollback()
-	input, _ := json.Marshal(c)
+	inputPayload := policyPublishPayload{
+		ExpectedVersion: c.ExpectedVersion,
+		ExpectedRelease: c.ExpectedRelease,
+		Disable:         c.Disable,
+	}
+	input, _ := json.Marshal(inputPayload)
 	hash := fmt.Sprintf("publish:%x", sha256.Sum256(append([]byte(fmt.Sprint(c.ID)), input...)))
 	if !c.Preview {
 		var h, result string
@@ -231,7 +311,15 @@ func (r *PolicyRepository) PublishPolicy(ctx context.Context, c entity.PublishPo
 			if h != hash {
 				return out, taxonomy.ErrPolicyConflict
 			}
-			e = json.Unmarshal([]byte(result), &out)
+			var rec policyPublishReceipt
+			e = json.Unmarshal([]byte(result), &rec)
+			out = entity.PublishPolicyResult{
+				ReleaseID:  rec.ReleaseID,
+				Digest:     rec.Digest,
+				Payload:    rec.Payload,
+				Membership: rec.Membership,
+				Preview:    rec.Preview,
+			}
 			return out, e
 		}
 		if !errors.Is(e, sql.ErrNoRows) {
@@ -257,10 +345,21 @@ func (r *PolicyRepository) PublishPolicy(ctx context.Context, c entity.PublishPo
 		return out, taxonomy.ErrPolicyConflict
 	}
 	// Read publication authority directly, never list/detail or current mutable rules.
-	rows, err := tx.QueryContext(ctx, `WITH selected AS (
-  SELECT id,CASE WHEN id=? THEN version ELSE published_version END v FROM policies
-  WHERE (id=? AND ?=0) OR (id<>? AND published_version IS NOT NULL))
-  SELECT s.id,s.v,r.document FROM selected s JOIN policy_revisions r ON r.policy_id=s.id AND r.version=s.v ORDER BY s.id`, c.ID, c.ID, c.Disable, c.ID)
+	rows, err := tx.QueryContext(ctx, `
+		WITH selected AS (
+			SELECT
+				id,
+				CASE WHEN id = ? THEN version ELSE published_version END AS v
+			FROM policies
+			WHERE (id = ? AND ? = 0) OR (id <> ? AND published_version IS NOT NULL)
+		)
+		SELECT
+			s.id,
+			s.v,
+			r.document
+		FROM selected s
+		JOIN policy_revisions r ON r.policy_id = s.id AND r.version = s.v
+		ORDER BY s.id`, c.ID, c.ID, c.Disable, c.ID)
 	if err != nil {
 		return out, err
 	}
@@ -296,7 +395,11 @@ func (r *PolicyRepository) PublishPolicy(ctx context.Context, c entity.PublishPo
 			rows.Close()
 			return out, err
 		}
-		p := runtimePolicy{ID: id, Host: snap.Host, PathPrefix: snap.PathPrefix, Priority: snap.Priority, Rules: []runtimeRule{}}
+		runtimePath := snap.PathPrefix
+		if runtimePath == "" {
+			runtimePath = "/"
+		}
+		p := runtimePolicy{ID: id, Host: snap.Host, PathPrefix: runtimePath, Priority: snap.Priority, Rules: []runtimeRule{}}
 		for _, rule := range snap.Rules {
 			if !rule.Enabled || !rule.RuntimeReady {
 				rows.Close()
@@ -367,7 +470,13 @@ func (r *PolicyRepository) PublishPolicy(ctx context.Context, c entity.PublishPo
 	if err != nil {
 		return out, err
 	}
-	receipt, _ := json.Marshal(out)
+	receipt, _ := json.Marshal(policyPublishReceipt{
+		ReleaseID:  out.ReleaseID,
+		Digest:     out.Digest,
+		Payload:    out.Payload,
+		Membership: out.Membership,
+		Preview:    out.Preview,
+	})
 	_, err = tx.ExecContext(ctx, `INSERT INTO policy_receipts VALUES(?,?,?,?)`, c.Actor, c.RequestKey, hash, string(receipt))
 	if err != nil {
 		return out, err
@@ -377,10 +486,28 @@ func (r *PolicyRepository) PublishPolicy(ctx context.Context, c entity.PublishPo
 
 func (r *PolicyRepository) PolicyCluster(ctx context.Context) (entity.PolicyClusterStatus, error) {
 	out := entity.PolicyClusterStatus{Nodes: []entity.PolicyClusterNode{}}
-	rows, err := r.reader.QueryContext(ctx, `WITH head AS (SELECT coalesce((SELECT release_id FROM policy_cluster_head WHERE singleton=1),0) id)
- SELECT head.id,coalesce(n.id,''),coalesce(p.release_id,0),
- CASE WHEN p.release_id=head.id THEN CASE WHEN p.phase='observed' AND unixepoch('now')-unixepoch(p.updated_at)>45 THEN 'stale' ELSE p.phase END ELSE 'pending' END,coalesce(p.message,''),coalesce(p.updated_at,'')
- FROM head LEFT JOIN cluster_nodes n ON 1=1 LEFT JOIN policy_node_reports p ON p.node_id=n.id ORDER BY n.id`)
+	rows, err := r.reader.QueryContext(ctx, `
+		WITH head AS (
+			SELECT coalesce((SELECT release_id FROM policy_cluster_head WHERE singleton = 1), 0) AS id
+		)
+		SELECT
+			head.id,
+			coalesce(n.id, ''),
+			coalesce(p.release_id, 0),
+			CASE
+				WHEN p.release_id = head.id THEN
+					CASE
+						WHEN p.phase = 'observed' AND unixepoch('now') - unixepoch(p.updated_at) > 45 THEN 'stale'
+						ELSE p.phase
+					END
+				ELSE 'pending'
+			END,
+			coalesce(p.message, ''),
+			coalesce(p.updated_at, '')
+		FROM head
+		LEFT JOIN cluster_nodes n ON 1 = 1
+		LEFT JOIN policy_node_reports p ON p.node_id = n.id
+		ORDER BY n.id`)
 	if err != nil {
 		return out, err
 	}
@@ -407,12 +534,23 @@ func (r *PolicyRepository) PolicySync(ctx context.Context, q entity.PolicySyncQu
 	return out, err
 }
 func (r *PolicyRepository) PolicyReport(ctx context.Context, c entity.PolicyReportCommand) error {
-	res, err := r.writer.ExecContext(ctx, `INSERT INTO policy_node_reports(node_id,release_id,phase,message)
- SELECT n.id,h.release_id,?,? FROM cluster_nodes n JOIN policy_cluster_head h ON h.release_id=? WHERE n.id=?
- ON CONFLICT(node_id) DO UPDATE SET release_id=excluded.release_id,phase=excluded.phase,message=excluded.message,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
- WHERE policy_node_reports.release_id<excluded.release_id OR policy_node_reports.phase=excluded.phase OR policy_node_reports.phase='failed'
- OR (policy_node_reports.phase='validated' AND excluded.phase IN ('reload_requested','observed','failed'))
- OR (policy_node_reports.phase='reload_requested' AND excluded.phase IN ('observed','failed'))`, c.Phase, c.Message, c.ReleaseID, c.NodeID)
+	res, err := r.writer.ExecContext(ctx, `
+		INSERT INTO policy_node_reports (node_id, release_id, phase, message)
+		SELECT n.id, h.release_id, ?, ?
+		FROM cluster_nodes n
+		JOIN policy_cluster_head h ON h.release_id = ?
+		WHERE n.id = ?
+		ON CONFLICT(node_id) DO UPDATE SET
+			release_id = excluded.release_id,
+			phase = excluded.phase,
+			message = excluded.message,
+			updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+		WHERE policy_node_reports.release_id < excluded.release_id
+		   OR policy_node_reports.phase = excluded.phase
+		   OR policy_node_reports.phase = 'failed'
+		   OR (policy_node_reports.phase = 'validated' AND excluded.phase IN ('reload_requested', 'observed', 'failed'))
+		   OR (policy_node_reports.phase = 'reload_requested' AND excluded.phase IN ('observed', 'failed'))`,
+		c.Phase, c.Message, c.ReleaseID, c.NodeID)
 	if err != nil {
 		return err
 	}

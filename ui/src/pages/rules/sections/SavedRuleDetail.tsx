@@ -30,6 +30,9 @@ export interface SavedDetail {
   score: number;
   priority: number;
   enabled: boolean;
+  assigned_policies: number;
+  created_at: string;
+  created_by: string;
   updated_at: string;
   runtime_ready: boolean;
   runtime_issues: string[];
@@ -64,7 +67,7 @@ const groupLabels: Record<string, string> = {
 };
 
 function formatDate(dateStr?: string): string {
-  if (!dateStr) return '2026-09-05 08:15 UTC';
+  if (!dateStr) return '—';
   try {
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr;
@@ -83,6 +86,7 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [copiedExpression, setCopiedExpression] = useState(false);
   const [enabledOverride, setEnabledOverride] = useState<boolean | null>(null);
+  const [isToggling, setIsToggling] = useState(false);
 
   useEffect(() => {
     if (!id) {
@@ -127,44 +131,69 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
     setTimeout(() => setCopiedExpression(false), 2000);
   };
 
-  const handleToggleRule = () => {
-    setEnabledOverride(!isEnabled);
+  const handleToggleRule = async () => {
+    if (!detail || isToggling) return;
+    setIsToggling(true);
+    const nextState = !isEnabled;
+    const authToken = getAuthToken();
+    try {
+      const res = await fetch('/api/v2/rules/' + encodeURIComponent(detail.id), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+          'Idempotency-Key': crypto.randomUUID(),
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          expected_version: detail.version,
+          name: detail.name,
+          description: detail.description,
+          group: detail.group,
+          severity: detail.severity,
+          score: detail.score,
+          enabled: nextState,
+          priority: detail.priority,
+          policy_id: null,
+          logic_mode: detail.logic_mode || 'all',
+          conditions: detail.conditions || [],
+          action: detail.action,
+          response_code: detail.response_code,
+          custom_response: detail.custom_response,
+          log_event: detail.log_event,
+          add_to_reputation: detail.add_to_reputation,
+          source_ip: detail.source_ip,
+          host_domain: detail.host_domain,
+          path_prefix: detail.path_prefix,
+          http_method: detail.http_method,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to update rule status (${res.status})`);
+      }
+      const updated = await res.json();
+      setDetail(prev => prev ? { ...prev, enabled: nextState, version: updated.version } : null);
+      setEnabledOverride(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Toggle rule failed.');
+    } finally {
+      setIsToggling(false);
+    }
   };
 
   const primaryCondition = detail?.conditions?.[0];
-  const expressionText = primaryCondition?.value || detail?.path_prefix || '(?i)union\\s+select';
+  const expressionText = primaryCondition?.value || detail?.path_prefix || detail?.source_ip || '—';
   const targetText = detail?.conditions && detail.conditions.length > 0
-    ? detail.conditions.map(c => c.field).filter(Boolean).join(', ') || 'Query string, Request body'
-    : 'Query string, Request body';
+    ? detail.conditions.map(c => c.field).filter(Boolean).join(', ')
+    : detail?.path_prefix ? 'Path prefix' : detail?.source_ip ? 'Client IP' : '—';
 
   // Audit history items formatting
-  const changeItems = history.length > 0
-    ? history.map((item) => ({
-        type: item.action === 'create' ? 'create' : 'update',
-        title: item.action === 'create' ? 'Rule created' : `Updated revision v${item.version}`,
-        user: item.actor || 'Admin User',
-        date: formatDate(item.updated_at),
-      }))
-    : [
-        {
-          type: 'create',
-          title: 'Rule created',
-          user: 'Admin User',
-          date: formatDate(detail?.updated_at),
-        },
-        {
-          type: 'update',
-          title: 'Updated match expression',
-          user: 'Admin User',
-          date: formatDate(detail?.updated_at),
-        },
-        {
-          type: 'assign',
-          title: 'Assigned to 2 more policies',
-          user: 'Admin User',
-          date: formatDate(detail?.updated_at),
-        },
-      ];
+  const changeItems = history.map((item) => ({
+    type: item.action === 'create' ? 'create' : 'update',
+    title: item.action === 'create' ? 'Rule created' : `Updated revision v${item.version}`,
+    user: item.actor || 'admin',
+    date: formatDate(item.updated_at),
+  }));
 
   return (
     <>
@@ -195,7 +224,7 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
           </div>
         ) : !detail ? (
           <div className="flex justify-between items-start">
-            <p role="status" className="text-slate-500 dark:text-slate-400 font-mono">
+            <p role="status" className="text-slate-500 dark:text-slate-400 font-sans">
               Loading saved revision…
             </p>
             {onClose && (
@@ -283,14 +312,14 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
               <div className="space-y-2 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="text-slate-500 dark:text-slate-400">Category</span>
-                  <span className="text-slate-800 dark:text-slate-200 font-medium font-mono text-[11px]">
+                  <span className="text-slate-800 dark:text-slate-200 font-medium font-sans text-[11px]">
                     {groupLabels[detail.group] || detail.group || 'SQL Injection'}
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between">
                   <span className="text-slate-500 dark:text-slate-400">Action</span>
-                  <span className="font-mono">
+                  <span className="font-sans">
                     {detail.action?.toLowerCase() === 'block' && (
                       <span className="px-2 py-0.5 text-[10px] font-bold bg-rose-100 text-rose-850 border border-rose-300 dark:bg-[#3E1418] dark:text-[#FCA5A5] dark:border-red-800 rounded-xs uppercase">
                         Block
@@ -347,14 +376,20 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
 
                 <div className="flex items-center justify-between">
                   <span className="text-slate-500 dark:text-slate-400">Scope</span>
-                  <span className="text-slate-800 dark:text-slate-200 font-mono text-[11px]">
-                    {detail.path_prefix ? `Path: ${detail.path_prefix}` : 'Global Web Policy'}
+                  <span className="text-slate-800 dark:text-slate-200 font-sans text-[11px]">
+                    {detail.path_prefix ? (
+                      <>Path: <span className="font-mono">{detail.path_prefix}</span></>
+                    ) : (
+                      'Global Web Policy'
+                    )}
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between">
                   <span className="text-slate-500 dark:text-slate-400">Assigned Policies</span>
-                  <span className="text-slate-800 dark:text-slate-200 font-mono text-[11px]">4</span>
+                  <span className="text-slate-800 dark:text-slate-200 font-mono text-[11px]">
+                    {detail.assigned_policies ?? 0}
+                  </span>
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -374,14 +409,14 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
               <div className="space-y-2 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="text-slate-500 dark:text-slate-400">Targets</span>
-                  <span className="text-slate-800 dark:text-slate-200 font-mono text-[11px] text-right">
+                  <span className="text-slate-800 dark:text-slate-200 font-sans text-[11px] text-right">
                     {targetText}
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between">
                   <span className="text-slate-500 dark:text-slate-400">Pattern Type</span>
-                  <span className="text-slate-800 dark:text-slate-200 font-mono text-[11px]">
+                  <span className="text-slate-800 dark:text-slate-200 font-sans text-[11px]">
                     {primaryCondition?.operator || 'Regex'}
                   </span>
                 </div>
@@ -408,7 +443,7 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
                 <div className="flex items-center justify-between">
                   <span className="text-slate-500 dark:text-slate-400">Score Contribution</span>
                   <span className="text-slate-800 dark:text-slate-200 font-mono text-[11px]">
-                    +{detail.score || 10}
+                    +{detail.score || 0}
                   </span>
                 </div>
               </div>
@@ -429,15 +464,15 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
 
                 <div className="flex items-center justify-between">
                   <span className="text-slate-500 dark:text-slate-400">Event Logging</span>
-                  <span className="text-slate-800 dark:text-slate-200 font-mono text-[11px]">
+                  <span className="text-slate-800 dark:text-slate-200 font-sans text-[11px]">
                     {detail.log_event !== false ? 'Enabled' : 'Disabled'}
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between">
                   <span className="text-slate-500 dark:text-slate-400">Audit Trail</span>
-                  <span className="text-slate-800 dark:text-slate-200 font-mono text-[11px]">
-                    Enabled
+                  <span className="text-slate-800 dark:text-slate-200 font-sans text-[11px]">
+                    {detail.log_event !== false ? 'Enabled' : 'Disabled'}
                   </span>
                 </div>
               </div>
@@ -456,7 +491,7 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
                 </button>
 
                 <Link
-                  to={`/edit-rule?id=${detail.id}`}
+                  to={`/rules/${detail.id}/edit`}
                   className="bg-slate-100 hover:bg-slate-200 dark:bg-[#0E1726] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-800 dark:text-slate-200 py-2 px-3 rounded-sm flex items-center justify-center gap-2 text-xs transition-colors cursor-pointer"
                 >
                   <Pencil className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
@@ -475,18 +510,19 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
 
                 <button
                   type="button"
+                  disabled={isToggling}
                   onClick={handleToggleRule}
-                  className="bg-slate-100 hover:bg-slate-200 dark:bg-[#0E1726] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-800 dark:text-slate-200 py-2 px-3 rounded-sm flex items-center justify-center gap-2 text-xs transition-colors cursor-pointer"
+                  className="bg-slate-100 hover:bg-slate-200 dark:bg-[#0E1726] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-800 dark:text-slate-200 py-2 px-3 rounded-sm flex items-center justify-center gap-2 text-xs transition-colors cursor-pointer disabled:opacity-50"
                 >
                   {isEnabled ? (
                     <>
                       <Ban className="w-3.5 h-3.5 text-rose-500" />
-                      <span>Disable rule</span>
+                      <span>{isToggling ? 'Updating...' : 'Disable rule'}</span>
                     </>
                   ) : (
                     <>
                       <Power className="w-3.5 h-3.5 text-emerald-500" />
-                      <span>Enable rule</span>
+                      <span>{isToggling ? 'Updating...' : 'Enable rule'}</span>
                     </>
                   )}
                 </button>
@@ -499,42 +535,48 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
                 <h3 className="text-xs font-semibold text-slate-900 dark:text-white tracking-wide">
                   Recent Changes
                 </h3>
-                <button
-                  type="button"
+                <Link
+                  to={`/rules/${encodeURIComponent(detail.id)}/history`}
                   className="text-[11px] text-blue-600 dark:text-cyan-400 hover:underline flex items-center gap-1 cursor-pointer"
                 >
                   <span>View all</span>
                   <ArrowRight className="w-3 h-3" />
-                </button>
+                </Link>
               </div>
 
               <div className="space-y-2">
-                {changeItems.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between text-xs py-1 border-b border-slate-100 dark:border-[#152030]/60 last:border-0"
-                  >
-                    <div className="flex items-center gap-2 min-w-0 pr-2">
-                      {item.type === 'create' ? (
-                        <div className="w-4 h-4 rounded-xs bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950 dark:text-emerald-400 dark:border-transparent flex items-center justify-center shrink-0 text-[10px] font-bold">
-                          +
-                        </div>
-                      ) : (
-                        <div className="w-4 h-4 rounded-xs bg-blue-100 text-blue-800 border border-blue-300 dark:bg-blue-950 dark:text-blue-400 dark:border-transparent flex items-center justify-center shrink-0 text-[10px]">
-                          <Pencil className="w-2.5 h-2.5" />
-                        </div>
-                      )}
-                      <span className="text-slate-800 dark:text-slate-200 font-medium truncate text-[11px]">
-                        {item.title}
-                      </span>
-                    </div>
+                {changeItems.length === 0 ? (
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 italic py-2">
+                    No revisions recorded yet.
+                  </p>
+                ) : (
+                  changeItems.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between text-xs py-1 border-b border-slate-100 dark:border-[#152030]/60 last:border-0"
+                    >
+                      <div className="flex items-center gap-2 min-w-0 pr-2">
+                        {item.type === 'create' ? (
+                          <div className="w-4 h-4 rounded-xs bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950 dark:text-emerald-400 dark:border-transparent flex items-center justify-center shrink-0 text-[10px] font-bold">
+                            +
+                          </div>
+                        ) : (
+                          <div className="w-4 h-4 rounded-xs bg-blue-100 text-blue-800 border border-blue-300 dark:bg-blue-950 dark:text-blue-400 dark:border-transparent flex items-center justify-center shrink-0 text-[10px]">
+                            <Pencil className="w-2.5 h-2.5" />
+                          </div>
+                        )}
+                        <span className="text-slate-800 dark:text-slate-200 font-medium truncate text-[11px]">
+                          {item.title}
+                        </span>
+                      </div>
 
-                    <div className="flex items-center gap-2.5 text-[11px] font-mono shrink-0">
-                      <span className="text-slate-500 dark:text-slate-400">{item.user}</span>
-                      <span className="text-slate-400 dark:text-slate-500">{item.date}</span>
+                      <div className="flex items-center gap-2.5 text-[11px] shrink-0">
+                        <span className="text-slate-500 dark:text-slate-400 font-sans">{item.user}</span>
+                        <span className="text-slate-400 dark:text-slate-500 font-mono">{item.date}</span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </>

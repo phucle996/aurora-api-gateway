@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 
 export function CreateRateLimitHeader() {
   return (
-    <div className="space-y-1 font-mono">
+    <div className="space-y-1 font-sans">
       {/* Breadcrumb */}
       <div className="flex items-center gap-1.5 text-xs text-slate-400">
         <Link to="/rate-limits" className="hover:text-white transition-colors">

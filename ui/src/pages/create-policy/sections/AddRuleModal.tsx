@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
-import { Search, X, ShieldPlus, Plus } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Search, X, SlidersHorizontal, Check } from 'lucide-react';
 
-interface CatalogRule {
+export interface CatalogRule {
   id: number;
   name: string;
   action: string;
@@ -11,20 +11,28 @@ interface CatalogRule {
 interface AddRuleModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddRules: (rules: CatalogRule[]) => void;
+  onSaveRules: (selectedIds: number[]) => void;
   catalog: CatalogRule[];
-  existingRuleIds: number[];
+  selectedRuleIds: number[];
 }
 
 export function AddRuleModal({
   isOpen,
   onClose,
-  onAddRules,
+  onSaveRules,
   catalog,
-  existingRuleIds,
+  selectedRuleIds,
 }: AddRuleModalProps) {
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+
+  // Sync selectedIds whenever modal opens or initial selection changes
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedIds(selectedRuleIds);
+      setSearch('');
+    }
+  }, [isOpen, selectedRuleIds]);
 
   // Filter catalog items
   const filteredCatalog = useMemo(() => {
@@ -47,33 +55,28 @@ export function AddRuleModal({
   };
 
   const handleConfirm = () => {
-    const selectedRules = catalog.filter((r) => selectedIds.includes(r.id));
-    if (selectedRules.length > 0) {
-      onAddRules(selectedRules);
-    }
-    setSelectedIds([]);
-    setSearch('');
+    onSaveRules(selectedIds);
     onClose();
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
       <div
-        className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#1C293D] w-full max-w-xl rounded-sm shadow-2xl overflow-hidden font-mono flex flex-col max-h-[85vh]"
+        className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#1C293D] w-full max-w-xl rounded-sm shadow-2xl overflow-hidden font-sans flex flex-col max-h-[85vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-[#1C293D] bg-slate-50/50 dark:bg-[#080E18]">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xs bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-900/60 text-blue-600 dark:text-blue-400">
-              <ShieldPlus className="w-4 h-4" />
+              <SlidersHorizontal className="w-4 h-4" />
             </div>
             <div>
               <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-                Add Rules from Catalog
+                Edit Policy Rules
               </h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Select real security rules from your catalog to include in this policy.
+                Select or deselect security rules from your catalog to include in this policy.
               </p>
             </div>
           </div>
@@ -111,30 +114,25 @@ export function AddRuleModal({
             </div>
           ) : (
             filteredCatalog.map((item) => {
-              const isAlreadyAdded = existingRuleIds.includes(item.id);
               const isSelected = selectedIds.includes(item.id);
 
               return (
                 <div
                   key={item.id}
-                  onClick={() => {
-                    if (!isAlreadyAdded) toggleSelect(item.id);
-                  }}
-                  className={`flex items-center justify-between p-3 rounded-sm border transition-all text-xs ${
-                    isAlreadyAdded
-                      ? 'border-slate-200 dark:border-[#172338] bg-slate-50/40 dark:bg-[#080E18]/40 opacity-60 cursor-not-allowed'
-                      : isSelected
-                      ? 'border-blue-400 dark:border-blue-500 bg-blue-50/30 dark:bg-blue-950/20 cursor-pointer'
-                      : 'border-slate-200 dark:border-[#172338] hover:border-slate-300 dark:hover:border-[#1C293D] bg-white dark:bg-[#0B1320] cursor-pointer'
+                  onClick={() => toggleSelect(item.id)}
+                  className={`flex items-center justify-between p-3 rounded-sm border transition-all text-xs cursor-pointer ${
+                    isSelected
+                      ? 'border-blue-400 dark:border-blue-500 bg-blue-50/40 dark:bg-blue-950/25'
+                      : 'border-slate-200 dark:border-[#172338] hover:border-slate-300 dark:hover:border-[#1C293D] bg-white dark:bg-[#0B1320]'
                   }`}
                 >
                   <div className="flex items-center gap-3">
                     <input
                       type="checkbox"
-                      checked={isSelected || isAlreadyAdded}
-                      disabled={isAlreadyAdded}
-                      onChange={() => {}}
-                      className="rounded-xs border-slate-300 dark:border-[#1C293D] text-blue-600 focus:ring-blue-500 cursor-pointer disabled:cursor-not-allowed"
+                      checked={isSelected}
+                      onChange={() => toggleSelect(item.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="rounded-xs border-slate-300 dark:border-[#1C293D] text-blue-600 focus:ring-blue-500 cursor-pointer"
                     />
 
                     <div>
@@ -146,13 +144,13 @@ export function AddRuleModal({
                           </span>
                         )}
                       </div>
-                      <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+                      <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 font-mono">
                         ID: #{item.id} • Action:{' '}
                         <span
                           className={
-                            item.action === 'allow'
+                            item.action.toLowerCase() === 'allow'
                               ? 'text-emerald-500 font-medium'
-                              : item.action === 'block'
+                              : item.action.toLowerCase() === 'block'
                               ? 'text-rose-500 font-medium'
                               : 'text-amber-500 font-medium'
                           }
@@ -164,15 +162,15 @@ export function AddRuleModal({
                   </div>
 
                   <div>
-                    {isAlreadyAdded ? (
-                      <span className="text-[11px] px-2 py-0.5 rounded-xs bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-medium">
-                        Added
+                    {isSelected ? (
+                      <span className="text-[11px] px-2 py-0.5 rounded-xs bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-medium border border-blue-200 dark:border-blue-800">
+                        Included
                       </span>
-                    ) : isSelected ? (
-                      <span className="text-[11px] px-2 py-0.5 rounded-xs bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-medium">
-                        Selected
+                    ) : (
+                      <span className="text-[11px] px-2 py-0.5 rounded-xs bg-slate-100 dark:bg-[#152030] text-slate-400 dark:text-slate-500 font-medium">
+                        Excluded
                       </span>
-                    ) : null}
+                    )}
                   </div>
                 </div>
               );
@@ -183,7 +181,7 @@ export function AddRuleModal({
         {/* Footer */}
         <div className="flex items-center justify-between px-5 py-3 border-t border-slate-200 dark:border-[#1C293D] bg-slate-50/50 dark:bg-[#080E18]">
           <span className="text-[11px] text-slate-500 dark:text-slate-400">
-            {selectedIds.length} rule{selectedIds.length === 1 ? '' : 's'} selected
+            <strong className="text-slate-900 dark:text-white">{selectedIds.length}</strong> of {catalog.length} rules selected
           </span>
 
           <div className="flex items-center gap-2">
@@ -198,11 +196,10 @@ export function AddRuleModal({
             <button
               type="button"
               onClick={handleConfirm}
-              disabled={selectedIds.length === 0}
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-semibold rounded-sm shadow-xs transition-all cursor-pointer disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-sm shadow-xs transition-all cursor-pointer"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Selected ({selectedIds.length})</span>
+              <Check className="w-3.5 h-3.5" />
+              <span>Save Rules ({selectedIds.length})</span>
             </button>
           </div>
         </div>

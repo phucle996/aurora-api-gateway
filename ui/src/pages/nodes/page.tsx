@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { NodesStats } from './sections/NodesStats';
 import { NodesTable, type NodeItem } from './sections/NodesTable';
 import { NodeDetail } from './sections/NodeDetail';
 import { nodesApi } from '../../lib/api';
+import type { NodeHeartbeat, NodeSyncLog } from '../../lib/api/nodes';
 import { API_BASE_URL, getAuthToken } from '../../lib/fetcher';
 
 // Tính toán thời gian tương đối động từ timestamp
@@ -21,215 +22,103 @@ export function formatRelativeTime(timestamp?: number): string {
 }
 
 export default function NodesPage() {
-  const [nodes, setNodes] = useState<NodeItem[]>([]);
-  const [selectedNode, setSelectedNode] = useState<NodeItem | null>(null);
+  const [records, setRecords] = useState<NodeItem[]>([]);
+  const [selectedID, setSelectedID] = useState<string | null>(null);
+  const [displayNode, setDisplayNode] = useState<NodeItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [latestHeartbeatEvent, setLatestHeartbeatEvent] = useState<any>(null);
-  const [latestSyncEvent, setLatestSyncEvent] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [streamState, setStreamState] = useState('Connecting');
+  const [heartbeats, setHeartbeats] = useState<Record<string, NodeHeartbeat>>({});
+  const [latestSyncEvent, setLatestSyncEvent] = useState<NodeSyncLog | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const requestID = useRef(0);
+  const nodes: NodeItem[] = records.map(n => {
+    const fresh = !!n.lastHeartbeatTimestamp && now - n.lastHeartbeatTimestamp <= 45000;
+    return { ...n, status: fresh ? n.status : 'Not Ready',
+      metricsAvailable: fresh && n.metricsAvailable,
+      lastHeartbeat: formatRelativeTime(n.lastHeartbeatTimestamp),
+      policySync: fresh ? n.policySync : 'Unknown (stale heartbeat)',
+    };
+  });
+  const selectedNode = nodes.find(n => n.id === selectedID) || null;
+  const latestHeartbeatEvent = selectedID ? heartbeats[selectedID] : undefined;
 
-  const fetchNodes = useCallback(async (isInitial = false) => {
-    if (isInitial) {
-      setIsLoading(true);
-    }
+  useEffect(() => {
+    if (selectedNode) setDisplayNode(selectedNode);
+  }, [records, selectedID, now]);
+
+  const fetchNodes = useCallback(async (initial = false) => {
+    const request = ++requestID.current;
+    if (initial) setIsLoading(true);
     try {
-      const res = await nodesApi.list();
-      if (Array.isArray(res)) {
-        const mapped: NodeItem[] = res.map((item: any) => {
-          let ts: number = Date.now();
-          if (item.lastHeartbeatTimestamp) {
-            ts = item.lastHeartbeatTimestamp * 1000;
-          } else if (item.lastHeartbeat) {
-            const match = item.lastHeartbeat.match(/^(\d+)s ago$/);
-            if (match) {
-              ts = Date.now() - parseInt(match[1], 10) * 1000;
-            } else {
-              const matchMin = item.lastHeartbeat.match(/^(\d+)m ago$/);
-              if (matchMin) {
-                ts = Date.now() - parseInt(matchMin[1], 10) * 60 * 1000;
-              }
-            }
-          }
-          return {
-            ...item,
-            lastHeartbeatTimestamp: ts,
-            lastHeartbeat: formatRelativeTime(ts),
-          };
-        });
-        setNodes(mapped);
-        // Cập nhật lại thông tin node đang xem (nếu có), không tự động mở node đầu tiên
-        setSelectedNode((prev) => {
-          if (!prev || mapped.length === 0) return null;
-          return mapped.find((n) => n.id === prev.id) || null;
-        });
-      }
+      const data = await nodesApi.list();
+      if (request !== requestID.current) return;
+      if (!Array.isArray(data)) throw new Error('Invalid nodes response');
+      setRecords(prev => data.map(item => {
+        const incoming = { ...item, lastHeartbeatTimestamp: (item.lastHeartbeatTimestamp || 0) * 1000 };
+        const old = prev.find(n => n.id === item.id);
+        return old && (old.lastHeartbeatTimestamp || 0) > incoming.lastHeartbeatTimestamp ? old : incoming;
+      }));
+      setError(null);
     } catch (err) {
-      console.error('Failed to fetch cluster nodes:', err);
-    } finally {
-      if (isInitial) {
-        setIsLoading(false);
-      }
-    }
+      if (request === requestID.current) setError(err instanceof Error ? err.message : 'Unable to fetch nodes');
+    } finally { if (request === requestID.current) setIsLoading(false); }
   }, []);
 
-  // 1. Tải danh sách nodes ban đầu
   useEffect(() => {
-    fetchNodes(true);
+    void fetchNodes(true);
+    const poll = setInterval(() => void fetchNodes(), 15000);
+    const clock = setInterval(() => setNow(Date.now()), 1000);
+    return () => { ++requestID.current; clearInterval(poll); clearInterval(clock); };
   }, [fetchNodes]);
 
-  // 2. Dynamic Relative Time Ticker: Tự động đếm giây (Xs ago / Xm ago) theo thời gian thực
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNodes((prev) => {
-        let changed = false;
-        const next = prev.map((n) => {
-          if (!n.lastHeartbeatTimestamp) return n;
-          const updatedText = formatRelativeTime(n.lastHeartbeatTimestamp);
-          const diffSec = Math.floor((Date.now() - n.lastHeartbeatTimestamp) / 1000);
-          const nextStatus = diffSec > 45 ? 'Not Ready' : n.status;
-
-          if (n.lastHeartbeat !== updatedText || n.status !== nextStatus) {
-            changed = true;
-            return {
-              ...n,
-              lastHeartbeat: updatedText,
-              status: nextStatus as any,
-              uptime: nextStatus === 'Not Ready' ? 'Offline' : n.uptime,
-            };
-          }
-          return n;
-        });
-        return changed ? next : prev;
-      });
-
-      setSelectedNode((prev) => {
-        if (!prev || !prev.lastHeartbeatTimestamp) return prev;
-        const updatedText = formatRelativeTime(prev.lastHeartbeatTimestamp);
-        const diffSec = Math.floor((Date.now() - prev.lastHeartbeatTimestamp) / 1000);
-        const nextStatus = diffSec > 45 ? 'Not Ready' : prev.status;
-
-        if (prev.lastHeartbeat !== updatedText || prev.status !== nextStatus) {
-          return {
-            ...prev,
-            lastHeartbeat: updatedText,
-            status: nextStatus as any,
-            uptime: nextStatus === 'Not Ready' ? 'Offline' : prev.uptime,
-          };
-        }
-        return prev;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, []);
-
-  // 3. Vòng đời SSE: Chỉ khởi tạo khi mount vào NodesPage và ngắt kết nối ngay khi unmount
   useEffect(() => {
     const token = getAuthToken();
-    const streamUrl = `${API_BASE_URL}/api/v1/events/stream${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-    const es = new EventSource(streamUrl, { withCredentials: true });
-
-    const handleHeartbeatsBatch = (items: any[]) => {
-      if (!Array.isArray(items) || items.length === 0) return;
-
-      const updateMap = new Map(items.map((it) => [it.node_id, it]));
-
-      // Cập nhật một lần duy nhất cho toàn bộ bảng Nodes (tránh re-render rời rạc)
-      setNodes((prev) =>
-        prev.map((n) => {
-          const update = updateMap.get(n.id);
-          if (!update) return n;
-          const ts = update.timestamp ? update.timestamp * 1000 : Date.now();
-          return {
-            ...n,
-            ip: update.ip || n.ip,
-            status: update.status || n.status,
-            requestsPerSecond:
-              update.rps != null ? Number(update.rps).toFixed(1) : n.requestsPerSecond,
-            activeConnections:
-              update.active_conns != null ? String(update.active_conns) : n.activeConnections,
-            cpuUsage: update.cpu_usage != null ? update.cpu_usage : n.cpuUsage,
-            memoryUsage: update.memory_usage != null ? update.memory_usage : n.memoryUsage,
-            sync: update.sync || n.sync,
-            ruleset: update.ruleset || n.ruleset,
-            lastHeartbeatTimestamp: ts,
-            lastHeartbeat: formatRelativeTime(ts),
-          };
-        })
-      );
-
-      // Cập nhật node đang mở chi tiết (nếu có trong batch)
-      setSelectedNode((prev) => {
-        if (!prev) return prev;
-        const update = updateMap.get(prev.id);
-        if (!update) return prev;
-        setLatestHeartbeatEvent(update);
-        const ts = update.timestamp ? update.timestamp * 1000 : Date.now();
-        return {
-          ...prev,
-          ip: update.ip || prev.ip,
-          status: update.status || prev.status,
-          requestsPerSecond:
-            update.rps != null ? Number(update.rps).toFixed(1) : prev.requestsPerSecond,
-          activeConnections:
-            update.active_conns != null ? String(update.active_conns) : prev.activeConnections,
-          cpuUsage: update.cpu_usage != null ? update.cpu_usage : prev.cpuUsage,
-          memoryUsage: update.memory_usage != null ? update.memory_usage : prev.memoryUsage,
-          sync: update.sync || prev.sync,
-          ruleset: update.ruleset || prev.ruleset,
-          lastHeartbeatTimestamp: ts,
-          lastHeartbeat: formatRelativeTime(ts),
-        };
-      });
-    };
-
-    const handleMessage = (e: MessageEvent) => {
+    const es = new EventSource(`${API_BASE_URL}/api/v1/events/stream${token ? `?token=${encodeURIComponent(token)}` : ''}`, { withCredentials: true });
+    es.onopen = () => { setStreamState('Live'); void fetchNodes(); };
+    es.onerror = () => setStreamState('Disconnected — retrying; refreshing every 15s');
+    const message = (event: MessageEvent) => {
       try {
-        const data = JSON.parse(e.data);
-        const list = Array.isArray(data) ? data : [data];
-        handleHeartbeatsBatch(list);
-      } catch (err) {
-        console.error('Failed to parse SSE heartbeats batch:', err);
-      }
+        const parsed = JSON.parse(event.data);
+        const updates: NodeHeartbeat[] = (Array.isArray(parsed) ? parsed : [parsed]).filter((u: NodeHeartbeat) =>
+          typeof u.node_id === 'string' && Number.isFinite(u.timestamp) && u.timestamp > 0 && u.timestamp <= Date.now()/1000 + 5 &&
+          [u.rps,u.active_conns,u.cpu_usage,u.memory_usage].every(v => typeof v === 'number' && Number.isFinite(v) && v >= 0));
+        setHeartbeats(prev => {
+          const next = { ...prev };
+          for (const u of updates) if (!next[u.node_id] || next[u.node_id].timestamp < u.timestamp) next[u.node_id] = u;
+          return next;
+        });
+        setRecords(prev => prev.map(n => {
+          const u = updates.filter(it => it.node_id === n.id).sort((a,b) => b.timestamp-a.timestamp)[0];
+          if (!u || u.timestamp * 1000 <= (n.lastHeartbeatTimestamp || 0)) return n;
+          return { ...n, ip: u.ip || n.ip, status: u.status, requestsPerSecond: u.rps.toFixed(1),
+            activeConnections: String(u.active_conns), cpuUsage: u.cpu_usage, memoryUsage: u.memory_usage,
+            sync: u.sync, policySync: u.sync, ruleset: u.ruleset, metricsScope: u.metrics_scope,
+            metricsAvailable: u.metrics_available, runtimeStartedAt: u.runtime_started_at,
+            lastHeartbeatTimestamp: u.timestamp * 1000 };
+        }));
+      } catch { setStreamState('Invalid event — waiting for refresh'); }
     };
-
-    es.addEventListener('nodes_heartbeat', handleMessage);
-    es.addEventListener('node_heartbeat', handleMessage);
-
-    es.addEventListener('node_sync', (e: MessageEvent) => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data) {
-          setLatestSyncEvent(data);
-        }
-      } catch (err) {
-        console.error('Failed to parse SSE node_sync:', err);
-      }
+    es.addEventListener('nodes_heartbeat', message);
+    es.addEventListener('node_heartbeat', message);
+    es.addEventListener('node_sync', (event: MessageEvent) => {
+      try { setLatestSyncEvent(JSON.parse(event.data)); } catch { /* REST history reconciles on refresh. */ }
     });
+    return () => es.close();
+  }, [fetchNodes]);
 
-    // Cleanup: Ngắt kết nối SSE ngay khi người dùng rời khỏi trang Nodes
-    return () => {
-      es.close();
-    };
-  }, []);
-
-  const handleSelectNode = (node: NodeItem) => {
-    // Click vào item đang chọn -> ẩn chi tiết để kéo dãn bảng full-width
-    if (selectedNode?.id === node.id) {
-      setSelectedNode(null);
-    } else {
-      setSelectedNode(node);
-    }
-  };
+  const handleSelectNode = (node: NodeItem) => setSelectedID(id => id === node.id ? null : node.id);
 
   return (
     <div className="p-6 w-full space-y-6">
       {/* Top KPI Metrics & Cluster Status */}
       <NodesStats nodes={nodes} />
+      <div role="status" className="text-xs text-slate-500">Telemetry: {streamState}{error && <span role="alert" className="text-rose-500 ml-3">{error} — showing last known data</span>}</div>
 
       {/* Grid: Nodes Table + Right Drawer / Detail */}
-      <div className="flex flex-col lg:flex-row gap-5 items-start">
+      <div className={`flex flex-col lg:flex-row items-start transition-all duration-300 ${selectedNode ? 'gap-5' : 'gap-0'}`}>
         {/* Table Area: Tự động kéo dãn toàn màn hình khi đóng panel chi tiết */}
-        <div className="flex-1 min-w-0 w-full transition-all duration-200">
+        <div className="flex-1 min-w-0 w-full transition-all duration-300 ease-in-out">
           <NodesTable
             nodes={nodes}
             isLoading={isLoading}
@@ -239,17 +128,26 @@ export default function NodesPage() {
           />
         </div>
 
-        {/* Selected Node Detail Panel: Chỉ hiện khi click xem chi tiết */}
-        {selectedNode && (
-          <div className="w-full lg:w-[420px] shrink-0 transition-all duration-200">
-            <NodeDetail
-              node={selectedNode}
-              latestHeartbeatEvent={latestHeartbeatEvent}
-              latestSyncEvent={latestSyncEvent}
-              onClose={() => setSelectedNode(null)}
-            />
+        {/* Selected Node Detail Panel: Co dãn và xuất hiện mượt mà */}
+        <div
+          className={`shrink-0 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] overflow-hidden ${
+            selectedNode
+              ? 'w-full lg:w-[420px] opacity-100 translate-x-0 max-h-[3000px]'
+              : 'w-0 lg:w-0 opacity-0 lg:translate-x-8 max-h-0 lg:max-h-none pointer-events-none'
+          }`}
+        >
+          <div className="w-full lg:w-[420px]">
+            {displayNode && (
+              <NodeDetail
+                key={displayNode.id}
+                node={displayNode}
+                latestHeartbeatEvent={latestHeartbeatEvent}
+                latestSyncEvent={latestSyncEvent}
+                onClose={() => setSelectedID(null)}
+              />
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

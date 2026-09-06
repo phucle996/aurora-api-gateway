@@ -87,10 +87,10 @@ export function DeleteRuleDialog({
             <div className="space-y-2">
               <label
                 htmlFor="confirm-rule-name-input"
-                className="block text-xs font-mono text-slate-700 dark:text-slate-300"
+                className="block text-xs font-sans text-slate-700 dark:text-slate-300"
               >
                 To confirm deletion, please type{' '}
-                <span className="font-bold text-rose-600 dark:text-rose-400 underline underline-offset-2 select-all">
+                <span className="font-bold text-rose-600 dark:text-rose-400 underline underline-offset-2 select-all font-mono">
                   {ruleName}
                 </span>{' '}
                 below:
@@ -117,7 +117,7 @@ export function DeleteRuleDialog({
                 )}
               </div>
               {!isMatched && confirmInput.length > 0 && (
-                <p className="text-[11px] font-mono text-slate-400 dark:text-slate-500">
+                <p className="text-[11px] font-sans text-slate-400 dark:text-slate-500">
                   Name does not match yet.
                 </p>
               )}
@@ -130,7 +130,7 @@ export function DeleteRuleDialog({
               type="button"
               onClick={onClose}
               disabled={isDeleting}
-              className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-[#0E1726] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-300 text-xs font-mono rounded-xs transition-colors cursor-pointer"
+              className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-[#0E1726] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-300 text-xs font-sans rounded-xs transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -138,7 +138,7 @@ export function DeleteRuleDialog({
             <button
               type="submit"
               disabled={!isMatched || isDeleting}
-              className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 disabled:bg-slate-200 dark:disabled:bg-[#1C293D] text-white disabled:text-slate-400 dark:disabled:text-slate-600 text-xs font-semibold font-mono rounded-xs shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:cursor-not-allowed"
+              className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 disabled:bg-slate-200 dark:disabled:bg-[#1C293D] text-white disabled:text-slate-400 dark:disabled:text-slate-600 text-xs font-semibold font-sans rounded-xs shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:cursor-not-allowed"
             >
               {isDeleting ? (
                 <>

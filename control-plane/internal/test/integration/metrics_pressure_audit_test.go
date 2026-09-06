@@ -154,7 +154,7 @@ func TestAuditMetricsStaleHeartbeatNotReady(t *testing.T) {
 	defer pools.Close()
 	nodeRepo := repository.NewNodeRepository(pools.Writer)
 	metrics := service.NewMetricsService(repository.NewSettingsRepository(pools.Writer), nodeRepo)
-	nodes := service.NewNodeService(nodeRepo, metrics)
+	nodes := service.NewNodeService(nodeRepo, metrics, nil)
 	defer metrics.SaveConfig(context.Background(), entity.MetricsIntegrationConfig{Mode: "disabled"})
 	for _, mode := range []string{"disabled", "standalone", "prometheus"} {
 		if err = metrics.SaveConfig(context.Background(), entity.MetricsIntegrationConfig{Mode: mode, PrometheusURL: "http://127.0.0.1:1"}); err != nil {

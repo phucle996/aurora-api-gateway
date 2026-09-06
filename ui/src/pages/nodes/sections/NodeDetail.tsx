@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Server,
@@ -16,28 +16,21 @@ import {
 } from 'lucide-react';
 import type { NodeItem } from './NodesTable';
 import { nodesApi, type NodeSyncLog } from '../../../lib/api';
+import type { NodeHeartbeat, NodeMetricPoint } from '../../../lib/api/nodes';
 
 interface NodeDetailProps {
   node: NodeItem;
-  latestHeartbeatEvent?: any;
-  latestSyncEvent?: any;
+  latestHeartbeatEvent?: NodeHeartbeat;
+  latestSyncEvent?: NodeSyncLog | null;
   onClose?: () => void;
 }
 
-function formatNodeUptime(createdAt?: string, status?: string, fallbackUptime?: string): string {
+function formatNodeUptime(startedAt?: number, status?: string, fallbackUptime?: string): string {
   if (status === 'Not Ready' || status === 'Offline') {
     return 'Offline';
   }
-  if (!createdAt) {
-    return fallbackUptime && fallbackUptime !== 'Active' ? fallbackUptime : 'Active';
-  }
-
-  const dateStr = createdAt.includes('T') ? createdAt : createdAt.replace(' ', 'T') + 'Z';
-  const createdMs = new Date(dateStr).getTime();
-  if (isNaN(createdMs)) {
-    return fallbackUptime && fallbackUptime !== 'Active' ? fallbackUptime : 'Active';
-  }
-
+  if (!startedAt || startedAt <= 0) return 'Unknown';
+  const createdMs = startedAt * 1000;
   const diffSec = Math.max(0, Math.floor((Date.now() - createdMs) / 1000));
   const days = Math.floor(diffSec / 86400);
   const hours = Math.floor((diffSec % 86400) / 3600);
@@ -63,160 +56,86 @@ export function NodeDetail({
   onClose,
 }: NodeDetailProps) {
   const [activeTab, setActiveTab] = useState<'Overview' | 'Metrics' | 'Config' | 'Sync'>('Overview');
-  const [metrics, setMetrics] = useState<any[]>([]);
+  const [metrics, setMetrics] = useState<NodeMetricPoint[]>([]);
   const [isLoadingMetrics, setIsLoadingMetrics] = useState(false);
   const [metricsError, setMetricsError] = useState<string | null>(null);
-
-  // State cho Tab Sync
   const [syncLogs, setSyncLogs] = useState<NodeSyncLog[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
-  const [heartbeatAckCount, setHeartbeatAckCount] = useState(1);
-  const [lastAckTimestamp, setLastAckTimestamp] = useState<number>(() => {
-    return node.lastHeartbeatTimestamp || Date.now();
-  });
-  const [lastAckTime, setLastAckTime] = useState('0s trước');
-  const [uptimeDisplay, setUptimeDisplay] = useState<string>(() =>
-    formatNodeUptime(node.created_at, node.status, node.uptime)
-  );
+  const [logsError, setLogsError] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const lastAckTime = node.lastHeartbeatTimestamp ? `${Math.max(0, Math.floor((now-node.lastHeartbeatTimestamp)/1000))}s trước` : 'Chưa nhận';
+  const uptimeDisplay = formatNodeUptime(node.runtimeStartedAt, node.status, node.uptime);
+  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
 
-  // Cập nhật timestamp khi node thay đổi
   useEffect(() => {
-    if (node.lastHeartbeatTimestamp) {
-      setLastAckTimestamp(node.lastHeartbeatTimestamp);
-    }
-    setUptimeDisplay(formatNodeUptime(node.created_at, node.status, node.uptime));
-  }, [node.id, node.lastHeartbeatTimestamp, node.created_at, node.status, node.uptime]);
+    const event = latestHeartbeatEvent;
+    if (!event || event.node_id !== node.id || !event.metrics_available) return;
+    const point: NodeMetricPoint = { timestamp: event.timestamp, timeLabel: new Date(event.timestamp*1000).toLocaleTimeString(),
+      rps: event.rps, activeConnections: event.active_conns, cpuUsage: event.cpu_usage,
+      memoryUsage: event.memory_usage, metricsScope: event.metrics_scope };
+    setMetrics(prev => [...prev.filter(p => p.timestamp !== point.timestamp && p.timestamp >= Date.now()/1000-3600), point].sort((a,b) => a.timestamp-b.timestamp));
+  }, [latestHeartbeatEvent, node.id]);
 
-  // Bộ đếm thời gian tương đối động cho ACK và Uptime (nhảy từng giây)
   useEffect(() => {
-    const updateTime = () => {
-      const diffSec = Math.max(0, Math.floor((Date.now() - lastAckTimestamp) / 1000));
-      if (diffSec < 60) {
-        setLastAckTime(`${diffSec}s trước`);
-      } else if (diffSec < 3600) {
-        setLastAckTime(`${Math.floor(diffSec / 60)}m trước`);
-      } else {
-        setLastAckTime(`${Math.floor(diffSec / 3600)}h trước`);
-      }
-      setUptimeDisplay(formatNodeUptime(node.created_at, node.status, node.uptime));
+    if (activeTab !== 'Metrics') return;
+    let cancelled = false;
+    const fetchHistory = async () => {
+      setIsLoadingMetrics(true);
+      try {
+        const data = await nodesApi.getMetrics(node.id);
+        if (cancelled) return;
+        setMetrics(prev => {
+          const merged = new Map(data.map(p => [p.timestamp,p]));
+          for (const p of prev) merged.set(p.timestamp,p);
+          return [...merged.values()].filter(p => p.timestamp >= Date.now()/1000-3600 && p.timestamp <= Date.now()/1000).sort((a,b) => a.timestamp-b.timestamp);
+        });
+        setMetricsError(null);
+      } catch (err) { if (!cancelled) setMetricsError(err instanceof Error ? err.message : 'Không tải được lịch sử metrics'); }
+      finally { if (!cancelled) setIsLoadingMetrics(false); }
     };
-    updateTime();
-    const timer = setInterval(updateTime, 1000);
-    return () => clearInterval(timer);
-  }, [lastAckTimestamp, node.created_at, node.status, node.uptime]);
+    void fetchHistory();
+    const timer = setInterval(fetchHistory,15000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [activeTab,node.id]);
 
-  // Lắng nghe sự kiện heartbeat từ SSE để merge in-place vào Heartbeat ACK và metrics
-  useEffect(() => {
-    if (!latestHeartbeatEvent || latestHeartbeatEvent.node_id !== node.id) return;
-
-    setHeartbeatAckCount((prev) => prev + 1);
-    const ts = latestHeartbeatEvent.timestamp ? latestHeartbeatEvent.timestamp * 1000 : Date.now();
-    setLastAckTimestamp(ts);
-
-    // Nếu tab Metrics đang mở, cập nhật ngay điểm đo tức thời vào timeline
-    if (activeTab === 'Metrics' && latestHeartbeatEvent.rps != null) {
-      setMetrics((prev) => {
-        const newPt = {
-          timestamp: latestHeartbeatEvent.timestamp || Math.floor(Date.now() / 1000),
-          timeLabel: 'Now',
-          rps: latestHeartbeatEvent.rps,
-          activeConnections: latestHeartbeatEvent.active_conns || 0,
-          cpuUsage: latestHeartbeatEvent.cpu_usage != null ? latestHeartbeatEvent.cpu_usage : (node.cpuUsage || 0),
-          memoryUsage: latestHeartbeatEvent.memory_usage != null ? latestHeartbeatEvent.memory_usage : (node.memoryUsage || 0),
-        };
-        const updated = [...prev, newPt];
-        return updated.length > 30 ? updated.slice(updated.length - 30) : updated;
-      });
-    }
-  }, [latestHeartbeatEvent, node.id, activeTab, node.cpuUsage, node.memoryUsage]);
-
-  // Lắng nghe sự kiện sync thực tế từ SSE để append vào danh sách log
   useEffect(() => {
     if (!latestSyncEvent || latestSyncEvent.node_id !== node.id) return;
-    setSyncLogs((prev) => {
-      if (prev.some((item) => item.id === latestSyncEvent.id)) return prev;
-      return [latestSyncEvent, ...prev].slice(0, 30);
-    });
-  }, [latestSyncEvent, node.id]);
+    setSyncLogs(prev => [latestSyncEvent,...prev.filter(p => p.id !== latestSyncEvent.id)].sort((a,b) => b.id-a.id).slice(0,30));
+  }, [latestSyncEvent,node.id]);
 
-  // Tải danh sách metrics lịch sử khi chuyển sang tab Metrics
   useEffect(() => {
-    if (activeTab === 'Metrics' && node?.id) {
-      setIsLoadingMetrics(true);
-      setMetricsError(null);
-      nodesApi
-        .getMetrics(node.id)
-        .then((data) => {
-          if (Array.isArray(data)) {
-            setMetrics(data);
-          }
-        })
-        .catch((err: any) => {
-          setMetricsError(
-            err.message ||
-              'Nguồn thu thập telemetry đang tắt hoặc không kết nối được tới máy chủ Prometheus.'
-          );
-        })
-        .finally(() => {
-          setIsLoadingMetrics(false);
-        });
-    }
-  }, [activeTab, node?.id]);
+    if (activeTab !== 'Sync') return;
+    let cancelled = false;
+    setIsLoadingLogs(true);
+    nodesApi.getSyncHistory(node.id).then(data => {
+      if (!cancelled) { setSyncLogs(prev => [...new Map([...data,...prev].map(p => [p.id,p])).values()].sort((a,b) => b.id-a.id).slice(0,30)); setLogsError(null); }
+    }).catch(err => { if (!cancelled) setLogsError(err.message); }).finally(() => { if (!cancelled) setIsLoadingLogs(false); });
+    return () => { cancelled = true; };
+  }, [activeTab,node.id]);
 
-  // Tải lịch sử sync thực tế khi chuyển sang tab Sync
-  useEffect(() => {
-    if (activeTab === 'Sync' && node?.id) {
-      setIsLoadingLogs(true);
-      nodesApi
-        .getSyncHistory(node.id)
-        .then((logs) => {
-          if (Array.isArray(logs)) {
-            setSyncLogs(logs);
-          }
-        })
-        .catch((err) => {
-          console.error('Failed to load node sync history:', err);
-        })
-        .finally(() => {
-          setIsLoadingLogs(false);
-        });
-    }
-  }, [activeTab, node?.id]);
-
-  // State cho Tab Config (Live từ Container Node)
   const [nodeConfig, setNodeConfig] = useState<string | null>(null);
-  const [configPath, setConfigPath] = useState<string>('/etc/nginx/nginx.conf');
+  const [configPath, setConfigPath] = useState('/etc/nginx/nginx.conf');
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
   const [copiedConfig, setCopiedConfig] = useState(false);
-
-  const fetchNodeConfig = useCallback(() => {
-    if (!node?.id) return;
-    setIsLoadingConfig(true);
-    setConfigError(null);
-    nodesApi
-      .getConfig(node.id)
-      .then((res) => {
-        if (res && res.config) {
-          setNodeConfig(res.config);
-          if (res.path) setConfigPath(res.path);
-        } else {
-          setConfigError('Dữ liệu cấu hình trả về rỗng từ node.');
-        }
-      })
-      .catch((err: any) => {
-        setConfigError(err.message || 'Không thể kéo file cấu hình từ container node.');
-      })
-      .finally(() => {
-        setIsLoadingConfig(false);
-      });
-  }, [node?.id]);
-
+  const configRequest = useRef(0);
+  const fetchNodeConfig = useCallback(async () => {
+    const request = ++configRequest.current;
+    setIsLoadingConfig(true); setConfigError(null);
+    try {
+      const res = await nodesApi.getConfig(node.id);
+      if (request !== configRequest.current) return;
+      if (!res.config) throw new Error('Node trả về cấu hình rỗng');
+      setNodeConfig(res.config); setConfigPath(res.path);
+    } catch (err) { if (request === configRequest.current) setConfigError(err instanceof Error ? err.message : 'Không tải được cấu hình'); }
+    finally { if (request === configRequest.current) setIsLoadingConfig(false); }
+  }, [node.id]);
   useEffect(() => {
-    if (activeTab === 'Config') {
-      fetchNodeConfig();
-    }
-  }, [activeTab, fetchNodeConfig]);
+    if (activeTab === 'Config') void fetchNodeConfig();
+    return () => { ++configRequest.current; };
+  }, [activeTab,fetchNodeConfig]);
+  const visibleMetrics = metrics.filter(p => p.timestamp >= now/1000-3600 && p.metricsScope === node.metricsScope);
+  const current = node.status === 'Ready' && node.metricsAvailable;
 
   const handleCopyConfig = async () => {
     if (!nodeConfig) return;
@@ -262,25 +181,57 @@ export function NodeDetail({
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200 dark:border-[#152030] bg-slate-50 dark:bg-[#080E18] text-xs font-sans">
+      <div className="relative flex border-b border-slate-200 dark:border-[#152030] bg-slate-50 dark:bg-[#080E18] text-xs font-sans select-none">
         {(['Overview', 'Metrics', 'Config', 'Sync'] as const).map((tab) => (
           <button
             key={tab}
             type="button"
             onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-2 text-center transition-colors cursor-pointer ${
+            className={`flex-1 py-2 text-center transition-colors duration-200 cursor-pointer ${
               activeTab === tab
-                ? 'text-emerald-600 dark:text-emerald-400 border-b-2 border-emerald-500 font-semibold bg-white dark:bg-[#0B1320]'
+                ? 'text-sky-600 dark:text-emerald-400 font-semibold bg-white dark:bg-[#0B1320]'
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#0E1726]'
             }`}
           >
             {tab}
           </button>
         ))}
+
+        {/* Animated Sliding Bottom Underline */}
+        <div
+          className="absolute bottom-0 h-[2px] w-1/4 bg-sky-500 dark:bg-emerald-400 transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] pointer-events-none"
+          style={{
+            transform: `translateX(${
+              activeTab === 'Overview'
+                ? '0%'
+                : activeTab === 'Metrics'
+                ? '100%'
+                : activeTab === 'Config'
+                ? '200%'
+                : '300%'
+            })`,
+          }}
+        />
       </div>
 
+      <style>{`
+        @keyframes nodeDetailTabFade {
+          from {
+            opacity: 0;
+            transform: translateY(3px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .animate-tab-fade {
+          animation: nodeDetailTabFade 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+      `}</style>
+
       {/* Tab Body */}
-      <div className="p-4 space-y-5 overflow-y-auto max-h-[calc(100vh-250px)]">
+      <div key={activeTab} className="animate-tab-fade p-4 space-y-5 overflow-y-auto max-h-[calc(100vh-250px)]">
         {activeTab === 'Overview' && (
           <>
             {/* Meta Key-Value List */}
@@ -295,7 +246,7 @@ export function NodeDetail({
               </div>
               <div className="flex justify-between py-1 border-b border-slate-100 dark:border-[#152030]/60">
                 <span className="text-slate-500 dark:text-slate-400">Role</span>
-                <span className="text-slate-800 dark:text-slate-200">{node.role}</span>
+                <span className="text-slate-800 dark:text-slate-200">{node.role || 'Unknown'}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-100 dark:border-[#152030]/60">
                 <span className="text-slate-500 dark:text-slate-400">Status</span>
@@ -311,7 +262,7 @@ export function NodeDetail({
               </div>
               <div className="flex justify-between py-1 border-b border-slate-100 dark:border-[#152030]/60">
                 <span className="text-slate-500 dark:text-slate-400">Version</span>
-                <span className="text-slate-800 dark:text-slate-200">{node.version}</span>
+                <span className="text-slate-800 dark:text-slate-200">{node.version || 'Unknown'}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-100 dark:border-[#152030]/60">
                 <span className="text-slate-500 dark:text-slate-400">Ruleset Revision</span>
@@ -332,13 +283,13 @@ export function NodeDetail({
               <div className="p-2.5 bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#152030]">
                 <div className="text-[10px] text-slate-500">Active Connections</div>
                 <div className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">
-                  {node.activeConnections || '0'}
+                  {current ? node.activeConnections : '—'}
                 </div>
               </div>
               <div className="p-2.5 bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#152030]">
                 <div className="text-[10px] text-slate-500">Requests per Second</div>
                 <div className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">
-                  {node.requestsPerSecond || '0.0'}
+                  {current ? node.requestsPerSecond : '—'}
                 </div>
               </div>
             </div>
@@ -359,7 +310,7 @@ export function NodeDetail({
                   {node.policySync}
                 </span>
                 <div className="text-[10px] text-slate-500 mt-1">
-                  Last: {node.lastSyncTime}
+                  Last applied observation: {node.lastSyncTime || 'Unknown'}
                 </div>
               </div>
             </div>
@@ -392,7 +343,7 @@ export function NodeDetail({
                     <span className="w-1.5 h-1.5 bg-slate-400 dark:bg-slate-500" />
                     <span>Registration time</span>
                   </div>
-                  <span className="text-slate-500">{node.created_at || 'Registered'}</span>
+                  <span className="text-slate-500">{node.runtimeStartedAt || 'Registered'}</span>
                 </div>
               </div>
             </div>
@@ -401,7 +352,7 @@ export function NodeDetail({
 
         {activeTab === 'Metrics' && (
           <div className="space-y-4 font-mono text-xs">
-            {isLoadingMetrics ? (
+            {isLoadingMetrics && metrics.length === 0 ? (
               <div className="p-8 bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#152030] flex items-center justify-center gap-2 text-slate-500 dark:text-slate-400">
                 <RefreshCw className="w-4 h-4 animate-spin text-emerald-500 dark:text-emerald-400" />
                 <span>Đang tải số liệu telemetry...</span>
@@ -427,13 +378,15 @@ export function NodeDetail({
               </div>
             ) : (
               <div className="space-y-3">
+                <p className="text-[10px] text-slate-500">Last 1 hour · {visibleMetrics.length} actual samples{visibleMetrics.length > 0 ? ` · available since ${new Date(visibleMetrics[0].timestamp*1000).toLocaleTimeString()}` : ''}. Gaps indicate missing data.</p>
                 {/* 1. CPU Usage */}
                 <TaskmgrChart
                   title="CPU"
-                  subtitle="% Utilization"
-                  currentDisplay={`${(node.cpuUsage ?? 0).toFixed(1)}%`}
-                  data={metrics.map((m: any) => ({
-                    label: m.timeLabel || 'Now',
+                  subtitle={`${node.metricsScope || "Unknown"} · % CPU allocation`}
+                  currentDisplay={current ? `${node.cpuUsage.toFixed(2)}%` : "Unavailable"}
+                  data={visibleMetrics.map((m) => ({
+                    timestamp: m.timestamp,
+                    label: new Date(m.timestamp * 1000).toLocaleTimeString(),
                     value: Number(m.cpuUsage || 0),
                   }))}
                   unit="%"
@@ -447,13 +400,14 @@ export function NodeDetail({
                 {/* 2. Memory / RAM Usage */}
                 <TaskmgrChart
                   title="Memory"
-                  subtitle="NGINX RAM Usage"
-                  currentDisplay={`${(node.memoryUsage ?? 0).toFixed(1)} MB`}
-                  data={metrics.map((m: any) => ({
-                    label: m.timeLabel || 'Now',
+                  subtitle={`${node.metricsScope || "Unknown"} · % memory limit`}
+                  currentDisplay={current ? `${node.memoryUsage.toFixed(2)}%` : "Unavailable"}
+                  data={visibleMetrics.map((m) => ({
+                    timestamp: m.timestamp,
+                    label: new Date(m.timestamp * 1000).toLocaleTimeString(),
                     value: Number(m.memoryUsage || 0),
                   }))}
-                  unit="MB"
+                  unit="%"
                   colorHex="#c084fc"
                   colorClass="text-purple-400"
                   gridId={`grid-mem-${node.id}`}
@@ -464,9 +418,10 @@ export function NodeDetail({
                 <TaskmgrChart
                   title="Throughput (RPS)"
                   subtitle="Requests / Second"
-                  currentDisplay={`${Number(node.requestsPerSecond || 0).toFixed(1)} req/s`}
-                  data={metrics.map((m: any) => ({
-                    label: m.timeLabel || 'Now',
+                  currentDisplay={current ? `${node.requestsPerSecond} req/s` : "Unavailable"}
+                  data={visibleMetrics.map((m) => ({
+                    timestamp: m.timestamp,
+                    label: new Date(m.timestamp * 1000).toLocaleTimeString(),
                     value: Number(m.rps || 0),
                   }))}
                   unit="req/s"
@@ -480,9 +435,10 @@ export function NodeDetail({
                 <TaskmgrChart
                   title="Connections"
                   subtitle="Active TCP Sockets"
-                  currentDisplay={`${node.activeConnections || '0'} active`}
-                  data={metrics.map((m: any) => ({
-                    label: m.timeLabel || 'Now',
+                  currentDisplay={current ? `${node.activeConnections} active` : "Unavailable"}
+                  data={visibleMetrics.map((m) => ({
+                    timestamp: m.timestamp,
+                    label: new Date(m.timestamp * 1000).toLocaleTimeString(),
                     value: Number(m.activeConnections || 0),
                   }))}
                   unit="conns"
@@ -502,7 +458,7 @@ export function NodeDetail({
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-slate-800 dark:text-slate-200">NGINX Adapter Config</span>
                 <span className="px-1.5 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-[10px]">
-                  Container Live
+                  Redacted snapshot
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
@@ -532,9 +488,8 @@ export function NodeDetail({
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-[10px] text-slate-500 px-0.5">
+            <div className="text-[10px] text-slate-500 px-0.5">
               <span>File: <code className="text-slate-700 dark:text-slate-300">{configPath}</code></span>
-              <span>Node: <code className="text-cyan-600 dark:text-cyan-400">{node.id}</code></span>
             </div>
 
             {isLoadingConfig ? (
@@ -575,24 +530,24 @@ export function NodeDetail({
             <div className="p-3 bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#152030] space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="relative flex h-2 w-2">
+                  <span className={`relative flex h-2 w-2 ${node.status !== "Ready" ? "grayscale opacity-40" : ""}`}>
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                   </span>
-                  <span className="font-semibold text-emerald-600 dark:text-emerald-400 text-xs">Heartbeat Liveness (ACK)</span>
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400 text-xs">Heartbeat Liveness</span>
                 </div>
                 <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono px-1.5 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-500/30">
-                  ACK #{heartbeatAckCount}
+                  {node.status === 'Ready' ? 'Recent' : 'Stale'}
                 </span>
               </div>
 
               <div className="text-[11px] text-slate-600 dark:text-slate-400 space-y-1.5 pt-1.5 border-t border-slate-200 dark:border-[#152030]/60">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Trạng thái:</span>
-                  <span className="text-emerald-600 dark:text-emerald-300 font-semibold">Active & Healthy</span>
+                  <span className="text-emerald-600 dark:text-emerald-300 font-semibold">{node.status === 'Ready' ? 'Heartbeat received' : 'Unknown — stale heartbeat'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">ACK lần cuối:</span>
+                  <span className="text-slate-500">Heartbeat lần cuối:</span>
                   <span className="text-slate-800 dark:text-slate-200">{lastAckTime}</span>
                 </div>
                 <div className="flex justify-between">
@@ -608,7 +563,7 @@ export function NodeDetail({
                 <span className="font-semibold">Sync History</span>
               </div>
 
-              {isLoadingLogs ? (
+              {logsError ? <div role="alert" className="text-rose-500">{logsError}</div> : isLoadingLogs ? (
                 <div className="py-6 text-center text-slate-500 flex items-center justify-center gap-2 text-[11px]">
                   <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-500 dark:text-emerald-400" />
                   <span>Đang tải lịch sử sync...</span>
@@ -616,7 +571,7 @@ export function NodeDetail({
               ) : syncLogs.length === 0 ? (
                 <div className="p-4 bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#152030] text-center text-slate-500 text-[11px] space-y-1">
                   <div>Chưa có sự kiện chuyển đổi release nào.</div>
-                  <div className="text-[10px] text-slate-400 dark:text-slate-600">Node đang chạy đồng bộ với cấu hình ban đầu.</div>
+                  <div className="text-[10px] text-slate-400 dark:text-slate-600">Không có bằng chứng đồng bộ đã được ghi nhận.</div>
                 </div>
               ) : (
                 <div className="space-y-2 max-h-72 overflow-y-auto">
@@ -665,7 +620,7 @@ interface TaskmgrChartProps {
   title: string;
   subtitle: string;
   currentDisplay: string;
-  data: { label: string; value: number }[];
+  data: { timestamp: number; label: string; value: number }[];
   unit: string;
   colorHex: string;
   colorClass: string;
@@ -688,47 +643,24 @@ function TaskmgrChart({
 }: TaskmgrChartProps) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
-  // Neu chi co 1 diem du lieu, tao diem truoc do de render duong chart
-  const chartData =
-    !data || data.length === 0
-      ? [{ label: 'Now', value: 0 }]
-      : data.length === 1
-        ? [{ label: '-15s', value: data[0].value }, data[0]]
-        : data;
-
-  const values = chartData.map((d) => d.value);
-  const maxVal = Math.max(...values);
-  const chartMax = fixedMax != null ? fixedMax : Math.max(1, maxVal > 0 ? maxVal * 1.15 : 10);
-  const chartMin = 0;
-
-  const svgWidth = 360;
-  const svgHeight = 72;
-  const padX = 6;
-  const padY = 6;
-  const effW = svgWidth - padX * 2;
-  const effH = svgHeight - padY * 2;
-
-  const points = chartData.map((d, i) => {
-    const x = padX + (chartData.length > 1 ? (i / (chartData.length - 1)) * effW : effW / 2);
-    const norm = chartMax > chartMin ? (d.value - chartMin) / (chartMax - chartMin) : 0;
-    const y = svgHeight - padY - Math.min(effH, Math.max(0, norm * effH));
-    return { x, y, ...d };
-  });
-
-  const lineD = points
-    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
-    .join(' ');
-  const areaD = `${lineD} L ${points[points.length - 1].x.toFixed(1)} ${(svgHeight - padY).toFixed(1)} L ${points[0].x.toFixed(1)} ${(svgHeight - padY).toFixed(1)} Z`;
-
-  const activeIndex = hoverIndex !== null && hoverIndex < points.length ? hoverIndex : null;
-  const activePt = activeIndex !== null ? points[activeIndex] : null;
-
+  const end = Date.now()/1000;
+  const start = end-3600;
+  const chartData = data.filter(d => Number.isFinite(d.value) && d.timestamp >= start && d.timestamp <= end).sort((a,b) => a.timestamp-b.timestamp);
+  const chartMax = fixedMax ?? Math.max(1, ...chartData.map(d => d.value*1.15));
+  const svgWidth = 360, svgHeight = 72, padX = 6, padY = 6;
+  const effW = svgWidth-padX*2, effH = svgHeight-padY*2;
+  const points = chartData.map(d => ({ ...d, x: padX+(d.timestamp-start)/3600*effW,
+    y: svgHeight-padY-Math.min(effH,Math.max(0,d.value/chartMax*effH)) }));
+  // Missing intervals remain gaps. One actual sample is a dot, never a fake line.
+  const lineD = points.map((p,i) => `${i === 0 || p.timestamp-points[i-1].timestamp > 90 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+  const activePt = hoverIndex !== null ? points[hoverIndex] : null;
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!points.length) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const relX = e.clientX - rect.left;
-    const ratio = Math.max(0, Math.min(1, (relX - padX) / effW));
-    const idx = Math.round(ratio * (chartData.length - 1));
-    setHoverIndex(idx);
+    const x = (e.clientX-rect.left)/rect.width*svgWidth;
+    let nearest = 0;
+    points.forEach((p,i) => { if (Math.abs(p.x-x)<Math.abs(points[nearest].x-x)) nearest=i; });
+    setHoverIndex(nearest);
   };
 
   const gradientId = `grad-${gridId}`;
@@ -801,7 +733,8 @@ function TaskmgrChart({
           />
 
           {/* Area under curve */}
-          <path d={areaD} fill={`url(#${gradientId})`} />
+          {points.length === 0 && <text x="180" y="38" textAnchor="middle" fill="#64748b" fontSize="11">No samples in the last hour</text>}
+          {points.map(p => <circle key={p.timestamp} cx={p.x} cy={p.y} r="1.5" fill={colorHex} />)}
 
           {/* Stroke Line */}
           <path
@@ -840,9 +773,9 @@ function TaskmgrChart({
 
       {/* Footer / Time Axis */}
       <div className="flex justify-between text-[9px] text-slate-500 pt-1 px-0.5 font-mono">
-        <span>{chartData[0]?.label || '-60s'}</span>
-        <span className="text-slate-600">60 seconds</span>
-        <span>{chartData[chartData.length - 1]?.label || '0 (Now)'}</span>
+        <span>{new Date(start*1000).toLocaleTimeString()}</span>
+        <span className="text-slate-600">Last 1 hour</span>
+        <span>{new Date(end*1000).toLocaleTimeString()}</span>
       </div>
     </div>
   );

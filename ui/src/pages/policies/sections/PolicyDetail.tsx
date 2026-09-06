@@ -64,7 +64,7 @@ export function PolicyDetail({
     <aside className="xl:col-span-5 bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-4 space-y-4 shadow-xs rounded-sm font-sans text-slate-800 dark:text-slate-200">
       {/* Header */}
       <div className="flex justify-between items-center border-b border-slate-200 dark:border-[#152030] pb-2">
-        <h2 className="font-bold text-sm text-slate-900 dark:text-white font-mono">
+        <h2 className="font-bold text-sm text-slate-900 dark:text-white font-sans">
           {policy.document.name}
         </h2>
         <button
@@ -82,30 +82,29 @@ export function PolicyDetail({
       </p>
 
       {/* Revisions & Scope Info Box */}
-      <div className="p-2.5 bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] text-xs font-mono space-y-1 rounded-sm">
+      <div className="p-2.5 bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] text-xs font-sans space-y-1 rounded-sm">
         <div>
           Draft revision:{' '}
-          <span className="font-semibold text-slate-900 dark:text-white">
+          <span className="font-semibold text-slate-900 dark:text-white font-mono">
             v{policy.version}
           </span>{' '}
           · Published:{' '}
-          <span className="font-semibold text-slate-900 dark:text-white">
+          <span className="font-semibold text-slate-900 dark:text-white font-mono">
             {policy.published_version ? `v${policy.published_version}` : 'none'}
           </span>
         </div>
         <div>
           Scope:{' '}
-          <span className="text-cyan-700 dark:text-cyan-400 font-medium">
-            {policy.document.host}
-            {policy.document.path_prefix}
+          <span className="text-cyan-700 dark:text-cyan-400 font-medium font-mono">
+            {policy.document.host === '*' ? 'All Domains (*)' : policy.document.host}
           </span>{' '}
           · Mode: <span className="font-bold">{policy.document.mode}</span> · Priority:{' '}
-          <span>{policy.document.priority}</span>
+          <span className="font-mono tabular-nums">{policy.document.priority}</span>
         </div>
       </div>
 
       <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-        Lowest priority number wins; ties use policy ID. First matching host/path scope owns the request. Unmatched rule paths are allowed.
+        Lowest priority number wins; ties use policy ID. First matching domain scope owns the request. Endpoint and path conditions are evaluated per rule.
       </p>
 
       {/* Rules Table */}
@@ -114,7 +113,7 @@ export function PolicyDetail({
           Rules ({policy.document.rules.length})
         </div>
         <div className="border border-slate-200 dark:border-[#172338] rounded-sm overflow-hidden text-xs">
-          <table className="w-full text-left font-mono">
+          <table className="w-full text-left font-sans">
             <thead className="bg-slate-50 dark:bg-[#080E18] text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-[#172338]">
               <tr>
                 <th className="py-2 px-2.5 font-medium">Rule</th>
@@ -187,7 +186,7 @@ export function PolicyDetail({
       )}
 
       {/* Action Buttons */}
-      <div className="grid grid-cols-2 gap-2 text-xs font-mono pt-1">
+      <div className="grid grid-cols-2 gap-2 text-xs font-sans pt-1">
         <Link
           to={`/policies/create?edit=${policy.id}`}
           className="p-2 text-center bg-slate-100 hover:bg-slate-200 dark:bg-[#0E1726] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-800 dark:text-slate-200 rounded-sm cursor-pointer transition-colors"
@@ -221,7 +220,7 @@ export function PolicyDetail({
       {/* Custom Publish Confirmation Dialog */}
       {confirmDialog === 'publish' && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150 font-mono"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150 font-sans"
           onClick={() => !busy && setConfirmDialog(null)}
         >
           <div
@@ -267,7 +266,7 @@ export function PolicyDetail({
                 <div className="flex justify-between">
                   <span className="text-slate-500 dark:text-slate-400">Scope:</span>
                   <span className="text-cyan-700 dark:text-cyan-400 font-medium">
-                    {policy.document.host}{policy.document.path_prefix}
+                    {policy.document.host === '*' ? 'All Domains (*)' : policy.document.host}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -325,7 +324,7 @@ export function PolicyDetail({
       {/* Custom Disable Confirmation Dialog */}
       {confirmDialog === 'disable' && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150 font-mono"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150 font-sans"
           onClick={() => !busy && setConfirmDialog(null)}
         >
           <div

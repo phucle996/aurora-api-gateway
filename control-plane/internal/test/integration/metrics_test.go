@@ -88,6 +88,7 @@ func TestMetricsFlexibilityLabAndProduction(t *testing.T) {
 
 	// Đẩy 1 heartbeat protobuf cho node-local-01
 	hb := entity.NodeHeartbeatPayload{
+		MetricsScope: "container", MetricsAvailable: true, Hostname: "test-container", WorkerIdentity: "worker-1", RuntimeStartedAt: time.Now().Unix() - 120,
 		NodeID:            "node-local-01",
 		Timestamp:         time.Now().Unix(),
 		CPUUsage:          15.5,

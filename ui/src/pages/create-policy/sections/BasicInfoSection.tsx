@@ -1,17 +1,15 @@
 import React, { useRef, useEffect } from 'react';
-import { Shield, Info, Gauge, GlobeLock } from 'lucide-react';
+import { Shield, Info, Eye, ShieldAlert } from 'lucide-react';
 
-export type PolicyType = 'waf' | 'rate-limit' | 'access-control';
+export type PolicyMode = 'mixed' | 'block' | 'detect';
 
 interface BasicInfoSectionProps {
   name: string;
   setName: (val: string) => void;
   description: string;
   setDescription: (val: string) => void;
-  policyType: PolicyType;
-  setPolicyType: (val: PolicyType) => void;
-  enabled: boolean;
-  setEnabled: (val: boolean) => void;
+  mode: PolicyMode;
+  setMode: (val: PolicyMode) => void;
   priority: number;
   setPriority: (val: number) => void;
 }
@@ -23,10 +21,8 @@ export function BasicInfoSection({
   setName,
   description,
   setDescription,
-  policyType,
-  setPolicyType,
-  enabled,
-  setEnabled,
+  mode,
+  setMode,
   priority,
   setPriority,
 }: BasicInfoSectionProps) {
@@ -41,13 +37,13 @@ export function BasicInfoSection({
   }, [description]);
 
   return (
-    <section className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-5 space-y-4 shadow-xs rounded-sm font-mono text-xs">
+    <section className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-5 space-y-4 shadow-xs rounded-sm font-sans text-xs">
       <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
         1. Basic Information
       </h2>
 
       <div className="space-y-4">
-        {/* Tầng 1: Policy Name & Policy Type */}
+        {/* Row 1: Policy Name & Priority */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Policy Name */}
           <div className="space-y-1.5">
@@ -57,92 +53,111 @@ export function BasicInfoSection({
             <input
               type="text"
               required
+              maxLength={120}
               placeholder="e.g. production-api"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] px-3 py-2 text-slate-900 dark:text-white text-xs font-mono rounded-sm focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] px-3 py-2 text-slate-900 dark:text-white text-xs rounded-sm focus:outline-none focus:border-blue-500 transition-colors"
             />
-          </div>
-
-          {/* Policy Type */}
-          <div className="space-y-1.5">
-            <label className="block text-slate-700 dark:text-slate-300 font-medium">
-              Policy Type <span className="text-rose-500">*</span>
-            </label>
-            <div className="relative">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                {policyType === 'waf' && <Shield className="w-3.5 h-3.5 text-blue-500" />}
-                {policyType === 'rate-limit' && <Gauge className="w-3.5 h-3.5 text-cyan-500" />}
-                {policyType === 'access-control' && <GlobeLock className="w-3.5 h-3.5 text-amber-500" />}
-              </div>
-              <select
-                value={policyType}
-                onChange={(e) => setPolicyType(e.target.value as PolicyType)}
-                className="w-full bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] pl-9 pr-8 py-2 text-slate-900 dark:text-white text-xs font-mono rounded-sm focus:outline-none focus:border-blue-500 cursor-pointer appearance-none"
-              >
-                <option value="waf">WAF Policy</option>
-                <option value="rate-limit">Rate Limiting Policy</option>
-                <option value="access-control">Access Control Policy</option>
-              </select>
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-[10px]">
-                ▼
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Tầng 2: Status & Priority */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-          {/* Status */}
-          <div className="space-y-1.5">
-            <label className="block text-slate-700 dark:text-slate-300 font-medium">
-              Status
-            </label>
-            <div className="flex items-center gap-2.5 h-[34px]">
-              <button
-                type="button"
-                role="switch"
-                aria-checked={enabled}
-                onClick={() => setEnabled(!enabled)}
-                className={`w-10 h-5.5 flex items-center p-0.5 rounded-full cursor-pointer transition-colors ${
-                  enabled ? 'bg-blue-600' : 'bg-slate-300 dark:bg-[#1C293D]'
-                }`}
-              >
-                <div
-                  className={`w-4.5 h-4.5 bg-white rounded-full transition-transform shadow-xs ${
-                    enabled ? 'translate-x-4.5' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-              <span className="text-slate-800 dark:text-slate-200 text-xs font-medium">
-                {enabled ? 'Enabled' : 'Disabled'}
-              </span>
-            </div>
           </div>
 
           {/* Priority */}
           <div className="space-y-1.5">
             <label className="flex items-center gap-1 text-slate-700 dark:text-slate-300 font-medium">
-              <span>Priority</span>
+              <span>Evaluation Priority</span>
               <span
                 className="cursor-help text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                title="Policies are evaluated in order of priority. Lower numbers have higher priority."
+                title="Policies are evaluated in order of priority (0–1,000,000). Lower numbers have higher precedence."
               >
                 <Info className="w-3 h-3" />
               </span>
             </label>
             <input
               type="number"
-              min={1}
+              min={0}
               max={1000000}
               value={priority}
-              onChange={(e) => setPriority(Math.max(1, Number(e.target.value) || 1))}
-              className="w-full bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] px-3 py-2 text-slate-900 dark:text-white text-xs font-mono rounded-sm focus:outline-none focus:border-blue-500 transition-colors"
+              onChange={(e) => setPriority(Math.max(0, Math.min(1000000, Number(e.target.value) || 0)))}
+              className="w-full bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] px-3 py-2 text-slate-900 dark:text-white text-xs tabular-nums rounded-sm focus:outline-none focus:border-blue-500 transition-colors"
             />
           </div>
         </div>
 
-        {/* Tầng 3: Description with character limit and auto-height textarea */}
+        {/* Row 2: Enforcement Mode Cards */}
+        <div className="space-y-2">
+          <label className="flex items-center gap-1 text-slate-700 dark:text-slate-300 font-medium">
+            <span>Enforcement Mode</span>
+            <span
+              className="cursor-help text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              title="Controls how attached rules are executed by the cluster runtime."
+            >
+              <Info className="w-3 h-3" />
+            </span>
+          </label>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* Mixed Mode */}
+            <div
+              onClick={() => setMode('mixed')}
+              className={`p-3 border rounded-sm cursor-pointer transition-all ${
+                mode === 'mixed'
+                  ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-950/30'
+                  : 'border-slate-200 dark:border-[#1C293D] hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-[#080E18]/50'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <Shield className={`w-3.5 h-3.5 ${mode === 'mixed' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                <span className={`font-semibold ${mode === 'mixed' ? 'text-blue-900 dark:text-blue-300' : 'text-slate-800 dark:text-slate-200'}`}>
+                  Mixed (Default)
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
+                Enforces individual actions configured on each rule (Block, Allow, Throttle).
+              </p>
+            </div>
+
+            {/* Block Mode */}
+            <div
+              onClick={() => setMode('block')}
+              className={`p-3 border rounded-sm cursor-pointer transition-all ${
+                mode === 'block'
+                  ? 'border-rose-500 bg-rose-50/40 dark:bg-rose-950/30'
+                  : 'border-slate-200 dark:border-[#1C293D] hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-[#080E18]/50'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <ShieldAlert className={`w-3.5 h-3.5 ${mode === 'block' ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}`} />
+                <span className={`font-semibold ${mode === 'block' ? 'text-rose-900 dark:text-rose-300' : 'text-slate-800 dark:text-slate-200'}`}>
+                  Strict Block
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
+                Immediately blocks all matching rule violations across the policy scope.
+              </p>
+            </div>
+
+            {/* Detect Mode */}
+            <div
+              onClick={() => setMode('detect')}
+              className={`p-3 border rounded-sm cursor-pointer transition-all ${
+                mode === 'detect'
+                  ? 'border-amber-500 bg-amber-50/40 dark:bg-amber-950/30'
+                  : 'border-slate-200 dark:border-[#1C293D] hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-[#080E18]/50'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <Eye className={`w-3.5 h-3.5 ${mode === 'detect' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'}`} />
+                <span className={`font-semibold ${mode === 'detect' ? 'text-amber-900 dark:text-amber-300' : 'text-slate-800 dark:text-slate-200'}`}>
+                  Detect (Shadow)
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
+                Logs rule violations without blocking traffic. Ideal for pre-production evaluation.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Row 3: Description */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <label className="block text-slate-700 dark:text-slate-300 font-medium">
@@ -156,10 +171,10 @@ export function BasicInfoSection({
             ref={textareaRef}
             rows={2}
             maxLength={MAX_DESCRIPTION_LENGTH}
-            placeholder="Security policy for production API endpoints..."
+            placeholder="Security policy description and intended operational boundary..."
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="w-full bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] px-3 py-2 text-slate-900 dark:text-white text-xs font-mono rounded-sm focus:outline-none focus:border-blue-500 transition-colors resize-none overflow-hidden min-h-[64px]"
+            className="w-full bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] px-3 py-2 text-slate-900 dark:text-white text-xs rounded-sm focus:outline-none focus:border-blue-500 transition-colors resize-none overflow-hidden min-h-[64px]"
           />
         </div>
       </div>

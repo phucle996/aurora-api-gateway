@@ -55,6 +55,14 @@ type RuleHistoryQuery struct {
 
 // RuleHistoryRecord biểu diễn một bản ghi lịch sử thay đổi của luật tại một phiên bản cụ thể.
 type RuleHistoryRecord struct {
+ Score int
+ SchemaVersion int
+ SourceIP string
+ HostDomain string
+ PathPrefix string
+ HTTPMethod string
+ LogEvent bool
+ AddToReputation bool
 	Version        int64  // Số thứ tự phiên bản sửa đổi
 	Name           string // Tên của luật tại thời điểm phiên bản này được lưu
 	Description    string // Mô tả chi tiết của luật
@@ -68,7 +76,7 @@ type RuleHistoryRecord struct {
 	UpdatedAt      string // Thời điểm bản ghi được cập nhật
 	LogicMode      string // Logic kết hợp điều kiện: 'all' hoặc 'any'
 	ConditionsJSON string // Danh sách điều kiện dạng chuỗi JSON
-	ResponseCode   int    // Mã HTTP phản hồi khi chặn
+	ResponseCode   *int    // Mã HTTP phản hồi khi chặn
 	CustomResponse string // Nội dung phản hồi tùy biến
 }
 
@@ -80,6 +88,7 @@ type RuleHistoryResult struct {
 
 // RollbackRuleCommand là lệnh yêu cầu khôi phục cấu hình của một rule về phiên bản cũ.
 type RollbackRuleCommand struct {
+ ExpectedVersion int64
 	ID            int64  // ID của luật cần rollback
 	TargetVersion int64  // Phiên bản muốn khôi phục
 	Actor         string // Người hoặc token thực hiện thao tác
@@ -194,6 +203,9 @@ type RuleDetailCondition struct {
 
 // RuleDetailResult chứa toàn bộ thông tin chi tiết và cấu hình vận hành của một luật bảo vệ.
 type RuleDetailResult struct {
+ AssignedPolicies int
+ CreatedAt string
+ CreatedBy string
 	SchemaVersion   int                   // Phiên bản schema (1: luật cơ bản v1, 2: luật nâng cao v2)
 	RuntimeReady    bool                  // Luật đã đủ tiêu chuẩn để nạp vào bộ máy WAF biên chưa
 	RuntimeIssues   []string              // Danh sách các vấn đề/cảnh báo vận hành nếu có (ví dụ biểu thức regex chưa tối ưu)
@@ -327,3 +339,50 @@ type TestRuleResult struct {
 	Details          []TestConditionDetail // Chi tiết từng điều kiện trong tập rule
 }
 
+
+type UpdateRuleCondition struct {
+	Field      string // Trường thông tin gói tin cần kiểm tra (uri_raw, path, query, header, body, client_ip, method)
+	Operator   string // Toán tử so khớp (equals, contains, starts_with, ends_with, regex, cidr)
+	Value      string // Giá trị kiểm tra (tối đa 8192 bytes, regex tối đa 1024 bytes)
+	HeaderName string // Tên tiêu đề HTTP (chỉ dùng khi Field là 'header', tối đa 128 bytes)
+}
+
+// UpdateRuleDefinitionCommand là lệnh gửi từ Handler vào Service để tạo mới luật đa điều kiện v2.
+type UpdateRuleDefinitionCommand struct {
+ ID int64
+ ExpectedVersion int64
+ Actor string
+	RequestKey      string                // Khóa Idempotency chống gửi lặp lại yêu cầu
+	Name            string                // Tên luật (tối đa 120 ký tự UTF-8)
+	Description     string                // Mô tả chi tiết (tối đa 2000 ký tự UTF-8)
+	Group           string                // Nhóm danh mục quy tắc (custom, sqli, xss, bot, traversal...)
+	Severity        string                // Mức độ nghiêm trọng (low, medium, high, critical)
+	Score           int                   // Điểm rủi ro (0 đến 1000)
+	Enabled         bool                  // Trạng thái bật/tắt luật
+	Priority        int                   // Độ ưu tiên thực thi (0 đến 1.000.000)
+	PolicyID        *string               // ID chính sách bảo mật liên kết (tùy chọn)
+	LogicMode       string                // Chế độ kết hợp điều kiện ('all' hoặc 'any')
+	Conditions      []UpdateRuleCondition // Danh sách từ 1 đến 16 điều kiện kiểm tra
+	Action          string                // Hành vi xử lý: 'allow', 'log', 'block'
+	ResponseCode    *int                  // Mã phản hồi HTTP khi Chặn (400, 403, 429, 500), bắt buộc với action 'block'
+	CustomResponse  string                // Thân phản hồi tùy biến khi Chặn (tối đa 512 ký tự)
+	LogEvent        bool                  // Ghi log sự kiện bảo mật khi khớp luật
+	AddToReputation bool                  // Đánh dấu giảm uy tín địa chỉ IP khi vi phạm
+	SourceIP        string                // Danh sách IP/CIDR nguồn áp dụng (tối đa 32 địa chỉ, cách nhau dấu phẩy)
+	HostDomain      string                // Tên miền máy chủ áp dụng (tối đa 253 ký tự ASCII)
+	PathPrefix      string                // Tiền tố đường dẫn áp dụng (bắt đầu bằng '/', tối đa 8192 ký tự)
+	HTTPMethod      string                // Phương thức HTTP áp dụng (GET, POST, PUT, DELETE...)
+}
+
+// UpdateRuleDefinitionResult chứa kết quả trả về sau khi lưu trữ luật đa điều kiện thành công.
+type UpdateRuleDefinitionResult struct {
+	ID            int64    // Mã định danh duy nhất vừa cấp cho luật mới
+	Version       int64    // Phiên bản khởi tạo ban đầu (mặc định = 1)
+	State         string   // Trạng thái lưu trữ (ví dụ: 'saved')
+	RuntimeReady  bool     // Trạng thái sẵn sàng vận hành của luật
+	RuntimeIssues []string // Danh sách các cảnh báo vận hành phát hiện trong quá trình tạo (nếu có)
+}
+
+
+type DeleteRuleCommand struct { ID int64; ExpectedVersion int64; Actor string }
+type DeleteRuleResult struct { ID int64; Version int64 }

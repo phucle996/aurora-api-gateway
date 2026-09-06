@@ -1,94 +1,75 @@
 import React, { useState } from 'react';
 import { Copy, Check } from 'lucide-react';
 import type { PolicyRuleItem } from './PolicyRulesSection';
-import type { PolicyType } from './BasicInfoSection';
+import type { PolicyMode } from './BasicInfoSection';
 
 interface PolicyPreviewPanelProps {
   name: string;
   description: string;
-  policyType: PolicyType;
+  mode: PolicyMode;
   priority: number;
-  enabled: boolean;
   rules: PolicyRuleItem[];
   target: string;
-  path: string;
-  httpMethod: string;
-  enableLogging: boolean;
-  enableShadowMode: boolean;
+  expectedVersion: number;
 }
 
 export function PolicyPreviewPanel({
   name,
   description,
-  policyType,
+  mode,
   priority,
-  enabled,
   rules,
   target,
-  path,
-  httpMethod,
-  enableLogging,
-  enableShadowMode,
+  expectedVersion,
 }: PolicyPreviewPanelProps) {
-  const [activeTab, setActiveTab] = useState<'json' | 'nginx'>('json');
+  const [activeTab, setActiveTab] = useState<'draft' | 'runtime'>('draft');
   const [copied, setCopied] = useState(false);
 
-  // Generate dynamic JSON representation
-  const jsonObject = {
+  const cleanHost = target === 'All Domains' ? '*' : (target.trim() || '*');
+  const activeRules = rules.filter((r) => r.enabled);
+
+  // 1. Real Draft API Payload (PolicyDraft sent to control-plane)
+  const draftPayload = {
     name: name || 'unnamed-policy',
-    type: policyType,
     description: description || '',
-    priority: priority || 100,
-    enabled: enabled,
-    rules: rules.filter((r) => r.enabled).map((r) => r.name),
-    scope: {
-      path: path || '/*',
-      methods: httpMethod === '*' ? ['*'] : [httpMethod],
-      domains: target === '*' ? ['*'] : [target],
-    },
-    options: {
-      logging: enableLogging,
-      shadow_mode: enableShadowMode,
+    host: cleanHost,
+    mode: mode,
+    priority: priority,
+    rule_ids: activeRules.map((r) => r.id),
+    expected_version: expectedVersion,
+  };
+
+  const draftJsonString = JSON.stringify(draftPayload, null, 2);
+
+  // 2. Real Runtime Snapshot (Compiled cluster representation distributed to NGINX nodes)
+  const runtimeSnapshot = {
+    schema_version: 1,
+    generation: '<next_release_id>',
+    policy: {
+      host: cleanHost,
+      priority: priority,
+      mode: mode,
+      rules: activeRules.map((r) => {
+        let runtimeAction = r.action;
+        if (mode === 'detect') {
+          runtimeAction = 'throttle'; // mapped to log in detect mode
+        } else if (mode === 'block' && r.action !== 'allow') {
+          runtimeAction = 'block';
+        }
+        return {
+          id: r.id,
+          name: r.name,
+          group: r.group || 'custom',
+          action: r.action,
+          runtime_action: mode === 'detect' ? 'log' : runtimeAction,
+        };
+      }),
     },
   };
 
-  const jsonString = JSON.stringify(
-    {
-      name: jsonObject.name,
-      type: jsonObject.type,
-      description: jsonObject.description,
-      priority: jsonObject.priority,
-      enabled: jsonObject.enabled,
-      rules: jsonObject.rules,
-      scope: jsonObject.scope,
-    },
-    null,
-    2
-  );
+  const runtimeJsonString = JSON.stringify(runtimeSnapshot, null, 2);
 
-  // Generate dynamic NGINX Config representation
-  const nginxConfigString = `# Aurora WAF Policy: ${name || 'policy'} (Priority: ${priority})
-location ${path || '/*'} {
-    aurora_waf ${enabled ? 'on' : 'off'};
-    aurora_policy_id "${name || 'custom-policy'}";
-    aurora_priority ${priority};
-    aurora_inspect_methods ${httpMethod === '*' ? 'ALL' : httpMethod};
-    
-    # Applied Rule Actions:
-${rules
-  .map(
-    (r) =>
-      `    # - ${r.name} (Action: ${r.action.toUpperCase()}${
-        r.enabled ? '' : ' [DISABLED]'
-      })`
-  )
-  .join('\n')}
-    
-    aurora_log_matches ${enableLogging ? 'on' : 'off'};
-    aurora_shadow_mode ${enableShadowMode ? 'on' : 'off'};
-}`;
-
-  const currentContent = activeTab === 'json' ? jsonString : nginxConfigString;
+  const currentContent = activeTab === 'draft' ? draftJsonString : runtimeJsonString;
   const lines = currentContent.split('\n');
 
   const handleCopy = async () => {
@@ -102,14 +83,14 @@ ${rules
   };
 
   return (
-    <section className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] shadow-xs rounded-sm overflow-hidden font-mono">
+    <section className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] shadow-xs rounded-sm overflow-hidden font-sans">
       {/* Header */}
       <div className="p-4 border-b border-slate-200 dark:border-[#152030]">
         <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
           Policy Preview
         </h2>
         <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-          This is how the policy will be represented in the system.
+          Real control-plane contract & compiled node runtime snapshot.
         </p>
       </div>
 
@@ -118,25 +99,25 @@ ${rules
         <div className="flex">
           <button
             type="button"
-            onClick={() => setActiveTab('json')}
+            onClick={() => setActiveTab('draft')}
             className={`py-2 px-3 border-b-2 font-semibold transition-colors cursor-pointer ${
-              activeTab === 'json'
+              activeTab === 'draft'
                 ? 'border-blue-600 text-blue-600 dark:text-blue-400'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            JSON
+            Draft API Payload
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab('nginx')}
+            onClick={() => setActiveTab('runtime')}
             className={`py-2 px-3 border-b-2 font-semibold transition-colors cursor-pointer ${
-              activeTab === 'nginx'
+              activeTab === 'runtime'
                 ? 'border-blue-600 text-blue-600 dark:text-blue-400'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            NGINX Config
+            Node Runtime Snapshot
           </button>
         </div>
 
@@ -176,7 +157,6 @@ ${rules
           <pre className="pl-3 font-mono text-slate-300 whitespace-pre overflow-x-auto flex-1">
             <code>
               {lines.map((line, idx) => {
-                // Lightweight syntax highlight coloring for JSON keys and strings
                 const isKey = line.match(/^(\s*)"([^"]+)":/);
                 const isStringVal = line.match(/: "([^"]+)"/);
                 const isBoolVal = line.match(/: (true|false)/);
@@ -210,8 +190,6 @@ ${rules
                           line.substring(line.indexOf(':') + 1)
                         )}
                       </>
-                    ) : line.includes('#') ? (
-                      <span className="text-slate-500 italic">{line}</span>
                     ) : (
                       line
                     )}

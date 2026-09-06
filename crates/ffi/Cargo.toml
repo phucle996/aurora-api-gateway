@@ -10,3 +10,6 @@ crate-type = ["rlib", "cdylib", "staticlib"]
 
 [dependencies]
 aurora-engine = { path = "../engine" }
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }

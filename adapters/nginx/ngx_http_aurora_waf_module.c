@@ -378,12 +378,8 @@ ngx_http_aurora_handler(ngx_http_request_t *r)
         input.now = (uint64_t) ngx_time();
         status = aurora_access_evaluate(conf->access_engine, &input, &decision);
         if (status != 0 || decision.action > 1) { return NGX_HTTP_SERVICE_UNAVAILABLE; }
-        if (aurora_log_second != ngx_time()) { aurora_log_second = ngx_time(); aurora_log_count = 0; }
-        if (decision.log_matches && aurora_log_count < 100) {
-            aurora_log_count++;
-            log = *r->connection->log; log.handler = NULL;
-            ngx_log_error(NGX_LOG_NOTICE, &log, 0, "AuroraAccess generation=%uL rule=%uL ip=%V",
-                decision.generation, decision.rule_id, &r->connection->addr_text);
+        if (decision.log_matches) {
+            aurora_access_record_match(decision.generation, decision.rule_id, input.ip, input.ip_len);
         }
         if (decision.action == 1) { return NGX_HTTP_FORBIDDEN; }
     }
@@ -488,22 +484,24 @@ ngx_http_aurora_generation(ngx_http_request_t *r, ngx_http_variable_value_t *v, 
 
 /*
  * Khởi tạo tiến trình NGINX worker:
- * Chỉ Worker 0 (hoặc single process) khởi chạy background telemetry thread.
+ * Khởi chạy In-Process Rust Runtime (Reconciliation, Hot-swap, Match flusher, Heartbeat).
  */
 static ngx_int_t
 ngx_http_aurora_init_process(ngx_cycle_t *cycle)
 {
-    /* Loading the HTTP module without an http block creates no telemetry zone. */
     if (aurora_telemetry_zone == NULL) { return NGX_OK; }
     if (sizeof(ngx_atomic_t) != sizeof(uint64_t) ||
         aurora_waf_bind_telemetry(aurora_telemetry_zone->data, 64, (void *) ngx_stat_active) != 0) {
         return NGX_ERROR;
     }
-    if (ngx_process == NGX_PROCESS_SINGLE || ngx_worker == 0) {
+    {
+        uint32_t is_leader = (ngx_process == NGX_PROCESS_SINGLE || ngx_worker == 0) ? 1 : 0;
         char *controller = NULL;
         char *node_id = NULL;
         char *token = NULL;
-        uint32_t interval = 10;
+        char *policy_path = NULL;
+        char *access_path = NULL;
+        uint32_t interval = 5;
         int64_t release_id = 0;
 
         if (cycle->conf_ctx) {
@@ -513,7 +511,6 @@ ngx_http_aurora_init_process(ngx_cycle_t *cycle)
                 if (ctx->loc_conf) {
                     conf = ctx->loc_conf[ngx_http_aurora_waf_module.ctx_index];
                 }
-                /* Nếu chưa có ở cấp http, kiểm tra ở server block đầu tiên */
                 if ((!conf || conf->controller.len == 0) && ctx->main_conf) {
                     ngx_http_core_main_conf_t *cmcf = ctx->main_conf[ngx_http_core_module.ctx_index];
                     if (cmcf && cmcf->servers.nelts > 0) {
@@ -546,6 +543,20 @@ ngx_http_aurora_init_process(ngx_cycle_t *cycle)
                             token = (char *) t;
                         }
                     }
+                    if (conf->policy.len > 0) {
+                        u_char *p = ngx_pcalloc(cycle->pool, conf->policy.len + 1);
+                        if (p) {
+                            ngx_memcpy(p, conf->policy.data, conf->policy.len);
+                            policy_path = (char *) p;
+                        }
+                    }
+                    if (conf->access_policy.len > 0) {
+                        u_char *a = ngx_pcalloc(cycle->pool, conf->access_policy.len + 1);
+                        if (a) {
+                            ngx_memcpy(a, conf->access_policy.data, conf->access_policy.len);
+                            access_path = (char *) a;
+                        }
+                    }
                     if (conf->interval != NGX_CONF_UNSET_UINT && conf->interval > 0) {
                         interval = (uint32_t) conf->interval;
                     }
@@ -556,21 +567,20 @@ ngx_http_aurora_init_process(ngx_cycle_t *cycle)
             }
         }
 
-        aurora_waf_start_telemetry(controller, node_id, token, interval, release_id);
+        aurora_waf_start_runtime(controller, node_id, token, interval, release_id, policy_path, access_path, is_leader);
     }
     return NGX_OK;
 }
 
 /*
  * Khi tiến trình NGINX worker dừng:
- * Dừng background telemetry thread an toàn.
+ * Dừng in-process runtime thread an toàn.
  */
 static void
 ngx_http_aurora_exit_process(ngx_cycle_t *cycle)
 {
-    if (ngx_process == NGX_PROCESS_SINGLE || ngx_worker == 0) {
-        aurora_waf_stop_telemetry();
-    }
+    (void) cycle;
+    aurora_waf_stop_telemetry();
 }
 
 /*

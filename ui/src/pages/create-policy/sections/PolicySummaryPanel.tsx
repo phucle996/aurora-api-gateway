@@ -1,38 +1,32 @@
 import React from 'react';
-import { Shield, Gauge, GlobeLock } from 'lucide-react';
+import { Shield, ShieldAlert, Eye } from 'lucide-react';
 import type { PolicyRuleItem } from './PolicyRulesSection';
-import type { PolicyType } from './BasicInfoSection';
+import type { PolicyMode } from './BasicInfoSection';
 
 interface PolicySummaryPanelProps {
   name: string;
-  policyType: PolicyType;
-  enabled: boolean;
+  mode: PolicyMode;
   priority: number;
   rules: PolicyRuleItem[];
   target: string;
-  path: string;
-  httpMethod: string;
-  enableLogging: boolean;
-  enableShadowMode: boolean;
+  isEditing: boolean;
+  expectedVersion: number;
 }
 
 export function PolicySummaryPanel({
   name,
-  policyType,
-  enabled,
+  mode,
   priority,
   rules,
   target,
-  path,
-  httpMethod,
-  enableLogging,
-  enableShadowMode,
+  isEditing,
+  expectedVersion,
 }: PolicySummaryPanelProps) {
-  const targetLabel = target === '*' ? 'All Domains' : target;
-  const methodLabel = httpMethod === '*' ? 'All Methods' : httpMethod;
+  const targetLabel = target === '*' || target === 'All Domains' ? '* (All Domains)' : (target.trim() || '*');
+  const activeRulesCount = rules.filter((r) => r.enabled).length;
 
   return (
-    <section className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-4 shadow-xs rounded-sm font-mono text-xs space-y-3">
+    <section className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-4 shadow-xs rounded-sm font-sans text-xs space-y-3">
       <h2 className="text-sm font-semibold text-slate-900 dark:text-white border-b border-slate-200 dark:border-[#152030] pb-2">
         Policy Summary
       </h2>
@@ -41,101 +35,64 @@ export function PolicySummaryPanel({
         {/* Name */}
         <div className="flex items-center justify-between">
           <span className="text-slate-500 dark:text-slate-400">Name</span>
-          <span className="font-semibold text-slate-900 dark:text-white">
+          <span className="font-semibold text-slate-900 dark:text-white truncate max-w-[180px]">
             {name || '—'}
           </span>
         </div>
 
-        {/* Type */}
+        {/* Mode */}
         <div className="flex items-center justify-between">
-          <span className="text-slate-500 dark:text-slate-400">Type</span>
-          <div className="flex items-center gap-1 text-slate-800 dark:text-slate-200">
-            {policyType === 'waf' && (
-              <>
-                <Shield className="w-3.5 h-3.5 text-blue-500" />
-                <span>WAF Policy</span>
-              </>
-            )}
-            {policyType === 'rate-limit' && (
-              <>
-                <Gauge className="w-3.5 h-3.5 text-cyan-500" />
-                <span>Rate Limit</span>
-              </>
-            )}
-            {policyType === 'access-control' && (
-              <>
-                <GlobeLock className="w-3.5 h-3.5 text-amber-500" />
-                <span>Access Control</span>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Status */}
-        <div className="flex items-center justify-between">
-          <span className="text-slate-500 dark:text-slate-400">Status</span>
+          <span className="text-slate-500 dark:text-slate-400">Mode</span>
           <div className="flex items-center gap-1.5">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                enabled ? 'bg-emerald-500' : 'bg-slate-400'
-              }`}
-            />
-            <span className={enabled ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-slate-500'}>
-              {enabled ? 'Enabled' : 'Disabled'}
-            </span>
+            {mode === 'mixed' && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-xs bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900/50 font-bold uppercase text-[10px]">
+                <Shield className="w-3 h-3" />
+                Mixed
+              </span>
+            )}
+            {mode === 'block' && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-xs bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900/50 font-bold uppercase text-[10px]">
+                <ShieldAlert className="w-3 h-3" />
+                Block
+              </span>
+            )}
+            {mode === 'detect' && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-xs bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-900/50 font-bold uppercase text-[10px]">
+                <Eye className="w-3 h-3" />
+                Detect
+              </span>
+            )}
           </div>
         </div>
 
         {/* Priority */}
         <div className="flex items-center justify-between">
           <span className="text-slate-500 dark:text-slate-400">Priority</span>
-          <span className="text-slate-800 dark:text-slate-200">{priority}</span>
+          <span className="text-slate-800 dark:text-slate-200 font-bold">{priority}</span>
         </div>
 
-        {/* Rules */}
-        <div className="flex items-center justify-between">
-          <span className="text-slate-500 dark:text-slate-400">Rules</span>
-          <span className="text-slate-800 dark:text-slate-200">
-            {rules.length} rule{rules.length === 1 ? '' : 's'}
-          </span>
-        </div>
-
-        {/* Scope */}
+        {/* Scope Host */}
         <div className="flex items-center justify-between gap-2">
-          <span className="text-slate-500 dark:text-slate-400 shrink-0">Scope</span>
-          <span className="text-slate-800 dark:text-slate-200 truncate text-right">
-            {targetLabel}, {path || '/*'}, {methodLabel}
+          <span className="text-slate-500 dark:text-slate-400 shrink-0">Target Scope</span>
+          <span className="text-slate-800 dark:text-slate-200 font-mono font-medium truncate text-right">
+            {targetLabel}
           </span>
         </div>
 
-        {/* Logging */}
+        {/* Attached Rules */}
         <div className="flex items-center justify-between">
-          <span className="text-slate-500 dark:text-slate-400">Logging</span>
-          <div className="flex items-center gap-1.5">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                enableLogging ? 'bg-emerald-500' : 'bg-slate-400'
-              }`}
-            />
-            <span className={enableLogging ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-slate-500'}>
-              {enableLogging ? 'Enabled' : 'Disabled'}
-            </span>
-          </div>
+          <span className="text-slate-500 dark:text-slate-400">Attached Rules</span>
+          <span className="text-slate-800 dark:text-slate-200">
+            {activeRulesCount} active ({rules.length} total)
+          </span>
         </div>
 
-        {/* Shadow Mode */}
-        <div className="flex items-center justify-between">
-          <span className="text-slate-500 dark:text-slate-400">Shadow Mode</span>
-          <div className="flex items-center gap-1.5">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                enableShadowMode ? 'bg-amber-500' : 'bg-slate-400'
-              }`}
-            />
-            <span className={enableShadowMode ? 'text-amber-600 dark:text-amber-400 font-medium' : 'text-slate-500'}>
-              {enableShadowMode ? 'Enabled' : 'Disabled'}
-            </span>
-          </div>
+        {/* Revision */}
+        <div className="flex items-center justify-between border-t border-slate-100 dark:border-[#152030] pt-2 text-[11px]">
+          <span className="text-slate-400">Revision State</span>
+          <span className="text-slate-600 dark:text-slate-400">
+            {isEditing ? `Targeting v${expectedVersion + 1}` : 'New Policy (Draft)'}
+          </span>
         </div>
       </div>
     </section>

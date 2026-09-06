@@ -1,12 +1,13 @@
 package handler
 
 import (
-	"aurora-waf.local/control-plane/internal/domain/entity"
-	port "aurora-waf.local/control-plane/internal/domain/service"
 	"io"
 	"net/http"
 	"time"
 
+	"aurora-waf.local/control-plane/internal/domain/entity"
+	port "aurora-waf.local/control-plane/internal/domain/service"
+	"aurora-waf.local/control-plane/internal/transport/http/dto"
 	"github.com/gin-gonic/gin"
 )
 
@@ -60,6 +61,9 @@ func (h *NodeHandler) List(c *gin.Context) {
 			"activeConnections":      node.ActiveConnections,
 			"requestsPerSecond":      node.RequestsPerSecond,
 			"uptime":                 node.Uptime,
+			"runtimeStartedAt":       node.RuntimeStartedAt,
+			"metricsScope":           node.MetricsScope,
+			"metricsAvailable":       node.MetricsAvailable,
 		})
 	}
 
@@ -115,6 +119,9 @@ func (h *NodeHandler) GetByID(c *gin.Context) {
 		"activeConnections":      node.ActiveConnections,
 		"requestsPerSecond":      node.RequestsPerSecond,
 		"uptime":                 node.Uptime,
+		"runtimeStartedAt":       node.RuntimeStartedAt,
+		"metricsScope":           node.MetricsScope,
+		"metricsAvailable":       node.MetricsAvailable,
 	})
 }
 
@@ -157,6 +164,13 @@ func (h *NodeHandler) Heartbeat(c *gin.Context) {
 	}
 
 	payload.IP = c.ClientIP()
+	payload.Authentication = "Bearer / HTTP"
+	if c.Request.TLS != nil {
+		payload.Authentication = "Bearer / TLS"
+		if len(c.Request.TLS.VerifiedChains) > 0 {
+			payload.Authentication = "mTLS verified"
+		}
+	}
 
 	ctx := c.Request.Context()
 	directive, err := h.service.RecordHeartbeat(ctx, *payload)
@@ -201,7 +215,13 @@ func (h *NodeHandler) RollingReloadCluster(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, status)
+	c.JSON(http.StatusOK, dto.ClusterRollingStatusResponse{
+		Active:         status.Active,
+		CurrentNodeID:  status.CurrentNodeID,
+		PendingNodes:   status.PendingNodes,
+		CompletedNodes: status.CompletedNodes,
+		Message:        status.Message,
+	})
 }
 
 // GetRollingStatus tiếp nhận yêu cầu GET /api/v1/nodes/rolling-status để kiểm tra tiến trình rolling cluster.
@@ -213,7 +233,13 @@ func (h *NodeHandler) GetRollingStatus(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, status)
+	c.JSON(http.StatusOK, dto.ClusterRollingStatusResponse{
+		Active:         status.Active,
+		CurrentNodeID:  status.CurrentNodeID,
+		PendingNodes:   status.PendingNodes,
+		CompletedNodes: status.CompletedNodes,
+		Message:        status.Message,
+	})
 }
 
 // EventsStream mở luồng HTTP Server-Sent Events (SSE) để truyền dữ liệu thời gian thực tới UI.
@@ -248,7 +274,29 @@ func (h *NodeHandler) EventsStream(c *gin.Context) {
 			if !ok {
 				return
 			}
-			c.SSEvent(msg.Event, msg.Data)
+			data := msg.Data
+			if beats, ok := msg.Data.([]entity.NodeHeartbeatEvent); ok {
+				resp := make([]dto.NodeHeartbeatEventResponse, len(beats))
+				for i, b := range beats {
+					resp[i] = dto.NodeHeartbeatEventResponse{
+						MetricsScope:     b.MetricsScope,
+						RuntimeStartedAt: b.RuntimeStartedAt,
+						MetricsAvailable: b.MetricsAvailable,
+						NodeID:           b.NodeID,
+						IP:               b.IP,
+						Status:           b.Status,
+						RPS:              b.RPS,
+						ActiveConns:      b.ActiveConns,
+						CPUUsage:         b.CPUUsage,
+						MemoryUsage:      b.MemoryUsage,
+						Sync:             b.Sync,
+						Ruleset:          b.Ruleset,
+						Timestamp:        b.Timestamp,
+					}
+				}
+				data = resp
+			}
+			c.SSEvent(msg.Event, data)
 			c.Writer.Flush()
 		}
 	}
@@ -269,7 +317,18 @@ func (h *NodeHandler) GetSyncLogs(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, logs)
+	resp := make([]dto.NodeSyncLogResponse, len(logs))
+	for i, l := range logs {
+		resp[i] = dto.NodeSyncLogResponse{
+			ID:        l.ID,
+			NodeID:    l.NodeID,
+			EventType: l.EventType,
+			ReleaseID: l.ReleaseID,
+			Message:   l.Message,
+			CreatedAt: l.CreatedAt,
+		}
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetConfig xử lý HTTP GET /api/v1/nodes/:id/config:

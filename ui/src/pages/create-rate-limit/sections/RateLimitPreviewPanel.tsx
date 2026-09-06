@@ -118,7 +118,7 @@ end`;
   };
 
   return (
-    <div className="bg-[#0B1320] border border-[#152030] p-4 space-y-3 font-mono text-xs">
+    <div className="bg-[#0B1320] border border-[#152030] p-4 space-y-3 font-sans text-xs">
       <div className="text-sm font-semibold text-white">Rule Preview</div>
 
       {/* Preview Tabs */}

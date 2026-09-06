@@ -54,9 +54,10 @@ func TestNodeReloadDirectives(t *testing.T) {
 
 	// 2. Node gửi heartbeat lần 1: Phải nhận được chỉ thị reload_process
 	hb1 := entity.NodeHeartbeatPayload{
-		NodeID:    "node-local-01",
-		Timestamp: time.Now().Unix(),
-		CPUUsage:  15.0,
+		WorkerIdentity: "worker-before",
+		NodeID:         "node-local-01",
+		Timestamp:      time.Now().Unix(),
+		CPUUsage:       15.0,
 	}
 	rHb1 := httptest.NewRequest("POST", "/api/v1/nodes/node-local-01/heartbeat", bytes.NewReader(hb1.MarshalBinary()))
 	rHb1.Header.Set("Content-Type", "application/x-protobuf")
@@ -77,9 +78,10 @@ func TestNodeReloadDirectives(t *testing.T) {
 
 	// 3. Node gửi heartbeat lần 2 (sau khi reload xong): Lệnh phải trở về 'none'
 	hb2 := entity.NodeHeartbeatPayload{
-		NodeID:    "node-local-01",
-		Timestamp: time.Now().Unix(),
-		CPUUsage:  10.0,
+		WorkerIdentity: "worker-after",
+		NodeID:         "node-local-01",
+		Timestamp:      time.Now().Unix() + 1,
+		CPUUsage:       10.0,
 	}
 	rHb2 := httptest.NewRequest("POST", "/api/v1/nodes/node-local-01/heartbeat", bytes.NewReader(hb2.MarshalBinary()))
 	rHb2.Header.Set("Content-Type", "application/x-protobuf")
@@ -140,7 +142,7 @@ func TestClusterRollingReloadQueue(t *testing.T) {
 	}
 
 	// 3. Node 1 gửi heartbeat: Nhận lệnh reload_process
-	hbNode1 := entity.NodeHeartbeatPayload{NodeID: "node-local-01", Timestamp: time.Now().Unix()}
+	hbNode1 := entity.NodeHeartbeatPayload{WorkerIdentity: "before", NodeID: "node-local-01", Timestamp: time.Now().Unix()}
 	r1 := httptest.NewRequest("POST", "/api/v1/nodes/node-local-01/heartbeat", bytes.NewReader(hbNode1.MarshalBinary()))
 	r1.Header.Set("Content-Type", "application/x-protobuf")
 	r1.Header.Set("Authorization", "Bearer "+rollingTestToken)
@@ -154,7 +156,7 @@ func TestClusterRollingReloadQueue(t *testing.T) {
 
 	// 4. Node 1 hoàn tất reload và gửi heartbeat xác nhận:
 	// Hệ thống phải tự động chuyển quyền reload sang Node 2!
-	hbNode1Done := entity.NodeHeartbeatPayload{NodeID: "node-local-01", Timestamp: time.Now().Unix()}
+	hbNode1Done := entity.NodeHeartbeatPayload{WorkerIdentity: "after", NodeID: "node-local-01", Timestamp: time.Now().Unix() + 1}
 	r1Done := httptest.NewRequest("POST", "/api/v1/nodes/node-local-01/heartbeat", bytes.NewReader(hbNode1Done.MarshalBinary()))
 	r1Done.Header.Set("Content-Type", "application/x-protobuf")
 	r1Done.Header.Set("Authorization", "Bearer "+rollingTestToken)
@@ -162,6 +164,7 @@ func TestClusterRollingReloadQueue(t *testing.T) {
 	mux.ServeHTTP(w1Done, r1Done)
 
 	// 5. Node 2 gửi heartbeat kế tiếp: Lập tức nhận được 'reload_process'!
+	hbNode2.Timestamp++
 	r2Next := httptest.NewRequest("POST", "/api/v1/nodes/node-local-02/heartbeat", bytes.NewReader(hbNode2.MarshalBinary()))
 	r2Next.Header.Set("Content-Type", "application/x-protobuf")
 	r2Next.Header.Set("Authorization", "Bearer "+rollingTestToken)

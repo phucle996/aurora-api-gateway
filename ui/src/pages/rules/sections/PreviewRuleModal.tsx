@@ -624,25 +624,24 @@ end`;
               <p className="text-xs text-muted-foreground mt-1">
                 {detail.description || 'Block common SQL injection patterns in URI and query parameters.'}
               </p>
-              <div className="flex items-center gap-4 mt-2 text-[11px] font-mono text-muted-foreground flex-wrap">
+              <div className="flex items-center gap-4 mt-2 text-[11px] font-sans text-muted-foreground flex-wrap">
                 <div>
-                  <span>Policy: </span>
-                  <span className="text-foreground font-medium">Unassigned</span>
+                  <span>Assigned Policies: </span>
+                  <span className="text-foreground font-medium font-mono">{detail.assigned_policies ?? 0}</span>
                 </div>
                 <span>•</span>
                 <div>
                   <span>Priority: </span>
-                  <span className="text-foreground font-medium">{detail.priority || 100}</span>
+                  <span className="text-foreground font-medium font-mono">{detail.priority || 100}</span>
                 </div>
                 <span>•</span>
                 <div className="flex items-center gap-1.5">
                   <span>Tags: </span>
                   <span className="px-1.5 py-0.5 bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 rounded-xs text-[10px]">
-                    {detail.group || 'sql-injection'}
+                    {detail.group || 'custom'}
                   </span>
-                  <span className="px-1.5 py-0.5 bg-muted text-foreground border border-border rounded-xs text-[10px]">web</span>
                   <span className="px-1.5 py-0.5 bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 rounded-xs text-[10px]">
-                    {detail.severity || 'critical'}
+                    {detail.severity || 'medium'}
                   </span>
                 </div>
               </div>
@@ -650,7 +649,7 @@ end`;
           </div>
 
           {/* Navigation Tabs */}
-          <div className="flex items-center gap-2 border-b border-border pb-1 font-mono text-xs overflow-x-auto">
+          <div className="flex items-center gap-2 border-b border-border pb-1 font-sans text-xs overflow-x-auto">
             <button
               type="button"
               onClick={() => setActiveTab('logic')}
@@ -754,15 +753,15 @@ end`;
                 <div className="bg-muted/40 border border-border p-4 rounded-md space-y-3 text-xs shadow-2xs">
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />
-                    <span className="font-semibold text-foreground uppercase tracking-wider text-[11px] font-mono">
+                    <span className="font-semibold text-foreground uppercase tracking-wider text-[11px] font-sans">
                       {detail.action ? `${detail.action} Request` : 'Block Request'}
                     </span>
                   </div>
 
-                  <div className="space-y-2.5 pt-2 border-t border-border text-[11px] font-mono">
+                  <div className="space-y-2.5 pt-2 border-t border-border text-[11px] font-sans">
                     <div className="flex justify-between py-1 border-b border-border/50">
                       <span className="text-muted-foreground">Response Code:</span>
-                      <span className="text-foreground font-semibold">{detail.response_code || 403} Forbidden</span>
+                      <span className="text-foreground font-semibold font-mono">{detail.response_code || 403} Forbidden</span>
                     </div>
                     <div className="flex justify-between py-1 border-b border-border/50">
                       <span className="text-muted-foreground">Custom Response:</span>
@@ -770,7 +769,9 @@ end`;
                     </div>
                     <div className="flex justify-between py-1 border-b border-border/50">
                       <span className="text-muted-foreground">Scope:</span>
-                      <span className="text-foreground">All Sources, All Paths</span>
+                      <span className="text-foreground">
+                        {detail.path_prefix ? `Path: ${detail.path_prefix}` : detail.source_ip ? `IP: ${detail.source_ip}` : 'Global Policy'}
+                      </span>
                     </div>
                     <div className="flex justify-between py-1 border-b border-border/50">
                       <span className="text-muted-foreground">Log Event:</span>
@@ -780,7 +781,9 @@ end`;
                     </div>
                     <div className="flex justify-between py-1">
                       <span className="text-muted-foreground">IP Reputation:</span>
-                      <span className="text-muted-foreground">Disabled</span>
+                      <span className={detail.add_to_reputation ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-muted-foreground'}>
+                        {detail.add_to_reputation ? 'Enabled' : 'Disabled'}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -790,51 +793,58 @@ end`;
 
           {/* TAB 2: Test Request */}
           {activeTab === 'test' && (
-            <div className="space-y-5 max-w-3xl mx-auto py-2">
+            <div className="space-y-4 max-w-3xl mx-auto py-2">
               <div className="bg-muted/40 border border-border p-5 rounded-md space-y-4 shadow-xs">
                 <div>
-                  <h3 className="text-sm font-semibold text-foreground">Send a Test Request</h3>
+                  <h3 className="text-sm font-semibold text-foreground">Test against Rule Criteria</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Nhập request mẫu hoặc chọn các kịch bản test để kiểm tra bộ lọc rule.
+                    Mô phỏng request HTTP để kiểm tra xem rule có chặn hoặc cho qua request này không.
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                {/* HTTP Request Form */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <select
                     value={testMethod}
                     onChange={(e) => setTestMethod(e.target.value)}
                     className="bg-background border border-input px-3 py-2 text-xs font-mono text-foreground rounded-sm focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
                   >
-                    <option>GET</option>
-                    <option>POST</option>
-                    <option>PUT</option>
-                    <option>DELETE</option>
+                    {['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'].map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
                   </select>
+
                   <input
                     type="text"
                     value={testUrl}
                     onChange={(e) => setTestUrl(e.target.value)}
-                    placeholder="https://example.com/search?q=1+or+1=1"
+                    placeholder="/api/v1/users?id=1%20UNION%20SELECT"
                     className="flex-1 bg-background border border-input px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground rounded-sm focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
                   />
+
                   <button
                     type="button"
                     onClick={handleRunTest}
                     disabled={isTesting}
-                    className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-2 text-xs font-semibold rounded-sm flex items-center gap-1.5 cursor-pointer transition-colors shrink-0 shadow-xs"
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-sm text-xs font-semibold font-sans flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                   >
                     {isTesting ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Testing...</span>
+                      </>
                     ) : (
-                      <Play className="w-3.5 h-3.5 fill-current" />
+                      <>
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        <span>Run Test</span>
+                      </>
                     )}
-                    <span>{isTesting ? 'Running...' : 'Run Test'}</span>
                   </button>
                 </div>
 
                 {/* Preset sample requests based on rule group & conditions */}
                 <div className="pt-2 border-t border-border/50">
-                  <span className="text-[11px] text-muted-foreground font-mono block mb-2">Preset Quick Samples:</span>
+                  <span className="text-[11px] text-muted-foreground font-sans block mb-2">Preset Quick Samples:</span>
                   <div className="flex flex-wrap gap-2">
                     {presetSamples.map((sample, sIdx) => (
                       <button
@@ -856,11 +866,11 @@ end`;
               {/* cURL Command Preview */}
               <div className="bg-muted/30 border border-border p-4 rounded-md space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-foreground font-mono">cURL equivalent:</span>
+                  <span className="text-xs font-semibold text-foreground font-sans">cURL equivalent:</span>
                   <button
                     type="button"
                     onClick={() => { navigator.clipboard.writeText(`curl -i -X ${testMethod} "${testUrl}"`); }}
-                    className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-mono cursor-pointer flex items-center gap-1"
+                    className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-sans cursor-pointer flex items-center gap-1"
                   >
                     <Copy className="w-3 h-3" /> Copy command
                   </button>
@@ -954,10 +964,10 @@ end`;
                   <div className="bg-card border border-border rounded-md p-4 space-y-3 shadow-2xs">
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <div className="flex items-center gap-3">
-                        <span className="text-xs font-semibold text-foreground tracking-wide font-mono">
+                        <span className="text-xs font-semibold text-foreground tracking-wide font-sans">
                           Simulated HTTP Response:
                         </span>
-                        <div className="flex gap-1 border border-border bg-muted/50 p-0.5 rounded text-[11px] font-mono">
+                        <div className="flex gap-1 border border-border bg-muted/50 p-0.5 rounded text-[11px] font-sans">
                           {(['body', 'headers', 'raw'] as const).map((tab) => (
                             <button
                               key={tab}
@@ -978,9 +988,9 @@ end`;
                       <button
                         type="button"
                         onClick={handleCopyResult}
-                        className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-mono rounded border border-border bg-background hover:bg-muted text-foreground transition-colors cursor-pointer shadow-2xs"
+                        className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-sans rounded border border-border bg-background hover:bg-muted text-foreground transition-colors cursor-pointer shadow-2xs"
                       >
-                        {copiedResult ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                        {copiedResult ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                         <span>
                           {copiedResult
                             ? 'Copied!'
@@ -1028,7 +1038,7 @@ end`;
                   </div>
 
                   {/* Condition Evaluation Breakdown Table */}
-                  <div className="bg-card border border-border rounded-md p-4 space-y-3 shadow-2xs font-mono">
+                  <div className="bg-card border border-border rounded-md p-4 space-y-3 shadow-2xs font-sans">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-foreground tracking-wide font-sans">
                         Rule Conditions Evaluation Breakdown
@@ -1098,10 +1108,10 @@ end`;
 
                   {/* Pattern Match Highlight (Only shown when rule conditions matched) */}
                   {testResult.matched && (
-                    <div className="p-3.5 bg-background border border-border rounded space-y-2.5 font-mono text-xs">
+                    <div className="p-3.5 bg-background border border-border rounded space-y-2.5 font-sans text-xs">
                       <div className="flex justify-between py-1 border-b border-border/50">
                         <span className="text-muted-foreground">Evaluated URL:</span>
-                        <span className="text-foreground font-semibold break-all text-right max-w-sm">{testUrl}</span>
+                        <span className="text-foreground font-semibold font-mono break-all text-right max-w-sm">{testUrl}</span>
                       </div>
                       {testResult.matchedField && (
                         <div className="flex justify-between py-1 border-b border-border/50">
@@ -1112,7 +1122,7 @@ end`;
                       {testResult.matchedPattern && (
                         <div className="flex justify-between py-1 border-b border-border/50">
                           <span className="text-muted-foreground">Matched Rule Pattern:</span>
-                          <code className="text-foreground max-w-xs truncate bg-muted px-1.5 py-0.5 border border-border rounded">
+                          <code className="text-foreground font-mono max-w-xs truncate bg-muted px-1.5 py-0.5 border border-border rounded">
                             {testResult.matchedPattern}
                           </code>
                         </div>
@@ -1120,7 +1130,7 @@ end`;
 
                       <div>
                         <span className="text-muted-foreground block mb-1">Pattern Match Highlight:</span>
-                        <div className="p-2.5 bg-muted/60 border border-border text-foreground rounded text-xs break-all leading-relaxed">
+                        <div className="p-2.5 bg-muted/60 border border-border text-foreground rounded text-xs break-all leading-relaxed font-mono">
                           {testResult.highlightPrefix}
                           {testResult.highlightMatch ? (
                             <span className="bg-rose-500/20 text-rose-600 dark:text-rose-300 border border-rose-500/40 px-1 py-0.5 rounded font-bold">
@@ -1145,7 +1155,7 @@ end`;
                   <button
                     type="button"
                     onClick={() => setActiveTab('test')}
-                    className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-500 rounded text-xs font-semibold font-mono cursor-pointer transition-colors inline-flex items-center gap-1.5 shadow-xs"
+                    className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-500 rounded text-xs font-semibold font-sans cursor-pointer transition-colors inline-flex items-center gap-1.5 shadow-xs"
                   >
                     <Play className="w-3.5 h-3.5 fill-current" />
                     <span>Chuyển tới Test Request</span>
@@ -1169,7 +1179,7 @@ end`;
                   <button
                     type="button"
                     onClick={handleCopyConfig}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono rounded border border-border bg-background hover:bg-muted text-foreground transition-colors cursor-pointer shadow-2xs"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-sans rounded border border-border bg-background hover:bg-muted text-foreground transition-colors cursor-pointer shadow-2xs"
                   >
                     {copiedConfig ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                     <span>{copiedConfig ? 'Copied!' : 'Copy Config'}</span>
@@ -1177,7 +1187,7 @@ end`;
                 </div>
 
                 {/* Config Subtabs */}
-                <div className="flex gap-2 border-b border-border font-mono text-xs pt-1">
+                <div className="flex gap-2 border-b border-border font-sans text-xs pt-1">
                   {(['NGINX Config', 'Lua Script', 'JSON Definition'] as const).map((cfgTab) => (
                     <button
                       key={cfgTab}

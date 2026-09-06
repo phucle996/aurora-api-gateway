@@ -26,7 +26,7 @@ export function EditRuleActivationDialog({
 }: EditRuleActivationDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="font-mono sm:max-w-md bg-card border-border text-foreground p-5 shadow-2xl">
+      <DialogContent className="font-sans sm:max-w-md bg-card border-border text-foreground p-5 shadow-2xl">
         <DialogHeader className="space-y-2">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-md bg-primary/10 text-primary">

@@ -10,6 +10,11 @@ pub struct HeartbeatPayload {
     pub active_release_id: i64,
     pub version: String,
     pub role: String,
+    pub metrics_scope: String,
+    pub hostname: String,
+    pub runtime_started_at: i64,
+    pub worker_identity: String,
+    pub metrics_available: bool,
 }
 
 impl HeartbeatPayload {
@@ -74,6 +79,21 @@ impl HeartbeatPayload {
             buf.extend_from_slice(self.role.as_bytes());
         }
 
+        for (tag, value) in [
+            (10, &self.metrics_scope),
+            (11, &self.hostname),
+            (13, &self.worker_identity),
+        ] {
+            if !value.is_empty() {
+                encode_tag(&mut buf, tag, 2);
+                encode_varint(&mut buf, value.len() as u64);
+                buf.extend_from_slice(value.as_bytes());
+            }
+        }
+        encode_tag(&mut buf, 12, 0);
+        encode_varint(&mut buf, self.runtime_started_at as u64);
+        encode_tag(&mut buf, 14, 0);
+        encode_varint(&mut buf, u64::from(self.metrics_available));
         buf
     }
 }

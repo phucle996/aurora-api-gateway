@@ -27,7 +27,7 @@ export function ActionsSection({
   setAddToReputation,
 }: ActionsProps) {
   return (
-    <div className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#152030] p-4 space-y-4 font-mono text-xs">
+    <div className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#152030] p-4 space-y-4 font-sans text-xs">
       <div>
         <div className="text-sm font-semibold text-slate-900 dark:text-white">
           3. Actions

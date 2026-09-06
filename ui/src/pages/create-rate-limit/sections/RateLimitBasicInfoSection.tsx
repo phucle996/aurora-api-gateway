@@ -27,7 +27,7 @@ export function RateLimitBasicInfoSection({
   setPriority,
 }: RateLimitBasicInfoProps) {
   return (
-    <div className="bg-[#0B1320] border border-[#152030] p-4 space-y-4 font-mono text-xs">
+    <div className="bg-[#0B1320] border border-[#152030] p-4 space-y-4 font-sans text-xs">
       <div className="text-sm font-semibold text-white">
         1. Basic Information
       </div>

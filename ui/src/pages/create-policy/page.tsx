@@ -2,10 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { policiesApi, type PolicyDraft, type PolicyRule } from '../../lib/api/policies';
 import { CreatePolicyHeader } from './sections/CreatePolicyHeader';
-import { BasicInfoSection, type PolicyType } from './sections/BasicInfoSection';
-import { PolicyRulesSection, type PolicyRuleItem } from './sections/PolicyRulesSection';
+import { BasicInfoSection, type PolicyMode } from './sections/BasicInfoSection';
 import { ScopeSection } from './sections/ScopeSection';
-import { AdvancedOptionsSection } from './sections/AdvancedOptionsSection';
+import { PolicyRulesSection, type PolicyRuleItem } from './sections/PolicyRulesSection';
 import { PolicyPreviewPanel } from './sections/PolicyPreviewPanel';
 import { PolicySummaryPanel } from './sections/PolicySummaryPanel';
 import { FilePlus, ShieldCheck, AlertCircle } from 'lucide-react';
@@ -47,24 +46,17 @@ export default function CreatePolicyPage() {
   const source = params.get('edit') || params.get('clone');
   const isEditing = params.has('edit');
 
-  // Form State
+  // Form State (100% Real API Contract)
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [policyType, setPolicyType] = useState<PolicyType>('waf');
-  const [enabled, setEnabled] = useState(true);
+  const [mode, setMode] = useState<PolicyMode>('mixed');
   const [priority, setPriority] = useState(100);
+
+  const [target, setTarget] = useState('*');
 
   const [rules, setRules] = useState<PolicyRuleItem[]>([]);
   const [catalog, setCatalog] = useState<PolicyRule[]>([]);
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(true);
-
-  const [target, setTarget] = useState('*');
-  const [path, setPath] = useState('/api/*');
-  const [httpMethod, setHttpMethod] = useState('*');
-
-  const [enableLogging, setEnableLogging] = useState(true);
-  const [addToIpReputation, setAddToIpReputation] = useState(false);
-  const [enableShadowMode, setEnableShadowMode] = useState(false);
 
   const [expectedVersion, setExpectedVersion] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
@@ -91,12 +83,11 @@ export default function CreatePolicyPage() {
           setName(doc.name + (isEditing ? '' : ' (copy)'));
           setDescription(doc.description || '');
           setTarget(doc.host || '*');
-          setPath(doc.path_prefix || '/*');
-          setPriority(doc.priority || 100);
+          setPriority(doc.priority ?? 100);
+          setMode(doc.mode || 'mixed');
           setExpectedVersion(isEditing ? policy.version : 0);
-          if (doc.mode === 'detect') setEnableShadowMode(true);
 
-          // If source has rules, map them
+          // Map attached rules
           if (doc.rules && doc.rules.length > 0) {
             setRules(doc.rules.map(mapCatalogRuleToItem));
           }
@@ -118,15 +109,21 @@ export default function CreatePolicyPage() {
     e.preventDefault();
     if (isSaving) return;
 
+    if (!name.trim()) {
+      setError('Policy name is required.');
+      return;
+    }
+
+    const cleanHost = target.trim() === 'All Domains' ? '*' : (target.trim() || '*');
+
     setIsSaving(true);
     setError('');
 
     const draft: PolicyDraft = {
-      name,
-      description,
-      host: target === 'All Domains' ? '*' : target,
-      path_prefix: path.replace(/\*$/, '') || '/',
-      mode: enableShadowMode ? 'detect' : 'mixed',
+      name: name.trim(),
+      description: description.trim(),
+      host: cleanHost,
+      mode,
       priority,
       rule_ids: rules.filter((r) => r.enabled).map((r) => r.id),
       expected_version: expectedVersion,
@@ -159,7 +156,7 @@ export default function CreatePolicyPage() {
 
       {/* Error Alert */}
       {error && (
-        <div className="p-3.5 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-400 text-xs font-mono flex items-center gap-2 rounded-sm">
+        <div className="p-3.5 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-400 text-xs font-sans flex items-center gap-2 rounded-sm">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{error}</span>
         </div>
@@ -168,23 +165,27 @@ export default function CreatePolicyPage() {
       {/* Main 2-Column Layout */}
       <form onSubmit={handleSubmit}>
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Left Column: Form Configuration Cards (~65% width) */}
+          {/* Left Column: Configuration Cards (~65% width) */}
           <div className="lg:col-span-7 xl:col-span-8 space-y-5">
-            {/* 1. Basic Information */}
+            {/* 1. Basic Information & Enforcement Mode */}
             <BasicInfoSection
               name={name}
               setName={setName}
               description={description}
               setDescription={setDescription}
-              policyType={policyType}
-              setPolicyType={setPolicyType}
-              enabled={enabled}
-              setEnabled={setEnabled}
+              mode={mode}
+              setMode={setMode}
               priority={priority}
               setPriority={setPriority}
             />
 
-            {/* 2. Policy Rules */}
+            {/* 2. Scope */}
+            <ScopeSection
+              target={target}
+              setTarget={setTarget}
+            />
+
+            {/* 3. Policy Rules */}
             <PolicyRulesSection
               rules={rules}
               setRules={setRules}
@@ -192,32 +193,12 @@ export default function CreatePolicyPage() {
               isLoading={isLoadingCatalog}
             />
 
-            {/* 3. Scope */}
-            <ScopeSection
-              target={target}
-              setTarget={setTarget}
-              path={path}
-              setPath={setPath}
-              httpMethod={httpMethod}
-              setHttpMethod={setHttpMethod}
-            />
-
-            {/* 4. Advanced Options */}
-            <AdvancedOptionsSection
-              enableLogging={enableLogging}
-              setEnableLogging={setEnableLogging}
-              addToIpReputation={addToIpReputation}
-              setAddToIpReputation={setAddToIpReputation}
-              enableShadowMode={enableShadowMode}
-              setEnableShadowMode={setEnableShadowMode}
-            />
-
             {/* Bottom Form Actions */}
-            <div className="flex items-center justify-between pt-2">
+            <div className="flex items-center justify-between pt-2 font-sans">
               <button
                 type="button"
                 onClick={() => navigate('/policies')}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-[#0B1320] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-300 text-xs font-mono rounded-sm transition-colors cursor-pointer"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-[#0B1320] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-300 text-xs rounded-sm transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -225,7 +206,7 @@ export default function CreatePolicyPage() {
               <button
                 type="submit"
                 disabled={isSaving || !name.trim()}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-mono font-semibold rounded-sm shadow-lg shadow-blue-500/20 transition-all cursor-pointer"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-semibold rounded-sm shadow-lg shadow-blue-500/20 transition-all cursor-pointer"
               >
                 {isSaving ? (
                   <span>Saving policy...</span>
@@ -246,33 +227,26 @@ export default function CreatePolicyPage() {
 
           {/* Right Column: Preview & Summary Sidebar (~35% width) */}
           <div className="lg:col-span-5 xl:col-span-4 space-y-5 lg:sticky lg:top-20">
-            {/* Policy Preview (Tabs JSON / NGINX Config) */}
+            {/* Policy Preview (Draft Payload & Compiled Runtime Snapshot) */}
             <PolicyPreviewPanel
               name={name}
               description={description}
-              policyType={policyType}
+              mode={mode}
               priority={priority}
-              enabled={enabled}
               rules={rules}
               target={target}
-              path={path}
-              httpMethod={httpMethod}
-              enableLogging={enableLogging}
-              enableShadowMode={enableShadowMode}
+              expectedVersion={expectedVersion}
             />
 
             {/* Policy Summary */}
             <PolicySummaryPanel
               name={name}
-              policyType={policyType}
-              enabled={enabled}
+              mode={mode}
               priority={priority}
               rules={rules}
               target={target}
-              path={path}
-              httpMethod={httpMethod}
-              enableLogging={enableLogging}
-              enableShadowMode={enableShadowMode}
+              isEditing={isEditing}
+              expectedVersion={expectedVersion}
             />
           </div>
         </div>

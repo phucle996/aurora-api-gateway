@@ -18,15 +18,16 @@ export function NodesStats({ nodes }: NodesStatsProps) {
   const registeredCount = nodes ? nodes.length : 0;
   const readyCount = nodes ? nodes.filter((n) => n.status === 'Ready').length : 0;
   const notReadyCount = nodes ? nodes.filter((n) => n.status !== 'Ready').length : 0;
-  const inSyncCount = nodes ? nodes.filter((n) => n.sync === 'In Sync').length : 0;
-  const ruleset = (nodes && nodes.length > 0 && nodes[0].ruleset) || 'None';
+  const inSyncCount = nodes ? nodes.filter((n) => n.sync === 'In Sync' && n.status === 'Ready').length : 0;
+  const revisions = new Set(nodes?.map(n => n.ruleset));
+  const ruleset = revisions.size > 1 ? 'Mixed' : [...revisions][0] || 'Unknown';
 
   const totalRps = nodes
-    ? nodes.reduce((acc, n) => acc + (parseFloat(n.requestsPerSecond) || 0), 0).toFixed(1)
+    ? nodes.filter(n => n.status === 'Ready' && n.metricsAvailable).reduce((acc, n) => acc + (parseFloat(n.requestsPerSecond) || 0), 0).toFixed(1)
     : '0.0';
 
   const totalConns = nodes
-    ? nodes.reduce((acc, n) => acc + (parseInt(n.activeConnections, 10) || 0), 0)
+    ? nodes.filter(n => n.status === 'Ready' && n.metricsAvailable).reduce((acc, n) => acc + (parseInt(n.activeConnections, 10) || 0), 0)
     : 0;
 
   return (
@@ -66,7 +67,7 @@ export function NodesStats({ nodes }: NodesStatsProps) {
           <div>
             <div className="text-lg font-bold font-sans tabular-nums text-emerald-500">{readyCount}</div>
             <div className="text-[10px] font-sans text-emerald-500 mt-0.5">
-              <span>Online & Protecting</span>
+              <span>Recent heartbeat</span>
             </div>
           </div>
         </div>
@@ -82,7 +83,7 @@ export function NodesStats({ nodes }: NodesStatsProps) {
               {notReadyCount}
             </div>
             <div className={`text-[10px] font-sans mt-0.5 ${notReadyCount > 0 ? 'text-rose-500' : 'text-muted-foreground'}`}>
-              <span>{notReadyCount === 0 ? 'All Nodes Healthy' : 'Requires Attention'}</span>
+              <span>{notReadyCount === 0 ? 'No stale heartbeats' : 'Requires Attention'}</span>
             </div>
           </div>
         </div>
@@ -98,7 +99,7 @@ export function NodesStats({ nodes }: NodesStatsProps) {
               {registeredCount > 0 ? `${inSyncCount}/${registeredCount}` : '—'}
             </div>
             <div className="text-[10px] font-sans text-cyan-500 mt-0.5">
-              <span>{inSyncCount === registeredCount && registeredCount > 0 ? 'Synchronized' : 'Sync In Progress'}</span>
+              <span>{inSyncCount === registeredCount && registeredCount > 0 ? 'Synchronized' : 'Not fully confirmed'}</span>
             </div>
           </div>
         </div>
@@ -125,7 +126,7 @@ export function NodesStats({ nodes }: NodesStatsProps) {
           </div>
           <div>
             <div className="text-lg font-bold font-sans text-indigo-500">{ruleset}</div>
-            <div className="text-[10px] font-sans text-muted-foreground mt-0.5">Active Release</div>
+            <div className="text-[10px] font-sans text-muted-foreground mt-0.5">Observed runtime release</div>
           </div>
         </div>
       </div>

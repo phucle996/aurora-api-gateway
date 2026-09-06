@@ -56,7 +56,7 @@ func (r *ruleRepository) List(ctx context.Context, q entity.ListRulesQuery) (ent
 			FROM rules r
 			LEFT JOIN rule_definitions d 
 				ON d.rule_id = r.id AND d.version = r.version
-			WHERE (? = '' OR instr(lower(name), lower(?)) > 0)
+			WHERE NOT EXISTS(SELECT 1 FROM rule_deletions WHERE rule_id=r.id) AND (? = '' OR instr(lower(name), lower(?)) > 0)
 			  AND (? = '' OR rule_group = ?)
 			  AND (? = '' OR action = ?)
 			  AND (? = '' OR severity = ?)
@@ -172,7 +172,7 @@ func (r *ruleRepository) Detail(ctx context.Context, q entity.RuleDetailQuery) (
 		WITH target AS (
 			SELECT * 
 			FROM rules 
-			WHERE id = ?
+			WHERE id = ? AND NOT EXISTS(SELECT 1 FROM rule_deletions WHERE rule_id=rules.id)
 		)
 		SELECT 
 			t.id,
@@ -199,7 +199,10 @@ func (r *ruleRepository) Detail(ctx context.Context, q entity.RuleDetailQuery) (
 			d.response_code,
 			coalesce(d.custom_response, ''),
 			coalesce(d.log_event, 0),
-			coalesce(d.add_to_reputation, 0)
+			coalesce(d.add_to_reputation, 0),
+ (SELECT count(*) FROM policies p WHERE EXISTS(SELECT 1 FROM json_each(p.document,'$.rule_ids') j WHERE CAST(j.value AS INTEGER)=t.id)),
+ COALESCE((SELECT updated_at FROM rule_revisions WHERE rule_id=t.id ORDER BY version LIMIT 1),''),
+ COALESCE((SELECT actor FROM rule_revisions WHERE rule_id=t.id ORDER BY version LIMIT 1),'')
 		FROM target t 
 		LEFT JOIN rule_definitions d 
 			ON d.rule_id = t.id AND d.version = t.version;
@@ -231,7 +234,7 @@ func (r *ruleRepository) Detail(ctx context.Context, q entity.RuleDetailQuery) (
 		&x.ResponseCode,
 		&x.CustomResponse,
 		&x.LogEvent,
-		&x.AddToReputation,
+		&x.AddToReputation, &x.AssignedPolicies, &x.CreatedAt, &x.CreatedBy,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = taxonomy.ErrRuleNotFound
@@ -319,6 +322,7 @@ func (r *ruleRepository) Stats(ctx context.Context, q entity.RuleStatsQuery) (en
 			FROM rule_revisions r 
 			JOIN winners w 
 				ON w.rule_id = r.rule_id AND w.version = r.version
+ WHERE NOT EXISTS(SELECT 1 FROM rule_deletions x WHERE x.rule_id=r.rule_id AND julianday(x.deleted_at)<julianday(?))
 		),
 		totals AS (
 			SELECT 
@@ -326,7 +330,7 @@ func (r *ruleRepository) Stats(ctx context.Context, q entity.RuleStatsQuery) (en
 				coalesce(sum(enabled), 0) AS enabled,
 				coalesce(sum(enabled = 1 AND action = 'log'), 0) AS logs,
 				coalesce(sum(enabled = 1 AND action = 'block'), 0) AS blocks 
-			FROM rules
+			FROM rules WHERE NOT EXISTS(SELECT 1 FROM rule_deletions WHERE rule_id=rules.id)
 		)
 		SELECT 
 			t.total,
@@ -343,7 +347,7 @@ func (r *ruleRepository) Stats(ctx context.Context, q entity.RuleStatsQuery) (en
 		CROSS JOIN coverage c;
 	`
 
-	err := r.reader.QueryRowContext(ctx, query, x.ComparisonBefore, x.ComparisonBefore).Scan(
+	err := r.reader.QueryRowContext(ctx, query, x.ComparisonBefore, x.ComparisonBefore, x.ComparisonBefore).Scan(
 		&x.Total,
 		&x.Enabled,
 		&x.Log,
@@ -371,14 +375,14 @@ func (r *ruleRepository) History(ctx context.Context, q entity.RuleHistoryQuery)
 			SELECT r.version, r.name, r.description, r.rule_group, r.action, r.severity, r.priority, r.path, r.enabled, r.actor, r.updated_at,
 			       COALESCE(d.logic_mode, 'all') as logic_mode,
 			       COALESCE(d.conditions_json, '[]') as conditions_json,
-			       COALESCE(d.response_code, 403) as response_code,
-			       COALESCE(d.custom_response, '') as custom_response
+			       CASE WHEN d.rule_id IS NULL AND r.action='block' THEN 403 ELSE d.response_code END as response_code,
+			       COALESCE(d.custom_response, '') as custom_response,r.score,CASE WHEN d.rule_id IS NULL THEN 1 ELSE 2 END AS schema_version,coalesce(d.source_ip,'') AS source_ip,coalesce(d.host_domain,'') AS host_domain,coalesce(d.path_prefix,'') AS path_prefix,coalesce(d.http_method,'') AS http_method,coalesce(d.log_event,0) AS log_event,coalesce(d.add_to_reputation,0) AS add_to_reputation
 			FROM rule_revisions r
 			LEFT JOIN rule_definitions d ON d.rule_id = r.rule_id AND d.version = r.version
 			WHERE r.rule_id = ? 
 			  AND (? = 0 OR r.version < ?)
 		)
-		SELECT version, name, description, rule_group, action, severity, priority, path, enabled, actor, updated_at, logic_mode, conditions_json, response_code, custom_response
+		SELECT version, name, description, rule_group, action, severity, priority, path, enabled, actor, updated_at, logic_mode, conditions_json, response_code, custom_response,score,schema_version,source_ip,host_domain,path_prefix,http_method,log_event,add_to_reputation
 		FROM selected 
 		ORDER BY version DESC 
 		LIMIT ?;
@@ -397,7 +401,7 @@ func (r *ruleRepository) History(ctx context.Context, q entity.RuleHistoryQuery)
 		if err = rows.Scan(
 			&item.Version, &item.Name, &item.Description, &item.Group, &item.Action, &item.Severity,
 			&item.Priority, &item.Path, &item.Enabled, &item.Actor, &item.UpdatedAt,
-			&item.LogicMode, &item.ConditionsJSON, &item.ResponseCode, &item.CustomResponse,
+			&item.LogicMode, &item.ConditionsJSON, &item.ResponseCode, &item.CustomResponse, &item.Score, &item.SchemaVersion, &item.SourceIP, &item.HostDomain, &item.PathPrefix, &item.HTTPMethod, &item.LogEvent, &item.AddToReputation,
 		); err != nil {
 			return out, err
 		}
@@ -420,10 +424,10 @@ func (r *ruleRepository) History(ctx context.Context, q entity.RuleHistoryQuery)
 // Create thêm mới một luật bảo vệ WAF vào cơ sở dữ liệu.
 //
 // Quy trình xử lý gồm các bước:
-// 1. Chống gửi lặp (Idempotency): Dùng mã băm SHA-256 để phát hiện và xử lý các yêu cầu gửi trùng.
-// 2. Kiểm soát giới hạn: Đảm bảo tổng số luật trong hệ thống không vượt quá 1024 luật.
-// 3. Toàn vẹn giao dịch (ACID Transaction): Ghi đồng thời vào bảng chính (rules),
-//    bảng lịch sử phiên bản (rule_revisions) và bảng chống lặp (rule_creates).
+//  1. Chống gửi lặp (Idempotency): Dùng mã băm SHA-256 để phát hiện và xử lý các yêu cầu gửi trùng.
+//  2. Kiểm soát giới hạn: Đảm bảo tổng số luật trong hệ thống không vượt quá 1024 luật.
+//  3. Toàn vẹn giao dịch (ACID Transaction): Ghi đồng thời vào bảng chính (rules),
+//     bảng lịch sử phiên bản (rule_revisions) và bảng chống lặp (rule_creates).
 func (r *ruleRepository) Create(ctx context.Context, c entity.CreateRuleCommand) (entity.CreateRuleResult, error) {
 	var out entity.CreateRuleResult
 
@@ -458,7 +462,7 @@ func (r *ruleRepository) Create(ctx context.Context, c entity.CreateRuleCommand)
 
 	// Bước 4: Kiểm tra giới hạn số lượng luật (tối đa 1024 luật)
 	var count int
-	if err = tx.QueryRowContext(ctx, "SELECT count(*) FROM rules").Scan(&count); err != nil {
+	if err = tx.QueryRowContext(ctx, "SELECT count(*) FROM rules WHERE NOT EXISTS(SELECT 1 FROM rule_deletions WHERE rule_id=rules.id)").Scan(&count); err != nil {
 		return out, err
 	}
 	if count >= 1024 {
@@ -507,10 +511,10 @@ func (r *ruleRepository) Create(ctx context.Context, c entity.CreateRuleCommand)
 // Update cập nhật nội dung cấu hình của một luật bảo vệ WAF.
 //
 // Cơ chế bảo vệ:
-// 1. Khóa lạc quan (Optimistic Concurrency Control): Chỉ cho phép cập nhật nếu phiên bản hiện tại
-//    trong cơ sở dữ liệu khớp đúng với 'ExpectedVersion'. Nếu người khác đã cập nhật trước đó,
-//    hệ thống sẽ phát hiện xung đột và từ chối ghi đè (ErrRuleConflict).
-// 2. Bảo vệ luật thế hệ 2: Không cho phép dùng hàm cập nhật v1 để ghi đè lên các luật có cấu hình chi tiết v2.
+//  1. Khóa lạc quan (Optimistic Concurrency Control): Chỉ cho phép cập nhật nếu phiên bản hiện tại
+//     trong cơ sở dữ liệu khớp đúng với 'ExpectedVersion'. Nếu người khác đã cập nhật trước đó,
+//     hệ thống sẽ phát hiện xung đột và từ chối ghi đè (ErrRuleConflict).
+//  2. Bảo vệ luật thế hệ 2: Không cho phép dùng hàm cập nhật v1 để ghi đè lên các luật có cấu hình chi tiết v2.
 func (r *ruleRepository) Update(ctx context.Context, c entity.UpdateRuleCommand) (entity.UpdateRuleResult, error) {
 	var out entity.UpdateRuleResult
 	tx, err := r.writer.BeginTx(ctx, nil)
@@ -591,12 +595,16 @@ func (r *ruleRepository) Rollback(ctx context.Context, c entity.RollbackRuleComm
 
 	// 1. Kiểm tra rule tồn tại
 	var currentVersion int64
-	err = tx.QueryRowContext(ctx, "SELECT version FROM rules WHERE id = ?", c.ID).Scan(&currentVersion)
+	err = tx.QueryRowContext(ctx, "SELECT version FROM rules WHERE id = ? AND NOT EXISTS(SELECT 1 FROM rule_deletions WHERE rule_id=rules.id)", c.ID).Scan(&currentVersion)
 	if errors.Is(err, sql.ErrNoRows) {
 		return out, taxonomy.ErrRuleNotFound
 	}
 	if err != nil {
 		return out, err
+	}
+
+	if currentVersion != c.ExpectedVersion {
+		return out, taxonomy.ErrRuleConflict
 	}
 
 	// 2. Lấy cấu hình mục tiêu từ rule_revisions
@@ -669,7 +677,9 @@ func (r *ruleRepository) Rollback(ctx context.Context, c entity.RollbackRuleComm
 		FROM rule_definitions
 		WHERE rule_id = ? AND version = ?;
 	`
-	_, _ = tx.ExecContext(ctx, copyDef, out.Version, c.ID, c.TargetVersion)
+	if _, err = tx.ExecContext(ctx, copyDef, out.Version, c.ID, c.TargetVersion); err != nil {
+		return out, err
+	}
 
 	return out, tx.Commit()
 }
@@ -853,10 +863,10 @@ func (r *ruleRepository) Release(ctx context.Context, q entity.ReleaseDetailQuer
 // 1. Kiểm tra chống gửi lặp lại (Idempotency) dựa trên RequestKey và mã băm SHA-256.
 // 2. Kiểm soát giới hạn tổng số lượng luật (tối đa 1024).
 // 3. Mở transaction ghi đồng thời vào:
-//    - 'rules': Bảng thông tin chung của luật.
-//    - 'rule_revisions': Bảng lưu lịch sử phiên bản.
-//    - 'rule_definitions': Bảng lưu các điều kiện lọc chi tiết dạng JSON.
-//    - 'definition_creates': Bảng lưu biên lai đối soát Idempotency.
+//   - 'rules': Bảng thông tin chung của luật.
+//   - 'rule_revisions': Bảng lưu lịch sử phiên bản.
+//   - 'rule_definitions': Bảng lưu các điều kiện lọc chi tiết dạng JSON.
+//   - 'definition_creates': Bảng lưu biên lai đối soát Idempotency.
 func (r *ruleRepository) CreateDefinition(ctx context.Context, c entity.CreateRuleDefinitionCommand, issues []string, path string) (entity.CreateRuleDefinitionResult, error) {
 	out := entity.CreateRuleDefinitionResult{Version: 1, State: "saved", RuntimeReady: len(issues) == 0, RuntimeIssues: issues}
 
@@ -911,7 +921,7 @@ func (r *ruleRepository) CreateDefinition(ctx context.Context, c entity.CreateRu
 
 	// Bước 4: Kiểm tra giới hạn số lượng luật hệ thống (tối đa 1024 luật)
 	var count int
-	if err = tx.QueryRowContext(ctx, "SELECT count(*) FROM rules").Scan(&count); err != nil {
+	if err = tx.QueryRowContext(ctx, "SELECT count(*) FROM rules WHERE NOT EXISTS(SELECT 1 FROM rule_deletions WHERE rule_id=rules.id)").Scan(&count); err != nil {
 		return out, err
 	}
 	if count >= 1024 {
@@ -987,5 +997,198 @@ func (r *ruleRepository) CreateDefinition(ctx context.Context, c entity.CreateRu
 	}
 
 	// Bước 10: Xác nhận transaction thành công (Commit)
+	return out, tx.Commit()
+}
+
+func (r *ruleRepository) UpdateDefinition(ctx context.Context, c entity.UpdateRuleDefinitionCommand, issues []string, path string) (entity.UpdateRuleDefinitionResult, error) {
+	out := entity.UpdateRuleDefinitionResult{Version: 1, State: "saved", RuntimeReady: len(issues) == 0, RuntimeIssues: issues}
+
+	// Bước 1: Tính mã băm SHA-256 của yêu cầu tạo luật
+	raw, err := json.Marshal(c)
+	if err != nil {
+		return out, err
+	}
+	sum := sha256.Sum256(raw)
+	hash := hex.EncodeToString(sum[:])
+
+	// Bước 2: Bắt đầu transaction ghi dữ liệu
+	tx, err := r.writer.BeginTx(ctx, nil)
+	if err != nil {
+		return out, err
+	}
+	defer tx.Rollback()
+
+	// Bước 3: Kiểm tra chống gửi trùng lặp (Idempotency Check)
+	// - CTE prior: Tìm bản ghi trong 'definition_updates' theo RequestKey.
+	// - SELECT: Kết hợp với bảng 'rule_definitions' để lấy lại trạng thái và các cảnh báo trước đó nếu có.
+	const checkPriorQuery = `
+		WITH prior AS (
+			SELECT * 
+			FROM definition_updates 
+			WHERE request_key = ?
+		)
+		SELECT 
+			p.rule_id,
+			p.version,
+			p.request_hash,
+			d.runtime_ready,
+			d.runtime_issues 
+		FROM prior p 
+		JOIN rule_definitions d 
+			ON d.rule_id = p.rule_id AND d.version = p.version;
+	`
+	var previousHash, previousIssues string
+	err = tx.QueryRowContext(ctx, checkPriorQuery, c.RequestKey).Scan(&out.ID, &out.Version, &previousHash, &out.RuntimeReady, &previousIssues)
+	if err == nil {
+		if hash != previousHash {
+			return out, taxonomy.ErrRuleConflict // Xung đột: cùng RequestKey nhưng nội dung băm khác nhau
+		}
+		if err = json.Unmarshal([]byte(previousIssues), &out.RuntimeIssues); err != nil {
+			return out, err
+		}
+		return out, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return out, err
+	}
+
+	err = tx.QueryRowContext(ctx, `
+		WITH target AS (
+			SELECT id
+			FROM rules
+			WHERE id = ?
+			  AND version = ?
+			  AND NOT EXISTS (
+				SELECT 1 FROM rule_deletions WHERE rule_id = rules.id
+			  )
+		)
+		UPDATE rules
+		SET version = version + 1,
+		    name = ?,
+		    description = ?,
+		    rule_group = ?,
+		    action = ?,
+		    severity = ?,
+		    score = ?,
+		    priority = ?,
+		    path = ?,
+		    enabled = ?,
+		    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+		WHERE id IN (SELECT id FROM target)
+		RETURNING id, version`,
+		c.ID, c.ExpectedVersion, c.Name, c.Description, c.Group, c.Action, c.Severity, c.Score, c.Priority, path, c.Enabled).Scan(&out.ID, &out.Version)
+	if errors.Is(err, sql.ErrNoRows) {
+		return out, taxonomy.ErrRuleConflict
+	}
+	if err != nil {
+		return out, err
+	}
+
+	// Bước 6: Ghi nhận bản ghi lịch sử phiên bản đầu tiên vào bảng 'rule_revisions'
+	const insertRevisionQuery = `
+		INSERT INTO rule_revisions 
+		SELECT id, version, name, description, rule_group, action, severity, score, priority, path, enabled, updated_at, ? 
+		FROM rules 
+		WHERE id = ?;
+	`
+	if _, err = tx.ExecContext(ctx, insertRevisionQuery, c.Actor, out.ID); err != nil {
+		return out, err
+	}
+
+	// Bước 7: Chuẩn hóa danh sách điều kiện chi tiết sang dạng JSON để lưu trữ
+	condRecords := make([]ruleConditionRecord, len(c.Conditions))
+	for i, cond := range c.Conditions {
+		condRecords[i] = ruleConditionRecord{
+			Field:      cond.Field,
+			Operator:   cond.Operator,
+			Value:      cond.Value,
+			HeaderName: cond.HeaderName,
+		}
+	}
+	conditions, err := json.Marshal(condRecords)
+	if err != nil {
+		return out, err
+	}
+	reasons, err := json.Marshal(issues)
+	if err != nil {
+		return out, err
+	}
+
+	// Bước 8: Lưu thông tin cấu hình chi tiết (IP nguồn, Header, Domain, Method, Response...) vào bảng 'rule_definitions'
+	const insertDefinitionQuery = `
+		INSERT INTO rule_definitions (
+			rule_id, version, logic_mode, conditions_json, source_ip, host_domain, path_prefix, 
+			http_method, response_code, custom_response, log_event, add_to_reputation, runtime_ready, runtime_issues
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+	`
+	if _, err = tx.ExecContext(
+		ctx,
+		insertDefinitionQuery,
+		out.ID, out.Version, c.LogicMode, string(conditions), c.SourceIP, c.HostDomain, c.PathPrefix,
+		c.HTTPMethod, c.ResponseCode, c.CustomResponse, c.LogEvent, c.AddToReputation, out.RuntimeReady, string(reasons),
+	); err != nil {
+		return out, err
+	}
+
+	// Bước 9: Lưu biên lai vào bảng 'definition_updates' để phục vụ đối soát chống gửi lặp (Idempotency)
+	if _, err = tx.ExecContext(ctx, "INSERT INTO definition_updates (request_key, request_hash, rule_id, version) VALUES (?, ?, ?, ?)", c.RequestKey, hash, out.ID, out.Version); err != nil {
+		return out, err
+	}
+
+	// Bước 10: Xác nhận transaction thành công (Commit)
+	return out, tx.Commit()
+}
+
+func (r *ruleRepository) Delete(ctx context.Context, c entity.DeleteRuleCommand) (entity.DeleteRuleResult, error) {
+	var out entity.DeleteRuleResult
+	tx, err := r.writer.BeginTx(ctx, nil)
+	if err != nil {
+		return out, err
+	}
+	defer tx.Rollback()
+	var referenced int
+	err = tx.QueryRowContext(ctx, `SELECT count(*) FROM policies p,json_each(p.document,'$.rule_ids') j WHERE CAST(j.value AS INTEGER)=?
+ `, c.ID).Scan(&referenced)
+	if err != nil {
+		return out, err
+	}
+	if referenced > 0 {
+		return out, taxonomy.ErrRuleConflict
+	}
+	err = tx.QueryRowContext(ctx, `
+		WITH target AS (
+			SELECT id
+			FROM rules
+			WHERE id = ?
+			  AND version = ?
+			  AND NOT EXISTS (
+				SELECT 1 FROM rule_deletions WHERE rule_id = rules.id
+			  )
+		)
+		UPDATE rules
+		SET enabled = 0,
+		    version = version + 1,
+		    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+		WHERE id IN (SELECT id FROM target)
+		RETURNING id, version`, c.ID, c.ExpectedVersion).Scan(&out.ID, &out.Version)
+	if errors.Is(err, sql.ErrNoRows) {
+		return out, taxonomy.ErrRuleConflict
+	}
+	if err != nil {
+		return out, err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO rule_revisions SELECT id,version,name,description,rule_group,action,severity,score,priority,path,enabled,updated_at,? FROM rules WHERE id=?`, c.Actor, c.ID)
+	if err != nil {
+		return out, err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO rule_definitions SELECT rule_id,?,logic_mode,conditions_json,source_ip,host_domain,path_prefix,http_method,response_code,custom_response,log_event,add_to_reputation,runtime_ready,runtime_issues FROM rule_definitions WHERE rule_id=? AND version=?`, out.Version, c.ID, c.ExpectedVersion)
+	if err != nil {
+		return out, err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO rule_deletions(rule_id,version,actor) VALUES(?,?,?)`, c.ID, out.Version, c.Actor)
+	if err != nil {
+		return out, err
+	}
 	return out, tx.Commit()
 }

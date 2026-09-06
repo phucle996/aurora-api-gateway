@@ -500,3 +500,74 @@ func (s *ruleService) Test(ctx context.Context, cmd entity.TestRuleCommand) (ent
 	}, nil
 }
 
+
+func (s *ruleService) UpdateDefinition(ctx context.Context, c entity.UpdateRuleDefinitionCommand) (entity.UpdateRuleDefinitionResult, error) {
+	issues := []string{} // Danh sách chứa các lý do/cảnh báo nếu luật chưa tương thích với runtime hiện tại
+	path := ""           // Đường dẫn chuẩn hóa (Canonical Path) nếu luật tương thích với bộ engine so khớp đường dẫn tĩnh
+
+	// Bước 1: Đánh giá tính tương thích với engine so khớp đường dẫn chính xác (Exact-path Engine)
+	// Engine hiện tại yêu cầu luật phải có đúng 1 điều kiện kiểm tra trường 'path' với toán tử 'equals'
+	if len(c.Conditions) != 1 || c.Conditions[0].Field != "path" || c.Conditions[0].Operator != "equals" {
+		issues = append(issues, "Runtime currently requires one Request Path / Equals condition")
+	} else {
+		// Trích xuất giá trị đường dẫn và kiểm tra xem có đạt chuẩn Canonical Path hay không:
+		// - Phải bắt đầu bằng dấu '/'
+		// - Không chứa ký tự đặc biệt / escape: %, ?, #, \
+		// - Không chứa hai dấu gạch chéo liên tiếp '//'
+		path = c.Conditions[0].Value
+		canonical := strings.HasPrefix(path, "/") && !strings.ContainsAny(path, "%?#\\") && !strings.Contains(path, "//")
+
+		// Kiểm tra ký tự in được trong bảng mã ASCII (mã từ 33 đến 126)
+		for _, b := range []byte(path) {
+			if b <= 32 || b >= 127 {
+				canonical = false
+			}
+		}
+
+		// Kiểm tra không chứa các đoạn dẫn tương đối nguy hiểm như '.' hoặc '..'
+		for _, segment := range strings.Split(path, "/") {
+			if segment == "." || segment == ".." {
+				canonical = false
+			}
+		}
+
+		// Nếu không đạt chuẩn canonical, ghi nhận cảnh báo và xóa bỏ biến path
+		if !canonical {
+			issues = append(issues, "Runtime requires a canonical ASCII path without escapes or dot segments")
+			path = ""
+		}
+	}
+
+	// Bước 2: Kiểm tra các bộ lọc phạm vi nâng cao (IP nguồn, Host Domain, Path Prefix, HTTP Method)
+	// Hiện tại runtime chưa hỗ trợ các bộ lọc này nên ghi nhận vào danh sách issues
+	if c.SourceIP != "" || c.HostDomain != "" || c.PathPrefix != "" || c.HTTPMethod != "" {
+		issues = append(issues, "Runtime scope filtering is not implemented")
+	}
+
+	// Bước 3: Kiểm tra cấu hình phản hồi tùy biến khi Chặn (Block)
+	// Runtime hiện tại chỉ hỗ trợ mã phản hồi mặc định là 403 Forbidden không kèm thân tùy biến
+	if c.Action == "block" && (*c.ResponseCode != 403 || c.CustomResponse != "") {
+		issues = append(issues, "Runtime supports only the default 403 response body")
+	}
+
+	// Bước 4: Kiểm tra tính năng ghi log sự kiện riêng cho từng luật
+	// Nếu bật cờ LogEvent, ghi nhận cảnh báo do runtime chưa hỗ trợ phân luồng log riêng
+	if c.LogEvent {
+		issues = append(issues, "Per-rule security event collection is not implemented")
+	}
+
+	// Bước 5: Kiểm tra tính năng cập nhật điểm danh tiếng địa chỉ IP (IP Reputation)
+	// Hiện runtime chưa hỗ trợ tự động thay đổi điểm uy tín IP khi vi phạm
+	if c.AddToReputation {
+		issues = append(issues, "IP reputation mutations are not implemented")
+	}
+
+	// Bước 6: Ủy thác lưu trữ cho tầng repository trong một transaction an toàn:
+	// - Kiểm tra tính bất biến Idempotency theo RequestKey
+	// - Kiểm tra giới hạn 1024 luật của toàn hệ thống
+	// - Ghi đồng thời vào các bảng: rules, rule_revisions, rule_definitions, definition_creates
+	// - Tự động đánh dấu RuntimeReady = (len(issues) == 0)
+	return s.repo.UpdateDefinition(ctx, c, issues, path)
+}
+
+func (s *ruleService) Delete(ctx context.Context,c entity.DeleteRuleCommand)(entity.DeleteRuleResult,error){return s.repo.Delete(ctx,c)}

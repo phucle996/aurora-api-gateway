@@ -38,13 +38,13 @@ export function EditMatchConditionsSection({
   };
 
   return (
-    <div className="bg-[#0B1320] border border-[#152030] p-4 space-y-4 font-mono text-xs">
+    <div className="bg-[#0B1320] border border-[#152030] p-4 space-y-4 font-sans text-xs">
       <div className="flex items-center justify-between">
         <div>
           <div className="text-sm font-semibold text-white">
             2. Match Conditions
           </div>
-          <p className="text-slate-400 text-[11px] mt-0.5 font-sans">
+          <p className="text-slate-400 text-[11px] mt-0.5">
             When a request matches {logicMode === 'ALL' ? 'ALL' : 'ANY'} of the following conditions:
           </p>
         </div>
@@ -55,7 +55,7 @@ export function EditMatchConditionsSection({
             tabIndex={0}
             role="button"
             aria-label="Rule Logic Guide"
-            className="flex items-center gap-1.5 text-cyan-400 hover:text-cyan-300 text-xs font-mono transition-colors cursor-pointer py-1 select-none"
+            className="flex items-center gap-1.5 text-cyan-400 hover:text-cyan-300 text-xs transition-colors cursor-pointer py-1 select-none"
           >
             <HelpCircle className="w-3.5 h-3.5" />
             <span>Rule Logic Guide</span>

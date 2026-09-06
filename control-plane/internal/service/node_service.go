@@ -4,33 +4,87 @@ import (
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	"aurora-waf.local/control-plane/internal/domain/repo"
 	domainService "aurora-waf.local/control-plane/internal/domain/service"
+	"aurora-waf.local/control-plane/internal/provider"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
 type nodeService struct {
-	repo       repo.NodeRepository
-	metricsSvc domainService.MetricsService
-	eventHub   EventHub
+	heartbeatMu sync.Mutex
+	repo        repo.NodeRepository
+	metricsSvc  domainService.MetricsService
+	eventHub    provider.EventHub
+
+	batchMu      sync.Mutex
+	pendingBeats map[string]entity.NodeHeartbeatEvent
 }
 
 // NewNodeService khởi tạo service quản lý workflow Cluster Nodes.
-func NewNodeService(repo repo.NodeRepository, metricsSvc domainService.MetricsService) domainService.NodeService {
-	return &nodeService{
-		repo:       repo,
-		metricsSvc: metricsSvc,
-		eventHub:   NewEventHub(),
+func NewNodeService(repo repo.NodeRepository, metricsSvc domainService.MetricsService, eventHub provider.EventHub) domainService.NodeService {
+	s := &nodeService{
+		repo:         repo,
+		metricsSvc:   metricsSvc,
+		eventHub:     eventHub,
+		pendingBeats: make(map[string]entity.NodeHeartbeatEvent),
 	}
+
+	if eventHub != nil {
+		go s.flushLoop(1200 * time.Millisecond)
+	}
+
+	return s
 }
 
 // SubscribeEvents đăng ký nhận luồng sự kiện realtime từ hệ thống.
 func (s *nodeService) SubscribeEvents() (<-chan entity.SSEMessage, func()) {
+	if s.eventHub == nil {
+		return nil, func() {}
+	}
 	return s.eventHub.Subscribe()
+}
+
+// queueHeartbeat đưa sự kiện nhịp tim của một node vào hàng chờ để gom batch gửi chung một lượt qua SSE.
+func (s *nodeService) queueHeartbeat(evt entity.NodeHeartbeatEvent) {
+	s.batchMu.Lock()
+	defer s.batchMu.Unlock()
+	s.pendingBeats[evt.NodeID] = evt
+}
+
+// flushLoop định kỳ gom tất cả pending node heartbeats và bắn 1 event duy nhất lên client qua EventHub.
+func (s *nodeService) flushLoop(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		s.flushBatch()
+	}
+}
+
+func (s *nodeService) flushBatch() {
+	s.batchMu.Lock()
+	if len(s.pendingBeats) == 0 {
+		s.batchMu.Unlock()
+		return
+	}
+
+	batch := make([]entity.NodeHeartbeatEvent, 0, len(s.pendingBeats))
+	for _, beat := range s.pendingBeats {
+		batch = append(batch, beat)
+	}
+	s.pendingBeats = make(map[string]entity.NodeHeartbeatEvent)
+	s.batchMu.Unlock()
+
+	if s.eventHub != nil {
+		s.eventHub.Broadcast("nodes_heartbeat", batch)
+	}
 }
 
 // ListNodeSyncLogs truy vấn danh sách log đồng bộ của một node.
@@ -72,24 +126,35 @@ func (s *nodeService) ListNodes(ctx context.Context) ([]entity.ClusterNodeRecord
 				node.Uptime = "Offline"
 			} else {
 				node.Status = "Ready"
-				node.Uptime = formatNodeUptime(node.CreatedAt, now)
+				if node.RuntimeStartedAt <= 0 {
+					node.Uptime = "Unknown"
+				}
+				node.Uptime = "Unknown"
+				if node.RuntimeStartedAt > 0 {
+					node.Uptime = formatNodeUptime(time.Unix(node.RuntimeStartedAt, 0).UTC().Format(time.RFC3339), now)
+				}
 			}
+		}
+
+		if node.Status != "Ready" {
+			node.PolicySync = "Unknown (stale heartbeat)"
 		}
 
 		// Nạp dữ liệu đo đạc thực tế từ In-Memory Ring Buffer thay vì gán tĩnh
 		if s.metricsSvc != nil {
-			if pt := s.metricsSvc.GetLatestMetricPoint(node.ID); pt != nil {
+			if pt := s.metricsSvc.GetLatestMetricPoint(node.ID); pt != nil && pt.Timestamp == node.LastHeartbeatTimestamp && node.Status == "Ready" {
+				node.MetricsAvailable = true
 				node.CPUUsage = pt.CPUUsage
 				node.MemoryUsage = pt.MemoryUsage
 				node.ActiveConnections = fmt.Sprintf("%d", pt.ActiveConnections)
 				node.RequestsPerSecond = fmt.Sprintf("%.1f", pt.RPS)
 			} else {
-				node.ActiveConnections = "0"
-				node.RequestsPerSecond = "0"
+				node.ActiveConnections = "—"
+				node.RequestsPerSecond = "—"
 			}
 		} else {
-			node.ActiveConnections = "0"
-			node.RequestsPerSecond = "0"
+			node.ActiveConnections = "—"
+			node.RequestsPerSecond = "—"
 		}
 	}
 
@@ -129,24 +194,35 @@ func (s *nodeService) GetNodeByID(ctx context.Context, id string) (*entity.Clust
 			node.Uptime = "Offline"
 		} else {
 			node.Status = "Ready"
-			node.Uptime = formatNodeUptime(node.CreatedAt, now)
+			if node.RuntimeStartedAt <= 0 {
+				node.Uptime = "Unknown"
+			}
+			node.Uptime = "Unknown"
+			if node.RuntimeStartedAt > 0 {
+				node.Uptime = formatNodeUptime(time.Unix(node.RuntimeStartedAt, 0).UTC().Format(time.RFC3339), now)
+			}
 		}
+	}
+
+	if node.Status != "Ready" {
+		node.PolicySync = "Unknown (stale heartbeat)"
 	}
 
 	// Nạp dữ liệu đo đạc thực tế từ In-Memory Ring Buffer
 	if s.metricsSvc != nil {
-		if pt := s.metricsSvc.GetLatestMetricPoint(node.ID); pt != nil {
+		if pt := s.metricsSvc.GetLatestMetricPoint(node.ID); pt != nil && pt.Timestamp == node.LastHeartbeatTimestamp && node.Status == "Ready" {
+			node.MetricsAvailable = true
 			node.CPUUsage = pt.CPUUsage
 			node.MemoryUsage = pt.MemoryUsage
 			node.ActiveConnections = fmt.Sprintf("%d", pt.ActiveConnections)
 			node.RequestsPerSecond = fmt.Sprintf("%.1f", pt.RPS)
 		} else {
-			node.ActiveConnections = "0"
-			node.RequestsPerSecond = "0"
+			node.ActiveConnections = "—"
+			node.RequestsPerSecond = "—"
 		}
 	} else {
-		node.ActiveConnections = "0"
-		node.RequestsPerSecond = "0"
+		node.ActiveConnections = "—"
+		node.RequestsPerSecond = "—"
 	}
 	return node, nil
 }
@@ -185,7 +261,8 @@ func (s *nodeService) GetNodeConfig(ctx context.Context, nodeID string) (string,
 	}
 
 	client := &http.Client{
-		Timeout: 3 * time.Second,
+		Timeout:       3 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 
 	var lastErr error
@@ -203,13 +280,18 @@ func (s *nodeService) GetNodeConfig(ctx context.Context, nodeID string) (string,
 		}
 
 		if resp.StatusCode == http.StatusOK {
-			body, err := io.ReadAll(resp.Body)
+			body, err := io.ReadAll(io.LimitReader(resp.Body, 1024*1024+1))
 			resp.Body.Close()
-			if err != nil {
+			if err != nil || len(body) > 1024*1024 {
+				if err == nil {
+					err = errors.New("node config exceeds 1 MiB")
+				}
 				lastErr = err
 				continue
 			}
-			return string(body), nil
+			// Redact at the API boundary as well, including older nodes.
+			redactor := regexp.MustCompile(`(?s)\baurora_waf_token\s+(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^;]*);`)
+			return redactor.ReplaceAllString(string(body), "aurora_waf_token [REDACTED];"), nil
 		}
 		resp.Body.Close()
 		lastErr = fmt.Errorf("node trả về mã HTTP %d từ %s", resp.StatusCode, targetURL)
@@ -226,12 +308,26 @@ func (s *nodeService) RecordHeartbeat(ctx context.Context, payload entity.NodeHe
 	if payload.NodeID == "" {
 		return nil, errors.New("node_id không được để trống")
 	}
-	if payload.Timestamp <= 0 {
-		payload.Timestamp = time.Now().Unix()
+	if payload.Timestamp <= 0 || payload.Timestamp > time.Now().Unix()+5 {
+		return nil, errors.New("invalid heartbeat timestamp")
 	}
+	if payload.MetricsScope != "container" && payload.MetricsScope != "host" {
+		payload.MetricsAvailable = false
+	}
+	if math.IsNaN(payload.CPUUsage) || math.IsInf(payload.CPUUsage, 0) || math.IsNaN(payload.MemoryUsage) || math.IsInf(payload.MemoryUsage, 0) || math.IsNaN(payload.RequestsPerSecond) || math.IsInf(payload.RequestsPerSecond, 0) || payload.CPUUsage < 0 || payload.CPUUsage > 100 || payload.MemoryUsage < 0 || payload.MemoryUsage > 100 || payload.RequestsPerSecond < 0 || payload.ActiveConnections < 0 {
+		return nil, errors.New("invalid heartbeat metrics")
+	}
+	s.heartbeatMu.Lock()
+	defer s.heartbeatMu.Unlock()
 
 	// 0. Lấy trạng thái trước đó của node để phát hiện State Transitions (release change, reload)
-	prevNode, _ := s.repo.GetNodeByID(ctx, payload.NodeID)
+	prevNode, err := s.repo.GetHeartbeatState(ctx, payload.NodeID)
+	if err != nil {
+		return nil, err
+	}
+	if prevNode != nil && payload.Timestamp <= prevNode.Timestamp {
+		return &entity.NodeCommandDirective{Action: "none"}, nil
+	}
 
 	// 1. Cập nhật thời điểm heartbeat và liveness vào SQLite
 	if err := s.repo.UpdateHeartbeat(ctx, payload); err != nil {
@@ -239,7 +335,7 @@ func (s *nodeService) RecordHeartbeat(ctx context.Context, payload entity.NodeHe
 	}
 
 	// 2. Đẩy điểm đo tức thời vào In-Memory Ring Buffer trong MetricsService
-	if s.metricsSvc != nil {
+	if s.metricsSvc != nil && payload.MetricsAvailable {
 		now := time.Now().Unix()
 		minutesAgo := int(float64(now-payload.Timestamp) / 60.0)
 		label := fmt.Sprintf("-%dm", minutesAgo)
@@ -249,6 +345,7 @@ func (s *nodeService) RecordHeartbeat(ctx context.Context, payload entity.NodeHe
 
 		s.metricsSvc.PushMetricPoint(payload.NodeID, entity.NodeMetricPoint{
 			Timestamp:         payload.Timestamp,
+			MetricsScope:      payload.MetricsScope,
 			TimeLabel:         label,
 			RPS:               payload.RequestsPerSecond,
 			CPUUsage:          payload.CPUUsage,
@@ -280,17 +377,20 @@ func (s *nodeService) RecordHeartbeat(ctx context.Context, payload entity.NodeHe
 
 	// 5. Đưa nhịp tim vào hàng đợi gom batch để phát sóng chung 1 event duy nhất
 	if s.eventHub != nil {
-		s.eventHub.QueueHeartbeat(entity.NodeHeartbeatEvent{
-			NodeID:      payload.NodeID,
-			IP:          payload.IP,
-			Status:      "Ready",
-			RPS:         payload.RequestsPerSecond,
-			ActiveConns: payload.ActiveConnections,
-			CPUUsage:    payload.CPUUsage,
-			MemoryUsage: payload.MemoryUsage,
-			Sync:        syncStatus,
-			Ruleset:     rulesetName,
-			Timestamp:   payload.Timestamp,
+		s.queueHeartbeat(entity.NodeHeartbeatEvent{
+			NodeID:           payload.NodeID,
+			MetricsScope:     payload.MetricsScope,
+			MetricsAvailable: payload.MetricsAvailable,
+			RuntimeStartedAt: payload.RuntimeStartedAt,
+			IP:               payload.IP,
+			Status:           "Ready",
+			RPS:              payload.RequestsPerSecond,
+			ActiveConns:      payload.ActiveConnections,
+			CPUUsage:         payload.CPUUsage,
+			MemoryUsage:      payload.MemoryUsage,
+			Sync:             syncStatus,
+			Ruleset:          rulesetName,
+			Timestamp:        payload.Timestamp,
 		})
 	}
 
@@ -310,7 +410,7 @@ func (s *nodeService) RecordHeartbeat(ctx context.Context, payload entity.NodeHe
 			}
 		}
 		// Vừa hoàn thành reload
-		if prevNode.ReloadStatus == "reloading" {
+		if prevNode.ReloadStatus == "reloading" && prevNode.WorkerIdentity != "" && payload.WorkerIdentity != "" && prevNode.WorkerIdentity != payload.WorkerIdentity {
 			msg := "Hoàn tất reload worker NGINX áp dụng cấu hình mới"
 			if logRec, err := s.repo.InsertSyncLog(ctx, payload.NodeID, "reload_completed", nil, msg); err == nil && s.eventHub != nil {
 				s.eventHub.Broadcast("node_sync", logRec)
@@ -319,7 +419,7 @@ func (s *nodeService) RecordHeartbeat(ctx context.Context, payload entity.NodeHe
 	}
 
 	// 7. Nếu node này vừa hoàn thành reload, kích hoạt node kế tiếp trong hàng đợi rolling cluster
-	node, err := s.repo.GetNodeByID(ctx, payload.NodeID)
+	node, err := s.repo.GetHeartbeatState(ctx, payload.NodeID)
 	if err == nil && node != nil && node.ReloadStatus == "completed" {
 		pending, reloading, _, _ := s.repo.GetRollingNodesStatus(ctx)
 		if len(reloading) == 0 && len(pending) > 0 {
@@ -442,4 +542,3 @@ func formatNodeUptime(createdAtStr string, now time.Time) string {
 	}
 	return fmt.Sprintf("%ds", seconds)
 }
-

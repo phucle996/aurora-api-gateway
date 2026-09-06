@@ -1,256 +1,250 @@
-import React, { useState, useEffect } from 'react';
-import { useSearchParams, useNavigate, Link } from 'react-router-dom';
-import { GitCompare, RotateCcw, ArrowLeft, ChevronRight, CheckCircle2, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom';
+import { GitCompare, RotateCcw, ArrowLeft, ChevronRight, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { rulesApi, type RuleDetailResponse } from '../../lib/api/rules';
 import { RuleSummaryCard } from './sections/RuleSummaryCard';
 import { VersionHistoryTable } from './sections/VersionHistoryTable';
 import { ConfigurationDiffViewer } from './sections/ConfigurationDiffViewer';
 import { VersionDetailsPanel } from './sections/VersionDetailsPanel';
 import { RestoreConfirmModal } from './sections/RestoreConfirmModal';
-import type { RuleVersion } from './types';
+import type { RuleVersion, RuleConditionItem, ModifiedFieldItem, DeploymentInfo, AuditTrailItem } from './types';
 
 export default function RuleHistoryPage() {
+  const { id: routeId } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const ruleIdParam = searchParams.get('id') || 'rule_01H8F3K9Z7';
+  const ruleId = routeId || searchParams.get('id') || '';
 
   // State
-  const [ruleName, setRuleName] = useState('block-sql-injection');
-  const [ruleId, setRuleId] = useState(ruleIdParam);
-  const [policy, setPolicy] = useState('Default WAF Policy');
-  const [createdBy, setCreatedBy] = useState('admin');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [ruleDetail, setRuleDetail] = useState<RuleDetailResponse | null>(null);
+  const [versions, setVersions] = useState<RuleVersion[]>([]);
+  const [selectedVersion, setSelectedVersion] = useState<number>(1);
+  const [fromVersion, setFromVersion] = useState<number>(1);
+  const [toVersion, setToVersion] = useState<number>(1);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-
-  // Initial versions matching user screenshot exactly
-  const [versions, setVersions] = useState<RuleVersion[]>([
-    {
-      version: 3,
-      versionLabel: 'v3',
-      dateTime: '2025-08-26 15:22:18',
-      changedBy: 'admin',
-      changeType: 'Logic Update',
-      summaryOfChanges: 'Added query parameter detection and updated action settings',
-      deploymentStatus: 'Active',
-      description: 'Block common SQL injection patterns in URI and query parameters.',
-      action: 'Log Only / Monitor',
-      responseCode: 403,
-      policy: 'Default WAF Policy',
-      priority: 100,
-      conditions: [
-        {
-          field: 'Request URI',
-          operator: 'Contains (Pattern)',
-          value: '(?i)(union|select|insert|drop|or\\s+1=1)',
-        },
-        {
-          field: 'Query Parameter',
-          operator: 'Contains (Pattern)',
-          value: '(?i)(union|select|insert|drop|or\\s+1=1)',
-        },
-      ],
-      modifiedFields: [
-        {
-          icon: 'filter',
-          title: 'Match Conditions',
-          subtext: 'Added: Query Parameter condition',
-        },
-        {
-          icon: 'shield',
-          title: 'Action Type',
-          subtext: 'Changed: Block Request → Log Only / Monitor',
-        },
-        {
-          icon: 'code',
-          title: 'Response Code',
-          subtext: 'Changed: 403 → 403 (no change)',
-        },
-        {
-          icon: 'file-text',
-          title: 'Description',
-          subtext: 'Updated rule description',
-        },
-      ],
-      deploymentInfo: {
-        deployedAt: '2025-08-26 15:22:30',
-        deployedBy: 'admin',
-        environment: 'Production',
-        nodes: '3 / 3 nodes',
-      },
-      auditTrail: [
-        {
-          title: 'Rule updated',
-          subtitle: 'Changes saved',
-          actorDate: 'admin • 2025-08-26 15:22:18',
-          type: 'blue',
-        },
-        {
-          title: 'Rule deployed',
-          subtitle: 'Deployed to 3 nodes',
-          actorDate: 'admin • 2025-08-26 15:22:30',
-          type: 'green',
-        },
-      ],
-    },
-    {
-      version: 2,
-      versionLabel: 'v2',
-      dateTime: '2025-08-24 10:41:02',
-      changedBy: 'admin',
-      changeType: 'Condition Update',
-      summaryOfChanges: 'Added request URI match condition',
-      deploymentStatus: 'Archived',
-      description: 'Block common SQL injection patterns in URI and query parameters.',
-      action: 'Block Request',
-      responseCode: 403,
-      policy: 'Default WAF Policy',
-      priority: 100,
-      conditions: [
-        {
-          field: 'Request URI',
-          operator: 'Contains (Pattern)',
-          value: '(?i)(union|select|insert|drop|or\\s+1=1)',
-        },
-      ],
-      modifiedFields: [
-        {
-          icon: 'filter',
-          title: 'Match Conditions',
-          subtext: 'Added: Request URI condition',
-        },
-        {
-          icon: 'shield',
-          title: 'Action Type',
-          subtext: 'Block Request',
-        },
-        {
-          icon: 'code',
-          title: 'Response Code',
-          subtext: '403 Forbidden',
-        },
-        {
-          icon: 'file-text',
-          title: 'Description',
-          subtext: 'Initial URI inspection scope',
-        },
-      ],
-      deploymentInfo: {
-        deployedAt: '2025-08-24 10:42:15',
-        deployedBy: 'admin',
-        environment: 'Production',
-        nodes: '3 / 3 nodes',
-      },
-      auditTrail: [
-        {
-          title: 'Rule updated',
-          subtitle: 'Changes saved',
-          actorDate: 'admin • 2025-08-24 10:41:02',
-          type: 'blue',
-        },
-        {
-          title: 'Rule deployed',
-          subtitle: 'Deployed to 3 nodes',
-          actorDate: 'admin • 2025-08-24 10:42:15',
-          type: 'green',
-        },
-      ],
-    },
-    {
-      version: 1,
-      versionLabel: 'v1',
-      dateTime: '2025-08-20 10:14:32',
-      changedBy: 'admin',
-      changeType: 'Initial Creation',
-      summaryOfChanges: 'Created base SQL injection detection rule',
-      deploymentStatus: 'Archived',
-      description: 'Base SQL injection detection rule.',
-      action: 'Block Request',
-      responseCode: 403,
-      policy: 'Default WAF Policy',
-      priority: 150,
-      conditions: [
-        {
-          field: 'Request URI',
-          operator: 'Contains (Pattern)',
-          value: '(?i)(union|select|insert|1=1)',
-        },
-      ],
-      modifiedFields: [
-        {
-          icon: 'filter',
-          title: 'Match Conditions',
-          subtext: 'Initial creation',
-        },
-        {
-          icon: 'shield',
-          title: 'Action Type',
-          subtext: 'Block Request',
-        },
-        {
-          icon: 'code',
-          title: 'Response Code',
-          subtext: '403 Forbidden',
-        },
-        {
-          icon: 'file-text',
-          title: 'Description',
-          subtext: 'Initial revision',
-        },
-      ],
-      deploymentInfo: {
-        deployedAt: '2025-08-20 10:15:00',
-        deployedBy: 'admin',
-        environment: 'Production',
-        nodes: '3 / 3 nodes',
-      },
-      auditTrail: [
-        {
-          title: 'Rule created',
-          subtitle: 'Initial revision created',
-          actorDate: 'admin • 2025-08-20 10:14:32',
-          type: 'blue',
-        },
-        {
-          title: 'Rule deployed',
-          subtitle: 'Deployed to 3 nodes',
-          actorDate: 'admin • 2025-08-20 10:15:00',
-          type: 'green',
-        },
-      ],
-    },
-  ]);
-
-  const [selectedVersion, setSelectedVersion] = useState<number>(3);
-  const [fromVersion, setFromVersion] = useState<number>(2);
-  const [toVersion, setToVersion] = useState<number>(3);
 
   // Restore Modal State
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
   const [restoreTargetVersion, setRestoreTargetVersion] = useState<RuleVersion | null>(null);
   const [isRestoring, setIsRestoring] = useState(false);
 
-  // Fetch real history from backend if available
-  useEffect(() => {
-    async function fetchBackendHistory() {
-      try {
-        const token = localStorage.getItem('aurora_admin_token') || 'test';
-        // Try rule id numeric (e.g. 1) or look up rule
-        const numericId = ruleIdParam === 'rule_01H8F3K9Z7' ? 1 : parseInt(ruleIdParam, 10) || 1;
-        const res = await fetch(`/api/v1/rules/${numericId}/history`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.items && data.items.length > 0) {
-            // If backend has items, rule name & version can be aligned
-            const first = data.items[0];
-            if (first.name) setRuleName(first.name);
-          }
-        }
-      } catch (err) {
-        console.warn('Could not fetch backend history, using local state snapshot', err);
-      }
+  const loadData = useCallback(async () => {
+    if (!ruleId) {
+      setLoading(false);
+      setError('No Rule ID specified. Please select a rule from the Rules catalog.');
+      return;
     }
-    fetchBackendHistory();
-  }, [ruleIdParam]);
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const [detailRes, historyRes] = await Promise.all([
+        rulesApi.getById(ruleId).catch(() => null),
+        rulesApi.getHistory(ruleId).catch(() => null),
+      ]);
+
+      if (!detailRes && (!historyRes || !historyRes.items || historyRes.items.length === 0)) {
+        setError(`Rule "${ruleId}" not found or has no revision history.`);
+        setLoading(false);
+        return;
+      }
+
+      if (detailRes) {
+        setRuleDetail(detailRes);
+      }
+
+      const items = historyRes?.items || [];
+      if (items.length > 0) {
+        const activeVer = detailRes?.version ?? items[0].version;
+        const mappedVersions: RuleVersion[] = items.map((item) => {
+          let conditions: RuleConditionItem[] = [];
+          if (item.conditions_json) {
+            try {
+              const parsed = JSON.parse(item.conditions_json);
+              if (Array.isArray(parsed)) {
+                conditions = parsed.map((c: any) => ({
+                  field: c.field || c.Field || 'uri',
+                  operator: c.operator || c.Operator || 'equals',
+                  value: c.value || c.Value || '',
+                  headerName: c.header_name || c.HeaderName || undefined,
+                }));
+              }
+            } catch (e) {
+              console.warn('Failed to parse conditions_json', e);
+            }
+          }
+          if (conditions.length === 0 && item.path) {
+            conditions = [{ field: 'path', operator: 'equals', value: item.path }];
+          }
+
+          const isInitial = item.version === 1;
+          const isRollback =
+            (item.description && item.description.toLowerCase().includes('rollback')) ||
+            item.actor === 'rollback';
+          const changeType = isInitial
+            ? 'Initial Creation'
+            : isRollback
+            ? 'Rollback Restore'
+            : 'Logic Update';
+
+          const summaryOfChanges = isInitial
+            ? `Initial rule creation (${item.name})`
+            : isRollback
+            ? item.description || 'Rolled back configuration'
+            : `Updated action to ${item.action.toUpperCase()} with ${conditions.length} condition(s)`;
+
+          const dateFormatted = item.updated_at
+            ? item.updated_at.replace('T', ' ').substring(0, 19)
+            : '—';
+
+          const modifiedFields: ModifiedFieldItem[] = [
+            {
+              icon: 'shield',
+              title: 'Action Type',
+              subtext: `Action: ${item.action}`,
+            },
+            {
+              icon: 'filter',
+              title: 'Match Conditions',
+              subtext: `${conditions.length} condition(s) configured`,
+            },
+            {
+              icon: 'code',
+              title: 'Response Code',
+              subtext: `HTTP ${item.response_code || 403}`,
+            },
+            {
+              icon: 'file-text',
+              title: 'Description',
+              subtext: item.description || 'No description provided',
+            },
+          ];
+
+          const deploymentInfo: DeploymentInfo = {
+            deployedAt: dateFormatted,
+            deployedBy: item.actor || 'system',
+            environment: 'Production',
+            nodes: 'Active Cluster',
+          };
+
+          const auditTrail: AuditTrailItem[] = [
+            {
+              title: isInitial ? 'Rule created' : 'Rule updated',
+              subtitle: 'Changes saved to revision history',
+              actorDate: `${item.actor || 'system'} • ${dateFormatted}`,
+              type: 'blue',
+            },
+            {
+              title: 'Revision committed',
+              subtitle: `Revision v${item.version} recorded`,
+              actorDate: `${item.actor || 'system'} • ${dateFormatted}`,
+              type: 'green',
+            },
+          ];
+
+          return {
+            version: item.version,
+            versionLabel: `v${item.version}`,
+            dateTime: dateFormatted,
+            changedBy: item.actor || 'system',
+            changeType,
+            summaryOfChanges,
+            deploymentStatus: item.version === activeVer ? 'Active' : 'Archived',
+            description: item.description || item.name,
+            action: item.action,
+            responseCode: item.response_code || 403,
+            policy:
+              detailRes?.assigned_policies && detailRes.assigned_policies > 0
+                ? `${detailRes.assigned_policies} active ${detailRes.assigned_policies === 1 ? 'policy' : 'policies'}`
+                : 'Default WAF Policy',
+            priority: item.priority || 100,
+            conditions,
+            modifiedFields,
+            deploymentInfo,
+            auditTrail,
+            rawJson: JSON.stringify(item, null, 2),
+          };
+        });
+
+        setVersions(mappedVersions);
+        setSelectedVersion(mappedVersions[0].version);
+        setToVersion(mappedVersions[0].version);
+        setFromVersion(
+          mappedVersions.length > 1 ? mappedVersions[1].version : mappedVersions[0].version
+        );
+      } else if (detailRes) {
+        // Fallback when rule exists but history records table has only the current state
+        const dateFormatted = detailRes.created_at
+          ? detailRes.created_at.replace('T', ' ').substring(0, 19)
+          : '—';
+        const singleVersion: RuleVersion = {
+          version: detailRes.version || 1,
+          versionLabel: `v${detailRes.version || 1}`,
+          dateTime: dateFormatted,
+          changedBy: detailRes.created_by || 'system',
+          changeType: 'Initial Creation',
+          summaryOfChanges: `Initial creation of rule (${detailRes.name})`,
+          deploymentStatus: 'Active',
+          description: detailRes.description || detailRes.name,
+          action: detailRes.action,
+          responseCode: detailRes.response_code || 403,
+          policy:
+            detailRes.assigned_policies && detailRes.assigned_policies > 0
+              ? `${detailRes.assigned_policies} active ${detailRes.assigned_policies === 1 ? 'policy' : 'policies'}`
+              : 'Default WAF Policy',
+          priority: detailRes.priority || 100,
+          conditions: (detailRes.conditions || []).map((c) => ({
+            field: c.field,
+            operator: c.operator,
+            value: c.value,
+            headerName: c.header_name,
+          })),
+          modifiedFields: [
+            {
+              icon: 'shield',
+              title: 'Action Type',
+              subtext: `Action: ${detailRes.action}`,
+            },
+            {
+              icon: 'filter',
+              title: 'Match Conditions',
+              subtext: `${detailRes.conditions?.length || 0} condition(s)`,
+            },
+          ],
+          deploymentInfo: {
+            deployedAt: dateFormatted,
+            deployedBy: detailRes.created_by || 'system',
+            environment: 'Production',
+            nodes: 'Active Cluster',
+          },
+          auditTrail: [
+            {
+              title: 'Rule created',
+              subtitle: 'Initial revision created',
+              actorDate: `${detailRes.created_by || 'system'} • ${dateFormatted}`,
+              type: 'blue',
+            },
+          ],
+        };
+        setVersions([singleVersion]);
+        setSelectedVersion(singleVersion.version);
+        setFromVersion(singleVersion.version);
+        setToVersion(singleVersion.version);
+      }
+    } catch (err: any) {
+      console.error('Failed to load rule history:', err);
+      setError(err?.message || 'Failed to load rule history');
+    } finally {
+      setLoading(false);
+    }
+  }, [ruleId]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
   const currentActiveVersionObj =
     versions.find((v) => v.deploymentStatus === 'Active') || versions[0];
@@ -264,7 +258,6 @@ export default function RuleHistoryPage() {
 
   const handleCompareVersion = (vNum: number) => {
     setFromVersion(vNum);
-    // Scroll smoothly to diff section
     const diffElem = document.getElementById('configuration-diff-section');
     if (diffElem) {
       diffElem.scrollIntoView({ behavior: 'smooth' });
@@ -288,106 +281,69 @@ export default function RuleHistoryPage() {
     }
 
     try {
-      // Call backend rollback if available
-      const token = localStorage.getItem('aurora_admin_token') || 'test';
-      const numericId = ruleIdParam === 'rule_01H8F3K9Z7' ? 1 : parseInt(ruleIdParam, 10) || 1;
-      await fetch(`/api/v1/rules/${numericId}/rollback`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ target_version: targetVer }),
-      }).catch(() => null);
+      const currentVersion = currentActiveVersionObj?.version || (versions[0]?.version) || 1;
+      await rulesApi.rollback(ruleId, targetVer, currentVersion);
 
-      // Create new version snapshot (e.g. v4)
-      const nextVersionNum = Math.max(...versions.map((v) => v.version)) + 1;
-      const now = new Date();
-      const dateStr = now.toISOString().replace('T', ' ').substring(0, 19);
-
-      const newVersion: RuleVersion = {
-        version: nextVersionNum,
-        versionLabel: `v${nextVersionNum}`,
-        dateTime: dateStr,
-        changedBy: 'admin',
-        changeType: 'Rollback Restore',
-        summaryOfChanges: `Restored configuration snapshot from ${targetObj.versionLabel} (${targetObj.action})`,
-        deploymentStatus: 'Active',
-        description: targetObj.description,
-        action: targetObj.action,
-        responseCode: targetObj.responseCode,
-        policy: targetObj.policy,
-        priority: targetObj.priority,
-        conditions: [...targetObj.conditions],
-        modifiedFields: [
-          {
-            icon: 'shield',
-            title: 'Rollback Action',
-            subtext: `Restored to: ${targetObj.action}`,
-          },
-          {
-            icon: 'filter',
-            title: 'Conditions Snapshot',
-            subtext: `Restored ${targetObj.conditions.length} condition(s) from ${targetObj.versionLabel}`,
-          },
-          {
-            icon: 'file-text',
-            title: 'Audit Source',
-            subtext: `Created from revision ${targetObj.versionLabel}`,
-          },
-        ],
-        deploymentInfo: {
-          deployedAt: dateStr,
-          deployedBy: 'admin',
-          environment: 'Production',
-          nodes: '3 / 3 nodes',
-        },
-        auditTrail: [
-          {
-            title: 'Rule rollback restored',
-            subtitle: `Restored from ${targetObj.versionLabel}`,
-            actorDate: `admin • ${dateStr}`,
-            type: 'blue',
-          },
-          {
-            title: 'Rule deployed',
-            subtitle: 'Deployed to 3 nodes',
-            actorDate: `admin • ${dateStr}`,
-            type: 'green',
-          },
-        ],
-      };
-
-      // Mark all existing versions as Archived
-      const updatedVersions = [
-        newVersion,
-        ...versions.map((v) => ({
-          ...v,
-          deploymentStatus: 'Archived' as const,
-        })),
-      ];
-
-      setVersions(updatedVersions);
-      setSelectedVersion(nextVersionNum);
-      setFromVersion(targetVer);
-      setToVersion(nextVersionNum);
       setIsRestoreModalOpen(false);
       setNotification({
         type: 'success',
-        message: `Rule configuration restored to version ${targetObj.versionLabel}. Revision v${nextVersionNum} is now active and deployed.`,
+        message: `Rule configuration successfully restored to version ${targetObj.versionLabel}. A new active revision has been created.`,
       });
 
+      await loadData();
       setTimeout(() => setNotification(null), 6000);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
       setNotification({
         type: 'error',
-        message: 'Failed to rollback rule configuration.',
+        message: err?.response?.data || err?.message || 'Failed to rollback rule configuration.',
       });
     } finally {
       setIsRestoring(false);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[500px] gap-3 text-slate-500 dark:text-slate-400 font-sans text-xs">
+        <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+        <span>Loading rule history...</span>
+      </div>
+    );
+  }
+
+  if (error || versions.length === 0) {
+    return (
+      <div className="p-6 max-w-2xl mx-auto mt-12 font-sans">
+        <div className="p-6 bg-card border border-border rounded-xs text-center space-y-4 shadow-sm">
+          <AlertCircle className="w-8 h-8 text-amber-500 mx-auto" />
+          <h2 className="text-base font-semibold text-slate-900 dark:text-white">
+            History Unavailable
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {error || 'No versions recorded for this rule.'}
+          </p>
+          <div className="pt-2">
+            <Link
+              to="/rules"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded-xs transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back to Security Rules</span>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const ruleName = ruleDetail?.name || versions[0]?.description || 'rule';
+  const policyName =
+    ruleDetail?.assigned_policies && ruleDetail.assigned_policies > 0
+      ? `${ruleDetail.assigned_policies} active ${ruleDetail.assigned_policies === 1 ? 'policy' : 'policies'}`
+      : 'Unassigned';
+  const ruleStatus = ruleDetail ? (ruleDetail.enabled ? 'Active' : 'Inactive') : 'Active';
+  const ruleCreatedBy = ruleDetail?.created_by || versions[versions.length - 1]?.changedBy || 'system';
 
   return (
     <div className="p-6 w-full space-y-6">
@@ -395,7 +351,7 @@ export default function RuleHistoryPage() {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           {/* Breadcrumb */}
-          <div className="flex items-center gap-1.5 text-xs font-mono text-slate-500 mb-1">
+          <div className="flex items-center gap-1.5 text-xs font-sans text-slate-500 mb-1">
             <Link
               to="/rules"
               className="hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
@@ -412,13 +368,13 @@ export default function RuleHistoryPage() {
           <h1 className="text-xl font-semibold text-slate-900 dark:text-white tracking-tight">
             Rule History
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-mono">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-sans">
             Review rule versions, audit changes, and restore previous configurations.
           </p>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2.5 font-mono text-xs">
+        <div className="flex flex-wrap items-center gap-2.5 font-sans text-xs">
           <button
             type="button"
             onClick={() => {
@@ -454,7 +410,7 @@ export default function RuleHistoryPage() {
       {/* Notification Banner */}
       {notification && (
         <div
-          className={`p-3 border rounded-xs text-xs font-mono flex items-center justify-between transition-all ${
+          className={`p-3 border rounded-xs text-xs font-sans flex items-center justify-between transition-all ${
             notification.type === 'success'
               ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
               : 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
@@ -483,10 +439,10 @@ export default function RuleHistoryPage() {
         ruleName={ruleName}
         ruleId={ruleId}
         currentVersion={currentActiveVersionObj.versionLabel}
-        status="Active"
-        policy={policy}
+        status={ruleStatus}
+        policy={policyName}
         lastModified={currentActiveVersionObj.dateTime}
-        createdBy={createdBy}
+        createdBy={ruleCreatedBy}
       />
 
       {/* Main 2-Column Grid */}
@@ -507,6 +463,7 @@ export default function RuleHistoryPage() {
             versions={versions}
             fromVersion={fromVersion}
             toVersion={toVersion}
+            ruleName={ruleName}
             onChangeFromVersion={setFromVersion}
             onChangeToVersion={setToVersion}
           />

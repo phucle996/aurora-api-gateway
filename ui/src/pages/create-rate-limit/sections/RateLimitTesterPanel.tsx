@@ -22,7 +22,7 @@ export function RateLimitTesterPanel({ rateLimit }: RateLimitTesterProps) {
   const isAllowed = simCount <= rateLimit;
 
   return (
-    <div className="bg-[#0B1320] border border-[#152030] p-4 space-y-3 font-mono text-xs">
+    <div className="bg-[#0B1320] border border-[#152030] p-4 space-y-3 font-sans text-xs">
       <div>
         <div className="text-sm font-semibold text-white">Test Rule</div>
         <p className="text-slate-400 text-[11px] font-sans">

@@ -50,7 +50,7 @@ export function VersionHistoryTable({
         <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
           Version History
         </h2>
-        <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+        <p className="text-xs text-slate-500 dark:text-slate-400 font-sans">
           All versions of this rule, including changes and deployment history.
         </p>
       </div>
@@ -58,7 +58,7 @@ export function VersionHistoryTable({
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs border-collapse">
           <thead>
-            <tr className="border-b border-border text-slate-500 dark:text-slate-400 font-mono text-[11px]">
+            <tr className="border-b border-border text-slate-500 dark:text-slate-400 font-sans text-[11px]">
               <th className="py-2.5 px-3 font-medium">Version</th>
               <th className="py-2.5 px-3 font-medium">Date / Time</th>
               <th className="py-2.5 px-3 font-medium">Changed By</th>
@@ -92,7 +92,7 @@ export function VersionHistoryTable({
                   </td>
 
                   {/* Changed By */}
-                  <td className="py-3 px-3 font-mono text-slate-700 dark:text-slate-300">
+                  <td className="py-3 px-3 font-sans text-slate-700 dark:text-slate-300">
                     {v.changedBy}
                   </td>
 
@@ -176,7 +176,7 @@ export function VersionHistoryTable({
                         {activeMenuVersion === v.version && (
                           <div
                             onClick={(e) => e.stopPropagation()}
-                            className="absolute right-0 top-full mt-1 w-44 bg-card border border-border shadow-lg rounded-xs py-1 z-30 font-mono text-[11px]"
+                            className="absolute right-0 top-full mt-1 w-44 bg-card border border-border shadow-lg rounded-xs py-1 z-30 font-sans text-xs"
                           >
                             <button
                               type="button"

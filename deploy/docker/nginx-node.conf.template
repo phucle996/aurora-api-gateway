@@ -1,5 +1,6 @@
 load_module /opt/modules/ngx_http_aurora_waf_module.so;
 env NODE_ROLE;
+env AURORA_METRICS_SCOPE;
 env NODE_VERSION;
 worker_processes 2;
 worker_rlimit_nofile 65535;
@@ -48,7 +49,7 @@ http {
 
         location = /_aurora/config {
             default_type text/plain;
-            alias /etc/nginx/nginx.conf;
+            alias /etc/nginx/aurora-config-view.conf;
         }
 
         location = /metrics {

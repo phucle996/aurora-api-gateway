@@ -5,6 +5,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
+Environment="AURORA_METRICS_SCOPE=host"
 Type=forking
 PIDFile=/var/run/aurora-waf/nginx.pid
 

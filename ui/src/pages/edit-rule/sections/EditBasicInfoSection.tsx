@@ -30,7 +30,7 @@ export function EditBasicInfoSection({
   isLoadingPolicies = false,
 }: EditBasicInfoProps) {
   return (
-    <div className="bg-card border border-border p-4 space-y-4 font-mono text-xs text-foreground">
+    <div className="bg-card border border-border p-4 space-y-4 font-sans text-xs text-foreground">
       <div className="flex items-center justify-between pb-1 border-b border-border/50">
         <div className="text-sm font-semibold text-foreground">
           1. Basic Information

@@ -453,6 +453,7 @@ func (h *RuleHandler) Detail(c *gin.Context) {
 	// Bước 4: Phản hồi toàn bộ hồ sơ chi tiết inline
 	c.JSON(http.StatusOK, gin.H{
 		"schema_version":    out.SchemaVersion,
+ "assigned_policies":out.AssignedPolicies,"created_at":out.CreatedAt,"created_by":out.CreatedBy,
 		"runtime_ready":     out.RuntimeReady,
 		"runtime_issues":    out.RuntimeIssues,
 		"logic_mode":        out.LogicMode,
@@ -531,6 +532,7 @@ func (h *RuleHandler) History(c *gin.Context) {
 	for _, item := range out.Items {
 		items = append(items, gin.H{
 			"version":         item.Version,
+ "score":item.Score,"schema_version":item.SchemaVersion,"source_ip":item.SourceIP,"host_domain":item.HostDomain,"path_prefix":item.PathPrefix,"http_method":item.HTTPMethod,"log_event":item.LogEvent,"add_to_reputation":item.AddToReputation,
 			"name":            item.Name,
 			"description":     item.Description,
 			"group":           item.Group,
@@ -568,20 +570,22 @@ func (h *RuleHandler) Rollback(c *gin.Context) {
 
 	var req struct {
 		TargetVersion int64 `json:"target_version"`
+ ExpectedVersion int64 `json:"expected_version"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil || req.TargetVersion < 1 {
+	if err := c.ShouldBindJSON(&req); err != nil || req.TargetVersion < 1 || req.ExpectedVersion < 1 {
 		c.String(http.StatusBadRequest, "invalid target_version")
 		return
 	}
 
-	actor := c.GetString("user")
+	actor := c.GetString("username")
 	if actor == "" {
-		actor = "admin"
+		actor = "unknown"
 	}
 
 	out, err := h.service.Rollback(c.Request.Context(), entity.RollbackRuleCommand{
 		ID:            id,
 		TargetVersion: req.TargetVersion,
+ ExpectedVersion:req.ExpectedVersion,
 		Actor:         actor,
 	})
 	if err != nil {
@@ -589,7 +593,7 @@ func (h *RuleHandler) Rollback(c *gin.Context) {
 			c.String(http.StatusNotFound, err.Error())
 			return
 		}
-		c.String(http.StatusInternalServerError, "rollback failed")
+		if errors.Is(err,taxonomy.ErrRuleConflict){c.String(409,"Rule changed. Reload before restoring.")}else{c.String(http.StatusInternalServerError, "rollback failed")}
 		return
 	}
 
@@ -1088,4 +1092,293 @@ func (h *RuleHandler) Test(c *gin.Context) {
 		Explanation:      res.Explanation,
 		Details:          detailResps,
 	})
+}
+
+func (h *RuleHandler) UpdateDefinition(c *gin.Context) {
+ id, parseErr := strconv.ParseInt(c.Param("id"),10,64)
+ if parseErr != nil || id < 1 { c.String(400,"invalid rule ID"); return }
+
+	// Bước 1: Kiểm tra định dạng JSON
+	media, _, err := mime.ParseMediaType(c.GetHeader("Content-Type"))
+	if err != nil || media != "application/json" {
+		c.String(http.StatusUnsupportedMediaType, "application/json required")
+		return
+	}
+
+	// Bước 2: Giới hạn kích thước gói dữ liệu dưới 64KB
+	body, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, 65536))
+	if err != nil {
+		c.String(http.StatusRequestEntityTooLarge, "request body too large")
+		return
+	}
+	if !utf8.Valid(body) || len(bytes.TrimSpace(body)) == 0 || bytes.TrimSpace(body)[0] != '{' {
+		c.String(http.StatusBadRequest, "JSON object required")
+		return
+	}
+
+	// Bước 3: Giải mã nội dung vào DTO UpdateRuleDefinitionRequest
+	var req dto.UpdateRuleDefinitionRequest
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err = decoder.Decode(&req); err != nil {
+		c.String(http.StatusBadRequest, "invalid JSON or unknown field")
+		return
+	}
+	if err = decoder.Decode(new(any)); err != io.EOF {
+		c.String(http.StatusBadRequest, "trailing JSON")
+		return
+	}
+
+	// Bước 4: Kiểm tra khóa chống trùng lặp Idempotency-Key
+	key := c.GetHeader("Idempotency-Key")
+
+	// Bước 5: Bắt đầu xác thực chi tiết từng trường dữ liệu trực tiếp (Inline Validation)
+	invalid := map[string]string{}
+ if req.ExpectedVersion < 1 { invalid["expected_version"]="Required positive version" }
+	if len(key) < 16 || len(key) > 128 {
+		invalid["idempotency_key"] = "Use a stable key of 16..128 characters for this submission"
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" || len(req.Name) > 120 || !utf8.ValidString(req.Name) {
+		invalid["name"] = "Required, at most 120 UTF-8 bytes"
+	}
+	if len(req.Description) > 2000 || !utf8.ValidString(req.Description) {
+		invalid["description"] = "At most 2000 UTF-8 bytes"
+	}
+	if req.Priority < 0 || req.Priority > 1000000 {
+		invalid["priority"] = "Must be between 0 and 1000000"
+	}
+	if req.Score < 0 || req.Score > 1000 {
+		invalid["score"] = "Must be between 0 and 1000"
+	}
+	switch req.Group {
+	case "custom", "sqli", "xss", "traversal", "bot", "endpoint", "authentication":
+	default:
+		invalid["group"] = "Unknown rule group"
+	}
+	switch req.Severity {
+	case "low", "medium", "high", "critical":
+	default:
+		invalid["severity"] = "Unknown severity"
+	}
+	if req.PolicyID != nil {
+		invalid["policy_id"] = "Create unassigned; policy binding is a separate workflow"
+	}
+
+	// Chế độ kết hợp điều kiện: 'all' (thỏa mãn tất cả) hoặc 'any' (thỏa mãn bất kỳ)
+	if req.LogicMode != "all" && req.LogicMode != "any" {
+		invalid["logic_mode"] = "Use all or any"
+	}
+
+	// Giới hạn số lượng điều kiện từ 1 đến 16
+	if len(req.Conditions) < 1 || len(req.Conditions) > 16 {
+		invalid["conditions"] = "Supply 1..16 ordered conditions"
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"code":   "invalid_rule_definition",
+			"fields": invalid,
+		})
+		return
+	}
+
+	// Bước 6: Kiểm tra từng điều kiện cụ thể và kiểm soát giới hạn độ dài biểu thức chính quy (Regex Budget)
+	totalPatternBytes := 0
+	for i, condition := range req.Conditions {
+		prefix := fmt.Sprintf("conditions[%d]", i)
+		switch condition.Field {
+		case "uri_raw", "path", "query", "header", "body", "client_ip", "method":
+		default:
+			invalid[prefix+".field"] = "Unknown request field"
+		}
+		switch condition.Operator {
+		case "equals", "contains", "starts_with", "ends_with", "regex", "cidr":
+		default:
+			invalid[prefix+".operator"] = "Unknown operator"
+		}
+		if condition.Value == "" || len(condition.Value) > 8192 || !utf8.ValidString(condition.Value) || strings.ContainsRune(condition.Value, 0) {
+			invalid[prefix+".value"] = "Required, at most 8192 UTF-8 bytes, no NUL"
+		}
+		if condition.Field == "header" {
+			if len(condition.HeaderName) < 1 || len(condition.HeaderName) > 128 {
+				invalid[prefix+".header_name"] = "Header name required (max 128 bytes)"
+			}
+			for _, b := range []byte(condition.HeaderName) {
+				if !(b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9' || strings.ContainsRune("!#$%&'*+-.^_\x60|~", rune(b))) {
+					invalid[prefix+".header_name"] = "Invalid HTTP header token"
+				}
+			}
+		} else if condition.HeaderName != "" {
+			invalid[prefix+".header_name"] = "Only valid for header conditions"
+		}
+		if condition.Operator == "cidr" {
+			if condition.Field != "client_ip" {
+				invalid[prefix+".operator"] = "CIDR operator requires client_ip"
+			}
+			if _, err := netip.ParsePrefix(condition.Value); err != nil {
+				invalid[prefix+".value"] = "Invalid IPv4/IPv6 CIDR"
+			}
+		} else if condition.Field == "client_ip" {
+			if condition.Operator != "equals" {
+				invalid[prefix+".operator"] = "Client IP supports equals or cidr"
+			}
+			if _, err := netip.ParseAddr(condition.Value); err != nil {
+				invalid[prefix+".value"] = "Invalid IPv4/IPv6 address"
+			}
+		}
+		if condition.Operator == "regex" {
+			totalPatternBytes += len(condition.Value)
+			if len(condition.Value) > 1024 {
+				invalid[prefix+".value"] = "Regex limited to 1024 bytes"
+			} else if _, err := regexp.Compile(condition.Value); err != nil {
+				invalid[prefix+".value"] = "Invalid RE2-compatible regex (no backreferences/lookaround)"
+			}
+		}
+	}
+
+	// Kiểm soát tổng độ dài biểu thức chính quy không vượt quá 4096 bytes để bảo vệ hiệu năng CPU
+	if totalPatternBytes > 4096 {
+		invalid["conditions"] = "Combined regex budget is 4096 bytes"
+	}
+
+	// Bước 7: Kiểm tra cấu hình hành vi và phản hồi tùy biến khi Chặn
+	switch req.Action {
+	case "allow", "log":
+		if req.ResponseCode != nil {
+			invalid["response_code"] = "Only block controls the HTTP response"
+		}
+		if req.CustomResponse != "" {
+			invalid["custom_response"] = "Only block accepts a response body"
+		}
+	case "block":
+		if req.ResponseCode == nil {
+			invalid["response_code"] = "Required for block"
+		} else {
+			switch *req.ResponseCode {
+			case 400, 403, 429, 500:
+			default:
+				invalid["response_code"] = "Use 400, 403, 429 or 500"
+			}
+		}
+	default:
+		invalid["action"] = "Supported definitions: allow, log, block; CAPTCHA is not available"
+	}
+	if utf8.RuneCountInString(req.CustomResponse) > 512 || !utf8.ValidString(req.CustomResponse) || strings.ContainsRune(req.CustomResponse, 0) {
+		invalid["custom_response"] = "At most 512 characters, no NUL"
+	}
+
+	// Bước 8: Thẩm định địa chỉ IP nguồn (Source IP), Tên miền máy chủ (Host Domain), Tiền tố đường dẫn và Phương thức HTTP
+	if req.SourceIP != "" {
+		entries := strings.Split(req.SourceIP, ",")
+		if len(entries) > 32 || len(req.SourceIP) > 2048 {
+			invalid["source_ip"] = "At most 32 addresses/CIDRs, 2048 bytes"
+		}
+		for _, entry := range entries {
+			entry = strings.TrimSpace(entry)
+			_, a := netip.ParseAddr(entry)
+			_, p := netip.ParsePrefix(entry)
+			if a != nil && p != nil {
+				invalid["source_ip"] = "Use comma-separated IPv4/IPv6 addresses or CIDRs"
+			}
+		}
+	}
+	if req.HostDomain != "" {
+		if len(req.HostDomain) > 253 {
+			invalid["host_domain"] = "Hostname too long"
+		}
+		for _, label := range strings.Split(req.HostDomain, ".") {
+			if len(label) < 1 || len(label) > 63 || strings.HasPrefix(label, "-") || strings.HasSuffix(label, "-") {
+				invalid["host_domain"] = "Use an ASCII hostname without scheme, port or wildcard"
+			}
+			for _, b := range []byte(label) {
+				if !(b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9' || b == '-') {
+					invalid["host_domain"] = "Use an ASCII hostname without scheme, port or wildcard"
+				}
+			}
+		}
+	}
+	if req.PathPrefix != "" && (!strings.HasPrefix(req.PathPrefix, "/") || len(req.PathPrefix) > 8192 || strings.ContainsAny(req.PathPrefix, "\x00\r\n?#")) {
+		invalid["path_prefix"] = "Use a path prefix, max 8192 bytes, without query/fragment/controls"
+	}
+	for _, b := range []byte(req.PathPrefix) {
+		if b < 32 || b == 127 {
+			invalid["path_prefix"] = "Path prefix must not contain control characters"
+		}
+	}
+	switch req.HTTPMethod {
+	case "", "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS":
+	default:
+		invalid["http_method"] = "Unknown HTTP method"
+	}
+
+	// Nếu phát hiện bất kỳ lỗi thẩm định nào, trả về danh sách chi tiết mã lỗi 422 Unprocessable Entity
+	if len(invalid) > 0 {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"code":   "invalid_rule_definition",
+			"fields": invalid,
+		})
+		return
+	}
+
+	// Bước 9: Ánh xạ từ DTO sang Flat Command Entity chuẩn bị chuyển sang tầng Service
+	conditions := make([]entity.UpdateRuleCondition, len(req.Conditions))
+	for i, cond := range req.Conditions {
+		conditions[i] = entity.UpdateRuleCondition{
+			Field:      cond.Field,
+			Operator:   cond.Operator,
+			Value:      cond.Value,
+			HeaderName: cond.HeaderName,
+		}
+	}
+	cmd := entity.UpdateRuleDefinitionCommand{
+ ID:id, ExpectedVersion:req.ExpectedVersion, Actor:c.GetString("username"),
+		RequestKey:      key,
+		Name:            req.Name,
+		Description:     req.Description,
+		Group:           req.Group,
+		Severity:        req.Severity,
+		Score:           req.Score,
+		Enabled:         req.Enabled,
+		Priority:        req.Priority,
+		PolicyID:        req.PolicyID,
+		LogicMode:       req.LogicMode,
+		Conditions:      conditions,
+		Action:          req.Action,
+		ResponseCode:    req.ResponseCode,
+		CustomResponse:  req.CustomResponse,
+		LogEvent:        req.LogEvent,
+		AddToReputation: req.AddToReputation,
+		SourceIP:        req.SourceIP,
+		HostDomain:      req.HostDomain,
+		PathPrefix:      req.PathPrefix,
+		HTTPMethod:      req.HTTPMethod,
+	}
+
+	// Bước 10: Thực thi tạo luật đa điều kiện trong Service
+	out, err := h.service.UpdateDefinition(c.Request.Context(), cmd)
+	if err != nil {
+		if errors.Is(err, taxonomy.ErrRuleConflict) {
+			c.String(http.StatusConflict, err.Error())
+			return
+		}
+		c.String(http.StatusInternalServerError, "rules operation failed")
+		return
+	}
+
+	// Bước 11: Đính kèm Header Location chỉ đường đến tài nguyên vừa tạo và trả về JSON inline
+	c.Header("Location", "/api/v1/rules/"+strconv.FormatInt(out.ID, 10))
+	c.JSON(http.StatusOK, gin.H{
+		"id":             strconv.FormatInt(out.ID, 10),
+		"version":        out.Version,
+		"state":          out.State,
+		"runtime_ready":  out.RuntimeReady,
+		"runtime_issues": out.RuntimeIssues,
+	})
+}
+
+func (h *RuleHandler) Delete(c *gin.Context) {
+ id,err:=strconv.ParseInt(c.Param("id"),10,64)
+ var req struct { ExpectedVersion int64 `json:"expected_version"` }
+ if err!=nil || id<1 || json.NewDecoder(http.MaxBytesReader(c.Writer,c.Request.Body,1024)).Decode(&req)!=nil || req.ExpectedVersion<1 { c.String(400,"invalid delete request");return }
+ out,err:=h.service.Delete(c.Request.Context(),entity.DeleteRuleCommand{ID:id,ExpectedVersion:req.ExpectedVersion,Actor:c.GetString("username")})
+ if err!=nil { if errors.Is(err,taxonomy.ErrRuleConflict){c.String(409,"Rule changed or is assigned to a policy. Refresh and remove policy assignments before deletion.")}else{c.String(500,"delete failed")};return }
+ c.JSON(200,gin.H{"id":strconv.FormatInt(out.ID,10),"version":out.Version,"state":"deleted"})
 }

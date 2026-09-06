@@ -1,45 +1,279 @@
-import React,{useCallback,useEffect,useRef,useState} from 'react';
-import {Link,useSearchParams} from 'react-router-dom';
-import {accessApi,type AccessObject,type AccessRuleDocument,type AccessStatus,type AccessActivity,type AccessChange} from '../../lib/api/access';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Plus, RefreshCw, AlertCircle, CheckCircle2, ShieldCheck, Radio } from 'lucide-react';
+import {
+  accessApi,
+  type AccessObject,
+  type AccessStatus,
+  type AccessActivity,
+  type AccessChange,
+} from '../../lib/api/access';
+import { IpAccessStatsCards } from './sections/IpAccessStatsCards';
+import { IpAccessTabsNav, type AccessTabKey } from './sections/IpAccessTabsNav';
+import { AccessRulesTab } from './sections/AccessRulesTab';
+import { IpGroupsTab } from './sections/IpGroupsTab';
+import { DatasetsTab } from './sections/DatasetsTab';
+import { AccessActivityTab } from './sections/AccessActivityTab';
+import { AccessHistoryDrawer } from './sections/AccessHistoryDrawer';
 
-export default function IpAccessPage(){
- const [params,setParams]=useSearchParams();const tab=params.get('tab')||'rules';
- const [items,setItems]=useState<AccessObject[]>([]);const [status,setStatus]=useState<AccessStatus|null>(null);const [activity,setActivity]=useState<AccessActivity[]>([]);
- const [search,setSearch]=useState('');const [filter,setFilter]=useState('all');const [error,setError]=useState('');const [notice,setNotice]=useState('');const [busy,setBusy]=useState(false);
- const [selected,setSelected]=useState<AccessObject|null>(null);const [history,setHistory]=useState<AccessObject[]>([]);
- const [editor,setEditor]=useState<{id:number;version:number;release:number;kind:'group'|'dataset';name:string;text:string}|null>(null);
- const receipt=useRef<{body:string;key:string}|null>(null);
- const refresh=useCallback(async()=>{const [rows,s,events]=await Promise.all([accessApi.list(),accessApi.status(),accessApi.activity()]);setItems(rows);setStatus(s);setActivity(events)},[]);
- useEffect(()=>{const load=()=>refresh().catch(e=>setError(String(e)));void load();const timer=setInterval(()=>void load(),5000);return()=>clearInterval(timer)},[refresh]);
- useEffect(()=>{let live=true;setHistory([]);if(selected)accessApi.list(selected.id,true).then(rows=>{if(live)setHistory(rows)}).catch(e=>{if(live)setError(String(e))});return()=>{live=false}},[selected]);
- async function change(command:AccessChange){if(busy)return;setBusy(true);setError('');const body=JSON.stringify(command);if(receipt.current?.body!==body)receipt.current={body,key:crypto.randomUUID()};try{const result=await accessApi.change(command,receipt.current.key);receipt.current=null;setNotice(`Saved. Deployment ${result.release_id} requested.`);setEditor(null);setSelected(null);await refresh()}catch(e){setError(e instanceof Error?e.message:String(e))}finally{setBusy(false)}}
- const rules=items.filter(x=>x.kind==='rule');const now=Math.floor(Date.now()/1000);
- const filtered=rules.filter(x=>{const d=x.document as AccessRuleDocument;return `${d.name} ${d.values.join(' ')} ${d.host} ${d.description}`.toLowerCase().includes(search.toLowerCase())&&(filter==='all'||filter===d.action||filter==='expired'&&d.expires_at>0&&d.expires_at<=now||filter==='disabled'&&!d.enabled||filter==='temporary'&&d.action==='block'&&d.expires_at>now||filter===d.source)});
- const applied=status?.nodes.filter(n=>n.release_id===status.release_id&&n.phase==='observed').length||0;
- return <div className="p-6 w-full space-y-4">
-  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-[#172338] pb-4"><div><h1 className="text-xl font-bold text-slate-900 dark:text-white">IP & Access Control</h1><p className="text-xs text-slate-500 dark:text-slate-400">Manage real network access rules, groups and imported Geo/ASN coverage.</p></div><Link to="/ip-access/create" className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 text-sm font-semibold transition-colors">Add Rule</Link></div>
-  {error&&<div role="alert" className="text-rose-600 dark:text-rose-300">{error} <button className="underline" onClick={()=>{setError('');void refresh().catch(e=>setError(String(e)))}}>Refresh</button></div>}
-  {notice&&<p role="status" className="text-emerald-600 dark:text-emerald-300">{notice}</p>}
-  {!status&&!error&&<p className="text-slate-500 dark:text-slate-400">Loading access configuration…</p>}
-  <div className="grid sm:grid-cols-4 gap-3">{[['Total rules',rules.length],['Allowlist',rules.filter(x=>(x.document as AccessRuleDocument).action==='allow').length],['Blocklist',rules.filter(x=>(x.document as AccessRuleDocument).action==='block').length],['Temporary bans',rules.filter(x=>{const d=x.document as AccessRuleDocument;return d.action==='block'&&d.enabled&&d.expires_at>now}).length]].map(([name,value])=><div key={name} className="border border-slate-200 dark:border-[#172338] bg-white dark:bg-[#0B1320] p-4 shadow-sm dark:shadow-none"><p className="text-xs text-slate-500 dark:text-slate-400">{name}</p><p className="text-2xl font-bold text-slate-900 dark:text-white">{value}</p></div>)}</div>
-  {status&&<details className="text-sm border border-slate-200 dark:border-[#172338] bg-white dark:bg-[#0B1320] p-3 text-slate-900 dark:text-slate-100"><summary className="cursor-pointer font-semibold">Deployment: {status.release_id?`${applied}/${status.nodes.length} nodes observed`:'No changes published'}{status.nodes.length===0?' · No nodes registered':''}</summary><p className="text-xs text-slate-500 dark:text-slate-400 my-2">A fresh local connection observed the snapshot. Old connections may still be draining; offline nodes retain their last configuration.</p>{status.nodes.map(n=><p key={n.id} className="text-xs py-1">{n.id} · {n.phase} · {n.message}</p>)}</details>}
-  <nav className="flex flex-wrap gap-2 border-b border-slate-200 dark:border-[#172338] pb-2">{[['rules','Access rules'],['groups','IP groups'],['datasets','Geo / ASN datasets'],['activity','Access Activity']].map(([value,label])=><button key={value} onClick={()=>{setParams({tab:value});setEditor(null)}} className={`px-3 py-2 text-sm font-medium transition-colors ${tab===value?'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700':'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>{label}</button>)}</nav>
-  {tab==='rules'&&<>
-   <div className="flex flex-wrap gap-3"><input aria-label="Search access rules" placeholder="Search rules, IP, host…" value={search} onChange={e=>setSearch(e.target.value)} className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] text-slate-900 dark:text-white p-2 text-sm focus:outline-none focus:border-emerald-500"/><select aria-label="Filter access rules" className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] text-slate-900 dark:text-white p-2 text-sm cursor-pointer" value={filter} onChange={e=>setFilter(e.target.value)}>{[['all','All rules'],['allow','Allowlist'],['block','Blocklist'],['temporary','Temporary bans'],['country','Geo rules'],['asn','ASN rules'],['disabled','Disabled'],['expired','Expired']].map(([v,l])=><option key={v} value={v}>{l}</option>)}</select><button className="text-sm text-emerald-600 dark:text-emerald-400 font-semibold" onClick={()=>{const blob=new Blob([JSON.stringify(items,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='access-configuration.json';a.click();URL.revokeObjectURL(url)}}>Export configuration</button></div>
-   <div className="overflow-auto border border-slate-200 dark:border-[#172338] bg-white dark:bg-[#080E18]"><table className="w-full text-sm text-left"><thead className="bg-slate-50 dark:bg-[#0B1320] text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-[#172338]"><tr>{['Rule','Source','Scope','Priority','Status','Actions'].map(h=><th key={h} className="p-3">{h}</th>)}</tr></thead><tbody className="divide-y divide-slate-100 dark:divide-[#172338]">{filtered.map(item=>{const d=item.document as AccessRuleDocument;return <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-[#0F1A2E]/50 text-slate-800 dark:text-slate-200"><td className="p-3"><button onClick={()=>setSelected(item)} className="text-emerald-600 dark:text-emerald-300 font-semibold">{d.name}</button><p className="text-xs text-slate-500 dark:text-slate-400">{d.action.toUpperCase()}</p></td><td className="p-3 max-w-60 break-words">{d.source}: {d.values.join(', ')}</td><td className="p-3">{d.host}{d.path_prefix}<p className="text-xs text-slate-500 dark:text-slate-400">{d.method} · {d.schedule}</p></td><td className="p-3">{d.priority}</td><td className="p-3">{!d.enabled?'Disabled':d.expires_at&&d.expires_at<=now?'Expired':'Enabled'}{d.expires_at>0&&<p className="text-xs text-slate-500 dark:text-slate-400">Until {new Date(d.expires_at*1000).toLocaleString()}</p>}</td><td className="p-3"><div className="flex flex-wrap gap-3"><Link to={`/ip-access/create?edit=${item.id}`} className="text-cyan-600 dark:text-cyan-400 hover:underline">Edit</Link><Link to={`/ip-access/create?clone=${item.id}`} className="text-cyan-600 dark:text-cyan-400 hover:underline">Clone</Link><button disabled={busy||!status} onClick={()=>void change({id:item.id,kind:'rule',expected_version:item.version,expected_release:status!.release_id,delete:false,document:{...d,enabled:!d.enabled}})} className="hover:underline">{d.enabled?'Disable':'Enable'}</button><button className="text-rose-600 dark:text-rose-300 hover:underline" disabled={busy||!status} onClick={()=>{if(confirm(`Delete access rule “${d.name}” and apply this change?`))void change({id:item.id,kind:'rule',expected_version:item.version,expected_release:status!.release_id,delete:true,document:null})}}>Delete</button></div></td></tr>})}</tbody></table>{filtered.length===0&&<p className="p-5 text-slate-500 dark:text-slate-400">No matching access rules.</p>}</div>
-  </>}
-  {(tab==='groups'||tab==='datasets')&&<section className="space-y-3">
-   <p className="text-sm text-slate-600 dark:text-slate-400">{tab==='groups'?'Groups contain actual IPv4/IPv6 addresses or CIDRs. Updating a group also deploys every enabled rule that uses it.':'Import CIDR, country code, ASN rows from your own data source. Matching uses the union of imported networks for each country/ASN. Coverage is limited to imported rows; each compiled snapshot is limited to 64 KiB.'}</p>
-   <button disabled={!status||busy} className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 text-sm font-semibold transition-colors" onClick={()=>setEditor({id:0,version:0,release:status!.release_id,kind:tab==='groups'?'group':'dataset',name:'',text:''})}>Add {tab==='groups'?'group':'dataset'}</button>
-   {items.filter(x=>x.kind===(tab==='groups'?'group':'dataset')).map(item=><div key={item.id} className="flex flex-wrap justify-between gap-3 border border-slate-200 dark:border-[#172338] bg-white dark:bg-[#0B1320] p-3 text-sm text-slate-900 dark:text-slate-100"><span>{item.document.name} · {'networks' in item.document?item.document.networks.length:0} networks · v{item.version}</span><div className="flex gap-3"><button disabled={!status} onClick={()=>setEditor({id:item.id,version:item.version,release:status!.release_id,kind:item.kind as 'group'|'dataset',name:item.document.name,text:('networks' in item.document?item.document.networks:[]).map(n=>typeof n==='string'?n:`${n.cidr},${n.country},${n.asn}`).join('\n')})} className="text-cyan-600 dark:text-cyan-400 hover:underline">Edit</button><button onClick={()=>setSelected(item)} className="hover:underline">History</button><button className="text-rose-600 dark:text-rose-300 hover:underline" disabled={busy||!status} onClick={()=>{if(confirm(`Delete ${item.document.name}? Enabled references must be removed first.`))void change({id:item.id,kind:item.kind,expected_version:item.version,expected_release:status!.release_id,delete:true,document:null})}}>Delete</button></div></div>)}
-   {editor&&<form className="border border-slate-200 dark:border-[#172338] bg-white dark:bg-[#0B1320] p-4 space-y-3 text-slate-900 dark:text-white" onSubmit={e=>{e.preventDefault();try{const lines=editor.text.split('\n').map(s=>s.trim()).filter(Boolean);const networks=editor.kind==='group'?lines:lines.map(line=>{const [cidr,country='',asn='',...extra]=line.split(',').map(s=>s.trim());if(extra.length)throw Error('Expected CIDR,country,ASN');return {cidr,country,asn}});void change({id:editor.id,kind:editor.kind,expected_version:editor.version,expected_release:editor.release,delete:false,document:{name:editor.name,networks}})}catch(err){setError(String(err))}}}>
-    <label className="block text-sm">Name / dataset provenance<input required maxLength={120} className="block w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white p-2 mt-1" value={editor.name} onChange={e=>setEditor({...editor,name:e.target.value})}/></label>
-    <label className="block text-sm">{editor.kind==='group'?'Networks (one per line)':'Networks (CIDR,country,ASN; one per line, no header)'}<textarea required rows={8} className="block w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white p-2 mt-1 font-mono" value={editor.text} onChange={e=>setEditor({...editor,text:e.target.value})}/></label>
-    <label className="block text-sm">Load text / CSV file<input type="file" accept=".csv,.txt" className="block mt-1 text-slate-600 dark:text-slate-300" onChange={async e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>65536){setError('Import exceeds 64 KiB');return}try{setEditor({...editor,text:await file.text()})}catch(err){setError(String(err))}}}/></label>
-    <div className="flex gap-3"><button disabled={busy} className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2">Save & apply</button><button type="button" onClick={()=>setEditor(null)} className="px-3 py-2 border border-slate-300 dark:border-slate-700">Cancel</button></div>
-   </form>}
-  </section>}
-  {tab==='activity'&&<section className="space-y-3"><p className="text-xs text-slate-500 dark:text-slate-400">Latest 200 sampled matches. Alerts and reputation flags are derived from the rule revision that actually handled the request. Delivery retries do not create duplicates.</p>{activity.length===0&&<p className="text-slate-500 dark:text-slate-400">No recorded access matches.</p>}<div className="overflow-auto border border-slate-200 dark:border-[#172338] bg-white dark:bg-[#080E18]"><table className="w-full text-left text-sm"><thead className="bg-slate-50 dark:bg-[#0B1320] text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-[#172338]"><tr>{['Time','Node','IP','Rule / release','Action','Flags'].map(h=><th key={h} className="p-2">{h}</th>)}</tr></thead><tbody className="divide-y divide-slate-100 dark:divide-[#172338]">{activity.map((e,i)=><tr key={i} className="hover:bg-slate-50 dark:hover:bg-[#0F1A2E]/50 text-slate-800 dark:text-slate-200"><td className="p-2">{new Date(e.created_at).toLocaleString()}</td><td className="p-2">{e.node_id}</td><td className="p-2">{e.ip}</td><td className="p-2">{e.rule_id} / {e.release_id}</td><td className="p-2">{e.action}</td><td className="p-2 text-amber-600 dark:text-amber-300">{e.alert?'Alert ':''}{e.reputation?`Risk score: ${e.risk_score}`:''}</td></tr>)}</tbody></table></div></section>}
-  {selected&&<aside className="border border-slate-200 dark:border-[#172338] bg-white dark:bg-[#0B1320] p-4 space-y-3 text-slate-900 dark:text-white shadow-lg"><div className="flex justify-between font-bold"><h2>{selected.document.name} · Revision history</h2><button onClick={()=>setSelected(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white">Close</button></div>{history.map(row=><details key={row.version} className="border-b border-slate-100 dark:border-[#172338] pb-2"><summary className="cursor-pointer text-sm font-medium">v{row.version} · {row.deleted?'Deleted':'Saved'} · {row.actor} · {new Date(row.updated_at).toLocaleString()}</summary><pre className="text-xs overflow-auto max-h-64 p-3 bg-slate-50 dark:bg-slate-950 mt-2 border border-slate-200 dark:border-slate-800">{JSON.stringify(row.document,null,2)}</pre>{!row.deleted&&selected.kind==='rule'&&row.version!==selected.version&&<button disabled={busy||!status} className="text-sm text-emerald-600 dark:text-emerald-400 mt-2 font-semibold hover:underline" onClick={()=>{if(confirm(`Restore revision ${row.version} and apply it?`))void change({id:selected.id,kind:'rule',expected_version:selected.version,expected_release:status!.release_id,delete:false,document:row.document})}}>Restore & apply</button>}</details>)}</aside>}
- </div>
+export default function IpAccessPage() {
+  const [params, setParams] = useSearchParams();
+  const rawTab = params.get('tab') || 'rules';
+  const activeTab: AccessTabKey = ['rules', 'groups', 'datasets', 'activity'].includes(rawTab)
+    ? (rawTab as AccessTabKey)
+    : 'rules';
+
+  const [items, setItems] = useState<AccessObject[]>([]);
+  const [status, setStatus] = useState<AccessStatus | null>(null);
+  const [activity, setActivity] = useState<AccessActivity[]>([]);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  const [selected, setSelected] = useState<AccessObject | null>(null);
+  const [history, setHistory] = useState<AccessObject[]>([]);
+  const receipt = useRef<{ body: string; key: string } | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const [rows, s, events] = await Promise.all([
+        accessApi.list(),
+        accessApi.status(),
+        accessApi.activity(),
+      ]);
+      setItems(rows);
+      setStatus(s);
+      setActivity(events);
+      setError('');
+      setLoaded(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+    const timer = setInterval(() => void refresh(), 5000);
+    return () => clearInterval(timer);
+  }, [refresh]);
+
+  useEffect(() => {
+    let live = true;
+    setHistory([]);
+    if (selected) {
+      accessApi
+        .list(selected.id, true)
+        .then((rows) => {
+          if (live) setHistory(rows);
+        })
+        .catch((e) => {
+          if (live) setError(String(e));
+        });
+    }
+    return () => {
+      live = false;
+    };
+  }, [selected]);
+
+  const change = async (command: AccessChange) => {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    const body = JSON.stringify(command);
+    if (receipt.current?.body !== body) {
+      receipt.current = { body, key: crypto.randomUUID() };
+    }
+    try {
+      const result = await accessApi.change(command, receipt.current.key);
+      receipt.current = null;
+      setNotice(`Changes applied successfully. Deployment #${result.release_id} active across edge nodes.`);
+      setSelected(null);
+      await refresh();
+      setTimeout(() => setNotice(''), 6000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRestore = async (item: AccessObject, _version: number, doc: unknown) => {
+    if (!status) return;
+    await change({
+      id: item.id,
+      kind: item.kind,
+      expected_version: item.version,
+      expected_release: status.release_id,
+      delete: false,
+      document: doc,
+    });
+  };
+
+  const rules = items.filter((x) => x.kind === 'rule');
+  const groups = items.filter((x) => x.kind === 'group');
+  const datasets = items.filter((x) => x.kind === 'dataset');
+
+  return (
+    <div className="p-6 w-full space-y-5 font-sans">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-[#172338] pb-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
+              IP & Access Control
+            </h1>
+            {status && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/60">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                </span>
+                Release #{status.release_id}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Deterministic edge perimeter filtering, CIDR lists, IP groups, and Geo/ASN custom datasets.
+          </p>
+        </div>
+
+        {/* Header Actions */}
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] hover:border-slate-300 dark:hover:border-[#223552] rounded-xs shadow-xs transition-colors cursor-pointer"
+            title="Refresh access state"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+            <span>Refresh</span>
+          </button>
+
+          <Link
+            to="/ip-access/create"
+            className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xs shadow-xs transition-colors cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add Access Rule</span>
+          </Link>
+        </div>
+      </div>
+
+      {/* Alerts / Feedback */}
+      {error && (
+        <div
+          role="alert"
+          className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs flex items-center justify-between rounded-xs"
+        >
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+            <span>{error}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setError('');
+              void refresh();
+            }}
+            className="text-xs font-bold underline hover:opacity-80 cursor-pointer ml-4 shrink-0"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {notice && (
+        <div
+          role="status"
+          className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-300 text-xs flex items-center justify-between rounded-xs"
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
+            <span>{notice}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setNotice('')}
+            className="text-xs font-semibold hover:opacity-80 cursor-pointer ml-4 shrink-0"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {!loaded && !error && (
+        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 py-4">
+          <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-500" />
+          <span>Loading IP & Access configuration…</span>
+        </div>
+      )}
+
+      {loaded && (
+        <>
+          {/* Real-time KPI Stats Cards */}
+          <IpAccessStatsCards items={items} status={status} />
+
+          {/* Animated Sliding Tabs Navigation */}
+          <IpAccessTabsNav
+            activeTab={activeTab}
+            onTabChange={(t) => setParams({ tab: t })}
+            counts={{
+              rules: rules.length,
+              groups: groups.length,
+              datasets: datasets.length,
+              activity: activity.length,
+            }}
+          />
+
+          {/* Active Tab View */}
+          <div className="pt-1">
+            {activeTab === 'rules' && (
+              <AccessRulesTab
+                items={items}
+                busy={busy}
+                status={status}
+                onChange={change}
+                onSelectHistory={(item) => setSelected(item)}
+              />
+            )}
+
+            {activeTab === 'groups' && (
+              <IpGroupsTab
+                items={items}
+                busy={busy}
+                status={status}
+                onChange={change}
+                onSelectHistory={(item) => setSelected(item)}
+              />
+            )}
+
+            {activeTab === 'datasets' && (
+              <DatasetsTab
+                items={items}
+                busy={busy}
+                status={status}
+                onChange={change}
+                onSelectHistory={(item) => setSelected(item)}
+              />
+            )}
+
+            {activeTab === 'activity' && (
+              <AccessActivityTab activity={activity} />
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Revision History Slide-over Drawer */}
+      <AccessHistoryDrawer
+        selected={selected}
+        history={history}
+        busy={busy}
+        status={status}
+        onClose={() => setSelected(null)}
+        onRestore={handleRestore}
+      />
+    </div>
+  );
 }

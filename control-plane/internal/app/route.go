@@ -17,9 +17,9 @@ import (
 // chỉ chấp nhận JWT đăng nhập bình thường.
 func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	// Route public — không yêu cầu đăng nhập
-	r.GET("/healthz", m.StatusHandler.Health)       // Load balancer ping — luôn OK
-	r.GET("/readyz", m.StatusHandler.Ready)         // Kiểm tra DB sẵn sàng
-	r.GET("/api/v1/status", m.StatusHandler.Status) // Thông tin phiên bản & trạng thái
+	r.GET("/healthz", m.HealthcheckHandler.Health)       // Load balancer ping — luôn OK
+	r.GET("/readyz", m.HealthcheckHandler.Ready)         // Kiểm tra DB sẵn sàng
+	r.GET("/api/v1/status", m.HealthcheckHandler.Status) // Thông tin phiên bản & trạng thái
 
 	// Route auth public — gọi để lấy token rồi mới gọi các route protected
 	r.POST("/api/v1/auth/login", m.AuthHandler.Login)   // Đăng nhập, trả về JWT
@@ -28,55 +28,45 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	// authMidd kiểm tra JWT từ cả cookie HttpOnly lẫn Authorization header.
 	// Nếu thiếu hoặc sai token, middleware trả về 401 và dừng request luôn.
 	authMidd := middleware.Auth(m.AuthService, token)
-	accessAdmin := func(c *gin.Context) {
-		if c.GetString(middleware.CtxUserRoleKey) != "admin" {
-			c.AbortWithStatusJSON(403, gin.H{"message": "admin role required"})
-			return
-		}
-		c.Next()
-	}
+
 	r.GET("/api/v1/access", authMidd, m.AccessHandler.Read)
 	r.GET("/api/v1/access/status", authMidd, m.AccessHandler.Status)
 	r.GET("/api/v1/access/activity", authMidd, m.AccessHandler.Activity)
-	r.POST("/api/v1/access/changes", authMidd, accessAdmin, m.AccessHandler.Change)
-	r.GET("/api/v1/access-sync/:node", authMidd, accessAdmin, m.AccessHandler.Desired)
-	r.POST("/api/v1/access-sync/:node", authMidd, accessAdmin, m.AccessHandler.Report)
-	r.POST("/api/v1/access-sync/:node/matches", authMidd, accessAdmin, m.AccessHandler.Match)
-	// Cluster policy authority is restricted to operators/admins, including agent reports.
-	policyAdmin := func(c *gin.Context) {
-		if c.GetString(middleware.CtxUserRoleKey) != "admin" {
-			c.AbortWithStatus(403)
-			return
-		}
-		c.Next()
-	}
+	r.GET("/api/v1/access/catalog", authMidd, m.AccessHandler.Catalog)
+	r.POST("/api/v1/access/changes", authMidd, m.AccessHandler.Change)
+	r.GET("/api/v1/access-sync/:node", authMidd, m.AccessHandler.Desired)
+	r.POST("/api/v1/access-sync/:node", authMidd, m.AccessHandler.Report)
+	r.POST("/api/v1/access-sync/:node/matches", authMidd, m.AccessHandler.Match)
+
 	r.GET("/api/v1/policies", authMidd, m.PolicyHandler.List)
 	r.GET("/api/v1/policies/catalog", authMidd, m.PolicyHandler.Catalog)
 	r.GET("/api/v1/policies/rule-catalog", authMidd, m.PolicyHandler.RuleCatalog)
 	r.GET("/api/v1/policies/cluster", authMidd, m.PolicyHandler.Cluster)
 	r.GET("/api/v1/policies/:id", authMidd, m.PolicyHandler.List)
-	r.POST("/api/v1/policies", authMidd, policyAdmin, m.PolicyHandler.SaveDraft)
-	r.PUT("/api/v1/policies/:id", authMidd, policyAdmin, m.PolicyHandler.SaveDraft)
-	r.POST("/api/v1/policies/:id/publish", authMidd, policyAdmin, m.PolicyHandler.PublishDraft)
-	r.GET("/api/v1/policy-sync/:node", authMidd, policyAdmin, m.PolicyHandler.Desired)
-	r.POST("/api/v1/policy-sync/:node", authMidd, policyAdmin, m.PolicyHandler.Report)
+	r.POST("/api/v1/policies", authMidd, m.PolicyHandler.SaveDraft)
+	r.PUT("/api/v1/policies/:id", authMidd, m.PolicyHandler.SaveDraft)
+	r.POST("/api/v1/policies/:id/publish", authMidd, m.PolicyHandler.PublishDraft)
+	r.GET("/api/v1/policy-sync/:node", authMidd, m.PolicyHandler.Desired)
+	r.POST("/api/v1/policy-sync/:node", authMidd, m.PolicyHandler.Report)
 
 	// Route protected — phải vượt qua authMidd
 	r.GET("/api/v1/auth/me", authMidd, m.AuthHandler.Me) // Thông tin user hiện tại
 
 	// Quản lý Rule API v2 (schema mới, hỗ trợ điều kiện phức tạp)
 	r.POST("/api/v2/rules", authMidd, m.RuleHandler.CreateDefinition)
+	r.PUT("/api/v2/rules/:id", authMidd, m.RuleHandler.UpdateDefinition)
+	r.DELETE("/api/v1/rules/:id", authMidd, m.RuleHandler.Delete)
 
 	// Quản lý Rule API v1
-	r.GET("/api/v1/rules", authMidd, m.RuleHandler.List)                // Danh sách rule (có filter, phân trang)
-	r.POST("/api/v1/rules", authMidd, m.RuleHandler.Create)             // Tạo rule mới
-	r.GET("/api/v1/rules/stats", authMidd, m.RuleHandler.Stats)         // Thống kê số lượng rule
-	r.GET("/api/v1/rules/:id", authMidd, m.RuleHandler.Detail)          // Chi tiết 1 rule
-	r.PUT("/api/v1/rules/:id", authMidd, m.RuleHandler.Update)          // Cập nhật rule
-	r.GET("/api/v1/rules/:id/history", authMidd, m.RuleHandler.History)   // Lịch sử thay đổi
+	r.GET("/api/v1/rules", authMidd, m.RuleHandler.List)                   // Danh sách rule (có filter, phân trang)
+	r.POST("/api/v1/rules", authMidd, m.RuleHandler.Create)                // Tạo rule mới
+	r.GET("/api/v1/rules/stats", authMidd, m.RuleHandler.Stats)            // Thống kê số lượng rule
+	r.GET("/api/v1/rules/:id", authMidd, m.RuleHandler.Detail)             // Chi tiết 1 rule
+	r.PUT("/api/v1/rules/:id", authMidd, m.RuleHandler.Update)             // Cập nhật rule
+	r.GET("/api/v1/rules/:id/history", authMidd, m.RuleHandler.History)      // Lịch sử thay đổi
 	r.POST("/api/v1/rules/:id/rollback", authMidd, m.RuleHandler.Rollback) // Khôi phục cấu hình về phiên bản cũ
-	r.POST("/api/v1/rules/test", authMidd, m.RuleHandler.Test)            // Kiểm thử & đánh giá request với tập luật WAF
-	r.POST("/api/v1/rules/:id/test", authMidd, m.RuleHandler.Test)      // Kiểm thử theo ID rule cụ thể
+	r.POST("/api/v1/rules/test", authMidd, m.RuleHandler.Test)             // Kiểm thử & đánh giá request với tập luật WAF
+	r.POST("/api/v1/rules/:id/test", authMidd, m.RuleHandler.Test)         // Kiểm thử theo ID rule cụ thể
 
 	// Phát hành (publish) bộ rule để NGINX áp dụng
 	r.POST("/api/v1/rule-releases", authMidd, m.RuleHandler.Publish)          // Tạo release mới

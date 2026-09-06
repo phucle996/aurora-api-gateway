@@ -17,6 +17,9 @@ use std::{
 pub mod access;
 pub mod telemetry;
 
+pub static DYNAMIC_POLICY_ENGINE: std::sync::RwLock<Option<std::sync::Arc<Engine>>> =
+    std::sync::RwLock::new(None);
+
 /// Mã trạng thái trả về cho caller C:
 /// - OK (0): Thao tác thành công
 const OK: u32 = 0;
@@ -30,6 +33,31 @@ const PANIC: u32 = 2;
 #[unsafe(no_mangle)]
 pub extern "C" fn aurora_waf_abi_version() -> u32 {
     3
+}
+
+/// Nạp và hoán đổi nguyên tử (Atomic Swap) Policy Engine mới vào RAM.
+/// # Safety
+/// `data` phải trỏ tới vùng nhớ hợp lệ chứa chuỗi JSON policy.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn aurora_waf_swap_policy(data: *const u8, len: usize) -> u32 {
+    if data.is_null() || len == 0 || len > MAX_POLICY_BYTES {
+        return INVALID;
+    }
+    match catch_unwind(AssertUnwindSafe(|| {
+        let bytes = unsafe { slice::from_raw_parts(data, len) };
+        Engine::from_policy(bytes)
+    })) {
+        Ok(Ok(e)) => {
+            if let Ok(mut g) = DYNAMIC_POLICY_ENGINE.write() {
+                *g = Some(std::sync::Arc::new(e));
+                OK
+            } else {
+                INVALID
+            }
+        }
+        Ok(Err(_)) => INVALID,
+        Err(_) => PANIC,
+    }
 }
 
 /// Tạo mới một đối tượng Engine từ dữ liệu chuỗi byte JSON chính sách (Policy data).
@@ -91,13 +119,10 @@ pub unsafe extern "C" fn aurora_waf_evaluate_v3(
     len: usize,
     out: *mut Decision,
 ) -> u32 {
-    // Bước 1: Kiểm tra con trỏ đầu ra
     if out.is_null() {
         return INVALID;
     }
 
-    // Thiết lập giá trị phòng ngừa ban đầu theo nguyên tắc Fail-Closed (mặc định action = 1 tức Block)
-    // Nếu có lỗi xảy ra giữa chừng, request sẽ tự động bị chặn để đảm bảo an toàn
     unsafe {
         *out = Decision {
             action: 1,
@@ -105,16 +130,21 @@ pub unsafe extern "C" fn aurora_waf_evaluate_v3(
         };
     }
 
-    // Bước 2: Kiểm tra tính hợp lệ của con trỏ engine và dữ liệu đường dẫn
-    if engine.is_null() || path.is_null() || len == 0 || len > MAX_PATH_BYTES {
+    if path.is_null() || len == 0 || len > MAX_PATH_BYTES {
         return INVALID;
     }
 
-    // Bước 3: Gọi hàm evaluate của Engine trong khối bọc an toàn catch_unwind
-    match catch_unwind(AssertUnwindSafe(|| unsafe {
-        (&*engine).evaluate(slice::from_raw_parts(path, len))
+    match catch_unwind(AssertUnwindSafe(|| {
+        let path_slice = unsafe { slice::from_raw_parts(path, len) };
+        let dynamic_arc = DYNAMIC_POLICY_ENGINE.read().ok().and_then(|g| g.clone());
+        if let Some(dyn_eng) = dynamic_arc {
+            dyn_eng.evaluate(path_slice)
+        } else if !engine.is_null() {
+            unsafe { (&*engine).evaluate(path_slice) }
+        } else {
+            Err(aurora_engine::Error::InvalidPolicy)
+        }
     })) {
-        // So khớp thành công: ghi kết quả Decision vào *out và trả về mã OK (0)
         Ok(Ok(decision)) => {
             telemetry::record_evaluation(decision.action);
             unsafe {
@@ -122,9 +152,7 @@ pub unsafe extern "C" fn aurora_waf_evaluate_v3(
             }
             OK
         }
-        // Đường dẫn URL không hợp lệ: trả về mã INVALID (1)
         Ok(Err(_)) => INVALID,
-        // Bắt được panic: trả về mã PANIC (2)
         Err(_) => PANIC,
     }
 }
@@ -150,8 +178,7 @@ pub unsafe extern "C" fn aurora_waf_evaluate_v4(
             ..Decision::default()
         };
     }
-    if engine.is_null()
-        || path.is_null()
+    if path.is_null()
         || len == 0
         || len > MAX_PATH_BYTES
         || host_len > 253
@@ -159,13 +186,21 @@ pub unsafe extern "C" fn aurora_waf_evaluate_v4(
     {
         return INVALID;
     }
-    match catch_unwind(AssertUnwindSafe(|| unsafe {
-        let host = if host_len == 0 {
+    match catch_unwind(AssertUnwindSafe(|| {
+        let host_slice = if host_len == 0 {
             &[]
         } else {
-            slice::from_raw_parts(host, host_len)
+            unsafe { slice::from_raw_parts(host, host_len) }
         };
-        (&*engine).evaluate_request(host, slice::from_raw_parts(path, len))
+        let path_slice = unsafe { slice::from_raw_parts(path, len) };
+        let dynamic_arc = DYNAMIC_POLICY_ENGINE.read().ok().and_then(|g| g.clone());
+        if let Some(dyn_eng) = dynamic_arc {
+            dyn_eng.evaluate_request(host_slice, path_slice)
+        } else if !engine.is_null() {
+            unsafe { (&*engine).evaluate_request(host_slice, path_slice) }
+        } else {
+            Err(aurora_engine::Error::InvalidPolicy)
+        }
     })) {
         Ok(Ok(decision)) => {
             telemetry::record_evaluation(decision.action);
@@ -185,10 +220,15 @@ pub unsafe extern "C" fn aurora_waf_evaluate_v4(
 /// - `engine`: Con trỏ Engine còn sống. Nếu truyền con trỏ null sẽ trả về 0.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn aurora_waf_generation(engine: *const Engine) -> u64 {
-    if engine.is_null() {
-        return 0;
+    if let Ok(guard) = DYNAMIC_POLICY_ENGINE.read()
+        && let Some(dyn_eng) = guard.as_ref()
+    {
+        dyn_eng.generation()
+    } else if !engine.is_null() {
+        unsafe { (&*engine).generation() }
+    } else {
+        0
     }
-    unsafe { (&*engine).generation() }
 }
 
 /// Đánh giá đường dẫn URL theo chuẩn ABI cũ (chỉ kiểm tra trạng thái chặn 0 hoặc 1).
@@ -209,11 +249,19 @@ pub unsafe extern "C" fn aurora_waf_evaluate(
     unsafe {
         *action = 1;
     }
-    if engine.is_null() || path.is_null() || len == 0 || len > MAX_PATH_BYTES {
+    if path.is_null() || len == 0 || len > MAX_PATH_BYTES {
         return INVALID;
     }
-    match catch_unwind(AssertUnwindSafe(|| unsafe {
-        (&*engine).blocked(slice::from_raw_parts(path, len))
+    match catch_unwind(AssertUnwindSafe(|| {
+        let path_slice = unsafe { slice::from_raw_parts(path, len) };
+        let dynamic_arc = DYNAMIC_POLICY_ENGINE.read().ok().and_then(|g| g.clone());
+        if let Some(dyn_eng) = dynamic_arc {
+            dyn_eng.blocked(path_slice)
+        } else if !engine.is_null() {
+            unsafe { (&*engine).blocked(path_slice) }
+        } else {
+            Err(aurora_engine::Error::InvalidPolicy)
+        }
     })) {
         Ok(Ok(blocked)) => {
             let act = u32::from(blocked);
@@ -243,17 +291,20 @@ pub unsafe extern "C" fn aurora_waf_destroy(engine: *mut Engine) {
     }
 }
 
-/// Khởi chạy Background Telemetry Thread từ NGINX Worker 0.
+/// Khởi chạy In-Process Runtime Thread (Đồng bộ Policy/Access, In-memory Hot-swap, Flush Match events và Heartbeat).
 ///
 /// # Safety
-/// - `controller_url`, `node_id`, `token` là chuỗi C kết thúc bằng null ('\0') hoặc null.
+/// Các con trỏ chuỗi C phải kết thúc bằng '\0' hoặc là null pointer.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn aurora_waf_start_telemetry(
+pub unsafe extern "C" fn aurora_waf_start_runtime(
     controller_url: *const std::ffi::c_char,
     node_id: *const std::ffi::c_char,
     token: *const std::ffi::c_char,
     interval_seconds: u32,
     active_release_id: i64,
+    policy_path: *const std::ffi::c_char,
+    access_path: *const std::ffi::c_char,
+    is_leader: u32,
 ) -> u32 {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         let url = if !controller_url.is_null() {
@@ -292,12 +343,67 @@ pub unsafe extern "C" fn aurora_waf_start_telemetry(
             std::env::var("AURORA_HEARTBEAT_INTERVAL")
                 .ok()
                 .and_then(|s| s.parse().ok())
-                .unwrap_or(10)
+                .unwrap_or(5)
         };
 
-        telemetry::start_telemetry(&url, &nid, &tok, interval, active_release_id);
+        let pol_file = if !policy_path.is_null() {
+            unsafe {
+                std::ffi::CStr::from_ptr(policy_path)
+                    .to_string_lossy()
+                    .to_string()
+            }
+        } else {
+            std::env::var("AURORA_POLICY_PATH").unwrap_or_default()
+        };
+
+        let acc_file = if !access_path.is_null() {
+            unsafe {
+                std::ffi::CStr::from_ptr(access_path)
+                    .to_string_lossy()
+                    .to_string()
+            }
+        } else {
+            std::env::var("AURORA_ACCESS_POLICY_PATH").unwrap_or_default()
+        };
+
+        telemetry::start_runtime(
+            &url,
+            &nid,
+            &tok,
+            interval,
+            active_release_id,
+            &pol_file,
+            &acc_file,
+            is_leader != 0,
+        );
     }));
     OK
+}
+
+/// Khởi chạy Background Telemetry Thread từ NGINX Worker 0 (backward compatibility).
+///
+/// # Safety
+/// - `controller_url`, `node_id`, `token` là chuỗi C kết thúc bằng null ('\0') hoặc null.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn aurora_waf_start_telemetry(
+    controller_url: *const std::ffi::c_char,
+    node_id: *const std::ffi::c_char,
+    token: *const std::ffi::c_char,
+    interval_seconds: u32,
+    active_release_id: i64,
+) -> u32 {
+    unsafe {
+        aurora_waf_start_runtime(
+            controller_url,
+            node_id,
+            token,
+            interval_seconds,
+            active_release_id,
+            std::ptr::null(),
+            std::ptr::null(),
+            1,
+        )
+    }
 }
 
 /// Dừng Background Telemetry Thread khi NGINX Worker tắt.
@@ -358,4 +464,94 @@ pub unsafe extern "C" fn aurora_waf_format_prometheus_metrics(
     }));
 
     OK
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::access::{
+        AccessInput, aurora_access_evaluate, aurora_access_generation, aurora_access_record_match,
+        aurora_access_swap_engine, drain_access_matches,
+    };
+
+    #[test]
+    fn test_dynamic_access_hot_swap_and_match_buffer() {
+        let snapshot_json = br#"{"schema_version":1,"generation":42,"rules":[{"id":101,"priority":1,"action":"block","networks":["192.168.1.0/24"],"host":"*","path_prefix":"/api","method":"*","schedule":"always","expires_at":0,"log":true,"reputation":false,"alert":false}]}"#;
+
+        let ret = unsafe { aurora_access_swap_engine(snapshot_json.as_ptr(), snapshot_json.len()) };
+        assert_eq!(ret, 0);
+
+        let generation = unsafe { aurora_access_generation(std::ptr::null()) };
+        assert_eq!(generation, 42);
+
+        // Evaluate request against hot-swapped engine in RAM (without static engine handle)
+        let ip = b"192.168.1.50";
+        let host = b"example.com";
+        let path = b"/api/v1/resource";
+        let method = b"GET";
+        let input = AccessInput {
+            ip: ip.as_ptr(),
+            ip_len: ip.len(),
+            host: host.as_ptr(),
+            host_len: host.len(),
+            path: path.as_ptr(),
+            path_len: path.len(),
+            method: method.as_ptr(),
+            method_len: method.len(),
+            now: 1000,
+        };
+        let mut decision = Decision::default();
+        let eval_status = unsafe { aurora_access_evaluate(std::ptr::null(), &input, &mut decision) };
+        assert_eq!(eval_status, 0);
+        assert_eq!(decision.action, 1); // blocked
+        assert_eq!(decision.rule_id, 101);
+        assert_eq!(decision.generation, 42);
+        assert_eq!(decision.log_matches, 1);
+
+        // Verify match event was automatically enqueued in RAM
+        let matches = drain_access_matches(10);
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].release_id, 42);
+        assert_eq!(matches[0].rule_id, 101);
+        assert_eq!(matches[0].ip, "192.168.1.50");
+
+        // Explicit match record C ABI
+        let explicit_ip = b"10.0.0.99";
+        let rec_status = unsafe {
+            aurora_access_record_match(42, 999, explicit_ip.as_ptr(), explicit_ip.len())
+        };
+        assert_eq!(rec_status, 0);
+        let explicit_matches = drain_access_matches(10);
+        assert_eq!(explicit_matches.len(), 1);
+        assert_eq!(explicit_matches[0].rule_id, 999);
+        assert_eq!(explicit_matches[0].ip, "10.0.0.99");
+    }
+
+    #[test]
+    fn test_dynamic_policy_hot_swap() {
+        let policy_json = br#"{"schema_version":1,"block_paths":["/admin","/restricted"]}"#;
+        let ret = unsafe { aurora_waf_swap_policy(policy_json.as_ptr(), policy_json.len()) };
+        assert_eq!(ret, 0);
+
+        let path = b"/admin";
+        let mut decision = Decision::default();
+        let status = unsafe {
+            aurora_waf_evaluate_v3(std::ptr::null(), path.as_ptr(), path.len(), &mut decision)
+        };
+        assert_eq!(status, 0);
+        assert_eq!(decision.action, 1); // Blocked
+
+        let safe_path = b"/public/index.html";
+        let mut safe_decision = Decision::default();
+        let safe_status = unsafe {
+            aurora_waf_evaluate_v3(
+                std::ptr::null(),
+                safe_path.as_ptr(),
+                safe_path.len(),
+                &mut safe_decision,
+            )
+        };
+        assert_eq!(safe_status, 0);
+        assert_eq!(safe_decision.action, 0); // Allowed
+    }
 }

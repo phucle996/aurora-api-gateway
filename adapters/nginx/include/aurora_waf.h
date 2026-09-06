@@ -37,6 +37,19 @@ uint64_t aurora_waf_generation(const AuroraEngine *engine);
 uint32_t aurora_waf_create(const uint8_t *data, size_t len, AuroraEngine **out);
 uint32_t aurora_waf_evaluate(const AuroraEngine *engine, const uint8_t *path, size_t len, uint32_t *action);
 void aurora_waf_destroy(AuroraEngine *engine);
+uint32_t aurora_access_record_match(uint64_t generation, uint64_t rule_id, const uint8_t *ip, size_t ip_len);
+uint32_t aurora_access_swap_engine(const uint8_t *data, size_t len);
+uint32_t aurora_waf_swap_policy(const uint8_t *data, size_t len);
+uint32_t aurora_waf_start_runtime(
+    const char *controller_url,
+    const char *node_id,
+    const char *token,
+    uint32_t interval_seconds,
+    int64_t active_release_id,
+    const char *policy_path,
+    const char *access_path,
+    uint32_t is_leader
+);
 uint32_t aurora_waf_start_telemetry(const char *controller_url, const char *node_id, const char *token, uint32_t interval_seconds, int64_t active_release_id);
 void aurora_waf_stop_telemetry(void);
 /* x86_64/Linux: shared zeroed aligned 64-byte atomic storage; lifetime is the

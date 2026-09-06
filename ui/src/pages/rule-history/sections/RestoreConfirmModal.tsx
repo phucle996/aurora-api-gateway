@@ -37,8 +37,8 @@ export function RestoreConfirmModal({
               <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
                 Restore Configuration
               </h3>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                Rollback to {targetVersion.versionLabel}
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-sans">
+                Rollback to <span className="font-mono">{targetVersion.versionLabel}</span>
               </p>
             </div>
           </div>
@@ -65,25 +65,25 @@ export function RestoreConfirmModal({
           </div>
 
           {/* Snapshot Summary */}
-          <div className="border border-border rounded-xs p-3 bg-slate-50/50 dark:bg-[#080E18] space-y-2 text-xs font-mono">
+          <div className="border border-border rounded-xs p-3 bg-slate-50/50 dark:bg-[#080E18] space-y-2 text-xs font-sans">
             <div className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
               Configuration to be restored:
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500 dark:text-slate-400">Target Revision:</span>
-              <span className="font-bold text-blue-600 dark:text-blue-400">{targetVersion.versionLabel}</span>
+              <span className="font-bold text-blue-600 dark:text-blue-400 font-mono">{targetVersion.versionLabel}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500 dark:text-slate-400">Action:</span>
-              <span className="text-slate-800 dark:text-slate-200">{targetVersion.action}</span>
+              <span className="text-slate-800 dark:text-slate-200 font-medium">{targetVersion.action}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500 dark:text-slate-400">Match Conditions:</span>
-              <span className="text-slate-800 dark:text-slate-200">{targetVersion.conditions.length} condition(s)</span>
+              <span className="text-slate-800 dark:text-slate-200 font-medium">{targetVersion.conditions.length} condition(s)</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500 dark:text-slate-400">Created Date:</span>
-              <span className="text-slate-700 dark:text-slate-300">{targetVersion.dateTime}</span>
+              <span className="text-slate-700 dark:text-slate-300 font-mono">{targetVersion.dateTime}</span>
             </div>
           </div>
         </div>
@@ -94,7 +94,7 @@ export function RestoreConfirmModal({
             type="button"
             onClick={onClose}
             disabled={isRestoring}
-            className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-[#0E1726] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-300 text-xs font-mono rounded-xs transition-colors cursor-pointer"
+            className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-[#0E1726] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-300 text-xs font-sans rounded-xs transition-colors cursor-pointer"
           >
             Cancel
           </button>
@@ -103,7 +103,7 @@ export function RestoreConfirmModal({
             type="button"
             onClick={() => onConfirm(targetVersion.version)}
             disabled={isRestoring}
-            className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold font-mono rounded-xs shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+            className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold font-sans rounded-xs shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
           >
             {isRestoring ? (
               <>

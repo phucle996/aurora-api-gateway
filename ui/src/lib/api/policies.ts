@@ -1,7 +1,7 @@
 import { api } from '../fetcher';
 export interface PolicyCatalogItem { id: number; name: string }
 export interface PolicyRule { id:number; version:number; name:string; group:string; action:string; enabled:boolean; runtime_ready:boolean }
-export interface PolicyDocument { name:string; description:string; host:string; path_prefix:string; mode:'mixed'|'block'|'detect'; priority:number; rule_ids:number[]; rules:PolicyRule[] }
+export interface PolicyDocument { name:string; description:string; host:string; path_prefix?:string; mode:'mixed'|'block'|'detect'; priority:number; rule_ids:number[]; rules:PolicyRule[] }
 export interface SavedPolicy { id:number; version:number; published_version:number|null; status:'Draft'|'Published'|'Disabled'; document:PolicyDocument; created_at:string; updated_at:string; actor?:string; operation?:string }
 export interface PolicyRelease { release_id:number; digest:string; payload:unknown; membership:{id:number;version:number;name:string}[]; preview:boolean }
 export interface ClusterPolicies { release_id:number; nodes:{id:string;release_id:number;phase:string;message:string;updated_at:string}[] }

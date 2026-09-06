@@ -176,4 +176,23 @@ func TestAccessPublicationAuthorityReplayAndRecovery(t *testing.T) {
 	if json.Unmarshal(history.Body.Bytes(), &rows) != nil || len(rows) != 3 {
 		t.Fatal(history.Body)
 	}
+
+	// Verify the access catalog projection
+	cat := request("GET", "/api/v1/access/catalog", "", nil, "access-test-token", "")
+	if cat.Code != 200 {
+		t.Fatal(cat.Code, cat.Body)
+	}
+	var catalog map[string]any
+	if json.Unmarshal(cat.Body.Bytes(), &catalog) != nil {
+		t.Fatal(cat.Body)
+	}
+	if _, ok := catalog["hosts"]; !ok {
+		t.Fatal("missing hosts in catalog")
+	}
+	if _, ok := catalog["countries"]; !ok {
+		t.Fatal("missing countries in catalog")
+	}
+	if _, ok := catalog["asns"]; !ok {
+		t.Fatal("missing asns in catalog")
+	}
 }

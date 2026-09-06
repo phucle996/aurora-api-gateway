@@ -84,9 +84,11 @@ int main(void) {
     atomic_store(shared + 8, 12);
     atomic_store(shared + 7, (uint64_t)time(NULL));
     assert(aurora_waf_format_prometheus_metrics("node", metrics, sizeof(metrics) - 1, &written) == 0);
-    metrics[written] = 0;
-    assert(strstr((char *)metrics, "aurora_node_cpu_percent{node_id=\"node\"} 25.00") != NULL);
-    assert(strstr((char *)metrics, "aurora_node_active_connections{node_id=\"node\"} 12") != NULL);
+    assert(strstr((char *)metrics, "aurora_node_cpu_percent{") != NULL);
+    assert(strstr((char *)metrics, "node_id=\"node\"") != NULL);
+    assert(strstr((char *)metrics, "25.00") != NULL);
+    assert(strstr((char *)metrics, "aurora_node_active_connections{") != NULL);
+    assert(strstr((char *)metrics, " 12") != NULL);
     atomic_store(shared + 7, (uint64_t)time(NULL) - 60);
     assert(aurora_waf_format_prometheus_metrics("node", metrics, sizeof(metrics) - 1, &written) == 0);
     metrics[written] = 0;

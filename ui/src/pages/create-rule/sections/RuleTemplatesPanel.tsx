@@ -90,7 +90,7 @@ export function RuleTemplatesPanel({ onSelectTemplate }: RuleTemplatesProps) {
   ];
 
   return (
-    <div id="rule-templates" className="bg-[#0B1320] border border-[#152030] p-4 flex flex-col font-mono text-xs">
+    <div id="rule-templates" className="bg-[#0B1320] border border-[#152030] p-4 flex flex-col font-sans text-xs">
       <div className="pb-2 border-b border-[#152030]">
         <div className="text-sm font-semibold text-white">Common Rule Templates</div>
         <div className="text-[11px] text-slate-400 font-sans mt-0.5">

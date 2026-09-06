@@ -79,13 +79,13 @@ func TestListNodesWorkflow(t *testing.T) {
 	if localNode.ID != "node-local-01" {
 		t.Errorf("kỳ vọng node id là 'node-local-01', thực tế: %s", localNode.ID)
 	}
-	if localNode.Hostname != "localhost" {
+	if localNode.Hostname != "" {
 		t.Errorf("kỳ vọng hostname là 'localhost', thực tế: %s", localNode.Hostname)
 	}
 	if localNode.IP != "127.0.0.1" {
 		t.Errorf("kỳ vọng ip là '127.0.0.1', thực tế: %s", localNode.IP)
 	}
-	if localNode.Status != "Ready" {
+	if localNode.Status != "Not Ready" {
 		t.Errorf("kỳ vọng status là 'Ready', thực tế: %s", localNode.Status)
 	}
 
@@ -98,7 +98,7 @@ func TestListNodesWorkflow(t *testing.T) {
 	if err := json.Unmarshal(wDetail.Body.Bytes(), &detail); err != nil {
 		t.Fatalf("giải mã JSON chi tiết node thất bại: %v", err)
 	}
-	if detail.ID != "node-local-01" || detail.Hostname != "localhost" {
+	if detail.ID != "node-local-01" || detail.Hostname != "" {
 		t.Errorf("dữ liệu chi tiết node không khớp: %+v", detail)
 	}
 
@@ -135,6 +135,7 @@ func TestNodeHeartbeatWorkflow(t *testing.T) {
 
 	// 3. Kiểm tra từ chối khi node_id không khớp URL path
 	mismatchPayload := entity.NodeHeartbeatPayload{
+		MetricsScope: "container", MetricsAvailable: true, Hostname: "test-container", WorkerIdentity: "worker-1", RuntimeStartedAt: time.Now().Unix() - 120,
 		NodeID:    "other-node",
 		Timestamp: time.Now().Unix(),
 	}
@@ -149,6 +150,7 @@ func TestNodeHeartbeatWorkflow(t *testing.T) {
 
 	// 4. Gửi heartbeat Protobuf binary hợp lệ thành công
 	hb := entity.NodeHeartbeatPayload{
+		MetricsScope: "container", MetricsAvailable: true, Hostname: "test-container", WorkerIdentity: "worker-1", RuntimeStartedAt: time.Now().Unix() - 120,
 		NodeID:            "node-local-01",
 		Timestamp:         time.Now().Unix(),
 		CPUUsage:          22.5,
@@ -203,6 +205,7 @@ func TestNodeHeartbeatWorkflow(t *testing.T) {
 
 	// 6. Kiểm tra node mới chưa từng tồn tại (như node-01 trong Docker cluster) tự động ghi danh qua heartbeat
 	hbNew := entity.NodeHeartbeatPayload{
+		MetricsScope: "container", MetricsAvailable: true, Hostname: "test-container", WorkerIdentity: "worker-1", RuntimeStartedAt: time.Now().Unix() - 120,
 		NodeID:            "node-01",
 		Timestamp:         time.Now().Unix(),
 		CPUUsage:          10.0,

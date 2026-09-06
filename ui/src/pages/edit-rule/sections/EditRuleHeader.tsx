@@ -20,7 +20,7 @@ export function EditRuleHeader({
     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
       <div>
         {/* Breadcrumbs */}
-        <div className="flex items-center gap-1.5 text-xs font-mono text-slate-500 mb-1">
+        <div className="flex items-center gap-1.5 text-xs font-sans text-slate-500 mb-1">
           <Link to="/rules" className="hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
             Rules
           </Link>
@@ -32,13 +32,13 @@ export function EditRuleHeader({
         <h1 className="text-xl font-semibold text-slate-900 dark:text-white tracking-tight">
           Edit Security Rule
         </h1>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-mono">
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
           Modify the rule configuration and deploy changes to protect your applications.
         </p>
       </div>
 
       {/* Action Buttons */}
-      <div className="flex flex-wrap items-center gap-2.5 font-mono text-xs">
+      <div className="flex flex-wrap items-center gap-2.5 font-sans text-xs">
         <Link
           to={`/rules/history?id=${ruleId || 'rule_01H8F3K9Z7'}`}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-[#0E1726] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"

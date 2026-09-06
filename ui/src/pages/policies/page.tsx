@@ -13,7 +13,7 @@ export default function PoliciesPage(){
  const [error,setError]=useState('');const [loaded,setLoaded]=useState(false);
  const refresh=useCallback(async()=>{try{const [rows,state]=await Promise.all([policiesApi.list(),policiesApi.cluster()]);setPolicies(rows);setCluster(state);setError('');setLoaded(true)}catch(e){setError(e instanceof Error?e.message:String(e))}},[]);
  useEffect(()=>{void refresh();const timer=setInterval(()=>void refresh(),5000);return()=>clearInterval(timer)},[refresh]);
- const rows:PolicyItem[]=policies.map(p=>({id:String(p.id),name:p.document.name,description:p.document.description,scope:p.document.host+p.document.path_prefix,mode:p.document.mode==='block'?'Block':p.document.mode==='detect'?'Detect':'Mixed',ruleSetsCount:p.document.rules.length,lastUpdated:new Date(p.updated_at).toLocaleString(),status:p.status,priority:p.document.priority<100?'High':p.document.priority<1000?'Medium':'Low',ruleGroups:[...new Set(p.document.rules.map(r=>r.group))]}));
+ const rows:PolicyItem[]=policies.map(p=>({id:String(p.id),name:p.document.name,description:p.document.description,scope:p.document.host==='*'?'All Domains (*)':p.document.host,mode:p.document.mode==='block'?'Block':p.document.mode==='detect'?'Detect':'Mixed',ruleSetsCount:p.document.rules.length,lastUpdated:new Date(p.updated_at).toLocaleString(),status:p.status,priority:p.document.priority<100?'High':p.document.priority<1000?'Medium':'Low',ruleGroups:[...new Set(p.document.rules.map(r=>r.group))]}));
  const selected=policies.find(p=>String(p.id)===selectedId);
  const filtered=rows.filter(p=>(filter==='All Statuses'||p.status===filter)&&`${p.name} ${p.scope}`.toLowerCase().includes(search.toLowerCase()));
   return (

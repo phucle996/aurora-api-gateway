@@ -95,5 +95,17 @@ pub fn format_prometheus_metrics(node_id: &str) -> String {
             out.push_str(&format!("# TYPE aurora_node_requests_per_second gauge\naurora_node_requests_per_second{labels} {:.2}\n",f64::from_bits(rps.load(Ordering::Relaxed))));
         }
     }
-    out
+    // Every node gauge carries its measurement scope so historical host and
+    // container series cannot be accidentally joined across a deployment change.
+    let scope = super::sampler::metrics_scope();
+    let mut scoped = String::with_capacity(out.len());
+    for line in out.lines() {
+        if line.starts_with("aurora_node_") && line.contains('{') {
+            scoped.push_str(&line.replacen('{', &format!("{{metrics_scope=\"{scope}\","), 1));
+        } else {
+            scoped.push_str(line);
+        }
+        scoped.push('\n');
+    }
+    scoped
 }

@@ -11,7 +11,7 @@ export function CreateRuleHeader({ onScrollToTemplates }: CreateRuleHeaderProps)
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
         {/* Breadcrumbs */}
-        <div className="flex items-center gap-1.5 text-xs font-mono text-slate-500 mb-1">
+        <div className="flex items-center gap-1.5 text-xs font-sans text-slate-500 mb-1">
           <Link to="/rules" className="hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
             Rules
           </Link>
@@ -23,7 +23,7 @@ export function CreateRuleHeader({ onScrollToTemplates }: CreateRuleHeaderProps)
         <h1 className="text-xl font-semibold text-slate-900 dark:text-white tracking-tight">
           Create Security Rule
         </h1>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-mono">
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
           Define conditions and actions to protect your applications from malicious traffic.
         </p>
       </div>
@@ -32,7 +32,7 @@ export function CreateRuleHeader({ onScrollToTemplates }: CreateRuleHeaderProps)
         <button
           type="button"
           onClick={onScrollToTemplates}
-          className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-[#0E1726] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-xs font-mono text-slate-700 hover:text-slate-900 dark:text-slate-200 dark:hover:text-white transition-colors cursor-pointer"
+          className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-[#0E1726] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-xs font-sans text-slate-700 hover:text-slate-900 dark:text-slate-200 dark:hover:text-white transition-colors cursor-pointer"
         >
           <LayoutTemplate className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
           <span>View Rule Templates</span>

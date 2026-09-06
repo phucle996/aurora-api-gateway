@@ -16,7 +16,7 @@ export function RateLimitBehaviorPanel({
   const greenBarsCount = Math.min(Math.floor(totalBars * 0.4), 14);
 
   return (
-    <div className="bg-[#0B1320] border border-[#152030] p-4 space-y-3 font-mono text-xs">
+    <div className="bg-[#0B1320] border border-[#152030] p-4 space-y-3 font-sans text-xs">
       <div className="flex items-center justify-between">
         <div className="text-sm font-semibold text-white">Expected Behavior</div>
         <div className="flex items-center gap-3 text-[11px]">

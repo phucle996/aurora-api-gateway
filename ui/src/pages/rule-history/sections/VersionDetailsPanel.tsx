@@ -59,7 +59,7 @@ export function VersionDetailsPanel({ version }: VersionDetailsPanelProps) {
       </div>
 
       {/* Metadata Attributes */}
-      <div className="space-y-2 text-xs font-mono">
+      <div className="space-y-2 text-xs font-sans">
         <div className="flex items-center justify-between">
           <span className="text-slate-500 dark:text-slate-400 text-[11px]">Change Type</span>
           <span
@@ -73,7 +73,7 @@ export function VersionDetailsPanel({ version }: VersionDetailsPanelProps) {
 
         <div className="flex items-center justify-between">
           <span className="text-slate-500 dark:text-slate-400 text-[11px]">Modified At</span>
-          <span className="text-slate-800 dark:text-slate-200 text-[11px]">
+          <span className="text-slate-800 dark:text-slate-200 text-[11px] font-mono">
             {version.dateTime}
           </span>
         </div>
@@ -110,7 +110,7 @@ export function VersionDetailsPanel({ version }: VersionDetailsPanelProps) {
         <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2">
           Change Summary
         </h3>
-        <div className="p-3 bg-slate-50 dark:bg-[#0E1726]/60 border border-border rounded-xs text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-mono text-[11px]">
+        <div className="p-3 bg-slate-50 dark:bg-[#0E1726]/60 border border-border rounded-xs text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-sans text-[11px]">
           {version.summaryOfChanges}
         </div>
       </div>
@@ -120,7 +120,7 @@ export function VersionDetailsPanel({ version }: VersionDetailsPanelProps) {
         <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2.5">
           Modified Fields
         </h3>
-        <div className="space-y-2.5">
+        <div className="space-y-2.5 font-sans">
           {version.modifiedFields.map((field, idx) => (
             <div key={idx} className="flex items-start gap-2 text-xs">
               <div className="p-1 bg-blue-50 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-900/40 rounded-xs">
@@ -144,10 +144,10 @@ export function VersionDetailsPanel({ version }: VersionDetailsPanelProps) {
         <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2.5">
           Deployment Information
         </h3>
-        <div className="space-y-1.5 text-xs font-mono">
+        <div className="space-y-1.5 text-xs font-sans">
           <div className="flex items-center justify-between">
             <span className="text-slate-500 dark:text-slate-400 text-[11px]">Deployed At</span>
-            <span className="text-slate-700 dark:text-slate-300 text-[11px]">
+            <span className="text-slate-700 dark:text-slate-300 text-[11px] font-mono">
               {version.deploymentInfo.deployedAt}
             </span>
           </div>
@@ -165,7 +165,7 @@ export function VersionDetailsPanel({ version }: VersionDetailsPanelProps) {
           </div>
           <div className="flex items-center justify-between">
             <span className="text-slate-500 dark:text-slate-400 text-[11px]">Nodes</span>
-            <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+            <span className="text-emerald-600 dark:text-emerald-400 font-medium font-mono">
               {version.deploymentInfo.nodes}
             </span>
           </div>
