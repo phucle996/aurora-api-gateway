@@ -36,17 +36,13 @@ export function IpScopeSection({
         {/* Target */}
         <div>
           <label className="block text-slate-400 mb-1 text-[11px]">Target</label>
-          <select
+          <input
+            type="text"
             value={target}
             onChange={(e) => setTarget(e.target.value)}
-            className="w-full bg-[#0E1726] border border-[#1C293D] px-3 py-1.5 text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer text-xs"
-          >
-            <option value="*">All Sites</option>
-            <option value="api.example.com">api.example.com</option>
-            <option value="app.example.com">app.example.com</option>
-            <option value="checkout.internal.net">checkout.internal.net</option>
-            <option value="admin.security.net">admin.security.net</option>
-          </select>
+            placeholder="* (All Sites) or host"
+            className="w-full bg-[#0E1726] border border-[#1C293D] px-3 py-1.5 text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 text-xs"
+          />
         </div>
 
         {/* Path (URL Path) */}

@@ -88,6 +88,14 @@ func (h *PolicyHandler) Catalog(c *gin.Context) {
 	}
 	c.JSON(200, out)
 }
+func (h *PolicyHandler) RuleCatalog(c *gin.Context) {
+	out, err := h.Read.PolicyRuleCatalog(c.Request.Context())
+	if err != nil {
+		policyError(c, err)
+		return
+	}
+	c.JSON(200, out)
+}
 func (h *PolicyHandler) Cluster(c *gin.Context) {
 	out, err := h.Read.PolicyCluster(c.Request.Context())
 	if err != nil {

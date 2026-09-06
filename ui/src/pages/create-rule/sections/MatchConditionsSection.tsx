@@ -56,14 +56,21 @@ export function MatchConditionsSection({
       </div>
 
       <div className="space-y-3">
-        {conditions.map((cond) => (
+        {conditions.map((cond, idx) => (
           <div
             key={cond.id}
             className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center bg-[#080E18] border border-[#152030] p-3"
           >
             {/* Field */}
             <div className="md:col-span-3">
-              <label className="block text-slate-500 mb-1 text-[10px]">Field</label>
+              <div className="flex items-center gap-1.5 mb-1">
+                {idx > 0 && (
+                  <span className="px-1.5 py-0.5 bg-sky-600 text-white text-[9px] font-bold rounded-xs tracking-wider uppercase">
+                    {logicMode === 'ALL' ? 'AND' : 'OR'}
+                  </span>
+                )}
+                <label className="text-slate-500 text-[10px]">Field</label>
+              </div>
               <select
                 aria-label={`Condition ${conditions.indexOf(cond) + 1} field`}
                 value={cond.field}

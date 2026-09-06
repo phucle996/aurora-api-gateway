@@ -8,6 +8,7 @@ import CreatePolicyPage from './pages/create-policy/page';
 import RulesPage from './pages/rules/page';
 import CreateRulePage from './pages/create-rule/page';
 import EditRulePage from './pages/edit-rule/page';
+import RuleHistoryPage from './pages/rule-history/page';
 import CreateIpRulePage from './pages/create-ip-rule/page';
 import CreateRateLimitPage from './pages/create-rate-limit/page';
 import SecurityEventsPage from './pages/events/page';
@@ -38,8 +39,13 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/rules/create" element={<CreateRulePage />} />
           <Route path="/create-rule" element={<CreateRulePage />} />
           <Route path="/rules/:id/edit" element={<EditRulePage />} />
+          <Route path="/rules/edit/:id" element={<EditRulePage />} />
           <Route path="/rules/edit" element={<EditRulePage />} />
           <Route path="/edit-rule" element={<EditRulePage />} />
+          <Route path="/rules/history" element={<RuleHistoryPage />} />
+          <Route path="/rules/:id/history" element={<RuleHistoryPage />} />
+          <Route path="/rules/history/:id" element={<RuleHistoryPage />} />
+          <Route path="/rule-history" element={<RuleHistoryPage />} />
 
           {/* Policies */}
           <Route path="/policies" element={<PoliciesPage />} />

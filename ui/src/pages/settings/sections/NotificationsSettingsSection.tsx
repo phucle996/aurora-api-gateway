@@ -21,22 +21,22 @@ export function NotificationsSettingsSection() {
   };
 
   return (
-    <div className="bg-[#0B1320] border border-[#152030] p-4 flex flex-col justify-between">
+    <div className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#152030] p-4 flex flex-col justify-between shadow-xs">
       <div>
-        <div className="flex items-center gap-2 pb-3 border-b border-[#152030] text-sm font-semibold text-white font-mono">
-          <Bell className="w-4 h-4 text-emerald-400" />
+        <div className="flex items-center gap-2 pb-3 border-b border-slate-200 dark:border-[#152030] text-sm font-semibold text-slate-900 dark:text-white font-mono">
+          <Bell className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           <span>Notifications</span>
         </div>
 
         <div className="mt-3 space-y-3 text-xs font-mono">
           {/* Email Notifications */}
           <div className="flex items-center justify-between">
-            <span className="text-slate-400">Email Notifications</span>
+            <span className="text-slate-500 dark:text-slate-400">Email Notifications</span>
             <button
               type="button"
               onClick={() => setEmailNotifs(!emailNotifs)}
               className={`w-9 h-5 flex items-center p-0.5 cursor-pointer transition-colors ${
-                emailNotifs ? 'bg-emerald-600' : 'bg-[#152030]'
+                emailNotifs ? 'bg-emerald-600 dark:bg-emerald-500' : 'bg-slate-300 dark:bg-[#152030]'
               }`}
             >
               <div
@@ -49,12 +49,12 @@ export function NotificationsSettingsSection() {
 
           {/* Slack Notifications */}
           <div className="flex items-center justify-between">
-            <span className="text-slate-400">Slack Notifications</span>
+            <span className="text-slate-500 dark:text-slate-400">Slack Notifications</span>
             <button
               type="button"
               onClick={() => setSlackNotifs(!slackNotifs)}
               className={`w-9 h-5 flex items-center p-0.5 cursor-pointer transition-colors ${
-                slackNotifs ? 'bg-emerald-600' : 'bg-[#152030]'
+                slackNotifs ? 'bg-emerald-600 dark:bg-emerald-500' : 'bg-slate-300 dark:bg-[#152030]'
               }`}
             >
               <div
@@ -66,13 +66,13 @@ export function NotificationsSettingsSection() {
           </div>
 
           {/* Webhook Notifications */}
-          <div className="flex items-center justify-between pb-2 border-b border-[#152030]/60">
-            <span className="text-slate-400">Webhook Notifications</span>
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-[#152030]/60">
+            <span className="text-slate-500 dark:text-slate-400">Webhook Notifications</span>
             <button
               type="button"
               onClick={() => setWebhookNotifs(!webhookNotifs)}
               className={`w-9 h-5 flex items-center p-0.5 cursor-pointer transition-colors ${
-                webhookNotifs ? 'bg-emerald-600' : 'bg-[#152030]'
+                webhookNotifs ? 'bg-emerald-600 dark:bg-emerald-500' : 'bg-slate-300 dark:bg-[#152030]'
               }`}
             >
               <div
@@ -86,32 +86,32 @@ export function NotificationsSettingsSection() {
           {/* SMTP Configuration */}
           <div className="space-y-2.5 pt-1">
             <div className="flex items-center justify-between">
-              <span className="text-slate-400">SMTP Server</span>
+              <span className="text-slate-500 dark:text-slate-400">SMTP Server</span>
               <input
                 type="text"
                 value={smtpServer}
                 onChange={(e) => setSmtpServer(e.target.value)}
-                className="w-48 bg-[#0E1726] border border-[#1C293D] px-2.5 py-1 text-slate-200 text-xs font-mono focus:outline-none focus:border-emerald-500"
+                className="w-48 bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] px-2.5 py-1 text-slate-800 dark:text-slate-200 text-xs font-mono focus:outline-none focus:border-emerald-500"
               />
             </div>
 
             <div className="flex items-center justify-between">
-              <span className="text-slate-400">SMTP Port</span>
+              <span className="text-slate-500 dark:text-slate-400">SMTP Port</span>
               <input
                 type="text"
                 value={smtpPort}
                 onChange={(e) => setSmtpPort(e.target.value)}
-                className="w-48 bg-[#0E1726] border border-[#1C293D] px-2.5 py-1 text-slate-200 text-xs font-mono focus:outline-none focus:border-emerald-500"
+                className="w-48 bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] px-2.5 py-1 text-slate-800 dark:text-slate-200 text-xs font-mono focus:outline-none focus:border-emerald-500"
               />
             </div>
 
             <div className="flex items-center justify-between">
-              <span className="text-slate-400">Sender Email</span>
+              <span className="text-slate-500 dark:text-slate-400">Sender Email</span>
               <input
                 type="email"
                 value={senderEmail}
                 onChange={(e) => setSenderEmail(e.target.value)}
-                className="w-48 bg-[#0E1726] border border-[#1C293D] px-2.5 py-1 text-slate-200 text-xs font-mono focus:outline-none focus:border-emerald-500"
+                className="w-48 bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] px-2.5 py-1 text-slate-800 dark:text-slate-200 text-xs font-mono focus:outline-none focus:border-emerald-500"
               />
             </div>
           </div>
@@ -122,12 +122,12 @@ export function NotificationsSettingsSection() {
               type="button"
               onClick={handleSendTestEmail}
               disabled={sendingTest}
-              className="w-full flex items-center justify-center gap-2 py-2 bg-[#0E1726] hover:bg-[#152030] border border-[#1C293D] text-slate-200 hover:text-white text-xs font-mono transition-colors cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-[#0E1726] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white text-xs font-mono transition-colors cursor-pointer"
             >
               {sendingTest ? (
                 <span>Sending...</span>
               ) : testSentSuccess ? (
-                <span className="text-emerald-400 flex items-center gap-1.5">
+                <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
                   <Check className="w-3.5 h-3.5" /> Test Email Sent!
                 </span>
               ) : (

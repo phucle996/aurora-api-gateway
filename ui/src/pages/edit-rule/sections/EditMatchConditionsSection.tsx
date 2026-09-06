@@ -49,13 +49,33 @@ export function EditMatchConditionsSection({
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => alert('Rule Logic Guide:\n• ALL (AND): Every condition must evaluate true.\n• ANY (OR): Any single condition triggers action.')}
-          className="text-cyan-400 hover:text-cyan-300 text-xs font-mono transition-colors cursor-pointer"
-        >
-          Rule Logic Guide
-        </button>
+        {/* Hover-based Rule Logic Guide */}
+        <div className="relative group inline-block">
+          <div
+            tabIndex={0}
+            role="button"
+            aria-label="Rule Logic Guide"
+            className="flex items-center gap-1.5 text-cyan-400 hover:text-cyan-300 text-xs font-mono transition-colors cursor-pointer py-1 select-none"
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+            <span>Rule Logic Guide</span>
+          </div>
+
+          <div className="absolute right-0 top-full mt-2 w-72 p-3 bg-[#0B1320] border border-[#152030] text-slate-200 rounded-md shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-200 z-50 font-sans">
+            <div className="font-semibold text-xs text-white mb-1.5 flex items-center gap-1.5 font-mono">
+              <span className="w-2 h-2 rounded-full bg-cyan-400 inline-block"></span>
+              Rule Logic Guide
+            </div>
+            <div className="space-y-1.5 text-[11px] text-slate-400 leading-relaxed">
+              <p>
+                <strong className="text-white font-semibold">ALL (AND):</strong> Every condition in the rule must evaluate to true for the action to trigger.
+              </p>
+              <p>
+                <strong className="text-white font-semibold">ANY (OR):</strong> Any single condition evaluating to true will trigger the action.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="space-y-3">
@@ -68,7 +88,7 @@ export function EditMatchConditionsSection({
             <div className="md:col-span-3">
               <div className="flex items-center gap-1.5 mb-1">
                 {idx > 0 && (
-                  <span className="px-1.5 py-0.2 bg-blue-950/60 border border-blue-500/40 text-blue-400 text-[9px] font-bold">
+                  <span className="px-1.5 py-0.5 bg-sky-600 text-white text-[9px] font-bold rounded-xs tracking-wider uppercase">
                     {logicMode === 'ALL' ? 'AND' : 'OR'}
                   </span>
                 )}

@@ -38,16 +38,16 @@ export function RateLimitsCharts() {
   ];
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 font-mono">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 font-sans">
       {/* Rate Limit Hits (Last 24 Hours) Bar Chart */}
-      <div className="bg-[#0B1320] border border-[#172338] p-4 space-y-4">
-        <h3 className="text-xs font-semibold text-white uppercase tracking-wider font-sans">
+      <div className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-4 space-y-4 shadow-sm dark:shadow-none">
+        <h3 className="text-xs font-semibold text-slate-900 dark:text-white uppercase tracking-wider font-sans">
           Rate Limit Hits (Last 24 Hours)
         </h3>
 
         <div className="flex gap-3 h-44 pt-2">
           {/* Y Axis Labels */}
-          <div className="flex flex-col justify-between text-[10px] text-slate-500 text-right w-9 select-none">
+          <div className="flex flex-col justify-between text-[10px] text-slate-400 dark:text-slate-500 text-right w-9 select-none">
             <span>2,000</span>
             <span>1,500</span>
             <span>1,000</span>
@@ -57,11 +57,11 @@ export function RateLimitsCharts() {
 
           {/* Chart Bars Area */}
           <div className="flex-1 flex flex-col justify-end">
-            <div className="h-full flex items-end justify-between gap-1 border-b border-l border-[#1C293D] px-1 pb-0.5">
+            <div className="h-full flex items-end justify-between gap-1 border-b border-l border-slate-200 dark:border-[#1C293D] px-1 pb-0.5">
               {hourlyData.map((item, idx) => (
                 <div
                   key={idx}
-                  className="flex-1 bg-cyan-600/80 hover:bg-cyan-400 transition-colors"
+                  className="flex-1 bg-cyan-500/80 hover:bg-cyan-400 dark:bg-cyan-600/80 dark:hover:bg-cyan-400 transition-colors rounded-t-[1px]"
                   style={{ height: `${item.pct}%` }}
                   title={`${item.time}: ${item.val} hits`}
                 />
@@ -69,7 +69,7 @@ export function RateLimitsCharts() {
             </div>
 
             {/* X Axis Time Labels */}
-            <div className="flex justify-between text-[10px] text-slate-500 pt-1.5 px-1 select-none">
+            <div className="flex justify-between text-[10px] text-slate-400 dark:text-slate-500 pt-1.5 px-1 select-none">
               <span>00:00</span>
               <span>04:00</span>
               <span>08:00</span>
@@ -82,27 +82,27 @@ export function RateLimitsCharts() {
       </div>
 
       {/* Top Endpoints by Rate Limit Hits Progress Bars */}
-      <div className="bg-[#0B1320] border border-[#172338] p-4 space-y-4">
-        <h3 className="text-xs font-semibold text-white uppercase tracking-wider font-sans">
+      <div className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-4 space-y-4 shadow-sm dark:shadow-none">
+        <h3 className="text-xs font-semibold text-slate-900 dark:text-white uppercase tracking-wider font-sans">
           Top Endpoints by Rate Limit Hits
         </h3>
 
         <div className="space-y-3.5 pt-2">
           {topEndpoints.map((ep) => (
             <div key={ep.path} className="flex items-center gap-3 text-xs">
-              <span className="w-28 text-slate-300 truncate text-[11px] font-mono">
+              <span className="w-28 text-slate-700 dark:text-slate-300 truncate text-[11px] font-mono">
                 {ep.path}
               </span>
 
               {/* Progress track */}
-              <div className="flex-1 bg-[#111A29] border border-[#1C293D] h-2">
+              <div className="flex-1 bg-slate-100 dark:bg-[#111A29] border border-slate-200 dark:border-[#1C293D] h-2 rounded-sm overflow-hidden">
                 <div
                   className="bg-rose-500/90 h-full"
                   style={{ width: `${ep.pct}%` }}
                 />
               </div>
 
-              <span className="w-12 text-right text-slate-400 font-mono text-[11px]">
+              <span className="w-12 text-right text-slate-500 dark:text-slate-400 font-mono text-[11px]">
                 {ep.hits}
               </span>
             </div>

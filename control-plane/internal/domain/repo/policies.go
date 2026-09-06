@@ -10,7 +10,8 @@ type PolicySaveRepository interface {
 }
 type PolicyReadRepository interface {
 	ReadPolicies(context.Context, entity.ReadPoliciesQuery) ([]entity.ReadPoliciesItem, error)
-	PolicyCatalog(context.Context) ([]entity.PolicyCatalogRule, error)
+	PolicyCatalog(context.Context) ([]entity.PolicyCatalogItem, error)
+	PolicyRuleCatalog(context.Context) ([]entity.PolicyCatalogRule, error)
 	PolicyCluster(context.Context) (entity.PolicyClusterStatus, error)
 }
 

@@ -21,8 +21,11 @@ type PolicyReadService struct{ Repository repo.PolicyReadRepository }
 func (s PolicyReadService) ReadPolicies(ctx context.Context, q entity.ReadPoliciesQuery) ([]entity.ReadPoliciesItem, error) {
 	return s.Repository.ReadPolicies(ctx, q)
 }
-func (s PolicyReadService) PolicyCatalog(ctx context.Context) ([]entity.PolicyCatalogRule, error) {
+func (s PolicyReadService) PolicyCatalog(ctx context.Context) ([]entity.PolicyCatalogItem, error) {
 	return s.Repository.PolicyCatalog(ctx)
+}
+func (s PolicyReadService) PolicyRuleCatalog(ctx context.Context) ([]entity.PolicyCatalogRule, error) {
+	return s.Repository.PolicyRuleCatalog(ctx)
 }
 func (s PolicyReadService) PolicyCluster(ctx context.Context) (entity.PolicyClusterStatus, error) {
 	return s.Repository.PolicyCluster(ctx)

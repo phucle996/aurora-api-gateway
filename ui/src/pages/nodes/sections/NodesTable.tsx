@@ -82,11 +82,11 @@ export function NodesTable({
   });
 
   return (
-    <div className="bg-[#0B1320] border border-[#152030] flex flex-col">
+    <div className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#152030] flex flex-col shadow-xs rounded-sm transition-colors">
       {/* Header Bar */}
-      <div className="p-4 border-b border-[#152030] flex flex-wrap items-center justify-between gap-3">
+      <div className="p-4 border-b border-slate-200 dark:border-[#152030] flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-white">
+          <span className="text-sm font-semibold text-slate-900 dark:text-white">
             Nodes ({nodes.length})
           </span>
         </div>
@@ -95,10 +95,10 @@ export function NodesTable({
           <button
             type="button"
             onClick={handleRefresh}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0E1726] border border-[#1C293D] hover:border-slate-500 text-xs font-mono text-slate-300 hover:text-white transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] hover:border-slate-400 dark:hover:border-slate-500 text-xs font-sans text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer rounded-sm"
           >
             <RotateCw
-              className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-emerald-400' : 'text-slate-400'}`}
+              className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-emerald-500 dark:text-emerald-400' : 'text-slate-400'}`}
             />
             <span>Refresh</span>
           </button>
@@ -106,16 +106,16 @@ export function NodesTable({
       </div>
 
       {/* Filter Toolbar */}
-      <div className="px-4 py-2.5 bg-[#080E18] border-b border-[#152030] flex flex-wrap items-center gap-3">
+      <div className="px-4 py-2.5 bg-slate-50/70 dark:bg-[#080E18] border-b border-slate-200 dark:border-[#152030] flex flex-wrap items-center gap-3 font-sans">
         {/* Search */}
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search nodes..."
-            className="w-full bg-[#0E1726] border border-[#1C293D] pl-8 pr-3 py-1 text-xs text-slate-200 placeholder:text-slate-500 font-mono focus:outline-none focus:border-emerald-500"
+            className="w-full bg-white dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] pl-8 pr-3 py-1 text-xs text-slate-900 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 font-sans focus:outline-none focus:border-blue-500 rounded-sm"
           />
         </div>
 
@@ -123,7 +123,7 @@ export function NodesTable({
         <select
           value={roleFilter}
           onChange={(e) => setRoleFilter(e.target.value)}
-          className="bg-[#0E1726] border border-[#1C293D] px-2.5 py-1 text-xs text-slate-300 font-mono focus:outline-none focus:border-emerald-500 cursor-pointer"
+          className="bg-white dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] px-2.5 py-1 text-xs text-slate-800 dark:text-slate-300 font-sans focus:outline-none focus:border-blue-500 cursor-pointer rounded-sm"
         >
           <option value="ALL">All Roles</option>
           <option value="Edge">Edge</option>
@@ -135,7 +135,7 @@ export function NodesTable({
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="bg-[#0E1726] border border-[#1C293D] px-2.5 py-1 text-xs text-slate-300 font-mono focus:outline-none focus:border-emerald-500 cursor-pointer"
+          className="bg-white dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] px-2.5 py-1 text-xs text-slate-800 dark:text-slate-300 font-sans focus:outline-none focus:border-blue-500 cursor-pointer rounded-sm"
         >
           <option value="ALL">All Statuses</option>
           <option value="Ready">Ready</option>
@@ -152,23 +152,23 @@ export function NodesTable({
       </div>
 
       {/* Table Container */}
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto font-sans">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="border-b border-[#152030] bg-[#0E1726]/70 text-[11px] font-mono text-slate-400">
+            <tr className="border-b border-slate-200 dark:border-[#152030] bg-slate-50 dark:bg-[#0E1726]/70 text-xs font-sans text-slate-500 dark:text-slate-400">
               <th className="py-2.5 px-3 font-medium">
-                <div className="flex items-center gap-1 cursor-pointer hover:text-slate-200">
+                <div className="flex items-center gap-1 cursor-pointer hover:text-slate-700 dark:hover:text-slate-200">
                   <span>Node Name</span>
-                  <ArrowUpDown className="w-3 h-3 text-slate-500" />
+                  <ArrowUpDown className="w-3 h-3 text-slate-400 dark:text-slate-500" />
                 </div>
               </th>
               <th className="py-2.5 px-3 font-medium">IP Address</th>
               <th className="py-2.5 px-3 font-medium">Hostname</th>
               <th className="py-2.5 px-3 font-medium">Role</th>
               <th className="py-2.5 px-3 font-medium">
-                <div className="flex items-center gap-1 cursor-pointer hover:text-slate-200">
+                <div className="flex items-center gap-1 cursor-pointer hover:text-slate-700 dark:hover:text-slate-200">
                   <span>Status</span>
-                  <ArrowUpDown className="w-3 h-3 text-slate-500" />
+                  <ArrowUpDown className="w-3 h-3 text-slate-400 dark:text-slate-500" />
                 </div>
               </th>
               <th className="py-2.5 px-3 font-medium">Version</th>
@@ -180,22 +180,22 @@ export function NodesTable({
             </tr>
           </thead>
           <tbody
-            className={`divide-y divide-[#152030] text-xs font-mono transition-opacity duration-300 ${
+            className={`divide-y divide-slate-100 dark:divide-[#152030] text-xs font-sans transition-opacity duration-300 ${
               isRefreshing ? 'opacity-60' : 'opacity-100'
             }`}
           >
             {isLoading && nodes.length === 0 ? (
               <tr>
-                <td colSpan={11} className="py-12 text-center text-slate-500">
+                <td colSpan={11} className="py-12 text-center text-slate-400 dark:text-slate-500">
                   <div className="flex flex-col items-center justify-center gap-2">
-                    <RotateCw className="w-5 h-5 animate-spin text-emerald-400" />
+                    <RotateCw className="w-5 h-5 animate-spin text-emerald-500 dark:text-emerald-400" />
                     <span>Loading cluster nodes...</span>
                   </div>
                 </td>
               </tr>
             ) : filteredNodes.length === 0 ? (
               <tr>
-                <td colSpan={11} className="py-12 text-center text-slate-500">
+                <td colSpan={11} className="py-12 text-center text-slate-400 dark:text-slate-500">
                   {nodes.length === 0
                     ? 'No nodes registered in the cluster yet. Nodes authenticate securely via mTLS.'
                     : 'No nodes found matching the filter criteria.'}
@@ -210,64 +210,64 @@ export function NodesTable({
                     onClick={() => onSelectNode(node)}
                     className={`cursor-pointer transition-colors ${
                       isSelected
-                        ? 'bg-emerald-950/20 border-l-2 border-l-emerald-400'
-                        : 'hover:bg-[#0E1726]/60'
+                        ? 'bg-blue-50/70 dark:bg-emerald-950/20 border-l-2 border-l-blue-600 dark:border-l-emerald-400'
+                        : 'hover:bg-slate-50 dark:hover:bg-[#0E1726]/60'
                     }`}
                   >
                     {/* Node Name */}
-                    <td className="py-2 px-3 font-medium text-slate-100 flex items-center gap-2">
-                      <span className="text-white font-mono">{node.name}</span>
+                    <td className="py-2 px-3 font-medium text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <span className="text-slate-900 dark:text-white font-mono font-bold">{node.name}</span>
                     </td>
 
                     {/* IP Address */}
-                    <td className="py-2 px-3 text-slate-300">{node.ip}</td>
+                    <td className="py-2 px-3 text-slate-700 dark:text-slate-300">{node.ip}</td>
 
                     {/* Hostname */}
-                    <td className="py-2 px-3 text-slate-400">{node.hostname || node.region || 'localhost'}</td>
+                    <td className="py-2 px-3 text-slate-500 dark:text-slate-400">{node.hostname || node.region || 'localhost'}</td>
 
                     {/* Role */}
-                    <td className="py-2 px-3 text-slate-300">{node.role || 'Edge Node'}</td>
+                    <td className="py-2 px-3 text-slate-700 dark:text-slate-300">{node.role || 'Edge Node'}</td>
 
                     {/* Status */}
                     <td className="py-2 px-3">
                       {node.status === 'Ready' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 bg-emerald-950/60 border border-emerald-500/50 text-emerald-400 text-[10px]">
+                        <span className="inline-flex items-center px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-500/50 text-emerald-700 dark:text-emerald-400 text-[10px] rounded-xs font-bold">
                           Ready
                         </span>
                       ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 bg-rose-950/60 border border-rose-500/50 text-rose-400 text-[10px]">
+                        <span className="inline-flex items-center px-2 py-0.5 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-500/50 text-rose-700 dark:text-rose-400 text-[10px] rounded-xs font-bold">
                           Not Ready
                         </span>
                       )}
                     </td>
 
                     {/* Version */}
-                    <td className="py-2 px-3 text-slate-400">{node.version}</td>
+                    <td className="py-2 px-3 text-slate-500 dark:text-slate-400">{node.version}</td>
 
                     {/* Ruleset */}
-                    <td className="py-2 px-3 text-cyan-400">{node.ruleset}</td>
+                    <td className="py-2 px-3 text-blue-600 dark:text-cyan-400">{node.ruleset}</td>
 
                     {/* RPS */}
-                    <td className="py-2 px-3 text-slate-200">{node.rps || node.requestsPerSecond}</td>
+                    <td className="py-2 px-3 text-slate-800 dark:text-slate-200">{node.rps || node.requestsPerSecond}</td>
 
                     {/* Connections */}
-                    <td className="py-2 px-3 text-slate-200">
+                    <td className="py-2 px-3 text-slate-800 dark:text-slate-200">
                       {node.connections || node.activeConnections}
                     </td>
 
                     {/* Last Heartbeat */}
-                    <td className="py-2 px-3 text-slate-400">
+                    <td className="py-2 px-3 text-slate-500 dark:text-slate-400">
                       {node.lastHeartbeat}
                     </td>
 
                     {/* Sync */}
                     <td className="py-2 px-3 text-right">
                       {node.sync === 'In Sync' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 bg-emerald-950/40 border border-emerald-500/40 text-emerald-400 text-[10px]">
+                        <span className="inline-flex items-center px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-400 text-[10px] rounded-xs font-bold">
                           In Sync
                         </span>
                       ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 bg-amber-950/40 border border-amber-500/40 text-amber-400 text-[10px]">
+                        <span className="inline-flex items-center px-2 py-0.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/40 text-amber-700 dark:text-amber-400 text-[10px] rounded-xs font-bold">
                           {node.sync || 'Syncing'}
                         </span>
                       )}
@@ -281,9 +281,9 @@ export function NodesTable({
       </div>
 
       {/* Table Footer */}
-      <div className="p-3 bg-[#080E18] border-t border-[#152030] flex items-center justify-between text-xs font-mono text-slate-400">
+      <div className="p-3 bg-slate-50 dark:bg-[#080E18] border-t border-slate-200 dark:border-[#152030] flex items-center justify-between text-xs font-mono text-slate-500 dark:text-slate-400">
         <div>
-          Tổng số: <span className="text-slate-200 font-semibold">{filteredNodes.length}</span> node
+          Tổng số: <span className="text-slate-900 dark:text-slate-200 font-semibold">{filteredNodes.length}</span> node
         </div>
       </div>
     </div>

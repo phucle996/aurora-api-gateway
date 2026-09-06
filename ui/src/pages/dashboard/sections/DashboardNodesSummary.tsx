@@ -56,29 +56,29 @@ export function DashboardNodesSummary() {
   ];
 
   return (
-    <div className="bg-[#0B1320] border border-[#152030] p-4 flex flex-col justify-between">
+    <div className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#152030] p-4 flex flex-col justify-between shadow-xs rounded-sm transition-colors">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[#152030]">
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-[#152030]">
         <div className="flex items-center gap-3">
-          <span className="text-sm font-semibold text-white font-mono">
+          <span className="text-sm font-semibold text-slate-900 dark:text-white font-sans">
             NGINX Nodes
           </span>
-          <div className="flex items-center gap-2 text-[11px] font-mono">
-            <span className="text-emerald-400 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 bg-emerald-400 inline-block" /> 10 Online
+          <div className="flex items-center gap-2 text-[11px] font-sans">
+            <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 bg-emerald-500 inline-block rounded-full" /> 10 Online
             </span>
-            <span className="text-amber-400 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 bg-amber-400 inline-block" /> 1 Not Ready
+            <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 bg-amber-500 inline-block rounded-full" /> 1 Not Ready
             </span>
-            <span className="text-rose-400 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 bg-rose-400 inline-block" /> 1 Offline
+            <span className="text-rose-600 dark:text-rose-400 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 bg-rose-500 inline-block rounded-full" /> 1 Offline
             </span>
           </div>
         </div>
 
         <Link
           to="/nodes"
-          className="text-xs font-mono text-cyan-400 hover:text-cyan-300 transition-colors"
+          className="text-xs font-sans text-blue-600 dark:text-cyan-400 hover:underline transition-colors"
         >
           View All
         </Link>
@@ -86,9 +86,9 @@ export function DashboardNodesSummary() {
 
       {/* Mini Table */}
       <div className="py-2 overflow-x-auto">
-        <table className="w-full text-left border-collapse text-xs font-mono">
+        <table className="w-full text-left border-collapse text-xs font-sans">
           <thead>
-            <tr className="text-slate-500 border-b border-[#152030]">
+            <tr className="text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-[#152030]">
               <th className="py-1.5 font-normal">Name</th>
               <th className="py-1.5 font-normal">IP Address</th>
               <th className="py-1.5 font-normal">Region</th>
@@ -98,29 +98,29 @@ export function DashboardNodesSummary() {
               <th className="py-1.5 font-normal">Memory</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#152030]/50">
+          <tbody className="divide-y divide-slate-100 dark:divide-[#152030]/50">
             {nodes.map((node) => (
-              <tr key={node.name} className="hover:bg-[#0E1726]/50">
-                <td className="py-2 text-white font-medium">{node.name}</td>
-                <td className="py-2 text-slate-300">{node.ip}</td>
-                <td className="py-2 text-slate-300">
+              <tr key={node.name} className="hover:bg-slate-50 dark:hover:bg-[#0E1726]/50 transition-colors">
+                <td className="py-2 text-slate-900 dark:text-white font-medium">{node.name}</td>
+                <td className="py-2 text-slate-600 dark:text-slate-300">{node.ip}</td>
+                <td className="py-2 text-slate-600 dark:text-slate-300">
                   <span className="mr-1">{node.flag}</span>
                   <span>{node.region}</span>
                 </td>
                 <td className="py-2">
                   {node.status === 'Online' ? (
-                    <span className="text-emerald-400 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 bg-emerald-400 inline-block" /> Online
+                    <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 bg-emerald-500 inline-block rounded-full" /> Online
                     </span>
                   ) : (
-                    <span className="text-amber-400 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 bg-amber-400 inline-block" /> Not Ready
+                    <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 bg-amber-500 inline-block rounded-full" /> Not Ready
                     </span>
                   )}
                 </td>
-                <td className="py-2 text-slate-200">{node.rps}</td>
-                <td className="py-2 text-slate-300">{node.cpu}</td>
-                <td className="py-2 text-slate-300">{node.memory}</td>
+                <td className="py-2 text-slate-800 dark:text-slate-200">{node.rps}</td>
+                <td className="py-2 text-slate-600 dark:text-slate-300">{node.cpu}</td>
+                <td className="py-2 text-slate-600 dark:text-slate-300">{node.memory}</td>
               </tr>
             ))}
           </tbody>

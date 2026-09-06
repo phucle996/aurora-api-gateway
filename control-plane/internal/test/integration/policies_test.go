@@ -4,6 +4,7 @@ import (
 	"aurora-waf.local/control-plane/infra"
 	"aurora-waf.local/control-plane/internal/app"
 	"aurora-waf.local/control-plane/internal/config"
+	"aurora-waf.local/control-plane/internal/domain/entity"
 	"bytes"
 	"context"
 	"database/sql"
@@ -122,6 +123,23 @@ func TestPolicyDraftHTTPAndConcurrentRevision(t *testing.T) {
 	var history []map[string]any
 	if json.Unmarshal(w.Body.Bytes(), &history) != nil || len(history) != 3 {
 		t.Fatal(w.Body)
+	}
+
+	catalogReq := request("GET", "/api/v1/policies/catalog", "", "", "policy-test-token", "")
+	if catalogReq.Code != 200 {
+		t.Fatal(catalogReq.Code, catalogReq.Body)
+	}
+	var catalogItems []entity.PolicyCatalogItem
+	if err := json.Unmarshal(catalogReq.Body.Bytes(), &catalogItems); err != nil {
+		t.Fatal(err)
+	}
+	if len(catalogItems) != 1 || catalogItems[0].ID != 1 || catalogItems[0].Name != "Cluster web" {
+		t.Fatalf("unexpected catalog items: %+v", catalogItems)
+	}
+
+	ruleCatalogReq := request("GET", "/api/v1/policies/rule-catalog", "", "", "policy-test-token", "")
+	if ruleCatalogReq.Code != 200 {
+		t.Fatal(ruleCatalogReq.Code, ruleCatalogReq.Body)
 	}
 }
 

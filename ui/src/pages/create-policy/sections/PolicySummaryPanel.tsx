@@ -1,236 +1,145 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
-import {
-  FileText,
-  Check,
-  Plus,
-  Save,
-  X,
-  Play,
-} from 'lucide-react';
+import { Shield, Gauge, GlobeLock } from 'lucide-react';
+import type { PolicyRuleItem } from './PolicyRulesSection';
+import type { PolicyType } from './BasicInfoSection';
 
 interface PolicySummaryPanelProps {
-  policyName: string;
-  scope: string;
-  mode: string;
-  priority: string;
-  status: string;
-  assignedApp: string;
-  selectedGroups: string[];
-  onCreatePolicy: () => void;
-  onSaveDraft: () => void;
+  name: string;
+  policyType: PolicyType;
+  enabled: boolean;
+  priority: number;
+  rules: PolicyRuleItem[];
+  target: string;
+  path: string;
+  httpMethod: string;
+  enableLogging: boolean;
+  enableShadowMode: boolean;
 }
 
 export function PolicySummaryPanel({
-  policyName,
-  scope,
-  mode,
+  name,
+  policyType,
+  enabled,
   priority,
-  status,
-  assignedApp,
-  selectedGroups,
-  onCreatePolicy,
-  onSaveDraft,
+  rules,
+  target,
+  path,
+  httpMethod,
+  enableLogging,
+  enableShadowMode,
 }: PolicySummaryPanelProps) {
-  const isNameValid = policyName.trim().length > 0;
-  const isScopeValid = scope.trim().length > 0;
-  const hasRules = selectedGroups.length > 0;
-  const isFormValid = isNameValid && isScopeValid && hasRules;
+  const targetLabel = target === '*' ? 'All Domains' : target;
+  const methodLabel = httpMethod === '*' ? 'All Methods' : httpMethod;
 
   return (
-    <div className="xl:col-span-4 bg-[#0B1320] border border-[#172338] p-4 space-y-4 font-mono">
-      {/* Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-[#172338]">
-        <div className="flex items-center gap-2">
-          <FileText className="w-4 h-4 text-slate-400" />
-          <h3 className="text-xs font-bold text-white uppercase tracking-wider font-sans">
-            Policy Summary
-          </h3>
+    <section className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-4 shadow-xs rounded-sm font-mono text-xs space-y-3">
+      <h2 className="text-sm font-semibold text-slate-900 dark:text-white border-b border-slate-200 dark:border-[#152030] pb-2">
+        Policy Summary
+      </h2>
+
+      <div className="space-y-2.5">
+        {/* Name */}
+        <div className="flex items-center justify-between">
+          <span className="text-slate-500 dark:text-slate-400">Name</span>
+          <span className="font-semibold text-slate-900 dark:text-white">
+            {name || '—'}
+          </span>
         </div>
-        <span className="px-1.5 py-0.5 text-[10px] font-bold bg-cyan-950 text-cyan-300 border border-cyan-700 uppercase">
-          {status}
-        </span>
-      </div>
 
-      {/* Overview Group */}
-      <div className="space-y-2 text-xs">
-        <h4 className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider pb-1 border-b border-[#172338]/60 font-sans">
-          Overview
-        </h4>
-        <div className="space-y-1.5 pt-1">
-          <div className="flex items-center justify-between py-0.5">
-            <span className="text-slate-400">Scope:</span>
-            <span className="text-slate-200 font-bold">{scope || '—'}</span>
+        {/* Type */}
+        <div className="flex items-center justify-between">
+          <span className="text-slate-500 dark:text-slate-400">Type</span>
+          <div className="flex items-center gap-1 text-slate-800 dark:text-slate-200">
+            {policyType === 'waf' && (
+              <>
+                <Shield className="w-3.5 h-3.5 text-blue-500" />
+                <span>WAF Policy</span>
+              </>
+            )}
+            {policyType === 'rate-limit' && (
+              <>
+                <Gauge className="w-3.5 h-3.5 text-cyan-500" />
+                <span>Rate Limit</span>
+              </>
+            )}
+            {policyType === 'access-control' && (
+              <>
+                <GlobeLock className="w-3.5 h-3.5 text-amber-500" />
+                <span>Access Control</span>
+              </>
+            )}
           </div>
+        </div>
 
-          <div className="flex items-center justify-between py-0.5">
-            <span className="text-slate-400">Mode:</span>
+        {/* Status */}
+        <div className="flex items-center justify-between">
+          <span className="text-slate-500 dark:text-slate-400">Status</span>
+          <div className="flex items-center gap-1.5">
             <span
-              className={`px-1.5 py-0.5 text-[10px] font-bold border uppercase ${
-                mode === 'Blocking'
-                  ? 'bg-rose-950 text-rose-300 border-rose-800'
-                  : 'bg-blue-950 text-blue-300 border-blue-800'
+              className={`w-2 h-2 rounded-full ${
+                enabled ? 'bg-emerald-500' : 'bg-slate-400'
               }`}
-            >
-              {mode}
+            />
+            <span className={enabled ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-slate-500'}>
+              {enabled ? 'Enabled' : 'Disabled'}
             </span>
           </div>
+        </div>
 
-          <div className="flex items-center justify-between py-0.5">
-            <span className="text-slate-400">Priority:</span>
+        {/* Priority */}
+        <div className="flex items-center justify-between">
+          <span className="text-slate-500 dark:text-slate-400">Priority</span>
+          <span className="text-slate-800 dark:text-slate-200">{priority}</span>
+        </div>
+
+        {/* Rules */}
+        <div className="flex items-center justify-between">
+          <span className="text-slate-500 dark:text-slate-400">Rules</span>
+          <span className="text-slate-800 dark:text-slate-200">
+            {rules.length} rule{rules.length === 1 ? '' : 's'}
+          </span>
+        </div>
+
+        {/* Scope */}
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-slate-500 dark:text-slate-400 shrink-0">Scope</span>
+          <span className="text-slate-800 dark:text-slate-200 truncate text-right">
+            {targetLabel}, {path || '/*'}, {methodLabel}
+          </span>
+        </div>
+
+        {/* Logging */}
+        <div className="flex items-center justify-between">
+          <span className="text-slate-500 dark:text-slate-400">Logging</span>
+          <div className="flex items-center gap-1.5">
             <span
-              className={`font-bold ${
-                priority === 'Critical' || priority === 'High'
-                  ? 'text-rose-400'
-                  : 'text-amber-400'
+              className={`w-2 h-2 rounded-full ${
+                enableLogging ? 'bg-emerald-500' : 'bg-slate-400'
               }`}
-            >
-              {priority}
+            />
+            <span className={enableLogging ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-slate-500'}>
+              {enableLogging ? 'Enabled' : 'Disabled'}
             </span>
-          </div>
-
-          <div className="flex items-center justify-between py-0.5">
-            <span className="text-slate-400">Selected Rule Groups:</span>
-            <span className="text-slate-200 font-bold">{selectedGroups.length}</span>
-          </div>
-
-          <div className="flex items-center justify-between py-0.5">
-            <span className="text-slate-400">Estimated Assignments:</span>
-            <span className="text-slate-300 text-[11px]">{assignedApp ? `1 application` : 'None'}</span>
           </div>
         </div>
-      </div>
 
-      {/* Selected Rule Groups List */}
-      <div className="space-y-2 text-xs">
-        <h4 className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider pb-1 border-b border-[#172338]/60 font-sans">
-          Selected Rule Groups ({selectedGroups.length})
-        </h4>
-        <div className="space-y-1.5 pt-1 max-h-44 overflow-y-auto pr-1">
-          {selectedGroups.length === 0 ? (
-            <div className="text-[11px] text-slate-500 italic py-1">
-              No rule groups selected
-            </div>
-          ) : (
-            selectedGroups.map((group) => (
-              <div key={group} className="flex items-center gap-2 text-slate-300 py-0.5">
-                <div className="w-3.5 h-3.5 bg-emerald-950 border border-emerald-700 flex items-center justify-center text-emerald-400 shrink-0">
-                  <Check className="w-2.5 h-2.5 stroke-[3]" />
-                </div>
-                <span className="truncate text-xs">{group}</span>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      {/* Validation Checklist */}
-      <div className="space-y-2 text-xs">
-        <h4 className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider pb-1 border-b border-[#172338]/60 font-sans">
-          Validation
-        </h4>
-        <div className="space-y-1.5 pt-1">
-          <div className="flex items-center gap-2 text-xs">
-            <div
-              className={`w-3.5 h-3.5 border flex items-center justify-center ${
-                isNameValid
-                  ? 'bg-emerald-950 border-emerald-700 text-emerald-400'
-                  : 'bg-[#152030] border-[#25354D] text-slate-500'
+        {/* Shadow Mode */}
+        <div className="flex items-center justify-between">
+          <span className="text-slate-500 dark:text-slate-400">Shadow Mode</span>
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                enableShadowMode ? 'bg-amber-500' : 'bg-slate-400'
               }`}
-            >
-              {isNameValid && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-            </div>
-            <span className={isNameValid ? 'text-slate-300' : 'text-slate-500'}>
-              Name provided
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2 text-xs">
-            <div
-              className={`w-3.5 h-3.5 border flex items-center justify-center ${
-                isScopeValid
-                  ? 'bg-emerald-950 border-emerald-700 text-emerald-400'
-                  : 'bg-[#152030] border-[#25354D] text-slate-500'
-              }`}
-            >
-              {isScopeValid && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-            </div>
-            <span className={isScopeValid ? 'text-slate-300' : 'text-slate-500'}>
-              Scope defined
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2 text-xs">
-            <div
-              className={`w-3.5 h-3.5 border flex items-center justify-center ${
-                hasRules
-                  ? 'bg-emerald-950 border-emerald-700 text-emerald-400'
-                  : 'bg-[#152030] border-[#25354D] text-slate-500'
-              }`}
-            >
-              {hasRules && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-            </div>
-            <span className={hasRules ? 'text-slate-300' : 'text-slate-500'}>
-              At least one rule group selected
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2 text-xs">
-            <div
-              className={`w-3.5 h-3.5 border flex items-center justify-center ${
-                isFormValid
-                  ? 'bg-emerald-950 border-emerald-700 text-emerald-400'
-                  : 'bg-[#152030] border-[#25354D] text-slate-500'
-              }`}
-            >
-              {isFormValid && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-            </div>
-            <span className={isFormValid ? 'text-slate-300' : 'text-slate-500'}>
-              Ready to save as draft
+            />
+            <span className={enableShadowMode ? 'text-amber-600 dark:text-amber-400 font-medium' : 'text-slate-500'}>
+              {enableShadowMode ? 'Enabled' : 'Disabled'}
             </span>
           </div>
         </div>
       </div>
-
-      {/* Action Buttons */}
-      <div className="space-y-2 pt-2 border-t border-[#172338]">
-        <button
-          type="button"
-          onClick={onCreatePolicy}
-          disabled={!isFormValid}
-          className="w-full bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold px-3 py-2.5 flex items-center justify-center gap-1.5 transition-colors cursor-pointer font-sans uppercase tracking-wider"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Create Policy</span>
-        </button>
-
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={onSaveDraft}
-            className="bg-[#0E1726] hover:bg-[#142034] text-slate-200 border border-[#1C293D] text-xs font-medium px-3 py-2 flex items-center justify-center gap-1.5 transition-colors cursor-pointer font-sans uppercase tracking-wider"
-          >
-            <Save className="w-3.5 h-3.5 text-slate-400" />
-            <span>Save Draft</span>
-          </button>
-
-          <Link
-            to="/policies"
-            className="bg-[#0E1726] hover:bg-[#142034] text-slate-200 border border-[#1C293D] text-xs font-medium px-3 py-2 flex items-center justify-center gap-1.5 transition-colors cursor-pointer font-sans uppercase tracking-wider text-center"
-          >
-            <X className="w-3.5 h-3.5 text-slate-400" />
-            <span>Cancel</span>
-          </Link>
-        </div>
-
-        <button
-          type="button"
-          className="w-full bg-[#0E1726] hover:bg-[#142034] text-slate-200 border border-[#1C293D] text-xs font-medium px-3 py-2 flex items-center justify-center gap-1.5 transition-colors cursor-pointer font-sans uppercase tracking-wider"
-        >
-          <Play className="w-3.5 h-3.5 text-slate-400" />
-          <span>Preview Policy</span>
-        </button>
-      </div>
-    </div>
+    </section>
   );
 }
+
+export default PolicySummaryPanel;

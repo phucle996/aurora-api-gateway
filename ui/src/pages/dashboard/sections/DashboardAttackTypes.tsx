@@ -13,16 +13,16 @@ export function DashboardAttackTypes() {
   ];
 
   return (
-    <div className="bg-[#0B1320] border border-[#152030] p-4 flex flex-col justify-between">
+    <div className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#152030] p-4 flex flex-col justify-between shadow-xs rounded-sm transition-colors">
       {/* Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-[#152030]">
-        <span className="text-sm font-semibold text-white font-mono">
+      <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-[#152030]">
+        <span className="text-sm font-semibold text-slate-900 dark:text-white font-sans">
           Top Attack Types
         </span>
         <select
           value={range}
           onChange={(e) => setRange(e.target.value)}
-          className="bg-[#0E1726] border border-[#1C293D] px-2 py-1 text-slate-300 text-xs font-mono focus:outline-none focus:border-emerald-500 cursor-pointer"
+          className="bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] px-2 py-1 text-slate-800 dark:text-slate-300 text-xs font-sans focus:outline-none focus:border-blue-500 rounded-sm cursor-pointer transition-colors"
         >
           <option value="Last 24 hours">Last 24 hours</option>
           <option value="Last 7 days">Last 7 days</option>
@@ -105,24 +105,24 @@ export function DashboardAttackTypes() {
           </svg>
 
           {/* Center text */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center font-mono">
-            <span className="text-sm font-bold text-white leading-none">342.1K</span>
-            <span className="text-[9px] text-slate-400 mt-0.5">Blocked</span>
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center font-sans">
+            <span className="text-sm font-bold text-slate-900 dark:text-white leading-none">342.1K</span>
+            <span className="text-[9px] text-slate-500 dark:text-slate-400 mt-0.5">Blocked</span>
           </div>
         </div>
 
         {/* Legend */}
-        <div className="flex-1 w-full space-y-1.5 text-xs font-mono">
+        <div className="flex-1 w-full space-y-1.5 text-xs font-sans">
           {attackTypes.map((item) => (
             <div key={item.name} className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span
-                  className="w-2.5 h-2.5 inline-block shrink-0"
+                  className="w-2.5 h-2.5 inline-block shrink-0 rounded-xs"
                   style={{ backgroundColor: item.color }}
                 />
-                <span className="text-slate-300">{item.name}</span>
+                <span className="text-slate-600 dark:text-slate-300">{item.name}</span>
               </div>
-              <span className="text-slate-200 font-semibold">{item.percent}</span>
+              <span className="text-slate-900 dark:text-slate-200 font-semibold">{item.percent}</span>
             </div>
           ))}
         </div>

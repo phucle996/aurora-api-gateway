@@ -122,19 +122,19 @@ export default function RateLimitsPage() {
   };
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-6 w-full space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-[#152030]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-200 dark:border-[#152030]">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-white tracking-tight font-sans">
+            <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight font-sans">
               Rate Limiting
             </h1>
-            <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-700 uppercase">
+            <span className="px-2 py-0.5 text-[10px] font-sans font-bold bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-700 uppercase rounded-xs">
               ACTIVE THROTTLING
             </span>
           </div>
-          <p className="text-xs text-slate-400 mt-0.5 font-mono">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-sans">
             Configure and manage rate limiting rules to protect your services from abuse and overuse.
           </p>
         </div>

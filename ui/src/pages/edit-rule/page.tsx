@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { EditRuleHeader } from './sections/EditRuleHeader';
 import { EditBasicInfoSection } from './sections/EditBasicInfoSection';
@@ -8,8 +8,11 @@ import { EditScopeSection } from './sections/EditScopeSection';
 import { EditRulePreviewPanel } from './sections/EditRulePreviewPanel';
 import { EditRuleTesterPanel } from './sections/EditRuleTesterPanel';
 import { EditRuleInfoPanel } from './sections/EditRuleInfoPanel';
+import { EditRuleActivationDialog } from './sections/EditRuleActivationDialog';
+import { DeleteRuleDialog } from './sections/DeleteRuleDialog';
 import type { Condition } from '../create-rule/sections/MatchConditionsSection';
 import { Save, Play } from 'lucide-react';
+import { policiesApi, type PolicyCatalogItem } from '../../lib/api/policies';
 
 export default function EditRulePage() {
   const navigate = useNavigate();
@@ -20,9 +23,35 @@ export default function EditRulePage() {
   const [description, setDescription] = useState(
     'Block common SQL injection patterns in URI and query parameters.'
   );
-  const [policy, setPolicy] = useState('Default WAF Policy');
+  const [policy, setPolicy] = useState('');
+  const [policyCatalog, setPolicyCatalog] = useState<PolicyCatalogItem[]>([]);
+  const [isLoadingPolicies, setIsLoadingPolicies] = useState(false);
   const [enabled, setEnabled] = useState(true);
   const [priority, setPriority] = useState(100);
+  const [isActivationDialogOpen, setIsActivationDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setIsLoadingPolicies(true);
+    policiesApi
+      .catalog()
+      .then((data) => {
+        if (!active) return;
+        setPolicyCatalog(data || []);
+      })
+      .catch(() => {
+        if (!active) return;
+        setPolicyCatalog([]);
+      })
+      .finally(() => {
+        if (active) setIsLoadingPolicies(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const [conditions, setConditions] = useState<Condition[]>([
     {
@@ -61,43 +90,58 @@ export default function EditRulePage() {
 
   const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = () => {
+  const handleInitiateSave = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!ruleName.trim()) {
+      alert('Vui lòng nhập tên Rule (Rule Name is required).');
+      return;
+    }
+    setIsActivationDialogOpen(true);
+  };
+
+  const handleConfirmSave = (shouldEnable: boolean) => {
+    setIsActivationDialogOpen(false);
+    setEnabled(shouldEnable);
     setIsSaving(true);
     setTimeout(() => {
       setIsSaving(false);
-      alert(`Rule "${ruleName}" updated successfully!`);
+      alert(`Rule "${ruleName}" updated successfully! (${shouldEnable ? 'Enabled' : 'Disabled'})`);
       navigate('/rules');
     }, 600);
   };
 
-  const handleDuplicate = () => {
-    alert(`Rule "${ruleName}" duplicated as "${ruleName}-copy"!`);
-    navigate('/rules/create');
+  const handleDelete = () => {
+    setIsDeleteDialogOpen(true);
   };
 
-  const handleDelete = () => {
-    if (window.confirm(`Are you sure you want to delete rule "${ruleName}"?`)) {
-      alert(`Rule "${ruleName}" deleted.`);
-      navigate('/rules');
+  const handleConfirmDelete = async () => {
+    setIsDeleting(true);
+    try {
+      // Simulate/perform rule deletion
+      setTimeout(() => {
+        setIsDeleting(false);
+        setIsDeleteDialogOpen(false);
+        navigate('/rules');
+      }, 500);
+    } catch (err) {
+      console.error(err);
+      setIsDeleting(false);
     }
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 w-full space-y-6">
       {/* Header */}
       <EditRuleHeader
-        onDuplicate={handleDuplicate}
+        ruleId={ruleId}
         onDelete={handleDelete}
-        onSave={handleSave}
+        onSave={handleInitiateSave}
         isSaving={isSaving}
       />
 
       {/* Form Layout: 2 Columns on desktop */}
       <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleSave();
-        }}
+        onSubmit={handleInitiateSave}
         className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start"
       >
         {/* Left 7 cols: Form sections */}
@@ -111,10 +155,10 @@ export default function EditRulePage() {
             setDescription={setDescription}
             policy={policy}
             setPolicy={setPolicy}
-            enabled={enabled}
-            setEnabled={setEnabled}
             priority={priority}
             setPriority={setPriority}
+            policyCatalog={policyCatalog}
+            isLoadingPolicies={isLoadingPolicies}
           />
 
           {/* 2. Match Conditions */}
@@ -174,8 +218,9 @@ export default function EditRulePage() {
               </button>
 
               <button
-                type="submit"
+                type="button"
                 disabled={isSaving}
+                onClick={handleInitiateSave}
                 className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-500 border border-blue-500 text-white text-xs font-bold font-mono transition-colors cursor-pointer shadow-sm"
               >
                 <Save className="w-3.5 h-3.5" />
@@ -197,12 +242,33 @@ export default function EditRulePage() {
           />
 
           {/* Test Rule */}
-          <EditRuleTesterPanel conditions={conditions} />
+          <EditRuleTesterPanel conditions={conditions} logicMode={logicMode} ruleId={ruleId} />
+
+
 
           {/* Rule Information */}
           <EditRuleInfoPanel />
         </div>
       </form>
+
+      {/* Save Confirmation Dialog */}
+      <EditRuleActivationDialog
+        open={isActivationDialogOpen}
+        onOpenChange={setIsActivationDialogOpen}
+        ruleName={ruleName}
+        isSaving={isSaving}
+        onConfirm={handleConfirmSave}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteRuleDialog
+        isOpen={isDeleteDialogOpen}
+        onClose={() => setIsDeleteDialogOpen(false)}
+        onConfirmDelete={handleConfirmDelete}
+        ruleName={ruleName}
+        isDeleting={isDeleting}
+      />
     </div>
   );
 }
+

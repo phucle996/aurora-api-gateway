@@ -18,8 +18,9 @@ services:
 
   node-01:
     networks:
-      - default
-      - access-ingress
+      default:
+      access-ingress:
+        ipv4_address: 172.29.253.11
     volumes:
       - node-01-policy:/var/lib/aurora-policy
     build:
@@ -40,8 +41,9 @@ services:
 
   node-02:
     networks:
-      - default
-      - access-ingress
+      default:
+      access-ingress:
+        ipv4_address: 172.29.253.12
     volumes:
       - node-02-policy:/var/lib/aurora-policy
     build:
@@ -62,8 +64,9 @@ services:
 
   node-03:
     networks:
-      - default
-      - access-ingress
+      default:
+      access-ingress:
+        ipv4_address: 172.29.253.13
     volumes:
       - node-03-policy:/var/lib/aurora-policy
     build:

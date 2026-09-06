@@ -35,28 +35,28 @@ export function PoliciesTable({
   onStatusFilterChange,
 }: PoliciesTableProps) {
   return (
-    <div className={`${selectedId ? 'xl:col-span-7' : 'xl:col-span-12'} bg-[#0B1320] border border-[#172338] p-4 space-y-3 transition-all duration-200`}>
+    <div className={`${selectedId ? 'xl:col-span-7' : 'xl:col-span-12'} bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-4 space-y-3 shadow-xs rounded-sm transition-all duration-200`}>
       {/* Table Header Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#172338]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200 dark:border-[#172338]">
         <div className="flex items-center gap-2">
-          <h2 className="text-xs font-mono font-semibold text-white uppercase tracking-wider">
+          <h2 className="text-xs font-sans font-semibold text-slate-900 dark:text-white uppercase tracking-wider">
             Policies
           </h2>
-          <span className="px-1.5 py-0.2 bg-[#172338] text-[11px] font-mono text-slate-300">
+          <span className="px-1.5 py-0.2 bg-slate-100 dark:bg-[#172338] text-[11px] font-sans text-slate-700 dark:text-slate-300 rounded-xs">
             {policies.length}
           </span>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap font-sans">
           {/* Search */}
           <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Search className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder="Filter policies..."
-              className="bg-[#0E1726] border border-[#1C293D] pl-8 pr-3 py-1 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 transition-colors font-mono w-44"
+              className="bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] pl-8 pr-3 py-1 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-blue-500 rounded-sm transition-colors font-sans w-44"
             />
           </div>
 
@@ -65,23 +65,23 @@ export function PoliciesTable({
             <select
               value={statusFilter}
               onChange={(e) => onStatusFilterChange(e.target.value)}
-              className="appearance-none bg-[#0E1726] border border-[#1C293D] pl-2.5 pr-6 py-1 text-xs text-slate-300 focus:outline-none focus:border-emerald-500 transition-colors font-mono cursor-pointer"
+              className="appearance-none bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] pl-2.5 pr-6 py-1 text-xs text-slate-800 dark:text-slate-300 focus:outline-none focus:border-blue-500 rounded-sm transition-colors font-sans cursor-pointer"
             >
               <option>All Statuses</option>
               <option>Published</option>
               <option>Draft</option>
               <option>Disabled</option>
             </select>
-            <ChevronDown className="w-3 h-3 text-slate-500 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <ChevronDown className="w-3 h-3 text-slate-400 dark:text-slate-500 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
         </div>
       </div>
 
       {/* Table */}
-      <div className="border border-[#172338] overflow-x-auto">
-        <table className="w-full text-left border-collapse text-xs">
+      <div className="border border-slate-200 dark:border-[#172338] overflow-x-auto rounded-sm">
+        <table className="w-full text-left border-collapse text-xs font-sans">
           <thead>
-            <tr className="bg-[#09101B] border-b border-[#18263D] text-[11px] font-mono text-slate-400 select-none">
+            <tr className="bg-slate-50 dark:bg-[#09101B] border-b border-slate-200 dark:border-[#18263D] text-xs font-sans text-slate-500 dark:text-slate-400 select-none">
               <th className="py-2.5 px-3">POLICY NAME</th>
               <th className="py-2.5 px-3">SCOPE</th>
               <th className="py-2.5 px-3">MODE</th>
@@ -91,61 +91,68 @@ export function PoliciesTable({
               <th className="py-2.5 px-2 text-right"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#18263D]">
-            {policies.map((p) => {
-              const isSelected = p.id === selectedId;
-              return (
-                <tr
+          <tbody className="divide-y divide-slate-100 dark:divide-[#18263D]">
+            {policies.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="py-12 text-center text-xs text-slate-400 dark:text-slate-500 font-sans">
+                  No policies found.
+                </td>
+              </tr>
+            ) : (
+              policies.map((p) => {
+                const isSelected = p.id === selectedId;
+                return (
+                  <tr
                   key={p.id}
                   onClick={() => onSelect(p.id)}
                   className={`cursor-pointer transition-colors ${
                     isSelected
-                      ? 'bg-emerald-950/30 border-l-2 border-emerald-400 text-white'
-                      : 'hover:bg-[#0E1726] text-slate-300'
+                      ? 'bg-blue-50/70 dark:bg-emerald-950/30 border-l-2 border-blue-600 dark:border-emerald-400 text-slate-900 dark:text-white'
+                      : 'hover:bg-slate-50 dark:hover:bg-[#0E1726] text-slate-700 dark:text-slate-300'
                   }`}
                 >
                   <td className="py-2.5 px-3 font-medium whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <FileText
                         className={`w-3.5 h-3.5 shrink-0 ${
-                          isSelected ? 'text-emerald-400' : 'text-slate-400'
+                          isSelected ? 'text-blue-600 dark:text-emerald-400' : 'text-slate-400'
                         }`}
                       />
-                      <span className={isSelected ? 'text-white font-bold' : 'text-slate-200'}>
+                      <span className={isSelected ? 'text-slate-900 dark:text-white font-bold' : 'text-slate-800 dark:text-slate-200'}>
                         {p.name}
                       </span>
                     </div>
                   </td>
-                  <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px] whitespace-nowrap">
+                  <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400 font-mono text-[11px] whitespace-nowrap">
                     {p.scope}
                   </td>
-                  <td className="py-2.5 px-3 whitespace-nowrap font-mono">
+                  <td className="py-2.5 px-3 whitespace-nowrap">
                     <span
-                      className={`px-1.5 py-0.5 text-[10px] font-bold border uppercase ${
+                      className={`px-1.5 py-0.5 text-[10px] font-sans font-bold border uppercase rounded-xs ${
                         p.mode === 'Block'
-                          ? 'bg-rose-950 text-rose-300 border-rose-800'
+                          ? 'bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
                           : p.mode === 'Detect'
-                          ? 'bg-blue-950 text-blue-300 border-blue-800'
-                          : 'bg-emerald-950 text-emerald-300 border-emerald-800'
+                          ? 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+                          : 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                       }`}
                     >
                       {p.mode}
                     </span>
                   </td>
-                  <td className="py-2.5 px-3 text-slate-300 font-mono text-[11px] whitespace-nowrap">
+                  <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300 font-sans text-xs whitespace-nowrap">
                     {p.ruleSetsCount} rules
                   </td>
-                  <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px] whitespace-nowrap">
+                  <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400 font-sans text-xs whitespace-nowrap">
                     {p.lastUpdated}
                   </td>
-                  <td className="py-2.5 px-3 whitespace-nowrap font-mono">
+                  <td className="py-2.5 px-3 whitespace-nowrap">
                     <span
-                      className={`px-1.5 py-0.5 text-[10px] font-bold border uppercase ${
+                      className={`px-1.5 py-0.5 text-[10px] font-sans font-bold border uppercase rounded-xs ${
                         p.status === 'Published'
-                          ? 'bg-emerald-950 text-emerald-400 border-emerald-700'
+                          ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-700'
                           : p.status === 'Draft'
-                          ? 'bg-slate-900 text-slate-300 border-slate-700'
-                          : 'bg-slate-950 text-slate-500 border-slate-800'
+                          ? 'bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+                          : 'bg-slate-100 dark:bg-slate-950 text-slate-500 dark:text-slate-500 border-slate-300 dark:border-slate-800'
                       }`}
                     >
                       {p.status}
@@ -154,7 +161,7 @@ export function PoliciesTable({
                   <td className="py-2.5 px-2 text-right">
                     <button
                       type="button"
-                      className="p-1 text-slate-500 hover:text-slate-200 hover:bg-[#18263D] transition-colors"
+                      className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#18263D] transition-colors rounded-xs"
                       onClick={(e) => {
                         e.stopPropagation();
                         onSelect(p.id);
@@ -166,7 +173,7 @@ export function PoliciesTable({
                   </td>
                 </tr>
               );
-            })}
+            }))}
           </tbody>
         </table>
       </div>

@@ -1,704 +1,1231 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   X,
   ShieldAlert,
-  Sliders,
   Play,
-  CheckCircle2,
-  FileCode,
   Copy,
   Check,
-  ChevronDown,
-  ChevronRight,
+  CheckCircle2,
+  XCircle,
   Pencil,
-  AlertTriangle,
-  Zap,
+  FileCode2,
+  Terminal,
+  Loader2,
 } from 'lucide-react';
-import type { RuleItem } from './RulesTable';
+import { Link } from 'react-router-dom';
+import type { SavedDetail } from './SavedRuleDetail';
+import { getAuthToken } from '@/lib/fetcher';
 
-interface PreviewRuleModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  rule: RuleItem;
+function getHttpStatusText(code: number): string {
+  switch (code) {
+    case 200: return 'OK';
+    case 201: return 'Created';
+    case 204: return 'No Content';
+    case 400: return 'Bad Request';
+    case 401: return 'Unauthorized';
+    case 403: return 'Forbidden';
+    case 404: return 'Not Found';
+    case 405: return 'Method Not Allowed';
+    case 429: return 'Too Many Requests';
+    case 500: return 'Internal Server Error';
+    case 502: return 'Bad Gateway';
+    case 503: return 'Service Unavailable';
+    default: return code >= 400 ? 'Error' : 'OK';
+  }
 }
 
-export function PreviewRuleModal({
-  isOpen,
-  onClose,
-  rule,
-}: PreviewRuleModalProps) {
-  const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<
-    'Rule Logic' | 'Test Request' | 'Match Result' | 'Generated Config'
-  >('Rule Logic');
+export interface ConditionEvaluationItem {
+  field: string;
+  operator: string;
+  value: string;
+  header_name?: string;
+  extracted_value: string;
+  matched: boolean;
+}
 
-  // Test Runner State
+export interface TestResultState {
+  matched: boolean;
+  action: string;
+  responseCode: number;
+  statusText: string;
+  actionDispatched: string;
+  latencyMs: number;
+  evaluationTimeNs: number;
+  matchedField: string;
+  matchedPattern: string;
+  matchedValue: string;
+  highlightPrefix: string;
+  highlightMatch: string;
+  highlightSuffix: string;
+  explanation: string;
+  details: ConditionEvaluationItem[];
+  responseHeaders: Record<string, string>;
+  responseBody: string;
+  rawHttpResponse: string;
+  testedAt: string;
+}
+
+export interface PreviewRuleModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  detail: SavedDetail;
+}
+
+interface SmoothHeightProps {
+  children: React.ReactNode;
+  className?: string;
+  duration?: number;
+  easing?: string;
+}
+
+function SmoothHeight({
+  children,
+  className = '',
+  duration = 340,
+  easing = 'cubic-bezier(0.25, 1, 0.5, 1)',
+}: SmoothHeightProps) {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const contentRef = React.useRef<HTMLDivElement>(null);
+  const prevHeightRef = React.useRef<number | null>(null);
+  const isAnimatingRef = React.useRef(false);
+  const timerRef = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    const container = containerRef.current;
+    const content = contentRef.current;
+    if (!container || !content) return;
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+
+      const newHeight = Math.round(
+        entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height
+      );
+
+      if (newHeight === 0) return;
+
+      // On initial mount or before measurement
+      if (prevHeightRef.current === null) {
+        prevHeightRef.current = newHeight;
+        container.style.height = 'auto';
+        container.style.overflow = 'visible';
+        return;
+      }
+
+      const prevHeight = prevHeightRef.current;
+      if (Math.abs(newHeight - prevHeight) < 2) {
+        return;
+      }
+
+      if (timerRef.current) {
+        window.clearTimeout(timerRef.current);
+      }
+
+      // If mid-animation, capture the actual visual height so redirect is smooth
+      let startHeight = prevHeight;
+      if (isAnimatingRef.current) {
+        startHeight = Math.round(container.getBoundingClientRect().height);
+      }
+
+      isAnimatingRef.current = true;
+      container.style.overflow = 'hidden';
+      container.style.transition = 'none';
+      container.style.height = `${startHeight}px`;
+
+      // Force synchronous layout reflow so browser applies startHeight before transition
+      void container.offsetHeight;
+
+      // Transition smoothly to target height
+      requestAnimationFrame(() => {
+        if (!containerRef.current) return;
+        container.style.transition = `height ${duration}ms ${easing}`;
+        container.style.height = `${newHeight}px`;
+      });
+
+      const onTransitionEnd = (e: TransitionEvent) => {
+        if (e.target !== container || e.propertyName !== 'height') return;
+        isAnimatingRef.current = false;
+        container.style.height = 'auto';
+        container.style.transition = 'none';
+        container.style.overflow = 'visible';
+        container.removeEventListener('transitionend', onTransitionEnd);
+      };
+
+      container.addEventListener('transitionend', onTransitionEnd);
+
+      timerRef.current = window.setTimeout(() => {
+        if (!containerRef.current) return;
+        isAnimatingRef.current = false;
+        container.style.height = 'auto';
+        container.style.transition = 'none';
+        container.style.overflow = 'visible';
+        prevHeightRef.current = newHeight;
+      }, duration + 80);
+
+      prevHeightRef.current = newHeight;
+    });
+
+    observer.observe(content);
+
+    const handleWindowResize = () => {
+      if (containerRef.current && contentRef.current) {
+        containerRef.current.style.transition = 'none';
+        containerRef.current.style.height = 'auto';
+        containerRef.current.style.overflow = 'visible';
+        prevHeightRef.current = Math.round(contentRef.current.offsetHeight);
+        isAnimatingRef.current = false;
+      }
+    };
+    window.addEventListener('resize', handleWindowResize);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', handleWindowResize);
+      if (timerRef.current) {
+        window.clearTimeout(timerRef.current);
+      }
+    };
+  }, [duration, easing]);
+
+  return (
+    <div
+      ref={containerRef}
+      className={`will-change-[height] ${className}`}
+      style={{ height: 'auto', overflow: 'visible' }}
+    >
+      <div ref={contentRef} className="w-full flow-root">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function PreviewRuleModal({ isOpen, onClose, detail }: PreviewRuleModalProps) {
+  const [activeTab, setActiveTab] = useState<'logic' | 'test' | 'result' | 'config'>('logic');
   const [testMethod, setTestMethod] = useState('GET');
-  const [testUrl, setTestUrl] = useState('https://example.com/search?q=1+or+1=1');
-  const [testHeaders, setTestHeaders] = useState('User-Agent: Mozilla/5.0\nAccept: application/json');
-  const [testBody, setTestBody] = useState('');
-  const [hasTested, setHasTested] = useState(true);
-  const [isBlocked, setIsBlocked] = useState(true);
-  const [showMatchDetails, setShowMatchDetails] = useState(true);
-  const [copied, setCopied] = useState(false);
-  const [configSubTab, setConfigSubTab] = useState<'nginx' | 'lua' | 'json'>('nginx');
+  const [testUrl, setTestUrl] = useState(() => {
+    if (detail.path_prefix) {
+      return `https://example.com${detail.path_prefix.startsWith('/') ? detail.path_prefix : '/' + detail.path_prefix}`;
+    }
+    const condWithVal = detail.conditions?.find((c) => c.value);
+    if (condWithVal) {
+      const val = condWithVal.value;
+      if (val.startsWith('/')) {
+        return `https://example.com${val}`;
+      }
+      if (condWithVal.field?.toLowerCase().includes('query') || condWithVal.field?.toLowerCase().includes('uri')) {
+        const cleanVal = val.replace(/^\(\?i\)/, '').replace(/[()\\+*?[\]^$|]/g, ' ').trim().split(/\s+/)[0] || 'test';
+        return `https://example.com/search?q=${encodeURIComponent(cleanVal)}`;
+      }
+    }
+    const grp = (detail.group || '').toLowerCase();
+    if (grp === 'sqli') return 'https://example.com/search?q=1+or+1=1';
+    if (grp === 'xss') return 'https://example.com/search?q=<script>alert(1)</script>';
+    if (grp === 'traversal') return 'https://example.com/download?file=../../../../etc/passwd';
+    return 'https://example.com/api/test';
+  });
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<TestResultState | null>(null);
+  const [resultSubTab, setResultSubTab] = useState<'body' | 'headers' | 'raw'>('body');
+  const [copiedResult, setCopiedResult] = useState(false);
+  const [copiedConfig, setCopiedConfig] = useState(false);
+  const [configSubTab, setConfigSubTab] = useState<'NGINX Config' | 'Lua Script' | 'JSON Definition'>('NGINX Config');
+  const modalBodyRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (modalBodyRef.current && modalBodyRef.current.scrollTop > 0) {
+      modalBodyRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [activeTab]);
 
   if (!isOpen) return null;
 
-  const ruleSlug = rule.name.toLowerCase().replace(/\s+/g, '-');
+  // Extract patterns and conditions without hardcoded mock fallbacks
+  const conditions = detail.conditions && detail.conditions.length > 0
+    ? detail.conditions
+    : (detail.path_prefix
+        ? [{ field: 'Path Prefix', operator: 'Starts With', value: detail.path_prefix, header_name: '' }]
+        : (detail.source_ip
+            ? [{ field: 'Source IP', operator: 'CIDR Match', value: detail.source_ip, header_name: '' }]
+            : []
+          )
+      );
 
-  const nginxCode = `# Rule: ${ruleSlug}
+  const primaryPattern = conditions[0]?.value || detail.path_prefix || detail.name || 'custom-pattern';
+
+  const presetSamples: { label: string; url: string; method?: string }[] = (() => {
+    const list: { label: string; url: string; method?: string }[] = [];
+    const firstCond = conditions[0];
+    const group = (detail.group || '').toLowerCase();
+
+    if (group === 'sqli' || firstCond?.value?.includes('1=1') || firstCond?.value?.includes('union')) {
+      list.push(
+        { label: 'SQLi Attack Sample', url: 'https://example.com/search?q=1+or+1=1', method: 'GET' },
+        { label: 'Union Select Attack', url: 'https://example.com/api/items?id=0+union+select+null,password+from+users', method: 'GET' },
+        { label: 'Legitimate Request', url: 'https://example.com/items?query=laptop&page=1', method: 'GET' }
+      );
+    } else if (group === 'xss' || firstCond?.value?.includes('script')) {
+      list.push(
+        { label: 'XSS Script Payload', url: 'https://example.com/search?q=<script>alert(1)</script>', method: 'GET' },
+        { label: 'IMG Tag XSS', url: 'https://example.com/profile?name=<img+src=x+onerror=alert(1)>', method: 'GET' },
+        { label: 'Legitimate Request', url: 'https://example.com/search?q=laptop+accessories', method: 'GET' }
+      );
+    } else if (group === 'traversal' || firstCond?.value?.includes('..')) {
+      list.push(
+        { label: 'Directory Traversal', url: 'https://example.com/files?path=../../../../etc/passwd', method: 'GET' },
+        { label: 'Encoded Traversal', url: 'https://example.com/download?file=%2e%2e%2f%2e%2e%2fwinnt', method: 'GET' },
+        { label: 'Legitimate Request', url: 'https://example.com/files?path=documents/report.pdf', method: 'GET' }
+      );
+    } else if (group === 'endpoint' || detail.path_prefix) {
+      const pfx = detail.path_prefix || '/admin';
+      list.push(
+        { label: 'Target Endpoint', url: `https://example.com${pfx.startsWith('/') ? pfx : '/' + pfx}`, method: 'GET' },
+        { label: 'Health Endpoint', url: 'https://example.com/healthz', method: 'GET' },
+        { label: 'Legitimate Request', url: 'https://example.com/public', method: 'GET' }
+      );
+    } else {
+      const val = firstCond?.value || 'test';
+      const cleanVal = val.replace(/^\(\?i\)/, '').replace(/[()\\+*?[\]^$|]/g, ' ').trim().split(/\s+/)[0] || 'sample';
+      list.push(
+        { label: 'Pattern Match Sample', url: `https://example.com/test?q=${encodeURIComponent(cleanVal)}`, method: 'GET' },
+        { label: 'Legitimate Request', url: 'https://example.com/normal-path', method: 'GET' }
+      );
+    }
+    return list;
+  })();
+
+  const handleCopyResult = () => {
+    if (!testResult) return;
+    let textToCopy = '';
+    if (resultSubTab === 'body') {
+      textToCopy = testResult.responseBody;
+    } else if (resultSubTab === 'headers') {
+      textToCopy = `HTTP/1.1 ${testResult.responseCode} ${testResult.statusText}\n${Object.entries(testResult.responseHeaders)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join('\n')}`;
+    } else {
+      textToCopy = testResult.rawHttpResponse;
+    }
+    navigator.clipboard.writeText(textToCopy);
+    setCopiedResult(true);
+    setTimeout(() => setCopiedResult(false), 2000);
+  };
+
+  // Interactive Test Execution via Live Backend Endpoint
+  const handleRunTest = async () => {
+    setIsTesting(true);
+    try {
+      const token = getAuthToken();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const ruleIdNum = detail.id ? parseInt(String(detail.id), 10) : undefined;
+      const res = await fetch('/api/v1/rules/test', {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          rule_id: !isNaN(Number(ruleIdNum)) ? ruleIdNum : undefined,
+          method: testMethod,
+          url: testUrl,
+          conditions: conditions.map((c) => ({
+            field: c.field,
+            operator: c.operator,
+            value: c.value,
+            header_name: c.header_name || '',
+          })),
+          logic_mode: detail.logic_mode || 'all',
+          action: detail.action || 'block',
+          response_code: detail.response_code || 403,
+        }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || `Server returned HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+
+      const statusCode = data.matched
+        ? (data.action === 'block' ? (data.response_code || detail.response_code || 403) : 200)
+        : 200;
+      const statusText = getHttpStatusText(statusCode);
+
+      let responseBodyStr = '';
+      if (data.matched && (data.action === 'block' || (!data.action && detail.action === 'block'))) {
+        if (detail.custom_response && detail.custom_response.trim()) {
+          responseBodyStr = detail.custom_response;
+        } else {
+          responseBodyStr = JSON.stringify(
+            {
+              error: statusText,
+              status: statusCode,
+              message: `Request blocked by Aurora WAF rule: "${detail.name || 'Security Rule'}"`,
+              rule_id: detail.id,
+              action: 'BLOCK',
+              matched_field: data.matched_field || (data.details?.[0]?.field ?? 'request_uri'),
+              client_ip: '127.0.0.1',
+              timestamp: new Date().toISOString(),
+            },
+            null,
+            2
+          );
+        }
+      } else if (data.matched && data.action === 'log') {
+        responseBodyStr = JSON.stringify(
+          {
+            status: 200,
+            message: 'Request passed and logged by Aurora WAF audit rule.',
+            action: 'LOG',
+            rule_id: detail.id,
+            eval_latency: `${(data.latency_ms || 0.08).toFixed(2)}ms`,
+            upstream_status: 200,
+            timestamp: new Date().toISOString(),
+          },
+          null,
+          2
+        );
+      } else {
+        responseBodyStr = JSON.stringify(
+          {
+            status: 200,
+            message: 'Request passed WAF inspection and was successfully forwarded to upstream service.',
+            action: 'ALLOW',
+            eval_latency: `${(data.latency_ms || 0.08).toFixed(2)}ms`,
+            upstream_status: 200,
+            timestamp: new Date().toISOString(),
+          },
+          null,
+          2
+        );
+      }
+
+      const bodyBytes = new TextEncoder().encode(responseBodyStr).length;
+      const respHeaders: Record<string, string> = {
+        'Date': new Date().toUTCString(),
+      };
+
+      if (data.matched && (data.action === 'block' || (!data.action && detail.action === 'block'))) {
+        respHeaders['Server'] = 'aurora-waf/1.2.0';
+        respHeaders['Content-Type'] = 'application/json; charset=utf-8';
+        respHeaders['Content-Length'] = String(bodyBytes);
+        respHeaders['Connection'] = 'close';
+        respHeaders['X-Aurora-Action'] = 'BLOCK';
+        respHeaders['X-Aurora-Rule-ID'] = String(detail.id || 'N/A');
+        respHeaders['X-Aurora-Rule-Name'] = detail.name || 'custom-rule';
+        respHeaders['X-Aurora-Latency'] = `${(data.latency_ms || 0.08).toFixed(2)}ms`;
+      } else if (data.matched && data.action === 'log') {
+        respHeaders['Server'] = 'upstream-backend/1.24.0';
+        respHeaders['Content-Type'] = 'application/json; charset=utf-8';
+        respHeaders['Content-Length'] = String(bodyBytes);
+        respHeaders['Connection'] = 'keep-alive';
+        respHeaders['X-Aurora-Action'] = 'LOG (Audit Recorded)';
+        respHeaders['X-Aurora-Rule-ID'] = String(detail.id || 'N/A');
+        respHeaders['X-Aurora-Latency'] = `${(data.latency_ms || 0.08).toFixed(2)}ms`;
+      } else {
+        respHeaders['Server'] = 'upstream-backend/1.24.0';
+        respHeaders['Content-Type'] = 'application/json; charset=utf-8';
+        respHeaders['Content-Length'] = String(bodyBytes);
+        respHeaders['Connection'] = 'keep-alive';
+        respHeaders['X-Aurora-Action'] = 'ALLOW (Pass-Through)';
+        respHeaders['X-Aurora-Latency'] = `${(data.latency_ms || 0.08).toFixed(2)}ms`;
+      }
+
+      const rawHttp = `HTTP/1.1 ${statusCode} ${statusText}\n${Object.entries(respHeaders)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join('\n')}\n\n${responseBodyStr}`;
+
+      // Calculate matching string without hardcoding patterns
+      let matchStr = '';
+      let matchedField = data.matched_field || '';
+      let matchedPattern = data.matched_pattern || '';
+      let matchedValue = data.matched_value || '';
+
+      if (data.matched) {
+        const matchedCond = (data.details as ConditionEvaluationItem[])?.find((d) => d.matched);
+        if (matchedCond) {
+          matchedField = matchedCond.field || matchedField;
+          matchedPattern = matchedCond.value || matchedPattern;
+          matchedValue = matchedCond.extracted_value || matchedValue;
+
+          const val = matchedCond.value || '';
+          const targetText = matchedCond.extracted_value || testUrl;
+
+          if (matchedCond.operator?.toLowerCase().includes('regex') || val.startsWith('(?i)')) {
+            try {
+              const cleanRx = val.startsWith('(?i)') ? val.slice(4) : val;
+              const rx = new RegExp(cleanRx, 'i');
+              const m = rx.exec(targetText);
+              if (m && m[0]) {
+                matchStr = m[0];
+              }
+            } catch {
+              if (val && targetText.toLowerCase().includes(val.toLowerCase())) {
+                const idx = targetText.toLowerCase().indexOf(val.toLowerCase());
+                matchStr = targetText.slice(idx, idx + val.length);
+              }
+            }
+          } else if (matchedCond.operator?.toLowerCase() === 'equals') {
+            matchStr = targetText;
+          } else if (matchedCond.operator?.toLowerCase().includes('starts')) {
+            matchStr = targetText.slice(0, val.length);
+          } else if (matchedCond.operator?.toLowerCase().includes('ends')) {
+            matchStr = targetText.slice(Math.max(0, targetText.length - val.length));
+          } else {
+            if (val && targetText.toLowerCase().includes(val.toLowerCase())) {
+              const idx = targetText.toLowerCase().indexOf(val.toLowerCase());
+              matchStr = targetText.slice(idx, idx + val.length);
+            }
+          }
+        }
+      }
+
+      const fullUri = testUrl;
+      const idx = matchStr ? fullUri.indexOf(matchStr) : -1;
+      const highlightPrefix = idx >= 0 ? fullUri.slice(0, idx) : fullUri;
+      const highlightMatch = idx >= 0 ? matchStr : '';
+      const highlightSuffix = idx >= 0 ? fullUri.slice(idx + matchStr.length) : '';
+
+      setTestResult({
+        matched: data.matched,
+        action: data.action || detail.action || 'block',
+        responseCode: statusCode,
+        statusText,
+        actionDispatched: data.action_dispatched || (data.matched ? `HTTP ${statusCode} response` : 'HTTP 200 Pass Through'),
+        latencyMs: data.latency_ms || 0.08,
+        evaluationTimeNs: data.evaluation_time_ns || 0,
+        matchedField: data.matched ? matchedField : '',
+        matchedPattern: data.matched ? matchedPattern : '',
+        matchedValue: data.matched ? matchedValue : '',
+        highlightPrefix,
+        highlightMatch,
+        highlightSuffix,
+        explanation: data.explanation || (data.matched ? `Matched condition in ${matchedField}` : 'No blocking conditions triggered'),
+        details: data.details || [],
+        responseHeaders: respHeaders,
+        responseBody: responseBodyStr,
+        rawHttpResponse: rawHttp,
+        testedAt: new Date().toLocaleTimeString(),
+      });
+    } catch (err: any) {
+      setTestResult({
+        matched: false,
+        action: 'error',
+        responseCode: 500,
+        statusText: 'Internal Server Error',
+        actionDispatched: 'Execution Error',
+        latencyMs: 0,
+        evaluationTimeNs: 0,
+        matchedField: '',
+        matchedPattern: '',
+        matchedValue: '',
+        highlightPrefix: testUrl,
+        highlightMatch: '',
+        highlightSuffix: '',
+        explanation: err?.message || 'Error occurred during test execution.',
+        details: [],
+        responseHeaders: {
+          'HTTP/1.1': '500 Internal Server Error',
+          'Date': new Date().toUTCString(),
+          'Server': 'aurora-waf/1.2.0',
+          'Content-Type': 'application/json',
+        },
+        responseBody: JSON.stringify({
+          error: 'Execution Error',
+          message: err?.message || 'Failed to communicate with rule evaluation endpoint.',
+        }, null, 2),
+        rawHttpResponse: `HTTP/1.1 500 Internal Server Error\n\n${err?.message || 'Error'}`,
+        testedAt: new Date().toLocaleTimeString(),
+      });
+    } finally {
+      setIsTesting(false);
+      setActiveTab('result');
+    }
+  };
+
+
+  const nginxConfig = `# ${detail.name || 'custom-rule'}
 location / {
-    if ($request_uri ~* "(union|select|insert|drop|or\\s+1=1)") {
-        return 403;
-    }
-    if ($arg_* ~* "(union|select|insert|drop|--|;|\\s+1=1)") {
-        return 403;
-    }
-    if ($request_body ~* "(union|select|insert|drop|--|;|\\s+1=1)") {
-        return 403;
+    if ($request_uri ~* "${primaryPattern.replace(/"/g, '\\"')}") {
+        return ${detail.response_code || 403};
     }
 }`;
 
-  const luaCode = `-- OpenResty / Lua evaluation for ${ruleSlug}
-local uri = ngx.var.request_uri or ""
-local args = ngx.var.args or ""
-local pattern = "(?i)(union|select|insert|drop|or\\\\s+1=1)"
-
-if ngx.re.find(uri, pattern, "jo") or ngx.re.find(args, pattern, "jo") then
-    ngx.status = 403
-    ngx.header.content_type = "application/json"
-    ngx.say('{"error":"forbidden","message":"Request blocked by security policy."}')
-    return ngx.exit(403)
+  const luaConfig = `-- Aurora WAF Lua Generated Rule
+local uri = ngx.var.request_uri
+if ngx.re.find(uri, [=[${primaryPattern}]=], "ijo") then
+    return ngx.exit(${detail.response_code || 403})
 end`;
 
-  const jsonCode = JSON.stringify(
+  const jsonConfig = JSON.stringify(
     {
-      id: rule.id,
-      name: ruleSlug,
-      description: rule.description,
-      action: 'BLOCK',
-      priority: 100,
-      enabled: true,
-      conditions: [
-        {
-          field: 'Request URI',
-          operator: 'CONTAINS_PATTERN',
-          value: '(?i)(union|select|insert|drop|or\\s+1=1)',
-        },
-        {
-          field: 'Query Parameter',
-          operator: 'CONTAINS_PATTERN',
-          value: '(?i)(union|select|insert|drop|--|;|\\s+1=1)',
-        },
-        {
-          field: 'Request Body',
-          operator: 'CONTAINS_PATTERN',
-          value: '(?i)(union|select|insert|drop|--|;|\\s+1=1)',
-        },
-      ],
-      response: {
-        code: 403,
-        message: 'Request blocked by security policy.',
-      },
+      id: detail.id,
+      name: detail.name,
+      enabled: detail.enabled,
+      priority: detail.priority,
+      conditions: conditions,
+      action: detail.action || 'block',
+      response_code: detail.response_code || 403,
     },
     null,
     2
   );
 
-  const currentConfigContent =
-    configSubTab === 'nginx' ? nginxCode : configSubTab === 'lua' ? luaCode : jsonCode;
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(currentConfigContent);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleRunTest = (customUrl?: string) => {
-    const targetUrl = customUrl || testUrl;
-    const isMalicious =
-      targetUrl.includes('or+1=1') ||
-      targetUrl.includes('or 1=1') ||
-      targetUrl.includes('union') ||
-      targetUrl.includes('select') ||
-      targetUrl.includes('script') ||
-      targetUrl.includes('..') ||
-      testBody.includes('union') ||
-      testBody.includes('select');
-
-    setIsBlocked(isMalicious);
-    setHasTested(true);
-    setActiveTab('Match Result');
+  const handleCopyConfig = () => {
+    const textToCopy = configSubTab === 'NGINX Config' ? nginxConfig : configSubTab === 'Lua Script' ? luaConfig : jsonConfig;
+    navigator.clipboard.writeText(textToCopy);
+    setCopiedConfig(true);
+    setTimeout(() => setCopiedConfig(false), 2000);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 overflow-y-auto no-scrollbar">
-      <div className="w-full max-w-4xl bg-[#0B1320] border border-[#1C293D] shadow-2xl flex flex-col my-auto select-none overflow-hidden">
-        {/* Header */}
-        <div className="px-5 py-3.5 border-b border-[#152030] flex items-start justify-between bg-[#080E18]">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in-0 duration-200">
+      <div className="bg-card border border-border text-foreground rounded-lg shadow-2xl max-w-5xl w-full max-h-[92vh] flex flex-col font-sans overflow-hidden animate-in fade-in-0 zoom-in-95 duration-200">
+        
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-muted/40 shrink-0">
           <div>
-            <h2 className="text-sm font-semibold text-white font-mono tracking-wide">
-              Preview Rule
-            </h2>
-            <p className="text-[11px] text-slate-400 font-sans mt-0.5">
+            <h2 className="text-base font-semibold text-foreground">Preview Rule</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
               See how this rule will be applied and test it with sample requests.
             </p>
           </div>
-
           <button
             type="button"
             onClick={onClose}
-            className="p-1 text-slate-400 hover:text-white hover:bg-[#152030] transition-colors cursor-pointer"
+            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors rounded-sm cursor-pointer"
+            aria-label="Close preview modal"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Top Metadata Banner */}
-        <div className="px-5 py-3 bg-[#060A10] border-b border-[#152030] flex flex-wrap items-center justify-between gap-4 font-mono text-xs">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="p-2 bg-rose-950/40 border border-rose-500/40 text-rose-400 shrink-0">
-              <ShieldAlert className="w-4 h-4" />
+        {/* Modal Body - Scrollable */}
+        <div ref={modalBodyRef} className="overflow-y-auto p-6 space-y-5 flex-1">
+          
+          {/* Summary Banner Card */}
+          <div className="bg-muted/40 border border-border p-4 rounded-md flex items-start gap-3.5">
+            <div className="w-9 h-9 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-600 dark:text-rose-400 shrink-0 mt-0.5">
+              <ShieldAlert className="w-5 h-5" />
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-white truncate">
-                  {ruleSlug}
-                </span>
-                <span className="inline-flex items-center px-1.5 py-0.2 bg-emerald-950/60 border border-emerald-500/50 text-emerald-400 text-[10px]">
-                  Enabled
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <span className="font-semibold text-sm text-foreground font-mono">{detail.name}</span>
+                <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 rounded-full uppercase tracking-wider">
+                  {detail.enabled ? 'Enabled' : 'Disabled'}
                 </span>
               </div>
-              <p className="text-[10px] text-slate-400 font-sans truncate mt-0.5 max-w-md">
-                {rule.description}
+              <p className="text-xs text-muted-foreground mt-1">
+                {detail.description || 'Block common SQL injection patterns in URI and query parameters.'}
               </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-5 text-[11px]">
-            <div>
-              <span className="text-slate-500 block text-[9px] uppercase">Policy</span>
-              <span className="text-slate-200 font-semibold">{rule.scope || 'Global Web Policy'}</span>
-            </div>
-
-            <div>
-              <span className="text-slate-500 block text-[9px] uppercase">Priority</span>
-              <span className="text-slate-200 font-semibold">100</span>
-            </div>
-
-            <div>
-              <span className="text-slate-500 block text-[9px] uppercase">Tags</span>
-              <div className="flex items-center gap-1 mt-0.5">
-                <span className="px-1.5 py-0.2 bg-rose-950/60 border border-rose-500/40 text-rose-400 text-[9px]">
-                  sql-injection
-                </span>
-                <span className="px-1.5 py-0.2 bg-amber-950/60 border border-amber-500/40 text-amber-400 text-[9px]">
-                  web
-                </span>
-                <span className="px-1.5 py-0.2 bg-rose-950/60 border border-rose-500/40 text-rose-400 text-[9px]">
-                  critical
-                </span>
+              <div className="flex items-center gap-4 mt-2 text-[11px] font-mono text-muted-foreground flex-wrap">
+                <div>
+                  <span>Policy: </span>
+                  <span className="text-foreground font-medium">Unassigned</span>
+                </div>
+                <span>•</span>
+                <div>
+                  <span>Priority: </span>
+                  <span className="text-foreground font-medium">{detail.priority || 100}</span>
+                </div>
+                <span>•</span>
+                <div className="flex items-center gap-1.5">
+                  <span>Tags: </span>
+                  <span className="px-1.5 py-0.5 bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 rounded-xs text-[10px]">
+                    {detail.group || 'sql-injection'}
+                  </span>
+                  <span className="px-1.5 py-0.5 bg-muted text-foreground border border-border rounded-xs text-[10px]">web</span>
+                  <span className="px-1.5 py-0.5 bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 rounded-xs text-[10px]">
+                    {detail.severity || 'critical'}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Tabs Bar */}
-        <div className="flex border-b border-[#152030] bg-[#070B12] text-xs font-mono">
-          {[
-            { id: 'Rule Logic', icon: Sliders },
-            { id: 'Test Request', icon: Play },
-            { id: 'Match Result', icon: CheckCircle2 },
-            { id: 'Generated Config', icon: FileCode },
-          ].map((item) => {
-            const Icon = item.icon;
-            const active = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setActiveTab(item.id as any)}
-                className={`flex items-center gap-2 px-4 py-2.5 transition-colors cursor-pointer text-xs ${
-                  active
-                    ? 'text-cyan-400 border-b-2 border-cyan-400 font-semibold bg-[#0B1320]'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#0E1726]'
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{item.id}</span>
-              </button>
-            );
-          })}
-        </div>
+          {/* Navigation Tabs */}
+          <div className="flex items-center gap-2 border-b border-border pb-1 font-mono text-xs overflow-x-auto">
+            <button
+              type="button"
+              onClick={() => setActiveTab('logic')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 border-b-2 font-semibold transition-colors cursor-pointer ${
+                activeTab === 'logic'
+                  ? 'border-blue-600 text-blue-600 bg-blue-500/10 dark:border-blue-500 dark:text-blue-400'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              }`}
+            >
+              <FileCode2 className="w-3.5 h-3.5" />
+              <span>Rule Logic</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('test')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 border-b-2 font-semibold transition-colors cursor-pointer ${
+                activeTab === 'test'
+                  ? 'border-blue-600 text-blue-600 bg-blue-500/10 dark:border-blue-500 dark:text-blue-400'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              }`}
+            >
+              <Play className="w-3.5 h-3.5" />
+              <span>Test Request</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('result')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 border-b-2 font-semibold transition-colors cursor-pointer ${
+                activeTab === 'result'
+                  ? 'border-blue-600 text-blue-600 bg-blue-500/10 dark:border-blue-500 dark:text-blue-400'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              }`}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Match Result</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('config')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 border-b-2 font-semibold transition-colors cursor-pointer ${
+                activeTab === 'config'
+                  ? 'border-blue-600 text-blue-600 bg-blue-500/10 dark:border-blue-500 dark:text-blue-400'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              }`}
+            >
+              <Terminal className="w-3.5 h-3.5" />
+              <span>Generated Config</span>
+            </button>
+          </div>
 
-        {/* Modal Body: Tabbed Views (Smooth scroll without visible scrollbars) */}
-        <div className="p-5 max-h-[480px] overflow-y-auto no-scrollbar font-mono text-xs">
-          {/* TAB 1: RULE LOGIC */}
-          {activeTab === 'Rule Logic' && (
-            <div className="space-y-4">
-              {/* Conditions Card */}
-              <div className="bg-[#080E18] border border-[#152030] p-4 space-y-3">
+          {/* Tab Content with Smooth Height Animation */}
+          <SmoothHeight>
+            <div
+              key={activeTab}
+              className="w-full animate-in fade-in-0 slide-in-from-bottom-2 duration-300 fill-mode-forwards"
+            >
+              {/* TAB 1: Rule Logic */}
+              {activeTab === 'logic' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+              {/* Left Column: Rule Conditions */}
+              <div className="lg:col-span-7 space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="font-semibold text-white text-xs">Rule Conditions</div>
-                  <span className="text-[10px] text-slate-500">Evaluated with OR semantics</span>
-                </div>
-
-                {/* Condition 1 */}
-                <div className="p-3 bg-[#0B1320] border border-[#152030] space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white font-bold">1. Request URI</span>
-                    <span className="text-[10px] text-cyan-400 bg-blue-950/60 border border-blue-800/40 px-1.5 py-0.2">
-                      Contains (Pattern)
+                  <h3 className="text-xs font-semibold text-foreground tracking-wide flex items-center gap-1.5">
+                    <span>Rule Conditions</span>
+                    <span className="px-1.5 py-0.2 bg-muted text-muted-foreground border border-border text-[10px] rounded font-mono">
+                      {conditions.length} condition{conditions.length > 1 ? 's' : ''}
                     </span>
-                  </div>
-                  <div className="p-2 bg-[#04070D] border border-[#1C293D] text-xs text-rose-300 font-mono select-text">
-                    (?i)(union|select|insert|drop|or\s+1=1)
-                  </div>
-                </div>
-
-                {/* Connector */}
-                <div className="flex justify-center">
-                  <span className="px-2.5 py-0.5 bg-[#0E1726] border border-[#1C293D] text-slate-400 text-[10px] font-bold">
-                    OR
+                  </h3>
+                  <span className="text-[11px] text-muted-foreground font-mono">
+                    Logic: <strong className="text-blue-600 dark:text-blue-400 font-bold">{detail.logic_mode ? detail.logic_mode.toUpperCase() : 'OR'}</strong>
                   </span>
                 </div>
 
-                {/* Condition 2 */}
-                <div className="p-3 bg-[#0B1320] border border-[#152030] space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white font-bold">2. Query Parameter</span>
-                    <span className="text-[10px] text-cyan-400 bg-blue-950/60 border border-blue-800/40 px-1.5 py-0.2">
-                      Contains (Pattern)
-                    </span>
-                  </div>
-                  <div className="p-2 bg-[#04070D] border border-[#1C293D] text-xs text-rose-300 font-mono select-text">
-                    (?i)(union|select|insert|drop|--|;|\s+1=1)
-                  </div>
-                </div>
-
-                {/* Connector */}
-                <div className="flex justify-center">
-                  <span className="px-2.5 py-0.5 bg-[#0E1726] border border-[#1C293D] text-slate-400 text-[10px] font-bold">
-                    OR
-                  </span>
-                </div>
-
-                {/* Condition 3 */}
-                <div className="p-3 bg-[#0B1320] border border-[#152030] space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white font-bold">3. Request Body</span>
-                    <span className="text-[10px] text-cyan-400 bg-blue-950/60 border border-blue-800/40 px-1.5 py-0.2">
-                      Contains (Pattern)
-                    </span>
-                  </div>
-                  <div className="p-2 bg-[#04070D] border border-[#1C293D] text-xs text-rose-300 font-mono select-text">
-                    (?i)(union|select|insert|drop|--|;|\s+1=1)
-                  </div>
+                <div className="space-y-2.5">
+                  {conditions.map((cond, idx) => (
+                    <React.Fragment key={idx}>
+                      {idx > 0 && (
+                        <div className="flex items-center justify-center my-1">
+                          <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-muted text-muted-foreground border border-border rounded">
+                            {detail.logic_mode ? detail.logic_mode.toUpperCase() : 'OR'}
+                          </span>
+                        </div>
+                      )}
+                      <div className="bg-muted/40 border border-border p-3 rounded-sm space-y-1.5 shadow-2xs">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-foreground">{idx + 1}. {cond.field || 'Request URI'}</span>
+                          <span className="text-[10px] font-mono text-muted-foreground">{cond.operator || 'Contains (Pattern)'}</span>
+                        </div>
+                        <div className="bg-background border border-border p-2 rounded-xs font-mono text-[11px] text-rose-600 dark:text-red-400 break-all select-all">
+                          {cond.value}
+                        </div>
+                      </div>
+                    </React.Fragment>
+                  ))}
                 </div>
               </div>
 
-              {/* Action Card */}
-              <div className="bg-[#080E18] border border-[#152030] p-4 space-y-3">
-                <div className="font-semibold text-white text-xs">Action & Execution</div>
-
-                <div className="p-2.5 bg-[#0B1320] border border-[#152030] flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-rose-400">
-                    <span className="text-sm">🚫</span>
-                    <span className="font-bold text-xs">Block Request</span>
-                  </div>
-                  <span className="px-2 py-0.5 bg-rose-950/60 border border-rose-500/50 text-rose-300 text-[11px] font-mono">
-                    HTTP 403
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <span className="text-slate-500 block text-[10px] mb-1">Response Code</span>
-                    <div className="p-2 bg-[#0B1320] border border-[#152030] text-slate-200 text-xs">
-                      403 Forbidden
-                    </div>
-                  </div>
-
-                  <div>
-                    <span className="text-slate-500 block text-[10px] mb-1">Custom Response</span>
-                    <div className="p-2 bg-[#0B1320] border border-[#152030] text-slate-300 text-xs truncate">
-                      Request blocked by security policy.
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-3 pt-2 border-t border-[#152030] text-xs">
-                  <div>
-                    <span className="text-slate-500 block text-[10px]">Scope</span>
-                    <span className="text-slate-300">All Sources / All Paths</span>
-                  </div>
-
-                  <div>
-                    <span className="text-slate-500 block text-[10px]">Log Event</span>
-                    <span className="text-cyan-400 font-semibold flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 bg-cyan-400 inline-block" /> Enabled
+              {/* Right Column: Action Card */}
+              <div className="lg:col-span-5 space-y-3">
+                <h3 className="text-xs font-semibold text-foreground tracking-wide">Action & Response</h3>
+                <div className="bg-muted/40 border border-border p-4 rounded-md space-y-3 text-xs shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />
+                    <span className="font-semibold text-foreground uppercase tracking-wider text-[11px] font-mono">
+                      {detail.action ? `${detail.action} Request` : 'Block Request'}
                     </span>
                   </div>
 
-                  <div>
-                    <span className="text-slate-500 block text-[10px]">Add to Reputation</span>
-                    <span className="text-slate-500 font-semibold">Disabled</span>
+                  <div className="space-y-2.5 pt-2 border-t border-border text-[11px] font-mono">
+                    <div className="flex justify-between py-1 border-b border-border/50">
+                      <span className="text-muted-foreground">Response Code:</span>
+                      <span className="text-foreground font-semibold">{detail.response_code || 403} Forbidden</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-border/50">
+                      <span className="text-muted-foreground">Custom Response:</span>
+                      <span className="text-foreground truncate max-w-[180px]">{detail.custom_response || 'Request blocked by security policy.'}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-border/50">
+                      <span className="text-muted-foreground">Scope:</span>
+                      <span className="text-foreground">All Sources, All Paths</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-border/50">
+                      <span className="text-muted-foreground">Log Event:</span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Enabled
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-1">
+                      <span className="text-muted-foreground">IP Reputation:</span>
+                      <span className="text-muted-foreground">Disabled</span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* TAB 2: TEST REQUEST */}
-          {activeTab === 'Test Request' && (
-            <div className="space-y-4">
-              <div className="bg-[#080E18] border border-[#152030] p-4 space-y-4">
+          {/* TAB 2: Test Request */}
+          {activeTab === 'test' && (
+            <div className="space-y-5 max-w-3xl mx-auto py-2">
+              <div className="bg-muted/40 border border-border p-5 rounded-md space-y-4 shadow-xs">
                 <div>
-                  <div className="font-semibold text-white text-xs">Test Request Simulator</div>
-                  <div className="text-[11px] text-slate-400 font-sans mt-0.5">
-                    Configure sample HTTP parameters and execute against Aurora WAF engine.
-                  </div>
+                  <h3 className="text-sm font-semibold text-foreground">Send a Test Request</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Nhập request mẫu hoặc chọn các kịch bản test để kiểm tra bộ lọc rule.
+                  </p>
                 </div>
 
-                {/* Quick Presets */}
-                <div>
-                  <span className="text-[10px] text-slate-500 block mb-1.5">Quick Payload Presets:</span>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTestUrl('https://example.com/search?q=1+or+1=1');
-                        setTestMethod('GET');
-                      }}
-                      className="px-2.5 py-1 bg-[#0E1726] hover:bg-[#152030] border border-[#1C293D] text-rose-300 hover:text-rose-200 text-xs cursor-pointer transition-colors"
-                    >
-                      SQLi: `?q=1+or+1=1`
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTestUrl('https://example.com/products?cat=union+select+null,password+from+users');
-                        setTestMethod('GET');
-                      }}
-                      className="px-2.5 py-1 bg-[#0E1726] hover:bg-[#152030] border border-[#1C293D] text-rose-300 hover:text-rose-200 text-xs cursor-pointer transition-colors"
-                    >
-                      UNION Injection
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTestUrl('https://example.com/search?q=laptop');
-                        setTestMethod('GET');
-                      }}
-                      className="px-2.5 py-1 bg-[#0E1726] hover:bg-[#152030] border border-[#1C293D] text-emerald-400 hover:text-emerald-300 text-xs cursor-pointer transition-colors"
-                    >
-                      Benign Request (`?q=laptop`)
-                    </button>
-                  </div>
-                </div>
-
-                {/* Request Line */}
-                <div className="space-y-1">
-                  <label className="block text-slate-400 text-[11px]">Request URL</label>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={testMethod}
-                      onChange={(e) => setTestMethod(e.target.value)}
-                      className="bg-[#0E1726] border border-[#1C293D] px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer text-xs"
-                    >
-                      <option value="GET">GET</option>
-                      <option value="POST">POST</option>
-                      <option value="PUT">PUT</option>
-                      <option value="DELETE">DELETE</option>
-                    </select>
-
-                    <input
-                      type="text"
-                      value={testUrl}
-                      onChange={(e) => setTestUrl(e.target.value)}
-                      placeholder="https://example.com/search?q=1+or+1=1"
-                      className="flex-1 bg-[#0E1726] border border-[#1C293D] px-3 py-2 text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500 text-xs font-mono"
-                    />
-                  </div>
-                </div>
-
-                {/* Headers & Body */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-400 text-[11px] mb-1">Request Headers</label>
-                    <textarea
-                      value={testHeaders}
-                      onChange={(e) => setTestHeaders(e.target.value)}
-                      rows={3}
-                      className="w-full bg-[#0E1726] border border-[#1C293D] p-2 text-slate-300 text-xs font-mono focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-400 text-[11px] mb-1">Request Body (Optional)</label>
-                    <textarea
-                      value={testBody}
-                      onChange={(e) => setTestBody(e.target.value)}
-                      placeholder='{"query": "SELECT * FROM users"}'
-                      rows={3}
-                      className="w-full bg-[#0E1726] border border-[#1C293D] p-2 text-slate-300 text-xs font-mono focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Run Button */}
-                <div className="pt-2 flex justify-end">
+                <div className="flex items-center gap-2">
+                  <select
+                    value={testMethod}
+                    onChange={(e) => setTestMethod(e.target.value)}
+                    className="bg-background border border-input px-3 py-2 text-xs font-mono text-foreground rounded-sm focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                  >
+                    <option>GET</option>
+                    <option>POST</option>
+                    <option>PUT</option>
+                    <option>DELETE</option>
+                  </select>
+                  <input
+                    type="text"
+                    value={testUrl}
+                    onChange={(e) => setTestUrl(e.target.value)}
+                    placeholder="https://example.com/search?q=1+or+1=1"
+                    className="flex-1 bg-background border border-input px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground rounded-sm focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
+                  />
                   <button
                     type="button"
-                    onClick={() => handleRunTest()}
-                    className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs cursor-pointer transition-colors"
+                    onClick={handleRunTest}
+                    disabled={isTesting}
+                    className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-2 text-xs font-semibold rounded-sm flex items-center gap-1.5 cursor-pointer transition-colors shrink-0 shadow-xs"
                   >
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>Run Evaluation Test</span>
+                    {isTesting ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                    )}
+                    <span>{isTesting ? 'Running...' : 'Run Test'}</span>
                   </button>
                 </div>
+
+                {/* Preset sample requests based on rule group & conditions */}
+                <div className="pt-2 border-t border-border/50">
+                  <span className="text-[11px] text-muted-foreground font-mono block mb-2">Preset Quick Samples:</span>
+                  <div className="flex flex-wrap gap-2">
+                    {presetSamples.map((sample, sIdx) => (
+                      <button
+                        key={sIdx}
+                        type="button"
+                        onClick={() => {
+                          setTestUrl(sample.url);
+                          if (sample.method) setTestMethod(sample.method);
+                        }}
+                        className="px-2.5 py-1 text-[11px] font-mono bg-background hover:bg-muted text-muted-foreground hover:text-foreground border border-border rounded transition-colors cursor-pointer"
+                      >
+                        {sample.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* cURL Command Preview */}
+              <div className="bg-muted/30 border border-border p-4 rounded-md space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-foreground font-mono">cURL equivalent:</span>
+                  <button
+                    type="button"
+                    onClick={() => { navigator.clipboard.writeText(`curl -i -X ${testMethod} "${testUrl}"`); }}
+                    className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-mono cursor-pointer flex items-center gap-1"
+                  >
+                    <Copy className="w-3 h-3" /> Copy command
+                  </button>
+                </div>
+                <pre className="p-2.5 bg-background border border-border rounded text-[11px] font-mono text-foreground whitespace-pre-wrap break-all">
+                  {`curl -i -X ${testMethod} "${testUrl}"`}
+                </pre>
               </div>
             </div>
           )}
 
-          {/* TAB 3: MATCH RESULT */}
-          {activeTab === 'Match Result' && (
-            <div className="space-y-4">
-              {hasTested ? (
-                <div className="space-y-4">
-                  {/* Status Banner */}
-                  <div
-                    className={`p-4 border ${
-                      isBlocked
-                        ? 'bg-rose-950/30 border-rose-500/40 text-rose-400'
-                        : 'bg-emerald-950/30 border-emerald-500/40 text-emerald-400'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-3">
-                        <div
-                          className={`p-1.5 border ${
-                            isBlocked
-                              ? 'bg-rose-950/80 border-rose-500/50 text-rose-400'
-                              : 'bg-emerald-950/80 border-emerald-500/50 text-emerald-400'
-                          }`}
-                        >
-                          {isBlocked ? (
-                            <AlertTriangle className="w-4 h-4" />
-                          ) : (
-                            <CheckCircle2 className="w-4 h-4" />
-                          )}
+          {/* TAB 3: Match Result */}
+          {activeTab === 'result' && (
+            <div className="space-y-4 max-w-4xl mx-auto py-2">
+              {testResult ? (
+                <div className="bg-muted/40 border border-border p-5 rounded-md space-y-4 shadow-xs animate-in fade-in-0 duration-300">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold text-foreground">Rule Evaluation Result</h3>
+                      <span className="text-[10px] font-mono text-muted-foreground bg-muted px-2 py-0.5 border border-border rounded">
+                        Evaluated at {testResult.testedAt}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('test')}
+                      className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-mono cursor-pointer flex items-center gap-1"
+                    >
+                      <Play className="w-3 h-3" /> Run another test
+                    </button>
+                  </div>
+
+                  {/* Result Status Banner */}
+                  {testResult.matched ? (
+                    <div className="bg-rose-500/10 border border-rose-500/30 p-4 rounded flex items-start gap-3.5">
+                      <XCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm text-rose-700 dark:text-rose-300">
+                              {testResult.action === 'block' ? 'Request would be BLOCKED' : `Request Action: ${testResult.action.toUpperCase()}`}
+                            </span>
+                            <span className="text-[11px] font-mono px-2 py-0.5 bg-rose-500/20 border border-rose-500/40 text-rose-700 dark:text-rose-300 font-bold rounded">
+                              HTTP {testResult.responseCode} {testResult.statusText}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-[11px] font-mono">
+                            <span className="px-2 py-0.5 bg-background border border-border rounded text-foreground font-semibold">
+                              {testResult.actionDispatched}
+                            </span>
+                            <span className="text-muted-foreground">
+                              ⚡ {testResult.latencyMs.toFixed(2)} ms
+                            </span>
+                          </div>
                         </div>
-                        <div>
-                          <div className="text-sm font-bold text-white">
-                            {isBlocked ? 'Request would be blocked' : 'Request would be allowed'}
+                        <p className="text-xs text-rose-600/90 dark:text-rose-400/90 mt-1">
+                          {testResult.explanation}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-emerald-500/10 border border-emerald-500/30 p-4 rounded flex items-start gap-3.5">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm text-emerald-700 dark:text-emerald-300">
+                              Request would be ALLOWED
+                            </span>
+                            <span className="text-[11px] font-mono px-2 py-0.5 bg-emerald-500/20 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 font-bold rounded">
+                              HTTP {testResult.responseCode} {testResult.statusText}
+                            </span>
                           </div>
-                          <div className="text-[11px] text-slate-400 font-sans mt-0.5">
-                            {isBlocked
-                              ? 'Matched condition: Request URI contains SQL injection pattern'
-                              : 'No matching blocking conditions were triggered. Request passes downstream.'}
+                          <div className="flex items-center gap-2 text-[11px] font-mono">
+                            <span className="px-2 py-0.5 bg-background border border-border rounded text-foreground font-semibold">
+                              {testResult.actionDispatched}
+                            </span>
+                            <span className="text-muted-foreground">
+                              ⚡ {testResult.latencyMs.toFixed(2)} ms
+                            </span>
                           </div>
+                        </div>
+                        <p className="text-xs text-emerald-600/90 dark:text-emerald-400/90 mt-1">
+                          {testResult.explanation}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Simulated HTTP Response Inspector */}
+                  <div className="bg-card border border-border rounded-md p-4 space-y-3 shadow-2xs">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-semibold text-foreground tracking-wide font-mono">
+                          Simulated HTTP Response:
+                        </span>
+                        <div className="flex gap-1 border border-border bg-muted/50 p-0.5 rounded text-[11px] font-mono">
+                          {(['body', 'headers', 'raw'] as const).map((tab) => (
+                            <button
+                              key={tab}
+                              type="button"
+                              onClick={() => setResultSubTab(tab)}
+                              className={`px-2.5 py-0.5 rounded-xs transition-colors cursor-pointer capitalize ${
+                                resultSubTab === tab
+                                  ? 'bg-background text-foreground font-bold shadow-2xs'
+                                  : 'text-muted-foreground hover:text-foreground'
+                              }`}
+                            >
+                              {tab === 'body' ? 'Response Body' : tab === 'headers' ? 'Response Headers' : 'Raw HTTP'}
+                            </button>
+                          ))}
                         </div>
                       </div>
 
-                      <span
-                        className={`inline-flex items-center px-2.5 py-1 text-xs font-bold shrink-0 ${
-                          isBlocked
-                            ? 'bg-rose-950/80 border border-rose-500/50 text-rose-300'
-                            : 'bg-emerald-950/80 border border-emerald-500/50 text-emerald-300'
-                        }`}
+                      <button
+                        type="button"
+                        onClick={handleCopyResult}
+                        className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-mono rounded border border-border bg-background hover:bg-muted text-foreground transition-colors cursor-pointer shadow-2xs"
                       >
-                        {isBlocked ? '403 Forbidden' : '200 OK Pass'}
+                        {copiedResult ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                        <span>
+                          {copiedResult
+                            ? 'Copied!'
+                            : resultSubTab === 'body'
+                            ? 'Copy Body'
+                            : resultSubTab === 'headers'
+                            ? 'Copy Headers'
+                            : 'Copy Raw'}
+                        </span>
+                      </button>
+                    </div>
+
+                    {/* Status Line */}
+                    <div className="flex items-center gap-2 text-xs font-mono py-1 px-2.5 bg-muted/60 border border-border/70 rounded text-foreground">
+                      <span className="text-muted-foreground">Status:</span>
+                      <span className={`font-bold ${testResult.responseCode >= 400 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                        HTTP/1.1 {testResult.responseCode} {testResult.statusText}
+                      </span>
+                      <span className="text-muted-foreground ml-auto text-[11px]">
+                        Content-Type: {testResult.responseHeaders['Content-Type'] || 'application/json'}
                       </span>
                     </div>
 
-                    {/* Match Details Section */}
-                    {isBlocked && (
-                      <div className="pt-3 mt-3 border-t border-rose-500/20 text-xs">
-                        <button
-                          type="button"
-                          onClick={() => setShowMatchDetails(!showMatchDetails)}
-                          className="flex items-center gap-1.5 text-slate-300 hover:text-white cursor-pointer font-bold"
-                        >
-                          {showMatchDetails ? (
-                            <ChevronDown className="w-3.5 h-3.5" />
-                          ) : (
-                            <ChevronRight className="w-3.5 h-3.5" />
-                          )}
-                          <span>Match Details Breakdown</span>
-                        </button>
+                    {/* Code Viewer */}
+                    <div className="bg-[#04070D] border border-border/80 p-3.5 rounded font-mono text-xs text-slate-200 overflow-x-auto leading-relaxed shadow-inner max-h-60 overflow-y-auto">
+                      {resultSubTab === 'body' && (
+                        <pre className="whitespace-pre-wrap break-all select-all text-[11px]">
+                          {testResult.responseBody}
+                        </pre>
+                      )}
+                      {resultSubTab === 'headers' && (
+                        <pre className="whitespace-pre-wrap break-all select-all text-[11px] text-slate-300">
+                          {`HTTP/1.1 ${testResult.responseCode} ${testResult.statusText}\n` +
+                            Object.entries(testResult.responseHeaders)
+                              .map(([k, v]) => `${k}: ${v}`)
+                              .join('\n')}
+                        </pre>
+                      )}
+                      {resultSubTab === 'raw' && (
+                        <pre className="whitespace-pre-wrap break-all select-all text-[11px] text-slate-300">
+                          {testResult.rawHttpResponse}
+                        </pre>
+                      )}
+                    </div>
+                  </div>
 
-                        {showMatchDetails && (
-                          <div className="space-y-2 mt-2.5 p-3 bg-[#04070D] border border-[#1C293D] font-mono text-[11px] text-slate-300">
-                            <div className="flex justify-between items-center py-1 border-b border-[#152030]">
-                              <span className="text-slate-500">Matched Field:</span>
-                              <span className="px-2 py-0.5 bg-blue-950 border border-blue-500/40 text-cyan-400 font-bold">
-                                Request URI
-                              </span>
-                            </div>
-                            <div className="flex justify-between items-center py-1 border-b border-[#152030]">
-                              <span className="text-slate-500">Matched Pattern:</span>
-                              <span className="text-rose-300">
-                                (?i)(union|select|insert|drop|or\s+1=1)
-                              </span>
-                            </div>
-                            <div className="flex justify-between items-center py-1 border-b border-[#152030]">
-                              <span className="text-slate-500">Matched Value:</span>
-                              <span>
-                                /search?q=<span className="text-rose-400 bg-rose-950 px-1 font-bold">1+or+1=1</span>
-                              </span>
-                            </div>
-                            <div className="flex justify-between items-start py-1">
-                              <span className="text-slate-500">Explanation:</span>
-                              <span className="text-slate-200 text-right max-w-sm">
-                                The request URI contains an inline boolean-based SQL injection pattern (1=1).
-                              </span>
-                            </div>
-                          </div>
-                        )}
+                  {/* Condition Evaluation Breakdown Table */}
+                  <div className="bg-card border border-border rounded-md p-4 space-y-3 shadow-2xs font-mono">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-foreground tracking-wide font-sans">
+                        Rule Conditions Evaluation Breakdown
+                      </span>
+                      <span className="text-[11px] text-muted-foreground">
+                        Logic Mode: <strong className="text-foreground">{detail.logic_mode ? detail.logic_mode.toUpperCase() : 'ALL'}</strong>
+                      </span>
+                    </div>
+
+                    {testResult.details && testResult.details.length > 0 ? (
+                      <div className="border border-border rounded overflow-hidden overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-muted/70 text-muted-foreground border-b border-border text-[11px]">
+                              <th className="py-2 px-3 font-semibold">#</th>
+                              <th className="py-2 px-3 font-semibold">Target Field</th>
+                              <th className="py-2 px-3 font-semibold">Operator</th>
+                              <th className="py-2 px-3 font-semibold">Expected Pattern</th>
+                              <th className="py-2 px-3 font-semibold">Extracted Value</th>
+                              <th className="py-2 px-3 font-semibold text-right">Result</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/60">
+                            {testResult.details.map((cond, cIdx) => (
+                              <tr
+                                key={cIdx}
+                                className={cond.matched ? 'bg-emerald-500/5' : 'bg-background hover:bg-muted/30'}
+                              >
+                                <td className="py-2 px-3 text-muted-foreground text-[11px]">{cIdx + 1}</td>
+                                <td className="py-2 px-3 font-medium text-foreground">
+                                  {cond.field}
+                                  {cond.header_name ? ` (${cond.header_name})` : ''}
+                                </td>
+                                <td className="py-2 px-3 text-muted-foreground text-[11px]">{cond.operator}</td>
+                                <td className="py-2 px-3 font-mono text-[11px] text-rose-600 dark:text-rose-400 break-all max-w-xs">
+                                  <span className="bg-muted px-1.5 py-0.5 rounded border border-border/60">
+                                    {cond.value}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-3 font-mono text-[11px] text-foreground break-all max-w-xs">
+                                  <span className="bg-muted/60 px-1.5 py-0.5 rounded border border-border/40 text-muted-foreground">
+                                    {cond.extracted_value || '(empty)'}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-3 text-right">
+                                  {cond.matched ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 rounded text-[10px] font-bold">
+                                      <Check className="w-3 h-3" /> Matched
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-muted text-muted-foreground border border-border rounded text-[10px]">
+                                      <X className="w-3 h-3" /> No Match
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-muted/40 border border-border rounded text-xs text-muted-foreground text-center">
+                        No individual conditions evaluated for this rule.
                       </div>
                     )}
                   </div>
 
-                  {/* Engine Performance Diagnostics */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="p-3 bg-[#080E18] border border-[#152030]">
-                      <div className="text-[10px] text-slate-500 flex items-center gap-1">
-                        <Zap className="w-3 h-3 text-amber-400" />
-                        <span>Evaluation Latency</span>
+                  {/* Pattern Match Highlight (Only shown when rule conditions matched) */}
+                  {testResult.matched && (
+                    <div className="p-3.5 bg-background border border-border rounded space-y-2.5 font-mono text-xs">
+                      <div className="flex justify-between py-1 border-b border-border/50">
+                        <span className="text-muted-foreground">Evaluated URL:</span>
+                        <span className="text-foreground font-semibold break-all text-right max-w-sm">{testUrl}</span>
                       </div>
-                      <div className="text-sm font-bold text-white mt-1">0.14 ms</div>
-                    </div>
+                      {testResult.matchedField && (
+                        <div className="flex justify-between py-1 border-b border-border/50">
+                          <span className="text-muted-foreground">Matched Field:</span>
+                          <span className="text-blue-600 dark:text-blue-400 font-semibold">{testResult.matchedField}</span>
+                        </div>
+                      )}
+                      {testResult.matchedPattern && (
+                        <div className="flex justify-between py-1 border-b border-border/50">
+                          <span className="text-muted-foreground">Matched Rule Pattern:</span>
+                          <code className="text-foreground max-w-xs truncate bg-muted px-1.5 py-0.5 border border-border rounded">
+                            {testResult.matchedPattern}
+                          </code>
+                        </div>
+                      )}
 
-                    <div className="p-3 bg-[#080E18] border border-[#152030]">
-                      <div className="text-[10px] text-slate-500">Regex Engine</div>
-                      <div className="text-sm font-bold text-cyan-400 mt-1">Rust + Hyperscan</div>
-                    </div>
-
-                    <div className="p-3 bg-[#080E18] border border-[#152030]">
-                      <div className="text-[10px] text-slate-500">Action Decision</div>
-                      <div className="text-sm font-bold text-rose-400 mt-1">
-                        {isBlocked ? 'TERMINATE (403)' : 'FORWARD (PASS)'}
+                      <div>
+                        <span className="text-muted-foreground block mb-1">Pattern Match Highlight:</span>
+                        <div className="p-2.5 bg-muted/60 border border-border text-foreground rounded text-xs break-all leading-relaxed">
+                          {testResult.highlightPrefix}
+                          {testResult.highlightMatch ? (
+                            <span className="bg-rose-500/20 text-rose-600 dark:text-rose-300 border border-rose-500/40 px-1 py-0.5 rounded font-bold">
+                              {testResult.highlightMatch}
+                            </span>
+                          ) : null}
+                          {testResult.highlightSuffix}
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               ) : (
-                <div className="p-8 text-center bg-[#080E18] border border-[#152030] text-slate-400">
-                  <Play className="w-8 h-8 mx-auto text-slate-600 mb-2" />
-                  <p>No test has been executed yet.</p>
+                <div className="bg-muted/40 border border-border p-8 rounded-md text-center space-y-3 animate-in fade-in-0 duration-300">
+                  <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center text-muted-foreground mx-auto">
+                    <Play className="w-5 h-5" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-foreground">Chưa có kết quả kiểm tra</h3>
+                  <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                    Gửi một request mẫu ở tab Test Request để xem phân tích chi tiết điều kiện khớp và phản hồi HTTP của rule.
+                  </p>
                   <button
                     type="button"
-                    onClick={() => setActiveTab('Test Request')}
-                    className="mt-3 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer"
+                    onClick={() => setActiveTab('test')}
+                    className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-500 rounded text-xs font-semibold font-mono cursor-pointer transition-colors inline-flex items-center gap-1.5 shadow-xs"
                   >
-                    Go to Test Request
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Chuyển tới Test Request</span>
                   </button>
                 </div>
               )}
             </div>
           )}
 
-          {/* TAB 4: GENERATED CONFIG */}
-          {activeTab === 'Generated Config' && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between border-b border-[#152030] bg-[#080E18]">
-                <div className="flex">
+          {/* TAB 4: Generated Config */}
+          {activeTab === 'config' && (
+            <div className="space-y-4 max-w-3xl mx-auto py-2">
+              <div className="bg-muted/40 border border-border p-5 rounded-md space-y-3 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">Generated NGINX & Lua Configuration</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Cấu hình runtime NGINX / Lua được tạo tự động từ rule này khi deploy.
+                    </p>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => setConfigSubTab('nginx')}
-                    className={`px-3.5 py-2 text-xs transition-colors cursor-pointer ${
-                      configSubTab === 'nginx'
-                        ? 'text-cyan-400 border-b-2 border-cyan-400 font-semibold bg-[#0B1320]'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
+                    onClick={handleCopyConfig}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono rounded border border-border bg-background hover:bg-muted text-foreground transition-colors cursor-pointer shadow-2xs"
                   >
-                    NGINX Config
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfigSubTab('lua')}
-                    className={`px-3.5 py-2 text-xs transition-colors cursor-pointer ${
-                      configSubTab === 'lua'
-                        ? 'text-cyan-400 border-b-2 border-cyan-400 font-semibold bg-[#0B1320]'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    OpenResty / Lua
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfigSubTab('json')}
-                    className={`px-3.5 py-2 text-xs transition-colors cursor-pointer ${
-                      configSubTab === 'json'
-                        ? 'text-cyan-400 border-b-2 border-cyan-400 font-semibold bg-[#0B1320]'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    JSON Spec
+                    {copiedConfig ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedConfig ? 'Copied!' : 'Copy Config'}</span>
                   </button>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleCopy}
-                  className="flex items-center gap-1.5 px-3 py-1 bg-[#152030] hover:bg-[#1C293D] border border-[#1C293D] text-slate-300 hover:text-white transition-colors cursor-pointer text-[11px] m-1"
-                >
-                  {copied ? (
-                    <>
-                      <Check className="w-3 h-3 text-emerald-400" />
-                      <span>Copied</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3 h-3" />
-                      <span>Copy</span>
-                    </>
-                  )}
-                </button>
-              </div>
+                {/* Config Subtabs */}
+                <div className="flex gap-2 border-b border-border font-mono text-xs pt-1">
+                  {(['NGINX Config', 'Lua Script', 'JSON Definition'] as const).map((cfgTab) => (
+                    <button
+                      key={cfgTab}
+                      type="button"
+                      onClick={() => setConfigSubTab(cfgTab)}
+                      className={`px-3 py-1.5 border-b-2 font-medium transition-colors cursor-pointer ${
+                        configSubTab === cfgTab
+                          ? 'border-blue-600 text-blue-600 dark:border-blue-500 dark:text-blue-400 font-semibold'
+                          : 'border-transparent text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {cfgTab}
+                    </button>
+                  ))}
+                </div>
 
-              {/* Code block with line numbers */}
-              <div className="p-3 bg-[#04070D] border border-[#1C293D] overflow-x-auto text-[11px] leading-relaxed text-slate-300 no-scrollbar">
-                {currentConfigContent.split('\n').map((line, idx) => (
-                  <div key={idx} className="flex">
-                    <span className="w-6 text-slate-600 select-none text-right pr-3 shrink-0">
-                      {idx + 1}
-                    </span>
-                    <span className="text-rose-300 font-mono select-text whitespace-pre">
-                      {line}
-                    </span>
-                  </div>
-                ))}
+                {/* Code Viewers */}
+                <div className="bg-[#04070D] border border-border p-4 rounded font-mono text-xs text-slate-200 overflow-x-auto leading-relaxed shadow-inner">
+                  <pre key={configSubTab} className="animate-in fade-in-0 duration-200">
+                    {configSubTab === 'NGINX Config' ? nginxConfig : configSubTab === 'Lua Script' ? luaConfig : jsonConfig}
+                  </pre>
+                </div>
               </div>
             </div>
           )}
+            </div>
+          </SmoothHeight>
+
         </div>
 
         {/* Modal Footer */}
-        <div className="px-5 py-3.5 bg-[#080E18] border-t border-[#152030] flex items-center justify-between font-mono text-xs">
+        <div className="flex items-center justify-between px-6 py-3.5 border-t border-border bg-muted/40 shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-1.5 bg-[#0E1726] hover:bg-[#152030] border border-[#1C293D] text-slate-300 hover:text-white transition-colors cursor-pointer"
+            className="px-4 py-1.5 bg-background hover:bg-muted border border-border text-foreground text-xs font-medium rounded-sm transition-colors cursor-pointer shadow-2xs"
           >
             Close
           </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              onClose();
-              navigate(`/rules/${rule.id}/edit`);
-            }}
-            className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 hover:bg-blue-500 border border-blue-500 text-white font-bold transition-colors cursor-pointer shadow-sm"
+          <Link
+            to={`/rules/edit/${detail.id}`}
+            className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-sm transition-colors cursor-pointer shadow-xs"
           >
             <Pencil className="w-3.5 h-3.5" />
             <span>Edit Rule</span>
-          </button>
+          </Link>
         </div>
+
       </div>
     </div>
   );

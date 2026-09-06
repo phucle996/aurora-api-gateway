@@ -52,6 +52,7 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	}
 	r.GET("/api/v1/policies", authMidd, m.PolicyHandler.List)
 	r.GET("/api/v1/policies/catalog", authMidd, m.PolicyHandler.Catalog)
+	r.GET("/api/v1/policies/rule-catalog", authMidd, m.PolicyHandler.RuleCatalog)
 	r.GET("/api/v1/policies/cluster", authMidd, m.PolicyHandler.Cluster)
 	r.GET("/api/v1/policies/:id", authMidd, m.PolicyHandler.List)
 	r.POST("/api/v1/policies", authMidd, policyAdmin, m.PolicyHandler.SaveDraft)
@@ -72,7 +73,10 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	r.GET("/api/v1/rules/stats", authMidd, m.RuleHandler.Stats)         // Thống kê số lượng rule
 	r.GET("/api/v1/rules/:id", authMidd, m.RuleHandler.Detail)          // Chi tiết 1 rule
 	r.PUT("/api/v1/rules/:id", authMidd, m.RuleHandler.Update)          // Cập nhật rule
-	r.GET("/api/v1/rules/:id/history", authMidd, m.RuleHandler.History) // Lịch sử thay đổi
+	r.GET("/api/v1/rules/:id/history", authMidd, m.RuleHandler.History)   // Lịch sử thay đổi
+	r.POST("/api/v1/rules/:id/rollback", authMidd, m.RuleHandler.Rollback) // Khôi phục cấu hình về phiên bản cũ
+	r.POST("/api/v1/rules/test", authMidd, m.RuleHandler.Test)            // Kiểm thử & đánh giá request với tập luật WAF
+	r.POST("/api/v1/rules/:id/test", authMidd, m.RuleHandler.Test)      // Kiểm thử theo ID rule cụ thể
 
 	// Phát hành (publish) bộ rule để NGINX áp dụng
 	r.POST("/api/v1/rule-releases", authMidd, m.RuleHandler.Publish)          // Tạo release mới

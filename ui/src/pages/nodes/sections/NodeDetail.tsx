@@ -230,20 +230,20 @@ export function NodeDetail({
   };
 
   return (
-    <div className="w-full lg:w-[420px] bg-[#0B1320] border border-[#152030] flex flex-col shrink-0">
+    <div className="w-full lg:w-[420px] bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#152030] flex flex-col shrink-0">
       {/* Detail Header */}
-      <div className="p-4 border-b border-[#152030] flex items-center justify-between">
+      <div className="p-4 border-b border-slate-200 dark:border-[#152030] flex items-center justify-between font-sans">
         <div className="flex items-center gap-2.5">
-          <Server className="w-4 h-4 text-emerald-400" />
-          <span className="text-sm font-mono font-bold text-white">
+          <Server className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
+          <span className="text-sm font-sans font-bold text-slate-900 dark:text-white">
             {node.name}
           </span>
           {node.status === 'Ready' ? (
-            <span className="inline-flex items-center px-2 py-0.5 bg-emerald-950/60 border border-emerald-500/50 text-emerald-400 text-[10px] font-mono">
+            <span className="inline-flex items-center px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-500/50 text-emerald-700 dark:text-emerald-400 text-[10px] font-sans font-bold rounded-xs">
               Ready
             </span>
           ) : (
-            <span className="inline-flex items-center px-2 py-0.5 bg-rose-950/60 border border-rose-500/50 text-rose-400 text-[10px] font-mono">
+            <span className="inline-flex items-center px-2 py-0.5 bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-500/50 text-rose-700 dark:text-rose-400 text-[10px] font-sans font-bold rounded-xs">
               Not Ready
             </span>
           )}
@@ -253,7 +253,7 @@ export function NodeDetail({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 hover:bg-[#152030] text-slate-400 hover:text-white transition-colors cursor-pointer"
+            className="p-1 hover:bg-slate-100 dark:hover:bg-[#152030] text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
             title="Đóng bảng chi tiết"
           >
             <X className="w-4 h-4" />
@@ -262,7 +262,7 @@ export function NodeDetail({
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-[#152030] bg-[#080E18] text-xs font-mono">
+      <div className="flex border-b border-slate-200 dark:border-[#152030] bg-slate-50 dark:bg-[#080E18] text-xs font-sans">
         {(['Overview', 'Metrics', 'Config', 'Sync'] as const).map((tab) => (
           <button
             key={tab}
@@ -270,8 +270,8 @@ export function NodeDetail({
             onClick={() => setActiveTab(tab)}
             className={`flex-1 py-2 text-center transition-colors cursor-pointer ${
               activeTab === tab
-                ? 'text-emerald-400 border-b-2 border-emerald-400 font-semibold bg-[#0B1320]'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-[#0E1726]'
+                ? 'text-emerald-600 dark:text-emerald-400 border-b-2 border-emerald-500 font-semibold bg-white dark:bg-[#0B1320]'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#0E1726]'
             }`}
           >
             {tab}
@@ -285,75 +285,75 @@ export function NodeDetail({
           <>
             {/* Meta Key-Value List */}
             <div className="space-y-2 text-xs font-mono">
-              <div className="flex justify-between py-1 border-b border-[#152030]/60">
-                <span className="text-slate-400">Name</span>
-                <span className="text-slate-200 font-semibold">{node.name}</span>
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-[#152030]/60">
+                <span className="text-slate-500 dark:text-slate-400">Name</span>
+                <span className="text-slate-900 dark:text-slate-200 font-semibold">{node.name}</span>
               </div>
-              <div className="flex justify-between py-1 border-b border-[#152030]/60">
-                <span className="text-slate-400">IP</span>
-                <span className="text-slate-200">{node.ip}</span>
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-[#152030]/60">
+                <span className="text-slate-500 dark:text-slate-400">IP</span>
+                <span className="text-slate-800 dark:text-slate-200">{node.ip}</span>
               </div>
-              <div className="flex justify-between py-1 border-b border-[#152030]/60">
-                <span className="text-slate-400">Role</span>
-                <span className="text-slate-200">{node.role}</span>
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-[#152030]/60">
+                <span className="text-slate-500 dark:text-slate-400">Role</span>
+                <span className="text-slate-800 dark:text-slate-200">{node.role}</span>
               </div>
-              <div className="flex justify-between py-1 border-b border-[#152030]/60">
-                <span className="text-slate-400">Status</span>
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-[#152030]/60">
+                <span className="text-slate-500 dark:text-slate-400">Status</span>
                 <span
                   className={
                     node.status === 'Ready'
-                      ? 'text-emerald-400 font-semibold'
-                      : 'text-rose-400 font-semibold'
+                      ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
+                      : 'text-rose-600 dark:text-rose-400 font-semibold'
                   }
                 >
                   {node.status}
                 </span>
               </div>
-              <div className="flex justify-between py-1 border-b border-[#152030]/60">
-                <span className="text-slate-400">Version</span>
-                <span className="text-slate-200">{node.version}</span>
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-[#152030]/60">
+                <span className="text-slate-500 dark:text-slate-400">Version</span>
+                <span className="text-slate-800 dark:text-slate-200">{node.version}</span>
               </div>
-              <div className="flex justify-between py-1 border-b border-[#152030]/60">
-                <span className="text-slate-400">Ruleset Revision</span>
-                <span className="text-cyan-400 font-semibold">{node.ruleset}</span>
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-[#152030]/60">
+                <span className="text-slate-500 dark:text-slate-400">Ruleset Revision</span>
+                <span className="text-cyan-600 dark:text-cyan-400 font-semibold">{node.ruleset}</span>
               </div>
-              <div className="flex justify-between py-1 border-b border-[#152030]/60">
-                <span className="text-slate-400">Uptime</span>
-                <span className="text-slate-200 font-mono">{uptimeDisplay}</span>
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-[#152030]/60">
+                <span className="text-slate-500 dark:text-slate-400">Uptime</span>
+                <span className="text-slate-800 dark:text-slate-200 font-mono">{uptimeDisplay}</span>
               </div>
-              <div className="flex justify-between py-1 border-b border-[#152030]/60">
-                <span className="text-slate-400">Last Heartbeat</span>
-                <span className="text-slate-300">{node.lastHeartbeat}</span>
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-[#152030]/60">
+                <span className="text-slate-500 dark:text-slate-400">Last Heartbeat</span>
+                <span className="text-slate-800 dark:text-slate-300">{node.lastHeartbeat}</span>
               </div>
             </div>
 
             {/* Realtime Connections & Traffic */}
             <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-xs">
-              <div className="p-2.5 bg-[#080E18] border border-[#152030]">
+              <div className="p-2.5 bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#152030]">
                 <div className="text-[10px] text-slate-500">Active Connections</div>
-                <div className="text-sm font-bold text-white mt-0.5">
+                <div className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">
                   {node.activeConnections || '0'}
                 </div>
               </div>
-              <div className="p-2.5 bg-[#080E18] border border-[#152030]">
+              <div className="p-2.5 bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#152030]">
                 <div className="text-[10px] text-slate-500">Requests per Second</div>
-                <div className="text-sm font-bold text-white mt-0.5">
+                <div className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">
                   {node.requestsPerSecond || '0.0'}
                 </div>
               </div>
             </div>
 
             {/* Policy Sync Banner */}
-            <div className="p-3 bg-[#080E18] border border-[#152030] flex items-center justify-between font-mono text-xs">
-              <span className="text-slate-400">Policy Sync</span>
+            <div className="p-3 bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#152030] flex items-center justify-between font-mono text-xs">
+              <span className="text-slate-500 dark:text-slate-400">Policy Sync</span>
               <div className="text-right">
                 <span
                   className={`inline-flex items-center px-2 py-0.5 border text-[10px] ${
                     node.sync === 'Drift'
-                      ? 'bg-amber-950/50 border-amber-500/40 text-amber-400'
+                      ? 'bg-amber-50 dark:bg-amber-950/50 border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-400'
                       : node.sync === 'Syncing'
-                      ? 'bg-cyan-950/50 border-cyan-500/40 text-cyan-400'
-                      : 'bg-emerald-950/50 border-emerald-500/40 text-emerald-400'
+                      ? 'bg-cyan-50 dark:bg-cyan-950/50 border-cyan-300 dark:border-cyan-500/40 text-cyan-700 dark:text-cyan-400'
+                      : 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-300 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-400'
                   }`}
                 >
                   {node.policySync}
@@ -365,31 +365,31 @@ export function NodeDetail({
             </div>
 
             {/* Recent Status Section */}
-            <div className="p-3 bg-[#080E18] border border-[#152030] space-y-2.5 font-mono text-xs">
+            <div className="p-3 bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#152030] space-y-2.5 font-mono text-xs">
               <div className="flex items-center justify-between">
-                <span className="font-semibold text-slate-200">Recent Status</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">Recent Status</span>
               </div>
 
               <div className="space-y-2 text-[11px]">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-slate-300">
-                    <span className={`w-1.5 h-1.5 ${node.status === 'Ready' ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                  <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                    <span className={`w-1.5 h-1.5 ${node.status === 'Ready' ? 'bg-emerald-500 dark:bg-emerald-400' : 'bg-rose-500 dark:bg-rose-400'}`} />
                     <span>{node.name} liveness</span>
                   </div>
-                  <span className="text-slate-400">{node.status} ({node.lastHeartbeat})</span>
+                  <span className="text-slate-500 dark:text-slate-400">{node.status} ({node.lastHeartbeat})</span>
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-slate-300">
-                    <span className="w-1.5 h-1.5 bg-cyan-400" />
+                  <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                    <span className="w-1.5 h-1.5 bg-cyan-500 dark:bg-cyan-400" />
                     <span>Active ruleset</span>
                   </div>
-                  <span className="text-slate-400">{node.ruleset} ({node.sync})</span>
+                  <span className="text-slate-500 dark:text-slate-400">{node.ruleset} ({node.sync})</span>
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-slate-300">
-                    <span className="w-1.5 h-1.5 bg-slate-500" />
+                  <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                    <span className="w-1.5 h-1.5 bg-slate-400 dark:bg-slate-500" />
                     <span>Registration time</span>
                   </div>
                   <span className="text-slate-500">{node.created_at || 'Registered'}</span>
@@ -402,23 +402,23 @@ export function NodeDetail({
         {activeTab === 'Metrics' && (
           <div className="space-y-4 font-mono text-xs">
             {isLoadingMetrics ? (
-              <div className="p-8 bg-[#080E18] border border-[#152030] flex items-center justify-center gap-2 text-slate-400">
-                <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
+              <div className="p-8 bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#152030] flex items-center justify-center gap-2 text-slate-500 dark:text-slate-400">
+                <RefreshCw className="w-4 h-4 animate-spin text-emerald-500 dark:text-emerald-400" />
                 <span>Đang tải số liệu telemetry...</span>
               </div>
             ) : metricsError ? (
-              <div className="p-4 bg-amber-950/20 border border-amber-500/40 space-y-2 text-xs font-mono">
-                <div className="flex items-center gap-2 text-amber-400 font-bold">
+              <div className="p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-500/40 space-y-2 text-xs font-mono">
+                <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-bold">
                   <AlertCircle className="w-4 h-4" />
                   <span>Telemetry Không Khả Dụng (503)</span>
                 </div>
-                <p className="text-slate-300 text-[11px] leading-relaxed">
+                <p className="text-slate-700 dark:text-slate-300 text-[11px] leading-relaxed">
                   {metricsError}
                 </p>
                 <div className="pt-2">
                   <Link
                     to="/settings"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#152030] hover:bg-[#1C293D] border border-cyan-500/40 text-cyan-300 text-[11px] font-mono transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-[#152030] hover:bg-slate-100 dark:hover:bg-[#1C293D] border border-slate-300 dark:border-cyan-500/40 text-cyan-700 dark:text-cyan-300 text-[11px] font-mono transition-colors cursor-pointer"
                   >
                     <span>Cấu hình tại Cài đặt -&gt; Tích hợp</span>
                     <ArrowRight className="w-3 h-3" />
@@ -498,10 +498,10 @@ export function NodeDetail({
 
         {activeTab === 'Config' && (
           <div className="space-y-3 font-mono text-xs">
-            <div className="flex items-center justify-between text-slate-400">
+            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-slate-200">NGINX Adapter Config</span>
-                <span className="px-1.5 py-0.5 bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 text-[10px]">
+                <span className="font-semibold text-slate-800 dark:text-slate-200">NGINX Adapter Config</span>
+                <span className="px-1.5 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-[10px]">
                   Container Live
                 </span>
               </div>
@@ -510,20 +510,20 @@ export function NodeDetail({
                   type="button"
                   onClick={fetchNodeConfig}
                   disabled={isLoadingConfig}
-                  className="p-1 hover:bg-[#152030] text-slate-400 hover:text-white transition-colors cursor-pointer disabled:opacity-50"
+                  className="p-1 hover:bg-slate-100 dark:hover:bg-[#152030] text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer disabled:opacity-50"
                   title="Tải lại file cấu hình từ container"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingConfig ? 'animate-spin text-emerald-400' : ''}`} />
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingConfig ? 'animate-spin text-emerald-500 dark:text-emerald-400' : ''}`} />
                 </button>
                 {nodeConfig && (
                   <button
                     type="button"
                     onClick={handleCopyConfig}
-                    className="p-1 hover:bg-[#152030] text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer"
+                    className="p-1 hover:bg-slate-100 dark:hover:bg-[#152030] text-slate-400 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors cursor-pointer"
                     title={copiedConfig ? 'Đã sao chép!' : 'Sao chép cấu hình'}
                   >
                     {copiedConfig ? (
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <Check className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
                     ) : (
                       <Copy className="w-3.5 h-3.5" />
                     )}
@@ -533,36 +533,36 @@ export function NodeDetail({
             </div>
 
             <div className="flex items-center justify-between text-[10px] text-slate-500 px-0.5">
-              <span>File: <code className="text-slate-300">{configPath}</code></span>
-              <span>Node: <code className="text-cyan-400">{node.id}</code></span>
+              <span>File: <code className="text-slate-700 dark:text-slate-300">{configPath}</code></span>
+              <span>Node: <code className="text-cyan-600 dark:text-cyan-400">{node.id}</code></span>
             </div>
 
             {isLoadingConfig ? (
-              <div className="p-8 bg-[#080E18] border border-[#152030] flex items-center justify-center gap-2 text-slate-400">
-                <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
+              <div className="p-8 bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#152030] flex items-center justify-center gap-2 text-slate-500 dark:text-slate-400">
+                <RefreshCw className="w-4 h-4 animate-spin text-emerald-500 dark:text-emerald-400" />
                 <span>Đang kéo file cấu hình trực tiếp từ container node...</span>
               </div>
             ) : configError ? (
-              <div className="p-4 bg-rose-950/20 border border-rose-500/40 space-y-2 text-xs font-mono">
-                <div className="flex items-center gap-2 text-rose-400 font-bold">
+              <div className="p-4 bg-rose-50 dark:bg-rose-950/20 border border-rose-300 dark:border-rose-500/40 space-y-2 text-xs font-mono">
+                <div className="flex items-center gap-2 text-rose-700 dark:text-rose-400 font-bold">
                   <AlertCircle className="w-4 h-4" />
                   <span>Không thể kết nối tới Container Node</span>
                 </div>
-                <p className="text-slate-300 text-[11px] leading-relaxed break-all">
+                <p className="text-slate-700 dark:text-slate-300 text-[11px] leading-relaxed break-all">
                   {configError}
                 </p>
                 <div className="pt-2">
                   <button
                     type="button"
                     onClick={fetchNodeConfig}
-                    className="px-3 py-1.5 bg-[#152030] hover:bg-[#1C293D] border border-cyan-500/40 text-cyan-300 text-[11px] font-mono cursor-pointer"
+                    className="px-3 py-1.5 bg-white dark:bg-[#152030] hover:bg-slate-100 dark:hover:bg-[#1C293D] border border-slate-300 dark:border-cyan-500/40 text-cyan-700 dark:text-cyan-300 text-[11px] font-mono cursor-pointer"
                   >
                     Thử lại
                   </button>
                 </div>
               </div>
             ) : (
-              <pre className="p-3 bg-[#04070D] border border-[#1C293D] text-[11px] text-slate-300 font-mono overflow-x-auto leading-relaxed max-h-96">
+              <pre className="p-3 bg-slate-50 dark:bg-[#04070D] border border-slate-200 dark:border-[#1C293D] text-[11px] text-slate-800 dark:text-slate-300 font-mono overflow-x-auto leading-relaxed max-h-96">
                 {nodeConfig}
               </pre>
             )}
@@ -572,71 +572,71 @@ export function NodeDetail({
         {activeTab === 'Sync' && (
           <div className="space-y-4 font-mono text-xs">
             {/* Heartbeat ACK Status Card (In-place Merging - Không tạo thêm dòng) */}
-            <div className="p-3 bg-[#080E18] border border-[#152030] space-y-2">
+            <div className="p-3 bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#152030] space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                   </span>
-                  <span className="font-semibold text-emerald-400 text-xs">Heartbeat Liveness (ACK)</span>
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400 text-xs">Heartbeat Liveness (ACK)</span>
                 </div>
-                <span className="text-[10px] text-emerald-400 font-mono px-1.5 py-0.5 bg-emerald-950/40 border border-emerald-500/30">
+                <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono px-1.5 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-500/30">
                   ACK #{heartbeatAckCount}
                 </span>
               </div>
 
-              <div className="text-[11px] text-slate-400 space-y-1.5 pt-1.5 border-t border-[#152030]/60">
+              <div className="text-[11px] text-slate-600 dark:text-slate-400 space-y-1.5 pt-1.5 border-t border-slate-200 dark:border-[#152030]/60">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Trạng thái:</span>
-                  <span className="text-emerald-300 font-semibold">Active & Healthy</span>
+                  <span className="text-emerald-600 dark:text-emerald-300 font-semibold">Active & Healthy</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">ACK lần cuối:</span>
-                  <span className="text-slate-200">{lastAckTime}</span>
+                  <span className="text-slate-800 dark:text-slate-200">{lastAckTime}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Địa chỉ Node IP:</span>
-                  <span className="text-slate-300 font-mono">{node.ip}</span>
+                  <span className="text-slate-800 dark:text-slate-300 font-mono">{node.ip}</span>
                 </div>
               </div>
             </div>
 
             {/* Real Sync & Release History (Lịch sử đồng bộ thật từ CSDL) */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between text-slate-400">
+              <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
                 <span className="font-semibold">Sync History</span>
               </div>
 
               {isLoadingLogs ? (
                 <div className="py-6 text-center text-slate-500 flex items-center justify-center gap-2 text-[11px]">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-500 dark:text-emerald-400" />
                   <span>Đang tải lịch sử sync...</span>
                 </div>
               ) : syncLogs.length === 0 ? (
-                <div className="p-4 bg-[#080E18] border border-[#152030] text-center text-slate-500 text-[11px] space-y-1">
+                <div className="p-4 bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#152030] text-center text-slate-500 text-[11px] space-y-1">
                   <div>Chưa có sự kiện chuyển đổi release nào.</div>
-                  <div className="text-[10px] text-slate-600">Node đang chạy đồng bộ với cấu hình ban đầu.</div>
+                  <div className="text-[10px] text-slate-400 dark:text-slate-600">Node đang chạy đồng bộ với cấu hình ban đầu.</div>
                 </div>
               ) : (
                 <div className="space-y-2 max-h-72 overflow-y-auto">
                   {syncLogs.map((log) => (
                     <div
                       key={log.id}
-                      className="p-2.5 bg-[#080E18] border border-[#152030] flex justify-between items-start gap-2 text-[11px]"
+                      className="p-2.5 bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#152030] flex justify-between items-start gap-2 text-[11px]"
                     >
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-1.5">
                           <span
                             className={`w-1.5 h-1.5 rounded-full ${
                               log.event_type === 'release_applied'
-                                ? 'bg-cyan-400'
+                                ? 'bg-cyan-500 dark:bg-cyan-400'
                                 : log.event_type === 'reload_completed'
-                                ? 'bg-emerald-400'
-                                : 'bg-amber-400'
+                                ? 'bg-emerald-500 dark:bg-emerald-400'
+                                : 'bg-amber-500 dark:bg-amber-400'
                             }`}
                           />
-                          <span className="font-semibold text-slate-200">
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">
                             {log.event_type === 'release_applied'
                               ? `Release Applied ${log.release_id ? `#${log.release_id}` : ''}`
                               : log.event_type === 'reload_completed'
@@ -644,7 +644,7 @@ export function NodeDetail({
                               : 'Drift Detected'}
                           </span>
                         </div>
-                        <div className="text-[10px] text-slate-400">{log.message}</div>
+                        <div className="text-[10px] text-slate-600 dark:text-slate-400">{log.message}</div>
                       </div>
                       <span className="text-[10px] text-slate-500 whitespace-nowrap shrink-0">
                         {log.created_at}
@@ -734,18 +734,18 @@ function TaskmgrChart({
   const gradientId = `grad-${gridId}`;
 
   return (
-    <div className="p-2.5 bg-[#060A11] border border-[#141F30] rounded font-mono text-xs select-none transition-all">
+    <div className="p-2.5 bg-white dark:bg-[#060A11] border border-slate-200 dark:border-[#141F30] rounded font-mono text-xs select-none transition-all">
       {/* Header: Title & Subtitle ben trai, Gia tri hien tai ben phai */}
       <div className="flex items-baseline justify-between mb-1.5 px-0.5">
         <div className="flex items-baseline gap-2">
-          <span className="font-semibold text-slate-200 text-xs tracking-wide">{title}</span>
+          <span className="font-semibold text-slate-800 dark:text-slate-200 text-xs tracking-wide">{title}</span>
           <span className="text-[10px] text-slate-500 font-sans">{subtitle}</span>
         </div>
         <div className="text-right">
           {activePt ? (
-            <span className="text-white font-bold bg-[#142033] px-1.5 py-0.5 rounded border border-[#203450] text-[11px]">
+            <span className="text-slate-900 dark:text-white font-bold bg-slate-100 dark:bg-[#142033] px-1.5 py-0.5 rounded border border-slate-300 dark:border-[#203450] text-[11px]">
               {activePt.value.toFixed(decimals)} {unit}
-              <span className="text-slate-400 font-normal ml-1">({activePt.label})</span>
+              <span className="text-slate-500 dark:text-slate-400 font-normal ml-1">({activePt.label})</span>
             </span>
           ) : (
             <span className={`text-xs font-bold ${colorClass}`}>
@@ -756,12 +756,12 @@ function TaskmgrChart({
       </div>
 
       {/* Task Manager Grid Box */}
-      <div className="relative border border-[#17253B] rounded-sm bg-[#04070C] overflow-hidden">
+      <div className="relative border border-slate-200 dark:border-[#17253B] rounded-sm bg-slate-50 dark:bg-[#04070C] overflow-hidden">
         {/* Scale labels in top-right / bottom-right */}
-        <div className="absolute right-1.5 top-0.5 text-[9px] text-slate-500 pointer-events-none font-mono opacity-70">
+        <div className="absolute right-1.5 top-0.5 text-[9px] text-slate-400 dark:text-slate-500 pointer-events-none font-mono opacity-70">
           {chartMax >= 100 ? Math.round(chartMax) : chartMax.toFixed(decimals > 0 ? 1 : 0)}{unit}
         </div>
-        <div className="absolute right-1.5 bottom-0.5 text-[9px] text-slate-600 pointer-events-none font-mono opacity-70">
+        <div className="absolute right-1.5 bottom-0.5 text-[9px] text-slate-400 dark:text-slate-600 pointer-events-none font-mono opacity-70">
           0{unit}
         </div>
 

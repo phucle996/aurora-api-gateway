@@ -36,6 +36,10 @@ type ReadPoliciesItem struct {
 	Actor            string          `json:"actor,omitempty"`
 	Operation        string          `json:"operation,omitempty"`
 }
+type PolicyCatalogItem struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
 type PolicyCatalogRule struct {
 	ID           int64  `json:"id"`
 	Version      int64  `json:"version"`

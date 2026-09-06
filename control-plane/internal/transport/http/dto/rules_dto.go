@@ -53,3 +53,40 @@ type CreateRuleConditionRequest struct {
 	Value      string `json:"value"`
 	HeaderName string `json:"header_name"`
 }
+
+type TestRuleRequest struct {
+	RuleID       *int64                       `json:"rule_id"`
+	Method       string                       `json:"method"`
+	URL          string                       `json:"url"`
+	Headers      map[string]string            `json:"headers"`
+	Body         string                       `json:"body"`
+	ClientIP     string                       `json:"client_ip"`
+	Conditions   []CreateRuleConditionRequest `json:"conditions"`
+	LogicMode    string                       `json:"logic_mode"`
+	Action       string                       `json:"action"`
+	ResponseCode int                          `json:"response_code"`
+}
+
+type TestConditionDetailResponse struct {
+	Field          string `json:"field"`
+	Operator       string `json:"operator"`
+	Value          string `json:"value"`
+	HeaderName     string `json:"header_name"`
+	ExtractedValue string `json:"extracted_value"`
+	Matched        bool   `json:"matched"`
+}
+
+type TestRuleResponse struct {
+	Matched          bool                          `json:"matched"`
+	Action           string                        `json:"action"`
+	ResponseCode     int                           `json:"response_code"`
+	ActionDispatched string                        `json:"action_dispatched"`
+	LatencyMS        float64                       `json:"latency_ms"`
+	EvaluationTimeNs int64                         `json:"evaluation_time_ns"`
+	MatchedField     string                        `json:"matched_field"`
+	MatchedPattern   string                        `json:"matched_pattern"`
+	MatchedValue     string                        `json:"matched_value"`
+	Explanation      string                        `json:"explanation"`
+	Details          []TestConditionDetailResponse `json:"details"`
+}
+

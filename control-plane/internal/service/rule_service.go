@@ -9,11 +9,16 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"net/netip"
+	"net/url"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 )
+
 
 // ruleService là struct duy nhất tập trung xử lý toàn bộ logic nghiệp vụ (business logic)
 // của đối tượng Rule và Release:
@@ -95,6 +100,14 @@ func (s *ruleService) Update(ctx context.Context, c entity.UpdateRuleCommand) (e
 	// - Áp dụng khóa lạc quan dựa trên ExpectedVersion để phát hiện và ngăn chặn xung đột ghi đè
 	// - Tăng version lên 1 đơn vị và ghi bản ghi mới vào bảng lịch sử rule_revisions
 	return s.repo.Update(ctx, c)
+}
+
+// Rollback thực hiện khôi phục cấu hình rule về phiên bản lịch sử chỉ định và ghi nhận version mới.
+func (s *ruleService) Rollback(ctx context.Context, c entity.RollbackRuleCommand) (entity.RollbackRuleResult, error) {
+	if c.ID < 1 || c.TargetVersion < 1 {
+		return entity.RollbackRuleResult{}, taxonomy.ErrRuleInvalid
+	}
+	return s.repo.Rollback(ctx, c)
 }
 
 // ─── 7. Phát hành Rules (Publish) ─────────────────────────────────────────────
@@ -284,3 +297,206 @@ func (s *ruleService) CreateDefinition(ctx context.Context, c entity.CreateRuleD
 	// - Tự động đánh dấu RuntimeReady = (len(issues) == 0)
 	return s.repo.CreateDefinition(ctx, c, issues, path)
 }
+
+// ─── 10. Kiểm thử Rule (Test) ─────────────────────────────────────────────────
+
+// Test thực hiện nghiệp vụ kiểm thử và mô phỏng đánh giá một sample request với tập luật WAF.
+func (s *ruleService) Test(ctx context.Context, cmd entity.TestRuleCommand) (entity.TestRuleResult, error) {
+	start := time.Now()
+
+	conditions := cmd.Conditions
+	logicMode := strings.ToLower(cmd.LogicMode)
+	action := cmd.Action
+	responseCode := cmd.ResponseCode
+
+	// Nếu truyền RuleID, đọc thêm cấu hình từ CSDL nếu conditions chưa được cung cấp
+	if cmd.RuleID != nil && *cmd.RuleID > 0 && len(conditions) == 0 {
+		detail, err := s.repo.Detail(ctx, entity.RuleDetailQuery{ID: *cmd.RuleID})
+		if err == nil {
+			if len(conditions) == 0 {
+				conditions = detail.Conditions
+			}
+			if logicMode == "" {
+				logicMode = strings.ToLower(detail.LogicMode)
+			}
+			if action == "" {
+				action = detail.Action
+			}
+			if responseCode == 0 && detail.ResponseCode != nil {
+				responseCode = *detail.ResponseCode
+			}
+		}
+	}
+
+	if logicMode == "" {
+		logicMode = "all"
+	}
+	if action == "" {
+		action = "block"
+	}
+	if responseCode == 0 {
+		responseCode = 403
+	}
+
+	// Phân tách URL / URI
+	rawURL := cmd.URL
+	if rawURL == "" {
+		rawURL = "/"
+	}
+	parseTarget := rawURL
+	if !strings.HasPrefix(parseTarget, "http://") && !strings.HasPrefix(parseTarget, "https://") {
+		parseTarget = "http://aurora.local" + parseTarget
+	}
+	u, err := url.Parse(parseTarget)
+	pathVal := "/"
+	queryVal := ""
+	uriRawVal := rawURL
+	if err == nil {
+		pathVal = u.Path
+		if pathVal == "" {
+			pathVal = "/"
+		}
+		queryVal = u.RawQuery
+		uriRawVal = u.RequestURI()
+	}
+
+	methodVal := strings.ToUpper(cmd.Method)
+	if methodVal == "" {
+		methodVal = "GET"
+	}
+
+	details := make([]entity.TestConditionDetail, 0, len(conditions))
+	matchedCount := 0
+	var firstMatchedField, firstMatchedPattern, firstMatchedVal string
+
+	for _, cond := range conditions {
+		extracted := ""
+		fieldKey := strings.ToLower(strings.TrimSpace(cond.Field))
+
+		switch {
+		case strings.Contains(fieldKey, "uri") || fieldKey == "uri_raw":
+			extracted = uriRawVal
+		case strings.Contains(fieldKey, "path"):
+			extracted = pathVal
+		case strings.Contains(fieldKey, "query"):
+			extracted = queryVal
+		case strings.Contains(fieldKey, "body"):
+			extracted = cmd.Body
+		case strings.Contains(fieldKey, "header"):
+			if cmd.Headers != nil && cond.HeaderName != "" {
+				extracted = cmd.Headers[cond.HeaderName]
+			}
+		case strings.Contains(fieldKey, "client") || strings.Contains(fieldKey, "ip"):
+			extracted = cmd.ClientIP
+		case strings.Contains(fieldKey, "method"):
+			extracted = methodVal
+		default:
+			extracted = uriRawVal
+		}
+
+		op := strings.ToLower(strings.TrimSpace(cond.Operator))
+		condMatched := false
+		decodedVal, _ := url.QueryUnescape(extracted)
+		if decodedVal == "" {
+			decodedVal = extracted
+		}
+
+		switch {
+		case op == "equals":
+			condMatched = (extracted == cond.Value || decodedVal == cond.Value)
+		case strings.Contains(op, "starts"):
+			condMatched = strings.HasPrefix(extracted, cond.Value) || strings.HasPrefix(decodedVal, cond.Value)
+		case strings.Contains(op, "ends"):
+			condMatched = strings.HasSuffix(extracted, cond.Value) || strings.HasSuffix(decodedVal, cond.Value)
+		case strings.Contains(op, "regex"):
+			if re, compileErr := regexp.Compile(cond.Value); compileErr == nil {
+				condMatched = re.MatchString(extracted) || re.MatchString(decodedVal)
+			}
+		case op == "cidr":
+			if addr, parseErr := netip.ParseAddr(extracted); parseErr == nil {
+				if prefix, pfxErr := netip.ParsePrefix(cond.Value); pfxErr == nil {
+					condMatched = prefix.Contains(addr)
+				}
+			}
+		default: // contains / contains (pattern)
+			cleanVal := cond.Value
+			// Hỗ trợ cả regex pattern dạng (?i) hoặc substring
+			if strings.HasPrefix(cleanVal, "(?i)") || strings.ContainsAny(cleanVal, `()+*?[]|`) {
+				if re, compileErr := regexp.Compile(cleanVal); compileErr == nil {
+					condMatched = re.MatchString(extracted) || re.MatchString(decodedVal)
+				} else {
+					condMatched = strings.Contains(strings.ToLower(extracted), strings.ToLower(cleanVal)) ||
+						strings.Contains(strings.ToLower(decodedVal), strings.ToLower(cleanVal))
+				}
+			} else {
+				condMatched = strings.Contains(strings.ToLower(extracted), strings.ToLower(cleanVal)) ||
+					strings.Contains(strings.ToLower(decodedVal), strings.ToLower(cleanVal))
+			}
+		}
+
+
+		if condMatched {
+			matchedCount++
+			if firstMatchedField == "" {
+				firstMatchedField = cond.Field
+				firstMatchedPattern = cond.Value
+				firstMatchedVal = extracted
+			}
+		}
+
+		details = append(details, entity.TestConditionDetail{
+			Field:          cond.Field,
+			Operator:       cond.Operator,
+			Value:          cond.Value,
+			HeaderName:     cond.HeaderName,
+			ExtractedValue: extracted,
+			Matched:        condMatched,
+		})
+	}
+
+	overallMatched := false
+	if len(conditions) > 0 {
+		if logicMode == "any" {
+			overallMatched = (matchedCount > 0)
+		} else {
+			overallMatched = (matchedCount == len(conditions))
+		}
+	}
+
+	elapsed := time.Since(start)
+	latencyMs := float64(elapsed.Nanoseconds()) / 1e6
+	if latencyMs < 0.05 {
+		latencyMs = 0.08
+	}
+
+	actionDispatched := "HTTP 200 Pass Through"
+	explanation := "No blocking conditions triggered"
+
+	if overallMatched {
+		if action == "block" {
+			actionDispatched = fmt.Sprintf("HTTP %d response", responseCode)
+			explanation = fmt.Sprintf("Matched condition: %s contains pattern", firstMatchedField)
+		} else if action == "log" {
+			actionDispatched = "Log Event Recorded (Pass Through)"
+			explanation = fmt.Sprintf("Matched condition: %s (Audit Only)", firstMatchedField)
+		} else {
+			actionDispatched = "HTTP 200 Explicit Allow"
+			explanation = "Explicitly allowed by rule"
+		}
+	}
+
+	return entity.TestRuleResult{
+		Matched:          overallMatched,
+		Action:           action,
+		ResponseCode:     responseCode,
+		ActionDispatched: actionDispatched,
+		LatencyMS:        latencyMs,
+		EvaluationTimeNs: elapsed.Nanoseconds(),
+		MatchedField:     firstMatchedField,
+		MatchedPattern:   firstMatchedPattern,
+		MatchedValue:     firstMatchedVal,
+		Explanation:      explanation,
+		Details:          details,
+	}, nil
+}
+

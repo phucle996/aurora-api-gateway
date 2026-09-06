@@ -13,7 +13,7 @@ export default function DashboardPage() {
   const [timeRange, setTimeRange] = useState('24h');
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 w-full space-y-6">
       {/* Header */}
       <DashboardHeader
         timeRange={timeRange}

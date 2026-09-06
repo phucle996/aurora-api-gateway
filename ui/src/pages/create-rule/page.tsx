@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CreateRuleHeader } from './sections/CreateRuleHeader';
 import { BasicInfoSection } from './sections/BasicInfoSection';
@@ -14,7 +14,9 @@ import {
   RuleTemplatesPanel,
   type TemplateData,
 } from './sections/RuleTemplatesPanel';
+import { RuleActivationDialog } from './sections/RuleActivationDialog';
 import { Save } from 'lucide-react';
+import { policiesApi, type PolicyCatalogItem } from '../../lib/api/policies';
 
 export default function CreateRulePage() {
   const navigate = useNavigate();
@@ -32,8 +34,32 @@ export default function CreateRulePage() {
   const [ruleName, setRuleName] = useState('');
   const [description, setDescription] = useState('');
   const [policy, setPolicy] = useState('');
+  const [policyCatalog, setPolicyCatalog] = useState<PolicyCatalogItem[]>([]);
+  const [isLoadingPolicies, setIsLoadingPolicies] = useState(false);
   const [enabled, setEnabled] = useState(true);
   const [priority, setPriority] = useState(100);
+  const [isActivationDialogOpen, setIsActivationDialogOpen] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setIsLoadingPolicies(true);
+    policiesApi
+      .catalog()
+      .then((data) => {
+        if (!active) return;
+        setPolicyCatalog(data || []);
+      })
+      .catch(() => {
+        if (!active) return;
+        setPolicyCatalog([]);
+      })
+      .finally(() => {
+        if (active) setIsLoadingPolicies(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const [conditions, setConditions] = useState<Condition[]>([
     {
@@ -89,10 +115,28 @@ export default function CreateRulePage() {
     http_method: httpMethod === 'All Methods' ? '' : httpMethod,
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleInitiateSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!ruleName.trim()) {
+      setError('Rule Name is required. Vui lòng nhập tên Rule.');
+      return;
+    }
+    setIsActivationDialogOpen(true);
+  };
+
+  const handleConfirmSave = async (shouldEnable: boolean) => {
+    setIsActivationDialogOpen(false);
+    setEnabled(shouldEnable);
+    await executeCreateRule(shouldEnable);
+  };
+
+  const executeCreateRule = async (shouldEnable: boolean) => {
     if (inFlight.current) return;
-    const payload = JSON.stringify(definition);
+    const def = {
+      ...definition,
+      enabled: shouldEnable,
+    };
+    const payload = JSON.stringify(def);
     if (uncertain && attempt.current?.payload !== payload) { setError('Retry the original submission before changing its content.'); return; }
     if (!attempt.current || attempt.current.payload !== payload) attempt.current = { key: crypto.randomUUID(), payload };
     inFlight.current = true; setBusy(true); setError(''); setFieldErrors({});
@@ -126,14 +170,13 @@ export default function CreateRulePage() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 w-full space-y-6">
       {/* Header */}
-          <CreateRuleHeader onScrollToTemplates={handleScrollToTemplates} />
-          <p className="border border-cyan-900 bg-cyan-950/20 p-3 text-sm text-cyan-200">Create saves immutable revision 1, unassigned and not deployed. Extended conditions/scopes are saved as definitions, but publish is blocked until the runtime supports them. No NGINX config or live traffic changes here.</p>
-          {error && <div role="alert" className="border border-rose-700 bg-rose-950/30 p-3 text-rose-200"><p>{error}</p><ul>{Object.entries(fieldErrors).map(([field, message]) => <li key={field}><strong>{field}</strong>: {message}</li>)}</ul></div>}
+      <CreateRuleHeader onScrollToTemplates={handleScrollToTemplates} />
+      {error && <div role="alert" className="border border-rose-700 bg-rose-950/30 p-3 text-rose-200"><p>{error}</p><ul>{Object.entries(fieldErrors).map(([field, message]) => <li key={field}><strong>{field}</strong>: {message}</li>)}</ul></div>}
 
           {/* Form Layout: 2 Columns on desktop */}
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          <form onSubmit={handleInitiateSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
             {/* Left 7 cols: Form sections */}
             <div className="lg:col-span-7 space-y-5">
               <fieldset disabled={busy || uncertain} className="space-y-5 disabled:opacity-70">
@@ -145,16 +188,16 @@ export default function CreateRulePage() {
                 setDescription={setDescription}
                 policy={policy}
                 setPolicy={setPolicy}
-                enabled={enabled}
-                setEnabled={setEnabled}
                 priority={priority}
                 setPriority={setPriority}
+                policyCatalog={policyCatalog}
+                isLoadingPolicies={isLoadingPolicies}
               />
 
-              <div className="grid grid-cols-3 gap-3 bg-[#0B1320] p-4 text-xs">
-                <label>Group<select aria-label="Rule group" value={group} onChange={e => setGroup(e.target.value)} className="block w-full bg-[#0E1726] p-2">{['custom','sqli','xss','traversal','bot','endpoint','authentication'].map(g => <option key={g}>{g}</option>)}</select></label>
-                <label>Severity<select aria-label="Severity" value={severity} onChange={e => setSeverity(e.target.value)} className="block w-full bg-[#0E1726] p-2">{['low','medium','high','critical'].map(s => <option key={s}>{s}</option>)}</select></label>
-                <label>Score<input aria-label="Score" type="number" min={0} max={1000} value={score} onChange={e => setScore(Number(e.target.value))} className="block w-full bg-[#0E1726] p-2" /></label>
+              <div className="grid grid-cols-3 gap-3 bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#152030] p-4 text-xs text-slate-800 dark:text-slate-200">
+                <label>Group<select aria-label="Rule group" value={group} onChange={e => setGroup(e.target.value)} className="block w-full bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] p-2 mt-1">{['custom','sqli','xss','traversal','bot','endpoint','authentication'].map(g => <option key={g}>{g}</option>)}</select></label>
+                <label>Severity<select aria-label="Severity" value={severity} onChange={e => setSeverity(e.target.value)} className="block w-full bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] p-2 mt-1">{['low','medium','high','critical'].map(s => <option key={s}>{s}</option>)}</select></label>
+                <label>Score<input aria-label="Score" type="number" min={0} max={1000} value={score} onChange={e => setScore(Number(e.target.value))} className="block w-full bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] p-2 mt-1" /></label>
               </div>
 
               {/* 2. Match Conditions */}
@@ -198,14 +241,15 @@ export default function CreateRulePage() {
                   type="button"
                   disabled={busy || uncertain}
                   onClick={() => navigate('/rules')}
-                  className="px-4 py-2 bg-[#0E1726] hover:bg-[#152030] border border-[#1C293D] text-slate-300 hover:text-white text-xs font-mono transition-colors cursor-pointer"
+                  className="px-4 py-2 bg-slate-100 dark:bg-[#0E1726] hover:bg-slate-200 dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-mono transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
 
                 <button
-                  type="submit"
+                  type="button"
                   disabled={busy}
+                  onClick={handleInitiateSubmit}
                   className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-500 border border-blue-500 text-white text-xs font-bold font-mono transition-colors cursor-pointer shadow-sm"
                 >
                   <Save className="w-3.5 h-3.5" />
@@ -219,13 +263,19 @@ export default function CreateRulePage() {
               {/* Rule Preview */}
               <RulePreviewPanel definition={definition} />
 
-              {/* Test Rule */}
-              <div className="bg-[#0B1320] border border-[#152030] p-4 text-xs text-slate-400"><h2 className="text-white font-semibold mb-2">Runtime testing</h2>Saving validates the definition, not an HTTP request. Extended runtime preview is not implemented; no simulated allow/block result is shown. Deployments must pass Rust validation and NGINX config validation separately.</div>
-
               {/* Common Rule Templates */}
               <fieldset disabled={busy || uncertain}><RuleTemplatesPanel onSelectTemplate={handleSelectTemplate} /></fieldset>
             </div>
           </form>
+
+          {/* Save Confirmation Dialog */}
+          <RuleActivationDialog
+            open={isActivationDialogOpen}
+            onOpenChange={setIsActivationDialogOpen}
+            ruleName={ruleName}
+            isSaving={busy}
+            onConfirm={handleConfirmSave}
+          />
     </div>
   );
 }

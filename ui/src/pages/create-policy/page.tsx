@@ -1,51 +1,282 @@
-import React,{useEffect,useRef,useState} from 'react';
-import {Link,useNavigate,useSearchParams} from 'react-router-dom';
-import {policiesApi,type PolicyDraft,type PolicyRule} from '../../lib/api/policies';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { policiesApi, type PolicyDraft, type PolicyRule } from '../../lib/api/policies';
+import { CreatePolicyHeader } from './sections/CreatePolicyHeader';
+import { BasicInfoSection, type PolicyType } from './sections/BasicInfoSection';
+import { PolicyRulesSection, type PolicyRuleItem } from './sections/PolicyRulesSection';
+import { ScopeSection } from './sections/ScopeSection';
+import { AdvancedOptionsSection } from './sections/AdvancedOptionsSection';
+import { PolicyPreviewPanel } from './sections/PolicyPreviewPanel';
+import { PolicySummaryPanel } from './sections/PolicySummaryPanel';
+import { FilePlus, ShieldCheck, AlertCircle } from 'lucide-react';
 
-export default function CreatePolicyPage(){
- const [params]=useSearchParams();const navigate=useNavigate();
- const source=params.get('edit')||params.get('clone');const editing=params.has('edit');
- const [form,setForm]=useState<PolicyDraft>({name:'',description:'',host:'*',path_prefix:'/',mode:'mixed',priority:100,rule_ids:[],expected_version:0});
- const [rules,setRules]=useState<PolicyRule[]>([]);const [ready,setReady]=useState(false);const [busy,setBusy]=useState(false);const [error,setError]=useState('');
- const retry=useRef<{body:string;key:string}|null>(null);
- useEffect(()=>{let live=true;setReady(false);
-  Promise.all([policiesApi.catalog(),source?policiesApi.detail(Number(source)):Promise.resolve([])]).then(([catalog,rows])=>{
-   if(!live)return;setRules(catalog);
-   if(source){const p=rows[0];if(!p)throw Error('Policy not found');const d=p.document;setForm({name:d.name+(editing?'':' (copy)'),description:d.description,host:d.host,path_prefix:d.path_prefix,mode:d.mode,priority:d.priority,rule_ids:d.rule_ids,expected_version:editing?p.version:0})}
-   setReady(true);
-  }).catch(e=>{if(live)setError(e instanceof Error?e.message:String(e))});return()=>{live=false};
- },[source,editing]);
- async function save(e:React.FormEvent){
-  e.preventDefault();if(busy||!ready)return;const body=JSON.stringify(form);
-  if(retry.current?.body!==body)retry.current={body,key:crypto.randomUUID()};
-  setBusy(true);setError('');
-  try{await policiesApi.save(editing?Number(source):null,form,retry.current.key);retry.current=null;navigate('/policies')}catch(e){setError(e instanceof Error?e.message:String(e))}finally{setBusy(false)}
- }
- const groups=[...new Set(rules.map(r=>r.group))];
- return <form onSubmit={save} className="p-6 space-y-4">
-  <Link to="/policies" className="text-emerald-400">← Policies</Link>
-  <h1 className="text-xl font-bold">{editing?'Edit policy draft':source?'Clone policy':'Create policy'}</h1>
-  <p className="text-sm text-slate-400">Applies cluster-wide after preview and publish. Saving captures the current revisions of selected rules. No traffic changes on save.</p>
-  {error&&<p role="alert" className="text-rose-300">{error}</p>}
-  {!ready&&!error&&<p>Loading policy and rule catalog…</p>}
-  <fieldset disabled={!ready||busy} className="space-y-4 disabled:opacity-50">
-   <section className="grid md:grid-cols-2 gap-4 bg-[#0B1320] border border-[#172338] p-4">
-    <label className="space-y-1">Name<input required maxLength={120} className="block w-full bg-slate-950 border border-slate-700 p-2" value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></label>
-    <label className="space-y-1">Priority (lower wins)<input type="number" required min={0} max={1000000} className="block w-full bg-slate-950 border border-slate-700 p-2" value={form.priority} onChange={e=>setForm({...form,priority:Number(e.target.value)})}/></label>
-    <label className="space-y-1">Host (* for all)<input required maxLength={253} className="block w-full bg-slate-950 border border-slate-700 p-2" value={form.host} onChange={e=>setForm({...form,host:e.target.value})}/></label>
-    <label className="space-y-1">Path prefix<input required maxLength={8192} className="block w-full bg-slate-950 border border-slate-700 p-2" value={form.path_prefix} onChange={e=>setForm({...form,path_prefix:e.target.value})}/></label>
-    <label>Mode<select className="block w-full bg-slate-950 border border-slate-700 p-2" value={form.mode} onChange={e=>setForm({...form,mode:e.target.value as PolicyDraft['mode']})}><option value="mixed">Mixed — respect rule actions</option><option value="detect">Detect — log matches, never block</option><option value="block">Block — preserve allow rules, block other matches</option></select></label>
-    <label>Description<textarea maxLength={2000} className="block w-full bg-slate-950 border border-slate-700 p-2" value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/></label>
-   </section>
-   <p className="text-xs text-slate-400">Host is exact and case-insensitive. /admin matches /admin and /admin/…, not /administrator. First matching policy wins; unmatched rule paths are allowed. Rules currently match exact normalized paths. Blocking response is 403; challenge, rate-limit and custom responses are not supported here.</p>
-   <section className="border border-[#172338] p-4 space-y-3"><h2>Rule groups — select actual saved rules ({form.rule_ids.length})</h2>
-    {rules.length===0&&<p>No rules yet. <Link to="/rules/create" className="text-emerald-400">Create a rule</Link> first.</p>}
-    {groups.map(group=><div key={group} className="border-b border-slate-800 pb-3"><div className="flex justify-between"><h3>{group}</h3><button type="button" className="text-emerald-400 text-xs" onClick={()=>{const ids=rules.filter(r=>r.group===group).map(r=>r.id);const all=ids.every(id=>form.rule_ids.includes(id));setForm({...form,rule_ids:all?form.rule_ids.filter(id=>!ids.includes(id)):[...new Set([...form.rule_ids,...ids])]})}}>Toggle group</button></div>
-     {rules.filter(r=>r.group===group).map(r=><label key={r.id} className="flex items-center gap-2 text-sm py-1"><input type="checkbox" checked={form.rule_ids.includes(r.id)} onChange={()=>setForm({...form,rule_ids:form.rule_ids.includes(r.id)?form.rule_ids.filter(id=>id!==r.id):[...form.rule_ids,r.id]})}/>{r.name} · v{r.version} · {r.action}{(!r.enabled||!r.runtime_ready)&&<span className="text-amber-400">Draft only: {r.enabled?'unsupported runtime conditions':'disabled rule'}</span>}</label>)}
-    </div>)}
-   </section>
-   <p className="text-xs text-slate-400">Audit revisions are always retained. Log actions use the existing bounded NGINX audit log, not a fabricated security-event feed.</p>
-   <button className="bg-emerald-700 px-4 py-2" type="submit">{busy?'Saving…':'Save draft'}</button>
-  </fieldset>
- </form>;
+function mapCatalogRuleToItem(r: PolicyRule): PolicyRuleItem {
+  let type: PolicyRuleItem['type'] = 'custom';
+  const g = (r.group || '').toLowerCase();
+  const nm = r.name.toLowerCase();
+  if (g === 'rate-limit' || nm.includes('rate-limit')) {
+    type = 'rate-limit';
+  } else if (
+    g === 'endpoint' ||
+    g === 'authentication' ||
+    g === 'access-control' ||
+    nm.includes('allow') ||
+    nm.includes('access')
+  ) {
+    type = 'access-control';
+  }
+
+  let action: PolicyRuleItem['action'] = 'block';
+  const act = (r.action || '').toLowerCase();
+  if (act.includes('allow')) action = 'allow';
+  else if (act.includes('limit') || act.includes('throttle') || act.includes('log')) action = 'throttle';
+
+  return {
+    id: r.id,
+    name: r.name,
+    type,
+    group: r.group,
+    action,
+    enabled: r.enabled ?? true,
+  };
+}
+
+export default function CreatePolicyPage() {
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const source = params.get('edit') || params.get('clone');
+  const isEditing = params.has('edit');
+
+  // Form State
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [policyType, setPolicyType] = useState<PolicyType>('waf');
+  const [enabled, setEnabled] = useState(true);
+  const [priority, setPriority] = useState(100);
+
+  const [rules, setRules] = useState<PolicyRuleItem[]>([]);
+  const [catalog, setCatalog] = useState<PolicyRule[]>([]);
+  const [isLoadingCatalog, setIsLoadingCatalog] = useState(true);
+
+  const [target, setTarget] = useState('*');
+  const [path, setPath] = useState('/api/*');
+  const [httpMethod, setHttpMethod] = useState('*');
+
+  const [enableLogging, setEnableLogging] = useState(true);
+  const [addToIpReputation, setAddToIpReputation] = useState(false);
+  const [enableShadowMode, setEnableShadowMode] = useState(false);
+
+  const [expectedVersion, setExpectedVersion] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
+  const retryRef = useRef<{ body: string; key: string } | null>(null);
+
+  // Load catalog and source policy if editing/cloning
+  useEffect(() => {
+    let active = true;
+    setIsLoadingCatalog(true);
+
+    Promise.all([
+      policiesApi.ruleCatalog().catch(() => [] as PolicyRule[]),
+      source ? policiesApi.detail(Number(source)).catch(() => []) : Promise.resolve([]),
+    ])
+      .then(([catalogData, rows]) => {
+        if (!active) return;
+        const fetchedCatalog = catalogData || [];
+        setCatalog(fetchedCatalog);
+
+        if (source && rows && rows.length > 0) {
+          const policy = rows[0];
+          const doc = policy.document;
+          setName(doc.name + (isEditing ? '' : ' (copy)'));
+          setDescription(doc.description || '');
+          setTarget(doc.host || '*');
+          setPath(doc.path_prefix || '/*');
+          setPriority(doc.priority || 100);
+          setExpectedVersion(isEditing ? policy.version : 0);
+          if (doc.mode === 'detect') setEnableShadowMode(true);
+
+          // If source has rules, map them
+          if (doc.rules && doc.rules.length > 0) {
+            setRules(doc.rules.map(mapCatalogRuleToItem));
+          }
+        }
+      })
+      .catch((err) => {
+        if (active) setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (active) setIsLoadingCatalog(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [source, isEditing]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSaving) return;
+
+    setIsSaving(true);
+    setError('');
+
+    const draft: PolicyDraft = {
+      name,
+      description,
+      host: target === 'All Domains' ? '*' : target,
+      path_prefix: path.replace(/\*$/, '') || '/',
+      mode: enableShadowMode ? 'detect' : 'mixed',
+      priority,
+      rule_ids: rules.filter((r) => r.enabled).map((r) => r.id),
+      expected_version: expectedVersion,
+    };
+
+    const bodyStr = JSON.stringify(draft);
+    if (retryRef.current?.body !== bodyStr) {
+      retryRef.current = { body: bodyStr, key: crypto.randomUUID() };
+    }
+
+    try {
+      await policiesApi.save(
+        isEditing ? Number(source) : null,
+        draft,
+        retryRef.current.key
+      );
+      retryRef.current = null;
+      navigate('/policies');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="p-6 w-full space-y-6">
+      {/* Header & Breadcrumb */}
+      <CreatePolicyHeader isEditing={isEditing} />
+
+      {/* Error Alert */}
+      {error && (
+        <div className="p-3.5 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-400 text-xs font-mono flex items-center gap-2 rounded-sm">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* Main 2-Column Layout */}
+      <form onSubmit={handleSubmit}>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Left Column: Form Configuration Cards (~65% width) */}
+          <div className="lg:col-span-7 xl:col-span-8 space-y-5">
+            {/* 1. Basic Information */}
+            <BasicInfoSection
+              name={name}
+              setName={setName}
+              description={description}
+              setDescription={setDescription}
+              policyType={policyType}
+              setPolicyType={setPolicyType}
+              enabled={enabled}
+              setEnabled={setEnabled}
+              priority={priority}
+              setPriority={setPriority}
+            />
+
+            {/* 2. Policy Rules */}
+            <PolicyRulesSection
+              rules={rules}
+              setRules={setRules}
+              availableCatalog={catalog}
+              isLoading={isLoadingCatalog}
+            />
+
+            {/* 3. Scope */}
+            <ScopeSection
+              target={target}
+              setTarget={setTarget}
+              path={path}
+              setPath={setPath}
+              httpMethod={httpMethod}
+              setHttpMethod={setHttpMethod}
+            />
+
+            {/* 4. Advanced Options */}
+            <AdvancedOptionsSection
+              enableLogging={enableLogging}
+              setEnableLogging={setEnableLogging}
+              addToIpReputation={addToIpReputation}
+              setAddToIpReputation={setAddToIpReputation}
+              enableShadowMode={enableShadowMode}
+              setEnableShadowMode={setEnableShadowMode}
+            />
+
+            {/* Bottom Form Actions */}
+            <div className="flex items-center justify-between pt-2">
+              <button
+                type="button"
+                onClick={() => navigate('/policies')}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-[#0B1320] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-300 text-xs font-mono rounded-sm transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                disabled={isSaving || !name.trim()}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-mono font-semibold rounded-sm shadow-lg shadow-blue-500/20 transition-all cursor-pointer"
+              >
+                {isSaving ? (
+                  <span>Saving policy...</span>
+                ) : isEditing ? (
+                  <>
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Save Policy Changes</span>
+                  </>
+                ) : (
+                  <>
+                    <FilePlus className="w-4 h-4" />
+                    <span>Create Policy</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Right Column: Preview & Summary Sidebar (~35% width) */}
+          <div className="lg:col-span-5 xl:col-span-4 space-y-5 lg:sticky lg:top-20">
+            {/* Policy Preview (Tabs JSON / NGINX Config) */}
+            <PolicyPreviewPanel
+              name={name}
+              description={description}
+              policyType={policyType}
+              priority={priority}
+              enabled={enabled}
+              rules={rules}
+              target={target}
+              path={path}
+              httpMethod={httpMethod}
+              enableLogging={enableLogging}
+              enableShadowMode={enableShadowMode}
+            />
+
+            {/* Policy Summary */}
+            <PolicySummaryPanel
+              name={name}
+              policyType={policyType}
+              enabled={enabled}
+              priority={priority}
+              rules={rules}
+              target={target}
+              path={path}
+              httpMethod={httpMethod}
+              enableLogging={enableLogging}
+              enableShadowMode={enableShadowMode}
+            />
+          </div>
+        </div>
+      </form>
+    </div>
+  );
 }

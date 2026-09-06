@@ -1,5 +1,6 @@
 import React from 'react';
 import { HelpCircle } from 'lucide-react';
+import type { PolicyCatalogItem } from '../../../lib/api/policies';
 
 interface BasicInfoProps {
   name: string;
@@ -8,10 +9,10 @@ interface BasicInfoProps {
   setDescription: (v: string) => void;
   policy: string;
   setPolicy: (v: string) => void;
-  enabled: boolean;
-  setEnabled: (v: boolean) => void;
   priority: number;
   setPriority: (v: number) => void;
+  policyCatalog?: PolicyCatalogItem[];
+  isLoadingPolicies?: boolean;
 }
 
 export function BasicInfoSection({
@@ -21,22 +22,23 @@ export function BasicInfoSection({
   setDescription,
   policy,
   setPolicy,
-  enabled,
-  setEnabled,
   priority,
   setPriority,
+  policyCatalog = [],
+  isLoadingPolicies = false,
 }: BasicInfoProps) {
   return (
-    <div className="bg-[#0B1320] border border-[#152030] p-4 space-y-4 font-mono text-xs">
-      <div className="text-sm font-semibold text-white">
+    <div className="bg-card border border-border p-4 space-y-4 font-mono text-xs text-foreground">
+      <div className="text-sm font-semibold text-foreground">
         1. Basic Information
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Tầng 1: Rule Name, Priority, Policy */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
         {/* Rule Name */}
         <div>
-          <label className="block text-slate-400 mb-1 text-[11px]">
-            Rule Name <span className="text-rose-400">*</span>
+          <label className="block text-muted-foreground mb-1 text-[11px]">
+            Rule Name <span className="text-rose-500">*</span>
           </label>
           <input
             type="text"
@@ -46,74 +48,15 @@ export function BasicInfoSection({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="block-sql-injection"
-            className="w-full bg-[#0E1726] border border-[#1C293D] px-3 py-1.5 text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500"
+            className="w-full bg-background border border-input px-3 py-1.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
           />
-        </div>
-
-        {/* Description */}
-        <div>
-          <label className="block text-slate-400 mb-1 text-[11px]">
-            Description
-          </label>
-          <input
-            type="text"
-            value={description}
-            aria-label="Description"
-            maxLength={2000}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Block common SQL injection patterns in URI and query parameters."
-            className="w-full bg-[#0E1726] border border-[#1C293D] px-3 py-1.5 text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-        {/* Policy */}
-        <div>
-          <label className="block text-slate-400 mb-1 text-[11px]">
-            Policy
-          </label>
-          <select
-            aria-label="Policy"
-            disabled
-            value={policy}
-            onChange={(e) => setPolicy(e.target.value)}
-            className="w-full bg-[#0E1726] border border-[#1C293D] px-3 py-1.5 text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
-          >
-            <option value="">Unassigned — publish separately</option>
-          </select>
-        </div>
-
-        {/* Rule Status */}
-        <div>
-          <label className="block text-slate-400 mb-1 text-[11px]">
-            Rule Status
-          </label>
-          <div className="flex items-center gap-2.5 h-[34px]">
-            <button
-              type="button"
-              onClick={() => setEnabled(!enabled)}
-              className={`w-9 h-5 flex items-center p-0.5 cursor-pointer transition-colors ${
-                enabled ? 'bg-emerald-600' : 'bg-[#152030]'
-              }`}
-            >
-              <div
-                className={`w-4 h-4 bg-white transition-transform ${
-                  enabled ? 'translate-x-4' : 'translate-x-0'
-                }`}
-              />
-            </button>
-            <span className={enabled ? 'text-emerald-400' : 'text-slate-500'}>
-              {enabled ? 'Enabled' : 'Disabled'}
-            </span>
-          </div>
         </div>
 
         {/* Priority */}
         <div>
-          <div className="flex items-center gap-1 text-slate-400 mb-1 text-[11px]">
+          <div className="flex items-center gap-1 text-muted-foreground mb-1 text-[11px]">
             <span>Priority</span>
-            <HelpCircle className="w-3 h-3 text-slate-500 cursor-pointer" />
+            <HelpCircle className="w-3 h-3 text-muted-foreground cursor-pointer" />
           </div>
           <input
             type="number"
@@ -122,10 +65,54 @@ export function BasicInfoSection({
             max={1000000}
             value={priority}
             onChange={(e) => setPriority(parseInt(e.target.value) || 0)}
-            className="w-full bg-[#0E1726] border border-[#1C293D] px-3 py-1.5 text-white focus:outline-none focus:border-emerald-500"
+            className="w-full bg-background border border-input px-3 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
           />
         </div>
+
+        {/* Policy */}
+        <div>
+          <label className="block text-muted-foreground mb-1 text-[11px]">
+            Policy
+          </label>
+          <select
+            aria-label="Policy"
+            value={policy}
+            onChange={(e) => setPolicy(e.target.value)}
+            className="w-full bg-background border border-input px-3 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary cursor-pointer disabled:opacity-60"
+          >
+            <option value="">Unassigned — publish separately</option>
+            {policyCatalog && policyCatalog.length > 0 ? (
+              policyCatalog.map((p) => (
+                <option key={p.id} value={p.name}>
+                  {p.name}
+                </option>
+              ))
+            ) : (
+              <option value="" disabled>
+                {isLoadingPolicies ? 'Loading policies...' : 'No policies available'}
+              </option>
+            )}
+          </select>
+        </div>
+      </div>
+
+      {/* Tầng 2: Mô tả (Description) */}
+      <div>
+        <label className="block text-muted-foreground mb-1 text-[11px]">
+          Description
+        </label>
+        <input
+          type="text"
+          value={description}
+          aria-label="Description"
+          maxLength={2000}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Block common SQL injection patterns in URI and query parameters."
+          className="w-full bg-background border border-input px-3 py-1.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+        />
       </div>
     </div>
   );
 }
+
+

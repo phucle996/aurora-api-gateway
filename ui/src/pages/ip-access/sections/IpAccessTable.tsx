@@ -72,7 +72,7 @@ export function IpAccessTable({
   };
 
   return (
-    <div className="bg-[#0B1320] border border-[#172338] p-4 space-y-3 font-mono">
+    <div className="bg-[#0B1320] border border-[#172338] p-4 space-y-3 font-sans">
       {/* Tabs Row */}
       <div className="flex items-center gap-1 border-b border-[#172338] pb-1 overflow-x-auto">
         {tabs.map((tab) => (
@@ -149,9 +149,9 @@ export function IpAccessTable({
 
       {/* Table Container */}
       <div className="border border-[#172338] overflow-x-auto">
-        <table className="w-full text-left text-xs border-collapse">
+        <table className="w-full text-left text-xs border-collapse font-sans">
           <thead>
-            <tr className="bg-[#09101B] border-b border-[#172338] text-slate-400 font-mono text-[11px] select-none">
+            <tr className="bg-[#09101B] border-b border-[#172338] text-slate-400 font-sans text-xs select-none">
               <th className="py-2.5 px-3 w-8">
                 <input
                   type="checkbox"
@@ -289,7 +289,7 @@ export function IpAccessTable({
       </div>
 
       {/* Pagination Footer */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 text-[11px] text-slate-400 font-mono">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 text-xs text-slate-400 font-sans">
         <div>
           Showing 1 to {rules.length} of 126 results
         </div>

@@ -20,6 +20,7 @@ type RuleRepository interface {
 	Create(context.Context, entity.CreateRuleCommand) (entity.CreateRuleResult, error)
 	CreateDefinition(context.Context, entity.CreateRuleDefinitionCommand, []string, string) (entity.CreateRuleDefinitionResult, error)
 	Update(context.Context, entity.UpdateRuleCommand) (entity.UpdateRuleResult, error)
+	Rollback(context.Context, entity.RollbackRuleCommand) (entity.RollbackRuleResult, error)
 
 	// --- Publish ---
 	// Reserve snapshot toàn bộ rule đang enabled thành 1 release.

@@ -5,21 +5,21 @@ export function DashboardTrafficChart() {
   const [range, setRange] = useState('Last 24 hours');
 
   return (
-    <div className="bg-[#0B1320] border border-[#152030] p-4 flex flex-col justify-between">
+    <div className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#152030] p-4 flex flex-col justify-between shadow-xs rounded-sm transition-colors">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#152030]">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-[#152030]">
         <div className="flex items-center gap-4">
-          <span className="text-sm font-semibold text-white font-mono">
+          <span className="text-sm font-semibold text-slate-900 dark:text-white font-sans">
             Request Traffic
           </span>
-          <div className="flex items-center gap-3 text-xs font-mono">
+          <div className="flex items-center gap-3 text-xs font-sans">
             <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 bg-blue-500 inline-block" />
-              <span className="text-slate-300">Allowed</span>
+              <span className="w-2.5 h-2.5 bg-blue-500 inline-block rounded-xs" />
+              <span className="text-slate-600 dark:text-slate-300">Allowed</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 bg-rose-500 inline-block" />
-              <span className="text-slate-300">Blocked</span>
+              <span className="w-2.5 h-2.5 bg-rose-500 inline-block rounded-xs" />
+              <span className="text-slate-600 dark:text-slate-300">Blocked</span>
             </div>
           </div>
         </div>
@@ -27,7 +27,7 @@ export function DashboardTrafficChart() {
         <select
           value={range}
           onChange={(e) => setRange(e.target.value)}
-          className="bg-[#0E1726] border border-[#1C293D] px-2 py-1 text-slate-300 text-xs font-mono focus:outline-none focus:border-emerald-500 cursor-pointer"
+          className="bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] px-2 py-1 text-slate-800 dark:text-slate-300 text-xs font-sans focus:outline-none focus:border-blue-500 rounded-sm cursor-pointer transition-colors"
         >
           <option value="Last 24 hours">Last 24 hours</option>
           <option value="Last 7 days">Last 7 days</option>
@@ -39,7 +39,7 @@ export function DashboardTrafficChart() {
       <div className="relative pt-6 pb-2">
         <div className="flex items-center">
           {/* Y Axis */}
-          <div className="flex flex-col justify-between h-44 text-[10px] font-mono text-slate-500 pr-2 select-none">
+          <div className="flex flex-col justify-between h-44 text-[10px] font-sans tabular-nums text-slate-500 pr-2 select-none">
             <span>400K</span>
             <span>300K</span>
             <span>200K</span>
@@ -96,7 +96,7 @@ export function DashboardTrafficChart() {
         </div>
 
         {/* X Axis */}
-        <div className="flex justify-between pl-8 pt-2 text-[10px] font-mono text-slate-500">
+        <div className="flex justify-between pl-8 pt-2 text-[10px] font-sans tabular-nums text-slate-500">
           <span>00:00</span>
           <span>04:00</span>
           <span>08:00</span>

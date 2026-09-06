@@ -55,18 +55,43 @@ type RuleHistoryQuery struct {
 
 // RuleHistoryRecord biểu diễn một bản ghi lịch sử thay đổi của luật tại một phiên bản cụ thể.
 type RuleHistoryRecord struct {
-	Version   int64  // Số thứ tự phiên bản sửa đổi
-	Name      string // Tên của luật tại thời điểm phiên bản này được lưu
-	Action    string // Hành vi xử lý của luật tại phiên bản này ('allow', 'log', 'block')
-	Enabled   bool   // Trạng thái bật hoặc tắt của luật tại phiên bản này
-	Actor     string // Định danh người hoặc token đã thực hiện thay đổi
-	UpdatedAt string // Thời điểm bản ghi được cập nhật
+	Version        int64  // Số thứ tự phiên bản sửa đổi
+	Name           string // Tên của luật tại thời điểm phiên bản này được lưu
+	Description    string // Mô tả chi tiết của luật
+	Group          string // Phân loại nhóm luật
+	Action         string // Hành vi xử lý của luật tại phiên bản này ('allow', 'log', 'block')
+	Severity       string // Mức độ nghiêm trọng: low, medium, high, critical
+	Priority       int    // Độ ưu tiên thực thi
+	Path           string // Đường dẫn URL quy định
+	Enabled        bool   // Trạng thái bật hoặc tắt của luật tại phiên bản này
+	Actor          string // Định danh người hoặc token đã thực hiện thay đổi
+	UpdatedAt      string // Thời điểm bản ghi được cập nhật
+	LogicMode      string // Logic kết hợp điều kiện: 'all' hoặc 'any'
+	ConditionsJSON string // Danh sách điều kiện dạng chuỗi JSON
+	ResponseCode   int    // Mã HTTP phản hồi khi chặn
+	CustomResponse string // Nội dung phản hồi tùy biến
 }
 
 // RuleHistoryResult chứa danh sách kết quả lịch sử phiên bản trả về cho client.
 type RuleHistoryResult struct {
 	Items      []RuleHistoryRecord // Danh sách các phiên bản lịch sử sắp xếp từ mới nhất về cũ nhất
 	NextBefore int64               // Mốc con trỏ phiên bản cho trang kế tiếp (bằng 0 nếu đã hết dữ liệu)
+}
+
+// RollbackRuleCommand là lệnh yêu cầu khôi phục cấu hình của một rule về phiên bản cũ.
+type RollbackRuleCommand struct {
+	ID            int64  // ID của luật cần rollback
+	TargetVersion int64  // Phiên bản muốn khôi phục
+	Actor         string // Người hoặc token thực hiện thao tác
+}
+
+// RollbackRuleResult chứa kết quả sau khi thực hiện khôi phục phiên bản.
+type RollbackRuleResult struct {
+	ID      int64  // ID của luật
+	Version int64  // Phiên bản mới được sinh ra sau khi rollback
+	Name    string // Tên luật
+	Action  string // Hành động
+	Enabled bool   // Trạng thái kích hoạt
 }
 
 // ─── 4. Workflow: Create Rule (Tạo mới luật bảo vệ cơ bản v1) ─────────────────
@@ -260,3 +285,45 @@ type CreateRuleDefinitionResult struct {
 	RuntimeReady  bool     // Trạng thái sẵn sàng vận hành của luật
 	RuntimeIssues []string // Danh sách các cảnh báo vận hành phát hiện trong quá trình tạo (nếu có)
 }
+
+// ─── 10. Workflow: Test Rule (Kiểm thử và đánh giá luật qua sample request) ────
+
+// TestConditionDetail chứa kết quả so khớp chi tiết của từng điều kiện đơn lẻ.
+type TestConditionDetail struct {
+	Field          string // Tên trường (uri_raw, path, query, header, body, client_ip, method)
+	Operator       string // Toán tử (equals, contains, starts_with, ends_with, regex, cidr)
+	Value          string // Pattern so sánh
+	HeaderName     string // Tên header (nếu field là header)
+	ExtractedValue string // Giá trị trích xuất được từ request
+	Matched        bool   // Điều kiện này có khớp hay không
+}
+
+// TestRuleCommand là lệnh yêu cầu kiểm thử đánh giá request với tập điều kiện.
+type TestRuleCommand struct {
+	RuleID       *int64                // ID của rule đã lưu (nếu kiểm thử rule có sẵn trong DB)
+	Method       string                // HTTP Method: GET, POST, PUT, DELETE...
+	URL          string                // Request URL hoặc URI cần kiểm tra
+	Headers      map[string]string     // Các HTTP Header giả lập
+	Body         string                // Thân request (nếu có)
+	ClientIP     string                // Địa chỉ IP client (nếu có)
+	Conditions   []RuleDetailCondition // Tập điều kiện kiểm thử trực tiếp (nếu test nháp)
+	LogicMode    string                // 'all' hoặc 'any'
+	Action       string                // 'block', 'allow', 'log'
+	ResponseCode int                   // Mã phản hồi khi block (mặc định 403)
+}
+
+// TestRuleResult chứa kết quả đánh giá chi tiết sau khi chạy qua bộ kiểm tra rule.
+type TestRuleResult struct {
+	Matched          bool                  // Request có bị kích hoạt bởi rule hay không
+	Action           string                // Hành động tương ứng ('block', 'allow', 'log')
+	ResponseCode     int                   // Mã HTTP phản hồi (ví dụ 403, 200)
+	ActionDispatched string                // Chuỗi mô tả hành động (ví dụ "HTTP 403 response", "HTTP 200 Pass Through")
+	LatencyMS        float64               // Độ trễ tính toán theo milliseconds (ms)
+	EvaluationTimeNs int64                 // Thời gian tính toán theo nanoseconds (ns)
+	MatchedField     string                // Tên trường kích hoạt vi phạm
+	MatchedPattern   string                // Pattern/Regex kích hoạt vi phạm
+	MatchedValue     string                // Chuỗi giá trị thực tế vi phạm
+	Explanation      string                // Giải thích ngắn gọn lý do kích hoạt hoặc bỏ qua
+	Details          []TestConditionDetail // Chi tiết từng điều kiện trong tập rule
+}
+

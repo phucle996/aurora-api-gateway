@@ -14,15 +14,15 @@ export function DashboardRecentEvents() {
   ];
 
   return (
-    <div className="bg-[#0B1320] border border-[#152030] p-4 flex flex-col justify-between font-mono">
+    <div className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#152030] p-4 flex flex-col justify-between font-sans shadow-xs rounded-sm transition-colors">
       {/* Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-[#152030]">
-        <span className="text-sm font-semibold text-white">
+      <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-[#152030]">
+        <span className="text-sm font-semibold text-slate-900 dark:text-white">
           Recent Security Events
         </span>
         <Link
           to="/events"
-          className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
+          className="text-xs text-blue-600 dark:text-cyan-400 hover:underline transition-colors"
         >
           View All
         </Link>
@@ -32,24 +32,24 @@ export function DashboardRecentEvents() {
       <div className="py-2 overflow-x-auto">
         <table className="w-full text-left border-collapse text-xs">
           <thead>
-            <tr className="text-slate-500 border-b border-[#152030]">
+            <tr className="text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-[#152030]">
               <th className="py-1.5 font-normal">Time</th>
               <th className="py-1.5 font-normal">Type</th>
               <th className="py-1.5 font-normal">Source IP</th>
               <th className="py-1.5 font-normal">Path</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#152030]/50">
+          <tbody className="divide-y divide-slate-100 dark:divide-[#152030]/50">
             {events.map((evt, idx) => (
-              <tr key={idx} className="hover:bg-[#0E1726]/50">
-                <td className="py-1.5 text-slate-400">{evt.time}</td>
+              <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-[#0E1726]/50 transition-colors">
+                <td className="py-1.5 text-slate-500 dark:text-slate-400">{evt.time}</td>
                 <td className="py-1.5">
-                  <span className={`inline-flex items-center px-1.5 py-0.5 border text-[10px] ${evt.color}`}>
+                  <span className={`inline-flex items-center px-1.5 py-0.5 border text-[10px] rounded-xs font-bold ${evt.color}`}>
                     {evt.type}
                   </span>
                 </td>
-                <td className="py-1.5 text-slate-200">{evt.ip}</td>
-                <td className="py-1.5 text-cyan-400">{evt.path}</td>
+                <td className="py-1.5 text-slate-800 dark:text-slate-200">{evt.ip}</td>
+                <td className="py-1.5 text-blue-600 dark:text-cyan-400 font-mono">{evt.path}</td>
               </tr>
             ))}
           </tbody>

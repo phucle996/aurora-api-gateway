@@ -364,22 +364,27 @@ func (r *ruleRepository) History(ctx context.Context, q entity.RuleHistoryQuery)
 	out := entity.RuleHistoryResult{Items: []entity.RuleHistoryRecord{}}
 
 	// Câu truy vấn CTE:
-	// - selected: Chọn các bản ghi lịch sử thuộc luật có ID chỉ định. Nếu có truyền 'Before', chỉ lấy phiên bản nhỏ hơn 'Before'.
+	// - selected: Chọn các bản ghi lịch sử thuộc luật có ID chỉ định, kết hợp thông tin chi tiết từ rule_definitions nếu có.
 	// - SELECT: Sắp xếp phiên bản giảm dần (từ mới nhất đến cũ nhất) và giới hạn số lượng bằng 'Limit + 1'.
 	const query = `
 		WITH selected AS (
-			SELECT version, name, action, enabled, actor, updated_at 
-			FROM rule_revisions 
-			WHERE rule_id = ? 
-			  AND (? = 0 OR version < ?)
+			SELECT r.version, r.name, r.description, r.rule_group, r.action, r.severity, r.priority, r.path, r.enabled, r.actor, r.updated_at,
+			       COALESCE(d.logic_mode, 'all') as logic_mode,
+			       COALESCE(d.conditions_json, '[]') as conditions_json,
+			       COALESCE(d.response_code, 403) as response_code,
+			       COALESCE(d.custom_response, '') as custom_response
+			FROM rule_revisions r
+			LEFT JOIN rule_definitions d ON d.rule_id = r.rule_id AND d.version = r.version
+			WHERE r.rule_id = ? 
+			  AND (? = 0 OR r.version < ?)
 		)
-		SELECT version, name, action, enabled, actor, updated_at 
+		SELECT version, name, description, rule_group, action, severity, priority, path, enabled, actor, updated_at, logic_mode, conditions_json, response_code, custom_response
 		FROM selected 
 		ORDER BY version DESC 
 		LIMIT ?;
 	`
 
-	// Bước 1: Tra cứu lịch sử từ bảng 'rule_revisions'
+	// Bước 1: Tra cứu lịch sử từ bảng 'rule_revisions' và 'rule_definitions'
 	rows, err := r.reader.QueryContext(ctx, query, q.ID, q.Before, q.Before, q.Limit+1)
 	if err != nil {
 		return out, err
@@ -389,7 +394,11 @@ func (r *ruleRepository) History(ctx context.Context, q entity.RuleHistoryQuery)
 	// Bước 2: Đọc từng bản ghi lịch sử
 	for rows.Next() {
 		var item entity.RuleHistoryRecord
-		if err = rows.Scan(&item.Version, &item.Name, &item.Action, &item.Enabled, &item.Actor, &item.UpdatedAt); err != nil {
+		if err = rows.Scan(
+			&item.Version, &item.Name, &item.Description, &item.Group, &item.Action, &item.Severity,
+			&item.Priority, &item.Path, &item.Enabled, &item.Actor, &item.UpdatedAt,
+			&item.LogicMode, &item.ConditionsJSON, &item.ResponseCode, &item.CustomResponse,
+		); err != nil {
 			return out, err
 		}
 		out.Items = append(out.Items, item)
@@ -568,6 +577,100 @@ func (r *ruleRepository) Update(ctx context.Context, c entity.UpdateRuleCommand)
 	}
 
 	// Bước 4: Hoàn tất transaction thành công (Commit)
+	return out, tx.Commit()
+}
+
+// Rollback khôi phục cấu hình của một rule về phiên bản cũ (TargetVersion) và tăng version lên 1 (snapshot mới).
+func (r *ruleRepository) Rollback(ctx context.Context, c entity.RollbackRuleCommand) (entity.RollbackRuleResult, error) {
+	var out entity.RollbackRuleResult
+	tx, err := r.writer.BeginTx(ctx, nil)
+	if err != nil {
+		return out, err
+	}
+	defer tx.Rollback()
+
+	// 1. Kiểm tra rule tồn tại
+	var currentVersion int64
+	err = tx.QueryRowContext(ctx, "SELECT version FROM rules WHERE id = ?", c.ID).Scan(&currentVersion)
+	if errors.Is(err, sql.ErrNoRows) {
+		return out, taxonomy.ErrRuleNotFound
+	}
+	if err != nil {
+		return out, err
+	}
+
+	// 2. Lấy cấu hình mục tiêu từ rule_revisions
+	var revName, revDesc, revGroup, revAction, revSev, revPath string
+	var revScore, revPrio, revEnabled int
+	const getTargetRev = `
+		SELECT name, description, rule_group, action, severity, score, priority, path, enabled
+		FROM rule_revisions
+		WHERE rule_id = ? AND version = ?;
+	`
+	err = tx.QueryRowContext(ctx, getTargetRev, c.ID, c.TargetVersion).Scan(
+		&revName, &revDesc, &revGroup, &revAction, &revSev, &revScore, &revPrio, &revPath, &revEnabled,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return out, taxonomy.ErrRuleNotFound
+	}
+	if err != nil {
+		return out, err
+	}
+
+	// 3. Cập nhật rules với version = currentVersion + 1
+	const updateRule = `
+		UPDATE rules
+		SET version = version + 1,
+		    name = ?,
+		    description = ?,
+		    rule_group = ?,
+		    action = ?,
+		    severity = ?,
+		    score = ?,
+		    priority = ?,
+		    path = ?,
+		    enabled = ?,
+		    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+		WHERE id = ?
+		RETURNING id, version, name, action, enabled;
+	`
+	var enabledInt int
+	actor := c.Actor
+	if actor == "" {
+		actor = "management-token"
+	}
+	err = tx.QueryRowContext(ctx, updateRule,
+		revName, revDesc, revGroup, revAction, revSev, revScore, revPrio, revPath, revEnabled, c.ID,
+	).Scan(&out.ID, &out.Version, &out.Name, &out.Action, &enabledInt)
+	if err != nil {
+		return out, err
+	}
+	out.Enabled = enabledInt == 1
+
+	// 4. Lưu bản sao revision mới vào rule_revisions
+	const insertNewRev = `
+		INSERT INTO rule_revisions 
+		SELECT id, version, name, description, rule_group, action, severity, score, priority, path, enabled, updated_at, ?
+		FROM rules
+		WHERE id = ?;
+	`
+	if _, err = tx.ExecContext(ctx, insertNewRev, actor, out.ID); err != nil {
+		return out, err
+	}
+
+	// 5. Nếu target revision có định nghĩa trong rule_definitions, sao chép sang version mới
+	const copyDef = `
+		INSERT INTO rule_definitions (
+			rule_id, version, logic_mode, conditions_json, source_ip, host_domain, path_prefix,
+			http_method, response_code, custom_response, log_event, add_to_reputation, runtime_ready, runtime_issues
+		)
+		SELECT rule_id, ?, logic_mode, conditions_json, source_ip, host_domain, path_prefix,
+		       http_method, response_code, custom_response, log_event, add_to_reputation, runtime_ready, runtime_issues
+		FROM rule_definitions
+		WHERE rule_id = ? AND version = ?;
+	`
+	_, _ = tx.ExecContext(ctx, copyDef, out.Version, c.ID, c.TargetVersion)
+
 	return out, tx.Commit()
 }
 

@@ -40,7 +40,7 @@ export function ConsoleLayout() {
   }
 
   return (
-    <div className="flex h-screen bg-slate-100 dark:bg-[#070B12] text-slate-900 dark:text-slate-200 overflow-hidden font-sans select-none">
+    <div className="flex h-screen bg-background text-foreground overflow-hidden font-sans">
       {/* Sidebar Navigation */}
       <ConsoleSidebar />
 
@@ -49,10 +49,12 @@ export function ConsoleLayout() {
         {/* Top Navbar / Header */}
         <ConsoleHeader />
 
-        {/* Scrollable Page Outlet */}
-        <div className="flex-1 overflow-y-auto no-scrollbar">
-          <Outlet />
-        </div>
+        {/* Scrollable Page Outlet - Layout centrally governs content width */}
+        <main className="flex-1 overflow-y-auto no-scrollbar w-full">
+          <div className="w-full min-w-0">
+            <Outlet />
+          </div>
+        </main>
       </div>
     </div>
   );

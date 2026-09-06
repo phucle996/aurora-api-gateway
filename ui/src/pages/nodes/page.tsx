@@ -222,7 +222,7 @@ export default function NodesPage() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 w-full space-y-6">
       {/* Top KPI Metrics & Cluster Status */}
       <NodesStats nodes={nodes} />
 

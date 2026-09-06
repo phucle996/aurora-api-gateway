@@ -1,4 +1,5 @@
 import { api } from '../fetcher';
+export interface PolicyCatalogItem { id: number; name: string }
 export interface PolicyRule { id:number; version:number; name:string; group:string; action:string; enabled:boolean; runtime_ready:boolean }
 export interface PolicyDocument { name:string; description:string; host:string; path_prefix:string; mode:'mixed'|'block'|'detect'; priority:number; rule_ids:number[]; rules:PolicyRule[] }
 export interface SavedPolicy { id:number; version:number; published_version:number|null; status:'Draft'|'Published'|'Disabled'; document:PolicyDocument; created_at:string; updated_at:string; actor?:string; operation?:string }
@@ -8,7 +9,8 @@ export type PolicyDraft = Omit<PolicyDocument,'rules'> & { expected_version:numb
 export const policiesApi = {
  list:()=>api.get<SavedPolicy[]>('/api/v1/policies'),
  detail:(id:number,history=false)=>api.get<SavedPolicy[]>(`/api/v1/policies/${id}`,{history}),
- catalog:()=>api.get<PolicyRule[]>('/api/v1/policies/catalog'),
+ catalog:()=>api.get<PolicyCatalogItem[]>('/api/v1/policies/catalog'),
+ ruleCatalog:()=>api.get<PolicyRule[]>('/api/v1/policies/rule-catalog'),
  cluster:()=>api.get<ClusterPolicies>('/api/v1/policies/cluster'),
  save:(id:number|null,body:PolicyDraft,key:string)=>id?api.put<{id:number;version:number}>(`/api/v1/policies/${id}`,body,{idempotencyKey:key}):api.post<{id:number;version:number}>('/api/v1/policies',body,{idempotencyKey:key}),
  restore:(id:number,version:number,restore:number,key:string)=>api.put(`/api/v1/policies/${id}`,{expected_version:version,restore_version:restore},{idempotencyKey:key}),

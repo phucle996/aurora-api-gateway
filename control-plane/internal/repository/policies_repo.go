@@ -176,7 +176,29 @@ func (r *PolicyRepository) ReadPolicies(ctx context.Context, q entity.ReadPolici
 	}
 	return out, rows.Err()
 }
-func (r *PolicyRepository) PolicyCatalog(ctx context.Context) ([]entity.PolicyCatalogRule, error) {
+func (r *PolicyRepository) PolicyCatalog(ctx context.Context) ([]entity.PolicyCatalogItem, error) {
+	out := []entity.PolicyCatalogItem{}
+	rows, err := r.reader.QueryContext(ctx, `WITH latest_policies AS (
+		SELECT id, json_extract(document, '$.name') AS name
+		FROM policies
+		ORDER BY id ASC
+	)
+	SELECT id, coalesce(name, 'policy-' || id) AS name FROM latest_policies`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var p entity.PolicyCatalogItem
+		if err = rows.Scan(&p.ID, &p.Name); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+func (r *PolicyRepository) PolicyRuleCatalog(ctx context.Context) ([]entity.PolicyCatalogRule, error) {
 	out := []entity.PolicyCatalogRule{}
 	rows, err := r.reader.QueryContext(ctx, `SELECT r.id,r.version,r.name,r.rule_group,r.action,r.enabled,coalesce(d.runtime_ready,1) FROM rules r LEFT JOIN rule_definitions d ON d.rule_id=r.id AND d.version=r.version ORDER BY r.id LIMIT 1024`)
 	if err != nil {
