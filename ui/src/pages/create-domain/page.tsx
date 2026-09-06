@@ -6,22 +6,22 @@ import {
   Server,
   Shield,
   FileText,
-  Lightbulb,
   Plus,
   Search,
   Check,
   ChevronDown,
   X,
+  ExternalLink,
+  Lock,
+  Zap,
+  Activity,
+  AlertCircle,
+  Code,
 } from 'lucide-react';
 import type { DomainItem, TlsType } from '../domains/types';
 import { policiesApi, type SavedPolicy } from '../../lib/api/policies';
-
-export interface ProbeCheckItem {
-  id: string;
-  type: 'Readiness' | 'Liveness' | 'Health';
-  path: string;
-  expectedStatus?: number;
-}
+import type { UpstreamItem } from '../upstreams/types';
+import { INITIAL_UPSTREAMS } from '../upstreams/mockData';
 
 export default function CreateDomainPage() {
   const navigate = useNavigate();
@@ -33,89 +33,49 @@ export default function CreateDomainPage() {
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>([]);
 
-  // 2. Upstream Configuration
-  const [upstreamType, setUpstreamType] = useState<'Single Server' | 'Load Balancer' | 'External (FQDN)'>('Single Server');
-  const [upstreamProtocol, setUpstreamProtocol] = useState<'http://' | 'https://'>('http://');
-  const [upstreamHost, setUpstreamHost] = useState('');
+  // 2. Target Upstream (NGINX ➔ Backend)
+  const [availableUpstreams, setAvailableUpstreams] = useState<UpstreamItem[]>([]);
+  const [upstreamMode, setUpstreamMode] = useState<'pool' | 'direct'>('pool');
+  const [selectedUpstreamId, setSelectedUpstreamId] = useState<string>('');
+  const [directAddress, setDirectAddress] = useState('127.0.0.1:8080');
+  const [directProtocol, setDirectProtocol] = useState<'http://' | 'https://'>('http://');
 
-  // Load Balancer state
-  const [lbAlgorithm, setLbAlgorithm] = useState<'round_robin' | 'least_conn' | 'ip_hash'>('round_robin');
-  const [lbServers, setLbServers] = useState<Array<{ id: string; address: string; weight: number }>>([
-    { id: 'lb-1', address: '10.0.1.10:8080', weight: 1 },
-    { id: 'lb-2', address: '10.0.1.11:8080', weight: 1 },
-  ]);
-
-  const handleAddLbServer = () => {
-    setLbServers([
-      ...lbServers,
-      { id: `lb-${Date.now()}`, address: '', weight: 1 },
-    ]);
-  };
-
-  const handleUpdateLbServer = (id: string, updates: Partial<{ address: string; weight: number }>) => {
-    setLbServers(lbServers.map((s) => (s.id === id ? { ...s, ...updates } : s)));
-  };
-
-  const handleRemoveLbServer = (id: string) => {
-    if (lbServers.length <= 1) return;
-    setLbServers(lbServers.filter((s) => s.id !== id));
-  };
-
-  // External FQDN state
-  const [externalFqdn, setExternalFqdn] = useState('');
-  const [sniOverride, setSniOverride] = useState(true);
-  const [dynamicDns, setDynamicDns] = useState(true);
-
-  const [probes, setProbes] = useState<ProbeCheckItem[]>([
-    { id: '1', type: 'Readiness', path: '/health', expectedStatus: 200 },
-  ]);
-  const [newProbePath, setNewProbePath] = useState('');
-  const [newProbeType, setNewProbeType] = useState<'Readiness' | 'Liveness' | 'Health'>('Readiness');
-
-  const handleAddProbe = () => {
-    const trimmed = newProbePath.trim();
-    if (!trimmed) return;
-    const formatted = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
-    if (probes.some((p) => p.path === formatted)) return;
-    setProbes([
-      ...probes,
-      {
-        id: `probe-${Date.now()}`,
-        type: newProbeType,
-        path: formatted,
-        expectedStatus: 200,
-      },
-    ]);
-    setNewProbePath('');
-  };
-
-  const handleRemoveProbe = (id: string) => {
-    setProbes(probes.filter((p) => p.id !== id));
-  };
-  // Transport & Protocols
-  const [httpVersion, setHttpVersion] = useState<'HTTP/1.1' | 'HTTP/2' | 'HTTP/1.0'>('HTTP/1.1');
-  const [enableWebSocket, setEnableWebSocket] = useState(false);
-  const [enableSse, setEnableSse] = useState(false);
-  const [enableGrpc, setEnableGrpc] = useState(false);
-
-  const handleToggleGrpc = () => {
-    const next = !enableGrpc;
-    setEnableGrpc(next);
-    if (next && httpVersion === 'HTTP/1.1') {
-      setHttpVersion('HTTP/2');
+  // Load upstreams from storage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('aurora_waf_upstreams');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setAvailableUpstreams(parsed);
+        if (parsed.length > 0) {
+          setSelectedUpstreamId(parsed[0].id);
+        }
+      } else {
+        setAvailableUpstreams(INITIAL_UPSTREAMS);
+        if (INITIAL_UPSTREAMS.length > 0) {
+          setSelectedUpstreamId(INITIAL_UPSTREAMS[0].id);
+        }
+      }
+    } catch {
+      setAvailableUpstreams(INITIAL_UPSTREAMS);
+      if (INITIAL_UPSTREAMS.length > 0) {
+        setSelectedUpstreamId(INITIAL_UPSTREAMS[0].id);
+      }
     }
-  };
+  }, []);
 
-  // 3. TLS / Security
+  const selectedUpstream = availableUpstreams.find((u) => u.id === selectedUpstreamId) || availableUpstreams[0];
+
+  // 3. Edge TLS / Security (Client ➔ NGINX)
   const [tlsMode, setTlsMode] = useState<TlsType>("Let's Encrypt");
   const [certificateEmail, setCertificateEmail] = useState('');
   const [tlsVersion, setTlsVersion] = useState<'TLS 1.2' | 'TLS 1.3'>('TLS 1.2');
   const [hstsEnabled, setHstsEnabled] = useState(true);
   const [additionalSans, setAdditionalSans] = useState('');
 
-  // 4. WAF & Policy Binding
+  // 4. Edge WAF & Policy Binding (Client Ingress)
   const [availablePolicies, setAvailablePolicies] = useState<SavedPolicy[]>([]);
-  const [selectedPolicies, setSelectedPolicies] = useState<string[]>([]);
+  const [selectedPolicies, setSelectedPolicies] = useState<number[]>([]);
   const [policyDropdownOpen, setPolicyDropdownOpen] = useState(false);
   const [policySearch, setPolicySearch] = useState('');
   const [enableWaf, setEnableWaf] = useState(true);
@@ -169,49 +129,38 @@ export default function CreateDomainPage() {
       // ignore
     }
 
-    let fullUpstream = '';
+    let upstreamDisplayName = '';
     let upstreamServersList: Array<{ url: string; weight: number; maxFails: number; failTimeout: string; healthy: boolean }> = [];
     let algorithm: 'round_robin' | 'least_conn' | 'ip_hash' = 'round_robin';
+    let healthPath = '/health';
+    let httpVer: 'HTTP/1.1' | 'HTTP/2' | 'HTTP/3' | 'HTTP/1.0' = 'HTTP/1.1';
+    let ws = false;
+    let sse = false;
+    let grpc = false;
 
-    if (upstreamType === 'Load Balancer') {
-      algorithm = lbAlgorithm;
-      upstreamServersList = lbServers.map((s) => ({
+    if (upstreamMode === 'pool' && selectedUpstream) {
+      upstreamDisplayName = selectedUpstream.name;
+      algorithm = selectedUpstream.algorithm;
+      upstreamServersList = selectedUpstream.servers.map((s) => ({
         url: s.address.startsWith('http://') || s.address.startsWith('https://')
           ? s.address
-          : `${upstreamProtocol}${s.address.trim() || '10.0.1.10:8080'}`,
+          : `${selectedUpstream.internalSsl?.enabled ? 'https://' : 'http://'}${s.address}`,
         weight: s.weight || 1,
-        maxFails: 3,
-        failTimeout: '10s',
-        healthy: true,
+        maxFails: s.maxFails || 3,
+        failTimeout: s.failTimeout || '10s',
+        healthy: s.healthy,
       }));
-      fullUpstream = `${lbServers.length} servers (${lbAlgorithm.replace('_', ' ')})`;
-    } else if (upstreamType === 'External (FQDN)') {
-      const fqdn = externalFqdn.trim() || 'origin.backend.internal';
-      fullUpstream = fqdn.startsWith('http://') || fqdn.startsWith('https://')
-        ? fqdn
-        : `${upstreamProtocol}${fqdn}`;
-      upstreamServersList = [
-        {
-          url: fullUpstream,
-          weight: 1,
-          maxFails: 3,
-          failTimeout: '10s',
-          healthy: true,
-        },
-      ];
+      healthPath = selectedUpstream.probes?.[0]?.path || '/health';
+      httpVer = selectedUpstream.transport?.httpVersion || 'HTTP/1.1';
+      ws = !!selectedUpstream.transport?.enableWebSocket;
+      sse = !!selectedUpstream.transport?.enableSse;
+      grpc = !!selectedUpstream.transport?.enableGrpc;
     } else {
-      // Single Server
-      fullUpstream = upstreamHost.trim()
-        ? `${upstreamProtocol}${upstreamHost.trim()}`
-        : `${upstreamProtocol}10.0.1.10:8080`;
+      const addr = directAddress.trim() || '127.0.0.1:8080';
+      const full = addr.startsWith('http://') || addr.startsWith('https://') ? addr : `${directProtocol}${addr}`;
+      upstreamDisplayName = full;
       upstreamServersList = [
-        {
-          url: fullUpstream,
-          weight: 1,
-          maxFails: 3,
-          failTimeout: '10s',
-          healthy: true,
-        },
+        { url: full, weight: 1, maxFails: 3, failTimeout: '10s', healthy: true },
       ];
     }
 
@@ -225,19 +174,19 @@ export default function CreateDomainPage() {
       tlsAutoRenew: true,
       minTlsVersion: tlsVersion === 'TLS 1.3' ? 'TLSv1.3' : 'TLSv1.2',
       hstsEnabled,
-      upstream: fullUpstream,
+      upstream: upstreamDisplayName,
       upstreamAlgorithm: algorithm,
-      healthCheckPath: probes.find((p) => p.type === 'Readiness')?.path || probes[0]?.path || '/health',
+      healthCheckPath: healthPath,
       upstreamServers: upstreamServersList,
       rulesCount: enableWaf ? 4 : 0,
       policiesCount: selectedPolicies.length,
       ipRulesCount: 0,
       rateLimitsCount: enableRateLimiting ? 2 : 0,
       tags,
-      httpVersion,
-      enableWebSocket,
-      enableSse,
-      enableGrpc,
+      httpVersion: httpVer,
+      enableWebSocket: ws,
+      enableSse: sse,
+      enableGrpc: grpc,
       createdAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
       updatedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
       createdBy: 'admin',
@@ -254,123 +203,96 @@ export default function CreateDomainPage() {
     navigate('/domains');
   };
 
-  const filteredPolicies = availablePolicies.filter((p) =>
-    p.document.name.toLowerCase().includes(policySearch.toLowerCase())
-  );
-
   return (
-    <div className="p-4 sm:p-6 w-full min-h-screen space-y-6 font-sans bg-background text-foreground">
-      {/* ── Breadcrumb & Top Bar ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-            <Link to="/domains" className="hover:text-foreground transition-colors">
-              Domains
-            </Link>
-            <span className="text-border">/</span>
-            <span className="text-foreground font-medium">Add Domain</span>
-          </div>
-          <h1 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">Add Domain</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Add a new domain or subdomain to manage its TLS, upstream and security settings.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => navigate('/domains')}
-          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md border border-border bg-card hover:bg-muted text-foreground text-xs font-medium transition-colors shadow-xs cursor-pointer w-fit"
+    <div className="p-4 sm:p-6 w-full space-y-6 pb-16 font-sans min-w-0">
+      {/* Top Header */}
+      <div className="flex flex-col gap-2">
+        <Link
+          to="/domains"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors w-fit"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Back to Domains</span>
-        </button>
+          Back to Domains
+        </Link>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">Add Domain</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Configure edge domain entry point, bind target upstream pool, setup edge SSL, and apply WAF policies.
+            </p>
+          </div>
+        </div>
       </div>
 
-      {/* ── Main Form with 60-30-10 Layout (60% background, 30% structural cards, 10% green accent) ── */}
       <form onSubmit={handleCreate}>
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Left Column: Form Cards (col-span-8) */}
-          <div className="lg:col-span-8 space-y-5">
+        <div className="grid grid-cols-12 gap-6 items-start">
+          {/* Main Form Fields */}
+          <div className="col-span-12 lg:col-span-8 space-y-6">
             {/* 1. Basic Information */}
-            <div className="bg-card border border-border rounded-lg p-5 sm:p-6 space-y-4 shadow-xs">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded text-xs font-bold bg-primary/10 text-primary border border-primary/25">
-                  1
-                </span>
-                <h2 className="text-sm font-bold text-foreground tracking-tight">
-                  Basic Information
-                </h2>
+            <div className="bg-card border border-border rounded-xl p-5 sm:p-6 space-y-4 shadow-sm">
+              <div className="flex items-center gap-2 pb-3 border-b border-border">
+                <Globe className="w-4 h-4 text-primary" />
+                <h2 className="text-sm font-semibold text-card-foreground">1. Edge Domain Identification</h2>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium text-foreground">
                     Domain Name <span className="text-destructive">*</span>
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. api.example.com"
+                    placeholder="e.g. app.example.com"
                     value={domainName}
                     onChange={(e) => handleDomainChange(e.target.value)}
-                    className="w-full bg-background border border-border rounded-md px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-colors"
+                    className="w-full bg-background border border-input rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring font-mono"
                   />
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    Enter a domain or subdomain. Wildcard domains are supported (e.g. *.example.com).
-                  </p>
+                  <p className="text-[11px] text-muted-foreground">The public FQDN requested by client browsers.</p>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1.5">
-                    Root Domain
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium text-foreground">
+                    Root Domain <span className="text-destructive">*</span>
                   </label>
                   <input
                     type="text"
+                    required
                     placeholder="e.g. example.com"
                     value={rootDomain}
                     onChange={(e) => setRootDomain(e.target.value)}
-                    className="w-full bg-background border border-border rounded-md px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-colors"
+                    className="w-full bg-background border border-input rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring font-mono"
                   />
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    Used for grouping and certificate management.
-                  </p>
+                  <p className="text-[11px] text-muted-foreground">Base apex domain used for certificate verification.</p>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1">
-                <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1.5">
-                    Description
+                <div className="col-span-full space-y-1.5">
+                  <label className="block text-xs font-medium text-foreground">
+                    Description <span className="text-muted-foreground font-normal">(Optional)</span>
                   </label>
-                  <div className="relative">
-                    <textarea
-                      rows={3}
-                      maxLength={500}
-                      placeholder="Add a description (optional)..."
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      className="w-full bg-background border border-border rounded-md px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none transition-colors pb-6"
-                    />
-                    <span className="absolute bottom-2 right-2.5 text-[10px] text-muted-foreground select-none pointer-events-none">
-                      {description.length}/500
-                    </span>
-                  </div>
+                  <input
+                    type="text"
+                    placeholder="e.g. Customer Portal & API gateway"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="w-full bg-background border border-input rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1.5">
+                <div className="col-span-full space-y-1.5">
+                  <label className="block text-xs font-medium text-foreground">
                     Tags
                   </label>
                   <input
                     type="text"
-                    placeholder="Type a tag and press Enter..."
+                    placeholder="Type tag and press Enter..."
                     value={tagInput}
                     onChange={(e) => setTagInput(e.target.value)}
                     onKeyDown={handleAddTag}
-                    className="w-full bg-background border border-border rounded-md px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-colors"
+                    className="w-full bg-background border border-input rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                   {tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-2.5">
+                    <div className="flex flex-wrap gap-1.5 pt-1">
                       {tags.map((t) => (
                         <span
                           key={t}
@@ -392,560 +314,184 @@ export default function CreateDomainPage() {
               </div>
             </div>
 
-            {/* 2. Upstream Configuration */}
-            <div className="bg-card border border-border rounded-lg p-5 sm:p-6 space-y-4 shadow-xs">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded text-xs font-bold bg-primary/10 text-primary border border-primary/25">
-                  2
-                </span>
-                <div>
-                  <h2 className="text-sm font-bold text-foreground tracking-tight">
-                    Upstream Configuration
-                  </h2>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Define where to forward traffic for this domain.
-                  </p>
+            {/* 2. Target Upstream (NGINX ➔ Backend) */}
+            <div className="bg-card border border-border rounded-xl p-5 sm:p-6 space-y-4 shadow-sm">
+              <div className="flex items-center justify-between pb-3 border-b border-border">
+                <div className="flex items-center gap-2">
+                  <Server className="w-4 h-4 text-primary" />
+                  <div>
+                    <h2 className="text-sm font-semibold text-card-foreground">2. Target Upstream (NGINX ➔ Backend)</h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Select the backend server pool or service origin to receive forwarded traffic.
+                    </p>
+                  </div>
                 </div>
+                <Link
+                  to="/upstreams/create"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-primary hover:text-primary/80 bg-primary/10 border border-primary/20 rounded-lg transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  New Upstream Pool
+                </Link>
               </div>
 
-              {/* Upstream Type Radio */}
-              <div className="space-y-1.5 pt-1">
-                <label className="block text-xs font-semibold text-foreground">
-                  Upstream Type
+              {/* Mode switch */}
+              <div className="flex items-center gap-4 text-xs">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="radio"
+                    name="upstreamMode"
+                    value="pool"
+                    checked={upstreamMode === 'pool'}
+                    onChange={() => setUpstreamMode('pool')}
+                    className="w-3.5 h-3.5 text-primary bg-background border-input focus:ring-ring"
+                  />
+                  <span className={upstreamMode === 'pool' ? 'font-medium text-foreground' : 'text-muted-foreground'}>
+                    Configured Upstream Pool (Recommended)
+                  </span>
                 </label>
-                <div className="flex flex-wrap items-center gap-6 pt-1">
-                  {(['Single Server', 'Load Balancer', 'External (FQDN)'] as const).map((type) => (
-                    <label
-                      key={type}
-                      className="flex items-center gap-2 text-xs text-foreground cursor-pointer select-none"
-                    >
-                      <input
-                        type="radio"
-                        name="upstreamType"
-                        value={type}
-                        checked={upstreamType === type}
-                        onChange={() => setUpstreamType(type)}
-                        className="w-3.5 h-3.5 text-primary bg-background border-border focus:ring-primary accent-primary cursor-pointer"
-                      />
-                      <span className={upstreamType === type ? 'font-medium text-foreground' : 'text-muted-foreground'}>
-                        {type}
-                      </span>
-                    </label>
-                  ))}
-                </div>
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="radio"
+                    name="upstreamMode"
+                    value="direct"
+                    checked={upstreamMode === 'direct'}
+                    onChange={() => setUpstreamMode('direct')}
+                    className="w-3.5 h-3.5 text-primary bg-background border-input focus:ring-ring"
+                  />
+                  <span className={upstreamMode === 'direct' ? 'font-medium text-foreground' : 'text-muted-foreground'}>
+                    Direct Address (Quick Single Host)
+                  </span>
+                </label>
               </div>
 
-              {/* Dynamic Upstream Fields based on Upstream Type */}
-              {upstreamType === 'Single Server' && (
-                <div className="space-y-1.5 pt-1">
-                  <label className="block text-xs font-semibold text-foreground">
-                    Upstream Server <span className="text-destructive">*</span>
+              {upstreamMode === 'pool' ? (
+                <div className="space-y-4 pt-1">
+                  <div>
+                    <label className="block text-xs font-medium text-foreground mb-1.5">
+                      Select Upstream Pool <span className="text-destructive">*</span>
+                    </label>
+                    <select
+                      value={selectedUpstreamId}
+                      onChange={(e) => setSelectedUpstreamId(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-background border border-input rounded-lg text-foreground focus:outline-none focus:ring-1 focus:ring-ring font-medium"
+                    >
+                      {availableUpstreams.map((ups) => (
+                        <option key={ups.id} value={ups.id}>
+                          {ups.name} ({ups.type} — {ups.servers.length} {ups.servers.length === 1 ? 'node' : 'nodes'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {selectedUpstream && (
+                    <div className="p-4 bg-muted/30 border border-border rounded-lg space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-xs text-foreground font-mono">{selectedUpstream.name}</span>
+                          <span className="px-2 py-0.5 text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20 rounded">
+                            {selectedUpstream.type}
+                          </span>
+                        </div>
+                        <Link
+                          to="/upstreams"
+                          className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+                        >
+                          Manage Upstreams <ExternalLink className="w-3 h-3" />
+                        </Link>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                        <div className="p-2.5 bg-background/60 rounded border border-border space-y-1">
+                          <span className="text-[11px] text-muted-foreground block">Nodes Pool & Algorithm</span>
+                          <span className="font-medium text-foreground block">
+                            {selectedUpstream.servers.length} nodes ({selectedUpstream.algorithm})
+                          </span>
+                          <span className="text-[10px] text-muted-foreground font-mono block truncate">
+                            {selectedUpstream.servers.map((s) => s.address).join(', ')}
+                          </span>
+                        </div>
+
+                        <div className="p-2.5 bg-background/60 rounded border border-border space-y-1">
+                          <span className="text-[11px] text-muted-foreground block">Internal SSL (NGINX ➔ Origin)</span>
+                          <span className={`font-medium block ${selectedUpstream.internalSsl?.enabled ? 'text-primary' : 'text-foreground'}`}>
+                            {selectedUpstream.internalSsl?.enabled ? 'HTTPS Active' : 'Plain HTTP'}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground block">
+                            {selectedUpstream.internalSsl?.mTLS ? 'mTLS Client Cert Enabled' : 'No Client Cert'}
+                          </span>
+                        </div>
+
+                        <div className="p-2.5 bg-background/60 rounded border border-border space-y-1">
+                          <span className="text-[11px] text-muted-foreground block">Probes & Transport</span>
+                          <span className="font-medium text-foreground block">
+                            {selectedUpstream.probes?.length || 0} active probe(s)
+                          </span>
+                          <span className="text-[10px] text-muted-foreground font-mono block">
+                            {selectedUpstream.transport?.httpVersion || 'HTTP/1.1'}
+                            {selectedUpstream.transport?.enableWebSocket ? ' · WS' : ''}
+                            {selectedUpstream.transport?.enableGrpc ? ' · gRPC' : ''}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3 pt-1">
+                  <label className="block text-xs font-medium text-foreground">
+                    Direct Backend Address <span className="text-destructive">*</span>
                   </label>
                   <div className="flex">
                     <select
-                      value={upstreamProtocol}
-                      onChange={(e) => setUpstreamProtocol(e.target.value as 'http://' | 'https://')}
-                      className="bg-muted border border-border border-r-0 rounded-l-md px-2.5 py-2 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                      value={directProtocol}
+                      onChange={(e) => setDirectProtocol(e.target.value as 'http://' | 'https://')}
+                      className="bg-muted border border-input border-r-0 rounded-l-lg px-2.5 py-2 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
                     >
                       <option value="http://">http://</option>
                       <option value="https://">https://</option>
                     </select>
                     <input
                       type="text"
-                      placeholder="e.g. 10.0.1.10:8080 or backend.example.com"
-                      value={upstreamHost}
-                      onChange={(e) => setUpstreamHost(e.target.value)}
-                      className="flex-1 bg-background border border-border rounded-r-md px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-colors font-mono"
+                      placeholder="127.0.0.1:8080 or backend.internal"
+                      value={directAddress}
+                      onChange={(e) => setDirectAddress(e.target.value)}
+                      className="flex-1 bg-background border border-input rounded-r-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring font-mono"
                     />
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    Direct forward proxy to a single internal backend server or container IP:Port.
+                    Direct single server proxy without upstream pool capabilities. For load balancing or internal mTLS, select an Upstream Pool.
                   </p>
                 </div>
               )}
-
-              {upstreamType === 'Load Balancer' && (
-                <div className="space-y-4 pt-1">
-                  {/* Load Balancing Algorithm */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-xs font-semibold text-foreground">
-                        Balancing Algorithm
-                      </label>
-                      <span className="text-[10px] font-mono text-muted-foreground">
-                        upstream policy: {lbAlgorithm}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                      {[
-                        {
-                          id: 'round_robin' as const,
-                          name: 'Round Robin',
-                          desc: 'Distribute requests sequentially across healthy nodes',
-                        },
-                        {
-                          id: 'least_conn' as const,
-                          name: 'Least Connections',
-                          desc: 'Forward to server with least active concurrent connections',
-                        },
-                        {
-                          id: 'ip_hash' as const,
-                          name: 'IP Hash (Sticky)',
-                          desc: 'Hash client IP to bind clients consistently to same node',
-                        },
-                      ].map((alg) => (
-                        <label
-                          key={alg.id}
-                          onClick={() => setLbAlgorithm(alg.id)}
-                          className={`p-2.5 rounded-md border cursor-pointer transition-all select-none ${
-                            lbAlgorithm === alg.id
-                              ? 'bg-primary/10 border-primary/40 text-foreground ring-1 ring-primary/30'
-                              : 'bg-background hover:bg-muted/40 border-border text-muted-foreground hover:text-foreground'
-                          }`}
-                        >
-                          <span className={`text-xs font-bold block ${lbAlgorithm === alg.id ? 'text-primary' : 'text-foreground'}`}>
-                            {alg.name}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground mt-0.5 block leading-snug">
-                            {alg.desc}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Backend Servers Pool List */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-xs font-semibold text-foreground">
-                        Backend Servers Pool <span className="text-destructive">*</span>
-                      </label>
-                      <span className="text-[10px] font-mono bg-muted text-muted-foreground px-2 py-0.5 rounded border border-border">
-                        {lbServers.length} nodes
-                      </span>
-                    </div>
-
-                    <div className="space-y-2">
-                      {lbServers.map((server, index) => (
-                        <div
-                          key={server.id}
-                          className="flex items-center gap-2 p-2 bg-background/70 border border-border rounded-md"
-                        >
-                          <span className="text-xs font-mono text-muted-foreground w-6 text-center">
-                            #{index + 1}
-                          </span>
-
-                          <div className="flex flex-1">
-                            <span className="bg-muted border border-border border-r-0 rounded-l-md px-2.5 py-1.5 text-xs font-medium text-foreground">
-                              {upstreamProtocol}
-                            </span>
-                            <input
-                              type="text"
-                              placeholder="e.g. 10.0.1.10:8080"
-                              value={server.address}
-                              onChange={(e) => handleUpdateLbServer(server.id, { address: e.target.value })}
-                              className="flex-1 bg-background border border-border rounded-r-md px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono"
-                            />
-                          </div>
-
-                          <div className="flex items-center gap-1.5 w-24 shrink-0">
-                            <span className="text-[10px] text-muted-foreground">Weight:</span>
-                            <input
-                              type="number"
-                              min={1}
-                              max={100}
-                              value={server.weight}
-                              onChange={(e) => handleUpdateLbServer(server.id, { weight: Number(e.target.value) || 1 })}
-                              className="w-12 bg-background border border-border rounded px-2 py-1.5 text-xs text-center font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                            />
-                          </div>
-
-                          <button
-                            type="button"
-                            disabled={lbServers.length <= 1}
-                            onClick={() => handleRemoveLbServer(server.id)}
-                            className="p-1.5 text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:hover:text-muted-foreground cursor-pointer transition-colors"
-                            title="Remove server"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleAddLbServer}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/25 rounded-md text-xs font-semibold cursor-pointer transition-colors"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add Backend Server</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {upstreamType === 'External (FQDN)' && (
-                <div className="space-y-4 pt-1">
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-semibold text-foreground">
-                      External Hostname / FQDN <span className="text-destructive">*</span>
-                    </label>
-                    <div className="flex">
-                      <select
-                        value={upstreamProtocol}
-                        onChange={(e) => setUpstreamProtocol(e.target.value as 'http://' | 'https://')}
-                        className="bg-muted border border-border border-r-0 rounded-l-md px-2.5 py-2 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-                      >
-                        <option value="https://">https://</option>
-                        <option value="http://">http://</option>
-                      </select>
-                      <input
-                        type="text"
-                        placeholder="e.g. origin-alb.us-east-1.elb.amazonaws.com or api.partner.net"
-                        value={externalFqdn}
-                        onChange={(e) => setExternalFqdn(e.target.value)}
-                        className="flex-1 bg-background border border-border rounded-r-md px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-colors font-mono"
-                      />
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      Public or external cloud load balancer Fully Qualified Domain Name.
-                    </p>
-                  </div>
-
-                  {/* FQDN Advanced Directives */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                    {/* SNI Host Override */}
-                    <div className="flex items-start gap-2.5 p-3 rounded-md bg-background/60 border border-border">
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={sniOverride}
-                        onClick={() => setSniOverride(!sniOverride)}
-                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border border-border transition-colors duration-200 ease-in-out focus:outline-none mt-0.5 ${
-                          sniOverride ? 'bg-primary border-primary' : 'bg-muted'
-                        }`}
-                      >
-                        <span
-                          className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
-                            sniOverride ? 'translate-x-4' : 'translate-x-0'
-                          }`}
-                        />
-                      </button>
-                      <div>
-                        <span className="text-xs font-semibold text-foreground block">
-                          Pass SNI / Upstream Host
-                        </span>
-                        <span className="text-[10px] text-muted-foreground block mt-0.5 leading-snug">
-                          Sets <code>proxy_ssl_server_name on;</code> and forwards origin FQDN as Host header.
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Dynamic DNS Resolver */}
-                    <div className="flex items-start gap-2.5 p-3 rounded-md bg-background/60 border border-border">
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={dynamicDns}
-                        onClick={() => setDynamicDns(!dynamicDns)}
-                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border border-border transition-colors duration-200 ease-in-out focus:outline-none mt-0.5 ${
-                          dynamicDns ? 'bg-primary border-primary' : 'bg-muted'
-                        }`}
-                      >
-                        <span
-                          className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
-                            dynamicDns ? 'translate-x-4' : 'translate-x-0'
-                          }`}
-                        />
-                      </button>
-                      <div>
-                        <span className="text-xs font-semibold text-foreground block">
-                          Dynamic DNS Re-resolution
-                        </span>
-                        <span className="text-[10px] text-muted-foreground block mt-0.5 leading-snug">
-                          Periodically resolves FQDN to prevent stale IPs on dynamic cloud providers.
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Probe & Health Checks */}
-              <div className="space-y-3 pt-3 border-t border-border">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="block text-xs font-semibold text-foreground">
-                      Probe & Health Checks
-                    </label>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Configure endpoint probe paths for upstream readiness routing and liveness monitoring.
-                    </p>
-                  </div>
-                  <span className="text-[10px] font-mono bg-muted text-muted-foreground px-2 py-0.5 rounded border border-border">
-                    {probes.length} probe{probes.length !== 1 ? 's' : ''}
-                  </span>
-                </div>
-
-                {/* Existing Probes List */}
-                {probes.length > 0 && (
-                  <div className="space-y-1.5">
-                    {probes.map((probe) => (
-                      <div
-                        key={probe.id}
-                        className="flex items-center justify-between px-3 py-2 bg-background border border-border rounded-md text-xs"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${
-                              probe.type === 'Readiness'
-                                ? 'bg-primary/10 text-primary border border-primary/25'
-                                : probe.type === 'Liveness'
-                                ? 'bg-secondary/10 text-secondary border border-secondary/25'
-                                : 'bg-muted text-muted-foreground border border-border'
-                            }`}
-                          >
-                            {probe.type}
-                          </span>
-                          <span className="font-mono text-foreground font-medium">{probe.path}</span>
-                          <span className="text-[11px] text-muted-foreground font-mono">
-                            → {probe.expectedStatus || 200} OK
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveProbe(probe.id)}
-                          className="text-muted-foreground hover:text-destructive transition-colors p-1 cursor-pointer"
-                          title="Remove probe"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Add New Probe Row */}
-                <div className="flex items-center gap-2 pt-1">
-                  <select
-                    value={newProbeType}
-                    onChange={(e) => setNewProbeType(e.target.value as any)}
-                    className="bg-card border border-border text-foreground px-2.5 py-2 text-xs rounded-md focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer shrink-0 font-medium"
-                  >
-                    <option value="Readiness">Readiness Probe</option>
-                    <option value="Liveness">Liveness Probe</option>
-                    <option value="Health">Health Check</option>
-                  </select>
-                  <input
-                    type="text"
-                    placeholder="e.g. /health, /ready, /live"
-                    value={newProbePath}
-                    onChange={(e) => setNewProbePath(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleAddProbe();
-                      }
-                    }}
-                    className="flex-1 bg-background border border-border rounded-md px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-colors font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddProbe}
-                    className="px-3.5 py-2 bg-primary/15 hover:bg-primary/25 text-primary border border-primary/30 text-xs font-semibold rounded-md transition-colors cursor-pointer shrink-0 flex items-center gap-1"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Add Probe</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Transport & Protocols */}
-              <div className="pt-4 border-t border-border space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-foreground">
-                    Transport & Protocols
-                  </label>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Configure upstream HTTP protocol version and advanced streaming communication options.
-                  </p>
-                </div>
-
-                {/* HTTP Version Selector */}
-                <div className="space-y-1.5 bg-background/60 p-3.5 rounded-md border border-border">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-foreground">
-                      Upstream HTTP Version
-                    </span>
-                    <span className="text-[10px] text-muted-foreground font-mono">
-                      Active: {httpVersion}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
-                    {[
-                      {
-                        ver: 'HTTP/1.1' as const,
-                        label: 'HTTP/1.1',
-                        badge: 'Default',
-                        desc: 'Standard persistent connection pooling',
-                      },
-                      {
-                        ver: 'HTTP/2' as const,
-                        label: 'HTTP/2',
-                        badge: 'Multiplexed',
-                        desc: 'Multiplexed streams & native gRPC support',
-                      },
-                      {
-                        ver: 'HTTP/1.0' as const,
-                        label: 'HTTP/1.0',
-                        badge: 'Legacy',
-                        desc: 'Non-persistent simple request-reply',
-                      },
-                    ].map((opt) => (
-                      <label
-                        key={opt.ver}
-                        onClick={() => setHttpVersion(opt.ver)}
-                        className={`flex flex-col p-2.5 rounded-md border cursor-pointer transition-all select-none ${
-                          httpVersion === opt.ver
-                            ? 'bg-primary/10 border-primary/40 text-foreground ring-1 ring-primary/30'
-                            : 'bg-card hover:bg-muted/50 border-border text-muted-foreground hover:text-foreground'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className={`text-xs font-bold ${httpVersion === opt.ver ? 'text-primary' : 'text-foreground'}`}>
-                            {opt.label}
-                          </span>
-                          <span
-                            className={`text-[9px] px-1.5 py-0.2 rounded font-mono ${
-                              httpVersion === opt.ver
-                                ? 'bg-primary/20 text-primary font-semibold'
-                                : 'bg-muted text-muted-foreground'
-                            }`}
-                          >
-                            {opt.badge}
-                          </span>
-                        </div>
-                        <span className="text-[10px] text-muted-foreground mt-1 leading-snug">
-                          {opt.desc}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Real-time Streaming & Protocol Toggles */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {/* WebSocket */}
-                  <div className="flex items-start gap-2.5 p-3 rounded-md bg-background/60 border border-border">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={enableWebSocket}
-                      onClick={() => setEnableWebSocket(!enableWebSocket)}
-                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border border-border transition-colors duration-200 ease-in-out focus:outline-none mt-0.5 ${
-                        enableWebSocket ? 'bg-primary border-primary' : 'bg-muted'
-                      }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
-                          enableWebSocket ? 'translate-x-4' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                    <div>
-                      <span className="text-xs font-semibold text-foreground block">WebSocket</span>
-                      <span className="text-[10px] text-muted-foreground block mt-0.5 leading-snug">
-                        RFC 6455 upgrade for real-time duplex sockets.
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Server-Sent Events (SSE) */}
-                  <div className="flex items-start gap-2.5 p-3 rounded-md bg-background/60 border border-border">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={enableSse}
-                      onClick={() => setEnableSse(!enableSse)}
-                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border border-border transition-colors duration-200 ease-in-out focus:outline-none mt-0.5 ${
-                        enableSse ? 'bg-primary border-primary' : 'bg-muted'
-                      }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
-                          enableSse ? 'translate-x-4' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                    <div>
-                      <span className="text-xs font-semibold text-foreground block">Server-Sent Events</span>
-                      <span className="text-[10px] text-muted-foreground block mt-0.5 leading-snug">
-                        Bypasses proxy buffering for instant AI streaming.
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* gRPC Proxying */}
-                  <div className="flex items-start gap-2.5 p-3 rounded-md bg-background/60 border border-border">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={enableGrpc}
-                      onClick={handleToggleGrpc}
-                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border border-border transition-colors duration-200 ease-in-out focus:outline-none mt-0.5 ${
-                        enableGrpc ? 'bg-primary border-primary' : 'bg-muted'
-                      }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
-                          enableGrpc ? 'translate-x-4' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                    <div>
-                      <span className="text-xs font-semibold text-foreground block">gRPC (HTTP/2)</span>
-                      <span className="text-[10px] text-muted-foreground block mt-0.5 leading-snug">
-                        Native HTTP/2 frame forwarding for microservices.
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
 
-            {/* 3. TLS / Security */}
-            <div className="bg-card border border-border rounded-lg p-5 sm:p-6 space-y-4 shadow-xs">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded text-xs font-bold bg-primary/10 text-primary border border-primary/25">
-                  3
-                </span>
+            {/* 3. Edge TLS & Certificates (Client ➔ NGINX) */}
+            <div className="bg-card border border-border rounded-xl p-5 sm:p-6 space-y-4 shadow-sm">
+              <div className="flex items-center gap-2 pb-3 border-b border-border">
+                <Lock className="w-4 h-4 text-primary" />
                 <div>
-                  <h2 className="text-sm font-bold text-foreground tracking-tight">
-                    TLS / Security
-                  </h2>
+                  <h2 className="text-sm font-semibold text-card-foreground">3. Edge TLS & Certificates (Client ➔ NGINX)</h2>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Configure TLS certificate and security settings.
+                    Configure SSL/TLS termination for incoming client connections to NGINX edge.
                   </p>
                 </div>
               </div>
 
-              {/* TLS Mode Radio */}
+              {/* Edge TLS Mode Radio */}
               <div className="space-y-1.5 pt-1">
-                <label className="block text-xs font-semibold text-foreground">
-                  TLS Mode
+                <label className="block text-xs font-medium text-foreground">
+                  Edge Certificate Mode
                 </label>
                 <div className="flex flex-wrap items-center gap-6 pt-1">
-                  {(["Let's Encrypt (Auto)", 'Custom Certificate', 'Self-signed', 'mTLS (Client Cert)'] as const).map(
+                  {(["Let's Encrypt (Auto)", 'Custom Certificate', 'Self-signed'] as const).map(
                     (mode) => {
                       const modeValue: TlsType =
                         mode === "Let's Encrypt (Auto)"
                           ? "Let's Encrypt"
                           : mode === 'Custom Certificate'
-                          ? 'Custom Cert'
-                          : mode === 'Self-signed'
-                          ? 'Self-signed'
-                          : 'mTLS';
+                            ? 'Custom Cert'
+                            : 'Self-signed';
                       return (
                         <label
                           key={mode}
@@ -954,10 +500,10 @@ export default function CreateDomainPage() {
                           <input
                             type="radio"
                             name="tlsMode"
-                            value={mode}
+                            value={modeValue}
                             checked={tlsMode === modeValue}
                             onChange={() => setTlsMode(modeValue)}
-                            className="w-3.5 h-3.5 text-primary bg-background border-border focus:ring-primary accent-primary cursor-pointer"
+                            className="w-3.5 h-3.5 text-primary bg-background border-input focus:ring-ring"
                           />
                           <span className={tlsMode === modeValue ? 'font-medium text-foreground' : 'text-muted-foreground'}>
                             {mode}
@@ -969,417 +515,316 @@ export default function CreateDomainPage() {
                 </div>
               </div>
 
-              {/* TLS Detailed Fields */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-5 pt-1 items-start">
-                <div className="lg:col-span-4">
-                  <label className="block text-xs font-semibold text-foreground mb-1.5">
-                    Email for Certificate <span className="text-destructive">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    placeholder="e.g. admin@example.com"
-                    value={certificateEmail}
-                    onChange={(e) => setCertificateEmail(e.target.value)}
-                    className="w-full bg-background border border-border rounded-md px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-colors"
-                  />
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    Used for Let's Encrypt notifications.
-                  </p>
+              {/* Dynamic TLS Inputs */}
+              {tlsMode === "Let's Encrypt" && (
+                <div className="space-y-3 pt-1">
+                  <div>
+                    <label className="block text-xs font-medium text-foreground mb-1.5">
+                      Contact Email for ACME Expiry Notices
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="admin@example.com"
+                      value={certificateEmail}
+                      onChange={(e) => setCertificateEmail(e.target.value)}
+                      className="w-full bg-background border border-input rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Let's Encrypt issues free 90-day certificates with automated auto-renewal at 30 days.
+                    </p>
+                  </div>
                 </div>
+              )}
 
-                <div className="lg:col-span-2">
-                  <label className="block text-xs font-semibold text-foreground mb-1.5">
-                    TLS Version (Min)
+              {tlsMode === 'Custom Cert' && (
+                <div className="space-y-3 pt-1">
+                  <div>
+                    <label className="block text-xs font-medium text-foreground mb-1.5">
+                      Upload Certificate Bundle (PEM)
+                    </label>
+                    <div className="border-2 border-dashed border-border hover:border-input rounded-lg p-4 text-center cursor-pointer bg-muted/20">
+                      <p className="text-xs text-muted-foreground">
+                        Drag and drop certificate files here, or <span className="text-primary font-medium">browse</span>
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-1">Supports fullchain.pem + privkey.pem</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Min TLS & HSTS */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border">
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1.5">
+                    Minimum TLS Protocol
                   </label>
                   <select
                     value={tlsVersion}
-                    onChange={(e) => setTlsVersion(e.target.value as 'TLS 1.2' | 'TLS 1.3')}
-                    className="w-full bg-background border border-border rounded-md px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-colors cursor-pointer"
+                    onChange={(e) => setTlsVersion(e.target.value as any)}
+                    className="w-full px-3 py-2 text-xs bg-background border border-input rounded-lg text-foreground focus:outline-none focus:ring-1 focus:ring-ring font-medium"
                   >
-                    <option value="TLS 1.2">TLS 1.2</option>
-                    <option value="TLS 1.3">TLS 1.3</option>
+                    <option value="TLS 1.2">TLSv1.2 (Standard compatibility)</option>
+                    <option value="TLS 1.3">TLSv1.3 (Highest modern security)</option>
                   </select>
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    Minimum allowed TLS version.
-                  </p>
                 </div>
 
-                <div className="lg:col-span-2">
-                  <label className="block text-xs font-semibold text-foreground mb-2">
-                    HSTS
+                <div className="flex flex-col justify-center pt-2">
+                  <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={hstsEnabled}
+                      onChange={(e) => setHstsEnabled(e.target.checked)}
+                      className="h-4 w-4 rounded border-input text-primary focus:ring-ring bg-background"
+                    />
+                    <span className="font-medium">Enable HSTS (Strict-Transport-Security)</span>
                   </label>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={hstsEnabled}
-                      onClick={() => setHstsEnabled(!hstsEnabled)}
-                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border border-border transition-colors duration-200 ease-in-out focus:outline-none ${
-                        hstsEnabled ? 'bg-primary border-primary' : 'bg-muted'
-                      }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
-                          hstsEnabled ? 'translate-x-4' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                    <span className="text-[11px] text-muted-foreground leading-tight">
-                      Enable HTTP Strict Transport Security
-                    </span>
-                  </div>
-                </div>
-
-                <div className="lg:col-span-4">
-                  <label className="block text-xs font-semibold text-foreground mb-1.5">
-                    Additional SANs (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. www.example.com"
-                    value={additionalSans}
-                    onChange={(e) => setAdditionalSans(e.target.value)}
-                    className="w-full bg-background border border-border rounded-md px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-colors"
-                  />
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    Add additional subject alternative names (one per line).
+                  <p className="text-[11px] text-muted-foreground pl-6 mt-0.5">
+                    Forces browsers to always connect via HTTPS with max-age=31536000.
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* 4. WAF & Policy Binding */}
-            <div className="bg-card border border-border rounded-lg p-5 sm:p-6 space-y-4 shadow-xs">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded text-xs font-bold bg-primary/10 text-primary border border-primary/25">
-                  4
-                </span>
+            {/* 4. Edge WAF & Security Policies (Client Ingress) */}
+            <div className="bg-card border border-border rounded-xl p-5 sm:p-6 space-y-4 shadow-sm">
+              <div className="flex items-center gap-2 pb-3 border-b border-border">
+                <Shield className="w-4 h-4 text-primary" />
                 <div>
-                  <h2 className="text-sm font-bold text-foreground tracking-tight">
-                    WAF & Policy Binding
-                  </h2>
+                  <h2 className="text-sm font-semibold text-card-foreground">4. Edge WAF & Security Policy Binding (Client Ingress)</h2>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Choose which security policies apply to this domain.
+                    Inspect incoming client HTTP/HTTPS requests and enforce security guardrails at the edge.
                   </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center pt-1">
-                {/* Policy Search & Selector */}
-                <div className="md:col-span-6 relative">
-                  <label className="block text-xs font-semibold text-foreground mb-1.5">
-                    Apply Existing Policies (Optional)
-                  </label>
-                  <div
-                    onClick={() => setPolicyDropdownOpen(!policyDropdownOpen)}
-                    className="flex items-center justify-between w-full bg-background border border-border rounded-md px-3 py-2 text-xs text-foreground cursor-pointer hover:border-primary transition-colors"
-                  >
-                    <div className="flex items-center gap-2 truncate">
-                      <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                      {selectedPolicies.length > 0 ? (
-                        <span className="truncate font-medium text-foreground">{selectedPolicies.join(', ')}</span>
-                      ) : (
-                        <span className="text-muted-foreground">Search and select policies...</span>
-                      )}
-                    </div>
-                    <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0 ml-2" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="flex items-start gap-3 p-3.5 rounded-lg border border-border hover:border-input bg-card cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={enableWaf}
+                    onChange={(e) => setEnableWaf(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-input text-primary focus:ring-ring bg-background"
+                  />
+                  <div>
+                    <span className="text-xs font-semibold text-foreground block">WAF Inspection Engine</span>
+                    <span className="text-[11px] text-muted-foreground mt-0.5 block">
+                      Inspect inbound client URI, headers, body against OWASP Top 10 exploits (SQLi, XSS, RCE).
+                    </span>
                   </div>
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    Selected policies will be applied to this domain.
-                  </p>
+                </label>
 
-                  {/* Dropdown Menu */}
+                <label className="flex items-start gap-3 p-3.5 rounded-lg border border-border hover:border-input bg-card cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={enableRateLimiting}
+                    onChange={(e) => setEnableRateLimiting(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-input text-primary focus:ring-ring bg-background"
+                  />
+                  <div>
+                    <span className="text-xs font-semibold text-foreground block">Client Rate Limiting</span>
+                    <span className="text-[11px] text-muted-foreground mt-0.5 block">
+                      Throttle aggressive client IPs, brute-force login attempts, and DDoS bursts.
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Policy Multi-Select Binding */}
+              <div className="space-y-1.5 pt-2 border-t border-border">
+                <label className="block text-xs font-medium text-foreground">
+                  Bind WAF Rule Policies <span className="text-muted-foreground font-normal">({selectedPolicies.length} selected)</span>
+                </label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setPolicyDropdownOpen(!policyDropdownOpen)}
+                    className="w-full flex items-center justify-between bg-background border border-input rounded-lg px-3 py-2 text-xs text-foreground hover:border-input transition-colors cursor-pointer"
+                  >
+                    <span className="truncate">
+                      {selectedPolicies.length === 0
+                        ? 'Select security policies to bind...'
+                        : `${selectedPolicies.length} policy(ies) selected`}
+                    </span>
+                    <ChevronDown className="w-4 h-4 text-muted-foreground ml-2 shrink-0" />
+                  </button>
+
                   {policyDropdownOpen && (
-                    <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-lg p-2 max-h-56 overflow-y-auto space-y-1">
-                      <input
-                        type="text"
-                        placeholder="Search policy name..."
-                        value={policySearch}
-                        onChange={(e) => setPolicySearch(e.target.value)}
-                        className="w-full bg-background border border-border rounded px-2.5 py-1 text-xs text-foreground placeholder:text-muted-foreground mb-1 focus:outline-none focus:border-primary"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      {filteredPolicies.length === 0 ? (
-                        <div className="text-xs text-muted-foreground p-2 text-center">
-                          No policies found
-                        </div>
-                      ) : (
-                        filteredPolicies.map((p) => {
-                          const isSelected = selectedPolicies.includes(p.document.name);
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto p-2 space-y-1">
+                      <div className="relative mb-2">
+                        <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-2.5" />
+                        <input
+                          type="text"
+                          placeholder="Search available policies..."
+                          value={policySearch}
+                          onChange={(e) => setPolicySearch(e.target.value)}
+                          className="w-full bg-background border border-input rounded px-2.5 py-1.5 pl-8 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                        />
+                      </div>
+
+                      {availablePolicies
+                        .filter((p) => (p.document?.name || `Policy #${p.id}`).toLowerCase().includes(policySearch.toLowerCase()))
+                        .map((policy) => {
+                          const isSelected = selectedPolicies.includes(policy.id);
                           return (
                             <div
-                              key={p.id}
+                              key={policy.id}
                               onClick={() => {
                                 if (isSelected) {
-                                  setSelectedPolicies(selectedPolicies.filter((n) => n !== p.document.name));
+                                  setSelectedPolicies(selectedPolicies.filter((id) => id !== policy.id));
                                 } else {
-                                  setSelectedPolicies([...selectedPolicies, p.document.name]);
+                                  setSelectedPolicies([...selectedPolicies, policy.id]);
                                 }
                               }}
-                              className={`flex items-center justify-between px-2.5 py-1.5 rounded text-xs cursor-pointer transition-colors ${
-                                isSelected ? 'bg-primary/15 text-primary font-semibold' : 'hover:bg-muted text-foreground'
-                              }`}
+                              className={`flex items-center justify-between px-2.5 py-2 rounded text-xs cursor-pointer transition-colors ${isSelected ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted text-foreground'
+                                }`}
                             >
-                              <span>{p.document.name}</span>
-                              {isSelected && <Check className="w-3.5 h-3.5 text-primary" />}
+                              <div className="flex items-center gap-2">
+                                <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center ${isSelected ? 'bg-primary border-primary' : 'border-input'}`}>
+                                  {isSelected && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
+                                </div>
+                                <span>{policy.document?.name || `Policy #${policy.id}`}</span>
+                              </div>
+                              <span className="text-[10px] text-muted-foreground font-mono">{policy.document?.mode || policy.status}</span>
                             </div>
                           );
-                        })
-                      )}
+                        })}
                     </div>
                   )}
                 </div>
-
-                {/* Right: WAF & Rate Limiting Toggles */}
-                <div className="md:col-span-6 flex flex-wrap items-center gap-8">
-                  {/* Enable WAF */}
-                  <div className="flex items-center gap-2.5">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={enableWaf}
-                      onClick={() => setEnableWaf(!enableWaf)}
-                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border border-border transition-colors duration-200 ease-in-out focus:outline-none ${
-                        enableWaf ? 'bg-primary border-primary' : 'bg-muted'
-                      }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
-                          enableWaf ? 'translate-x-4' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                    <div>
-                      <span className="text-xs font-medium text-foreground block">Enable WAF</span>
-                      <span className="text-[10px] text-muted-foreground block">Apply WAF inspection to this domain</span>
-                    </div>
-                  </div>
-
-                  {/* Enable Rate Limiting */}
-                  <div className="flex items-center gap-2.5">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={enableRateLimiting}
-                      onClick={() => setEnableRateLimiting(!enableRateLimiting)}
-                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border border-border transition-colors duration-200 ease-in-out focus:outline-none ${
-                        enableRateLimiting ? 'bg-primary border-primary' : 'bg-muted'
-                      }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
-                          enableRateLimiting ? 'translate-x-4' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                    <div>
-                      <span className="text-xs font-medium text-foreground block">Enable Rate Limiting</span>
-                      <span className="text-[10px] text-muted-foreground block">Use rate limiting rules</span>
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
 
-            {/* Bottom Form Actions */}
-            <div className="flex items-center justify-between pt-2">
-              <button
-                type="button"
-                onClick={() => navigate('/domains')}
-                className="px-4 py-2 border border-border bg-card hover:bg-muted text-foreground text-xs font-medium rounded-md transition-colors cursor-pointer"
+            {/* Bottom Actions */}
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
+              <Link
+                to="/domains"
+                className="px-4 py-2 text-xs font-medium border border-border bg-background hover:bg-muted text-foreground rounded-lg transition-colors"
               >
                 Cancel
-              </button>
-
+              </Link>
               <button
                 type="submit"
                 disabled={!domainName.trim()}
-                className="inline-flex items-center gap-1.5 px-5 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground text-xs font-medium rounded-md shadow-xs transition-all cursor-pointer"
+                className="px-5 py-2 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Create Domain</span>
+                Create Domain Entry
               </button>
             </div>
           </div>
 
-          {/* Right Column: Sticky Preview & Tips (col-span-4) */}
-          <div className="lg:col-span-4 space-y-5 sticky top-6">
-            {/* Domain Preview Card */}
-            <div className="bg-card border border-border rounded-lg p-5 space-y-4 shadow-xs">
-              <div>
-                <h3 className="text-xs font-bold text-foreground tracking-tight">Domain Preview</h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Here is a summary of the domain configuration.
-                </p>
+          {/* Right Sidebar: Sticky Domain Preview */}
+          <div className="col-span-12 lg:col-span-4 sticky top-6 space-y-4">
+            <div className="bg-card border border-border rounded-xl p-4 space-y-4 shadow-sm">
+              <div className="flex items-center justify-between pb-3 border-b border-border">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Domain Live Preview</h3>
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                  Ready to Bind
+                </span>
               </div>
 
-              {/* Sub-block 1: Domain */}
-              <div className="space-y-2 border-t border-border pt-3">
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                  <div className="w-5 h-5 rounded bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shrink-0">
-                    <Globe className="w-3 h-3" />
+              <div className="space-y-3 text-xs">
+                {/* Edge Ingress */}
+                <div>
+                  <span className="text-muted-foreground block text-[11px]">Edge Ingress (Client ➔ NGINX)</span>
+                  <div className="font-mono font-bold text-foreground mt-0.5">
+                    {domainName.trim() || 'example.com'}
                   </div>
-                  <span>Domain</span>
-                </div>
-                <div className="space-y-1.5 text-[11px]">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Domain Name</span>
-                    <span className="font-medium text-foreground text-right">{domainName || '-'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Root Domain</span>
-                    <span className="font-medium text-foreground text-right">{rootDomain || '-'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Description</span>
-                    <span className="font-medium text-foreground text-right truncate max-w-[150px]">
-                      {description || '-'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Tags</span>
-                    <span className="font-medium text-foreground text-right truncate max-w-[150px]">
-                      {tags.length > 0 ? tags.join(', ') : '-'}
-                    </span>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">
+                    Apex: <span className="font-mono text-foreground">{rootDomain.trim() || 'example.com'}</span>
                   </div>
                 </div>
-              </div>
 
-              {/* Sub-block 2: Upstream */}
-              <div className="space-y-2 border-t border-border pt-3">
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                  <div className="w-5 h-5 rounded bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shrink-0">
-                    <Server className="w-3 h-3" />
+                {/* Edge TLS */}
+                <div className="pt-2 border-t border-border space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Edge TLS</span>
+                    <span className="font-medium text-foreground">{tlsMode}</span>
                   </div>
-                  <span>Upstream</span>
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>Min Version:</span>
+                    <span className="font-mono text-foreground">{tlsVersion}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>HSTS:</span>
+                    <span className={hstsEnabled ? 'text-primary font-medium' : 'text-muted-foreground'}>
+                      {hstsEnabled ? 'Enforced' : 'Disabled'}
+                    </span>
+                  </div>
                 </div>
-                <div className="space-y-1.5 text-[11px]">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Type</span>
-                    <span className="font-medium text-foreground">{upstreamType || '-'}</span>
+
+                {/* Target Upstream */}
+                <div className="pt-2 border-t border-border space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Target Upstream (Egress)</span>
+                    <span className="font-mono font-medium text-foreground">
+                      {upstreamMode === 'pool' && selectedUpstream ? selectedUpstream.name : directAddress}
+                    </span>
                   </div>
-                  {upstreamType === 'Load Balancer' ? (
-                    <>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Algorithm</span>
-                        <span className="font-medium text-foreground capitalize">
-                          {lbAlgorithm.replace('_', ' ')}
+                  {upstreamMode === 'pool' && selectedUpstream && (
+                    <div className="p-2 bg-muted/40 rounded border border-border text-[11px] space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Topology:</span>
+                        <span className="text-foreground font-medium">{selectedUpstream.type}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Internal SSL:</span>
+                        <span className={selectedUpstream.internalSsl?.enabled ? 'text-primary font-medium' : 'text-muted-foreground'}>
+                          {selectedUpstream.internalSsl?.enabled ? 'Backend HTTPS' : 'Plain HTTP'}
                         </span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Servers</span>
-                        <span className="font-medium text-foreground text-right truncate max-w-[150px]">
-                          {lbServers.length} nodes ({lbServers.map((s) => s.address || 'node').join(', ')})
-                        </span>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Health Probes:</span>
+                        <span className="text-foreground font-mono">{selectedUpstream.probes?.[0]?.path || '/health'}</span>
                       </div>
-                    </>
-                  ) : upstreamType === 'External (FQDN)' ? (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">FQDN</span>
-                      <span className="font-medium text-foreground truncate max-w-[150px]">
-                        {externalFqdn ? `${upstreamProtocol}${externalFqdn}` : '-'}
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Server</span>
-                      <span className="font-medium text-foreground truncate max-w-[150px]">
-                        {upstreamHost ? `${upstreamProtocol}${upstreamHost}` : '-'}
-                      </span>
                     </div>
                   )}
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">HTTP Version</span>
-                    <span className="font-mono text-xs font-semibold text-foreground">{httpVersion}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Protocols</span>
-                    <span className="font-medium text-foreground text-right truncate max-w-[150px]">
-                      {[
-                        enableWebSocket && 'WebSocket',
-                        enableSse && 'SSE',
-                        enableGrpc && 'gRPC',
-                      ].filter(Boolean).join(', ') || 'Standard'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Probes / Health</span>
-                    <span className="font-medium text-foreground text-right truncate max-w-[150px]">
-                      {probes.length > 0 ? probes.map((p) => p.path).join(', ') : '-'}
-                    </span>
-                  </div>
                 </div>
-              </div>
 
-              {/* Sub-block 3: TLS / Security */}
-              <div className="space-y-2 border-t border-border pt-3">
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                  <div className="w-5 h-5 rounded bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shrink-0">
-                    <Shield className="w-3 h-3" />
-                  </div>
-                  <span>TLS / Security</span>
-                </div>
-                <div className="space-y-1.5 text-[11px]">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">TLS Mode</span>
-                    <span className="font-medium text-foreground">{tlsMode || '-'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">TLS Version</span>
-                    <span className="font-medium text-foreground">{tlsVersion || '-'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">HSTS</span>
-                    <span className={`font-medium ${hstsEnabled ? 'text-primary' : 'text-muted-foreground'}`}>
-                      {hstsEnabled ? 'Enabled' : 'Disabled'}
+                {/* Edge Security */}
+                <div className="pt-2 border-t border-border space-y-1.5">
+                  <span className="text-muted-foreground block text-[11px]">Edge WAF & Security</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">WAF Engine:</span>
+                    <span className={enableWaf ? 'text-primary font-medium' : 'text-muted-foreground'}>
+                      {enableWaf ? 'Active' : 'Bypass'}
                     </span>
                   </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Rate Limiting:</span>
+                    <span className={enableRateLimiting ? 'text-primary font-medium' : 'text-muted-foreground'}>
+                      {enableRateLimiting ? 'Active' : 'Disabled'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Bound Policies:</span>
+                    <span className="font-semibold text-foreground">{selectedPolicies.length} policy(ies)</span>
+                  </div>
                 </div>
-              </div>
 
-              {/* Sub-block 4: WAF & Policies */}
-              <div className="space-y-2 border-t border-border pt-3">
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                  <div className="w-5 h-5 rounded bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shrink-0">
-                    <FileText className="w-3 h-3" />
+                {/* Generated Server Block Preview */}
+                <div className="pt-3 border-t border-border">
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground mb-1.5">
+                    <Code className="w-3.5 h-3.5" />
+                    <span>NGINX Server Block (Edge)</span>
                   </div>
-                  <span>WAF & Policies</span>
-                </div>
-                <div className="space-y-1.5 text-[11px]">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">WAF</span>
-                    <span className={`font-medium ${enableWaf ? 'text-primary' : 'text-muted-foreground'}`}>
-                      {enableWaf ? 'Enabled' : 'Disabled'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Rate Limiting</span>
-                    <span className={`font-medium ${enableRateLimiting ? 'text-primary' : 'text-muted-foreground'}`}>
-                      {enableRateLimiting ? 'Enabled' : 'Disabled'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Policies</span>
-                    <span className="font-medium text-foreground truncate max-w-[150px]">
-                      {selectedPolicies.length > 0 ? selectedPolicies.join(', ') : '-'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
+                  <pre className="p-2.5 bg-muted/60 rounded-lg text-[10px] font-mono text-muted-foreground overflow-x-auto leading-relaxed border border-border">
+                    {`server {
+  listen 443 ssl http2;
+  server_name ${domainName.trim() || 'example.com'};
 
-            {/* Tips Card */}
-            <div className="bg-card border border-border rounded-lg p-5 space-y-3 shadow-xs">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
-                <Lightbulb className="w-4 h-4 text-primary" />
-                <span>Tips</span>
+  # Edge TLS (Client ➔ NGINX)
+  ssl_certificate /etc/letsencrypt/live/${domainName.trim() || 'example.com'}/fullchain.pem;
+  ssl_protocols ${tlsVersion === 'TLS 1.3' ? 'TLSv1.3' : 'TLSv1.2 TLSv1.3'};
+  ${hstsEnabled ? 'add_header Strict-Transport-Security "max-age=31536000" always;\n' : ''}
+  location / {
+    proxy_pass ${upstreamMode === 'pool' && selectedUpstream ? `http://${selectedUpstream.name}` : `${directProtocol}${directAddress}`};
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+  }
+}`}
+                  </pre>
+                </div>
               </div>
-              <ul className="space-y-2 text-[11px] text-muted-foreground list-disc pl-4 leading-relaxed">
-                <li>Use a dedicated subdomain for each service (e.g. api.example.com).</li>
-                <li>Let's Encrypt certificates are automatically renewed.</li>
-                <li>You can attach security policies later from the domain detail page.</li>
-                <li>Changes will be deployed to all connected NGINX nodes automatically.</li>
-              </ul>
             </div>
           </div>
         </div>

@@ -83,8 +83,14 @@ export function ConsoleSidebar() {
     {
       label: 'Domains',
       path: '/domains',
-      aliases: [],
+      aliases: ['/domains/create', '/domains/add'],
       icon: <Globe className="w-4 h-4 shrink-0" />,
+    },
+    {
+      label: 'Upstreams',
+      path: '/upstreams',
+      aliases: ['/upstreams/create', '/upstreams/add'],
+      icon: <Server className="w-4 h-4 shrink-0" />,
     },
     {
       label: 'Security Events',
