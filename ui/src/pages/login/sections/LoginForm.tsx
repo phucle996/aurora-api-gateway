@@ -9,16 +9,16 @@ import {
   ShieldCheck,
   AlertCircle,
   CheckCircle2,
-  KeyRound,
 } from 'lucide-react';
+import logoImg from '@/assets/logo.png';
 import { api, setAuthToken, setAuthUser } from '../../../lib/fetcher';
 
 export function LoginForm() {
   const navigate = useNavigate();
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('admin');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberDevice, setRememberDevice] = useState(true);
+  const [rememberDevice, setRememberDevice] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
@@ -61,14 +61,21 @@ export function LoginForm() {
     <div className="lg:col-span-7 bg-[#0C121E] border border-[#1C2739] p-8 md:p-10 shadow-2xl flex flex-col justify-between">
       <div>
         <div className="mb-6">
-          <span className="text-[11px] font-mono font-semibold tracking-[0.2em] text-slate-400 uppercase">
-            SIGN IN
-          </span>
-          <h1 className="text-2xl font-bold text-white tracking-tight mt-1.5 font-sans">
-            Aurora WAF Console
+          <div className="flex items-center gap-2.5 mb-2">
+            <img
+              src={logoImg}
+              alt="Aurora Logo"
+              className="w-7 h-7 object-contain drop-shadow-[0_2px_6px_rgba(16,185,129,0.2)]"
+            />
+            <span className="text-[11px] font-mono font-semibold tracking-[0.2em] text-emerald-400 uppercase">
+              CONSOLE ACCESS
+            </span>
+          </div>
+          <h1 className="text-2xl font-bold text-white tracking-tight mt-1 font-sans">
+            Sign in to Aurora WAF
           </h1>
-          <p className="text-xs text-slate-400 mt-1 font-mono">
-            Unified Cloud Defense Management · JWT Authentication
+          <p className="text-xs text-slate-400 mt-1 font-sans">
+            Enterprise Cloud Defense & Security Management
           </p>
         </div>
 
@@ -88,7 +95,7 @@ export function LoginForm() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
           {/* Username */}
           <div>
             <label
@@ -104,10 +111,11 @@ export function LoginForm() {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="admin"
+                placeholder="Enter username"
                 className="w-full bg-[#111A29] border border-[#1F2C40] pl-9 pr-4 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 transition-colors font-mono"
                 required
-                autoComplete="username"
+                autoComplete="off"
+                spellCheck={false}
               />
             </div>
           </div>
@@ -127,10 +135,10 @@ export function LoginForm() {
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••••••"
+                placeholder="Enter password"
                 className="w-full bg-[#111A29] border border-[#1F2C40] pl-9 pr-9 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 transition-colors font-mono"
                 required
-                autoComplete="current-password"
+                autoComplete="new-password"
               />
               <button
                 type="button"
@@ -145,17 +153,6 @@ export function LoginForm() {
                 )}
               </button>
             </div>
-          </div>
-
-          {/* Seed hint info */}
-          <div className="p-2.5 bg-[#0A101C] border border-[#172338] text-[11px] font-mono text-slate-400 flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-cyan-400">
-              <KeyRound className="w-3.5 h-3.5" />
-              <span>Default Seed Account:</span>
-            </div>
-            <code className="text-white bg-[#111A29] px-2 py-0.5 border border-[#1F2C40]">
-              admin / admin
-            </code>
           </div>
 
           {/* Remember this device & Forgot password */}
@@ -208,7 +205,7 @@ export function LoginForm() {
       <div className="mt-8 pt-4 border-t border-[#1C2739] flex items-center gap-2 text-slate-400 text-xs font-mono">
         <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
         <span>
-          Protected by Aurora WAF Core engine (Argon2id / HMAC-SHA256 JWT / SQLite3 state).
+          Protected by Aurora WAF Enterprise Security Engine.
         </span>
       </div>
     </div>

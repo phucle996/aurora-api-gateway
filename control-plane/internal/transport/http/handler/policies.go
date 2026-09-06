@@ -28,50 +28,12 @@ func NewPolicyHandler(svc port.PolicyService) *PolicyHandler {
 	}
 }
 
-// Policy endpoint boundary only: strict bounded JSON and typed error redaction
-// must be identical for mutation/replay safety; these are not global helpers.
-func policyJSON(c *gin.Context, v any) bool {
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
-	d := json.NewDecoder(c.Request.Body)
-	d.DisallowUnknownFields()
-	if d.Decode(v) != nil || d.Decode(&struct{}{}) != io.EOF {
-		c.JSON(400, gin.H{"message": "invalid JSON request"})
-		return false
-	}
-	return true
-}
-func policyError(c *gin.Context, err error) {
-	status := 500
-	message := "policy storage unavailable"
-	switch {
-	case errors.Is(err, taxonomy.ErrPolicyInvalid), errors.Is(err, taxonomy.ErrPolicyUnsupported):
-		status = 422
-		message = err.Error()
-	case errors.Is(err, taxonomy.ErrPolicyConflict):
-		status = 409
-		message = err.Error()
-	case errors.Is(err, taxonomy.ErrPolicyNotFound):
-		status = 404
-		message = err.Error()
-	case errors.Is(err, taxonomy.ErrPublishUnavailable):
-		status = 503
-		message = "runtime compiler unavailable or rejected snapshot"
-	}
-	c.JSON(status, gin.H{"message": message})
-}
-func policyID(c *gin.Context) (int64, bool) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil || id < 1 {
-		c.JSON(400, gin.H{"message": "invalid policy id"})
-		return 0, false
-	}
-	return id, true
-}
 func (h *PolicyHandler) List(c *gin.Context) {
 	q := entity.ReadPoliciesQuery{}
 	if c.Param("id") != "" {
-		id, ok := policyID(c)
-		if !ok {
+		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil || id < 1 {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "invalid policy id"})
 			return
 		}
 		q.ID = id
@@ -79,11 +41,27 @@ func (h *PolicyHandler) List(c *gin.Context) {
 	q.History = c.Query("history") == "true"
 	out, err := h.Service.ReadPolicies(c.Request.Context(), q)
 	if err != nil {
-		policyError(c, err)
+		status := http.StatusInternalServerError
+		message := "policy storage unavailable"
+		switch {
+		case errors.Is(err, taxonomy.ErrPolicyInvalid), errors.Is(err, taxonomy.ErrPolicyUnsupported):
+			status = http.StatusUnprocessableEntity
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPolicyConflict):
+			status = http.StatusConflict
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPolicyNotFound):
+			status = http.StatusNotFound
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPublishUnavailable):
+			status = http.StatusServiceUnavailable
+			message = "runtime compiler unavailable or rejected snapshot"
+		}
+		c.JSON(status, gin.H{"message": message})
 		return
 	}
 	if q.ID > 0 && len(out) == 0 {
-		policyError(c, taxonomy.ErrPolicyNotFound)
+		c.JSON(http.StatusNotFound, gin.H{"message": taxonomy.ErrPolicyNotFound.Error()})
 		return
 	}
 	items := make([]dto.ReadPolicyItemResponse, len(out))
@@ -100,12 +78,29 @@ func (h *PolicyHandler) List(c *gin.Context) {
 			Operation:        it.Operation,
 		}
 	}
-	c.JSON(200, items)
+	c.JSON(http.StatusOK, items)
 }
+
 func (h *PolicyHandler) Catalog(c *gin.Context) {
 	out, err := h.Service.PolicyCatalog(c.Request.Context())
 	if err != nil {
-		policyError(c, err)
+		status := http.StatusInternalServerError
+		message := "policy storage unavailable"
+		switch {
+		case errors.Is(err, taxonomy.ErrPolicyInvalid), errors.Is(err, taxonomy.ErrPolicyUnsupported):
+			status = http.StatusUnprocessableEntity
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPolicyConflict):
+			status = http.StatusConflict
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPolicyNotFound):
+			status = http.StatusNotFound
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPublishUnavailable):
+			status = http.StatusServiceUnavailable
+			message = "runtime compiler unavailable or rejected snapshot"
+		}
+		c.JSON(status, gin.H{"message": message})
 		return
 	}
 	items := make([]dto.PolicyCatalogItemResponse, len(out))
@@ -115,12 +110,29 @@ func (h *PolicyHandler) Catalog(c *gin.Context) {
 			Name: it.Name,
 		}
 	}
-	c.JSON(200, items)
+	c.JSON(http.StatusOK, items)
 }
+
 func (h *PolicyHandler) RuleCatalog(c *gin.Context) {
 	out, err := h.Service.PolicyRuleCatalog(c.Request.Context())
 	if err != nil {
-		policyError(c, err)
+		status := http.StatusInternalServerError
+		message := "policy storage unavailable"
+		switch {
+		case errors.Is(err, taxonomy.ErrPolicyInvalid), errors.Is(err, taxonomy.ErrPolicyUnsupported):
+			status = http.StatusUnprocessableEntity
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPolicyConflict):
+			status = http.StatusConflict
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPolicyNotFound):
+			status = http.StatusNotFound
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPublishUnavailable):
+			status = http.StatusServiceUnavailable
+			message = "runtime compiler unavailable or rejected snapshot"
+		}
+		c.JSON(status, gin.H{"message": message})
 		return
 	}
 	items := make([]dto.PolicyCatalogRuleResponse, len(out))
@@ -135,12 +147,29 @@ func (h *PolicyHandler) RuleCatalog(c *gin.Context) {
 			RuntimeReady: it.RuntimeReady,
 		}
 	}
-	c.JSON(200, items)
+	c.JSON(http.StatusOK, items)
 }
+
 func (h *PolicyHandler) Cluster(c *gin.Context) {
 	out, err := h.Service.PolicyCluster(c.Request.Context())
 	if err != nil {
-		policyError(c, err)
+		status := http.StatusInternalServerError
+		message := "policy storage unavailable"
+		switch {
+		case errors.Is(err, taxonomy.ErrPolicyInvalid), errors.Is(err, taxonomy.ErrPolicyUnsupported):
+			status = http.StatusUnprocessableEntity
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPolicyConflict):
+			status = http.StatusConflict
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPolicyNotFound):
+			status = http.StatusNotFound
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPublishUnavailable):
+			status = http.StatusServiceUnavailable
+			message = "runtime compiler unavailable or rejected snapshot"
+		}
+		c.JSON(status, gin.H{"message": message})
 		return
 	}
 	nodes := make([]dto.PolicyClusterNodeResponse, len(out.Nodes))
@@ -153,21 +182,27 @@ func (h *PolicyHandler) Cluster(c *gin.Context) {
 			UpdatedAt: n.UpdatedAt,
 		}
 	}
-	c.JSON(200, dto.PolicyClusterStatusResponse{
+	c.JSON(http.StatusOK, dto.PolicyClusterStatusResponse{
 		ReleaseID: out.ReleaseID,
 		Nodes:     nodes,
 	})
 }
+
 func (h *PolicyHandler) SaveDraft(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
+	d := json.NewDecoder(c.Request.Body)
+	d.DisallowUnknownFields()
 	var req dto.SavePolicyRequest
-	if !policyJSON(c, &req) {
+	if d.Decode(&req) != nil || d.Decode(&struct{}{}) != io.EOF {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid JSON request"})
 		return
 	}
 	var id int64
 	if c.Param("id") != "" {
-		var ok bool
-		id, ok = policyID(c)
-		if !ok {
+		var err error
+		id, err = strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil || id < 1 {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "invalid policy id"})
 			return
 		}
 	}
@@ -175,7 +210,7 @@ func (h *PolicyHandler) SaveDraft(c *gin.Context) {
 	requestKey := c.GetHeader("Idempotency-Key")
 
 	if id < 0 || req.ExpectedVersion < 0 || req.RestoreVersion < 0 || (id == 0 && (req.ExpectedVersion != 0 || req.RestoreVersion != 0)) || (id > 0 && req.ExpectedVersion == 0) || len(requestKey) < 8 || len(requestKey) > 128 || actor == "" {
-		policyError(c, taxonomy.ErrPolicyInvalid)
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"message": taxonomy.ErrPolicyInvalid.Error()})
 		return
 	}
 	cmd := entity.SavePolicyCommand{
@@ -200,47 +235,47 @@ func (h *PolicyHandler) SaveDraft(c *gin.Context) {
 			cmd.PathPrefix = "/"
 		}
 		if cmd.Name == "" || len(cmd.Name) > 120 || len(cmd.Description) > 2000 || !utf8.ValidString(cmd.Name+cmd.Description) || cmd.Priority < 0 || cmd.Priority > 1000000 || len(cmd.RuleIDs) > 1024 || (cmd.Mode != "mixed" && cmd.Mode != "block" && cmd.Mode != "detect") {
-			policyError(c, taxonomy.ErrPolicyInvalid)
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": taxonomy.ErrPolicyInvalid.Error()})
 			return
 		}
 		if cmd.Host == "" || len(cmd.Host) > 253 {
-			policyError(c, taxonomy.ErrPolicyInvalid)
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": taxonomy.ErrPolicyInvalid.Error()})
 			return
 		}
 		if cmd.Host != "*" {
 			for _, label := range strings.Split(cmd.Host, ".") {
 				if label == "" || len(label) > 63 || strings.HasPrefix(label, "-") || strings.HasSuffix(label, "-") {
-					policyError(c, taxonomy.ErrPolicyInvalid)
+					c.JSON(http.StatusUnprocessableEntity, gin.H{"message": taxonomy.ErrPolicyInvalid.Error()})
 					return
 				}
 				for _, b := range []byte(label) {
 					if !(b >= 'a' && b <= 'z' || b >= '0' && b <= '9' || b == '-') {
-						policyError(c, taxonomy.ErrPolicyInvalid)
+						c.JSON(http.StatusUnprocessableEntity, gin.H{"message": taxonomy.ErrPolicyInvalid.Error()})
 						return
 					}
 				}
 			}
 		}
 		if !strings.HasPrefix(cmd.PathPrefix, "/") || len(cmd.PathPrefix) > 8192 || strings.ContainsAny(cmd.PathPrefix, "%?#\\*") || strings.Contains(cmd.PathPrefix, "//") {
-			policyError(c, taxonomy.ErrPolicyInvalid)
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": taxonomy.ErrPolicyInvalid.Error()})
 			return
 		}
 		for _, b := range []byte(cmd.PathPrefix) {
 			if b <= 32 || b >= 127 {
-				policyError(c, taxonomy.ErrPolicyInvalid)
+				c.JSON(http.StatusUnprocessableEntity, gin.H{"message": taxonomy.ErrPolicyInvalid.Error()})
 				return
 			}
 		}
 		for _, p := range strings.Split(cmd.PathPrefix, "/") {
 			if p == "." || p == ".." {
-				policyError(c, taxonomy.ErrPolicyInvalid)
+				c.JSON(http.StatusUnprocessableEntity, gin.H{"message": taxonomy.ErrPolicyInvalid.Error()})
 				return
 			}
 		}
 		sort.Slice(cmd.RuleIDs, func(i, j int) bool { return cmd.RuleIDs[i] < cmd.RuleIDs[j] })
 		for i, rid := range cmd.RuleIDs {
 			if rid < 1 || (i > 0 && rid == cmd.RuleIDs[i-1]) {
-				policyError(c, taxonomy.ErrPolicyInvalid)
+				c.JSON(http.StatusUnprocessableEntity, gin.H{"message": taxonomy.ErrPolicyInvalid.Error()})
 				return
 			}
 		}
@@ -251,21 +286,43 @@ func (h *PolicyHandler) SaveDraft(c *gin.Context) {
 
 	out, err := h.Service.Save(c.Request.Context(), cmd)
 	if err != nil {
-		policyError(c, err)
+		status := http.StatusInternalServerError
+		message := "policy storage unavailable"
+		switch {
+		case errors.Is(err, taxonomy.ErrPolicyInvalid), errors.Is(err, taxonomy.ErrPolicyUnsupported):
+			status = http.StatusUnprocessableEntity
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPolicyConflict):
+			status = http.StatusConflict
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPolicyNotFound):
+			status = http.StatusNotFound
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPublishUnavailable):
+			status = http.StatusServiceUnavailable
+			message = "runtime compiler unavailable or rejected snapshot"
+		}
+		c.JSON(status, gin.H{"message": message})
 		return
 	}
-	c.JSON(200, dto.SavePolicyResponse{
+	c.JSON(http.StatusOK, dto.SavePolicyResponse{
 		ID:      out.ID,
 		Version: out.Version,
 	})
 }
+
 func (h *PolicyHandler) PublishDraft(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
+	d := json.NewDecoder(c.Request.Body)
+	d.DisallowUnknownFields()
 	var req dto.PublishPolicyRequest
-	if !policyJSON(c, &req) {
+	if d.Decode(&req) != nil || d.Decode(&struct{}{}) != io.EOF {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid JSON request"})
 		return
 	}
-	id, ok := policyID(c)
-	if !ok {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id < 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid policy id"})
 		return
 	}
 	actor := c.GetString(middleware.CtxUsernameKey)
@@ -273,7 +330,7 @@ func (h *PolicyHandler) PublishDraft(c *gin.Context) {
 	preview := c.Query("preview") == "true"
 
 	if id < 1 || req.ExpectedVersion < 1 || req.ExpectedRelease < 0 || actor == "" || (!preview && (len(requestKey) < 8 || len(requestKey) > 128)) {
-		policyError(c, taxonomy.ErrPolicyInvalid)
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"message": taxonomy.ErrPolicyInvalid.Error()})
 		return
 	}
 
@@ -289,10 +346,26 @@ func (h *PolicyHandler) PublishDraft(c *gin.Context) {
 
 	out, err := h.Service.Publish(c.Request.Context(), cmd)
 	if err != nil {
-		policyError(c, err)
+		status := http.StatusInternalServerError
+		message := "policy storage unavailable"
+		switch {
+		case errors.Is(err, taxonomy.ErrPolicyInvalid), errors.Is(err, taxonomy.ErrPolicyUnsupported):
+			status = http.StatusUnprocessableEntity
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPolicyConflict):
+			status = http.StatusConflict
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPolicyNotFound):
+			status = http.StatusNotFound
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPublishUnavailable):
+			status = http.StatusServiceUnavailable
+			message = "runtime compiler unavailable or rejected snapshot"
+		}
+		c.JSON(status, gin.H{"message": message})
 		return
 	}
-	c.JSON(200, dto.PublishPolicyResponse{
+	c.JSON(http.StatusOK, dto.PublishPolicyResponse{
 		ReleaseID:  out.ReleaseID,
 		Digest:     out.Digest,
 		Payload:    out.Payload,
@@ -300,26 +373,48 @@ func (h *PolicyHandler) PublishDraft(c *gin.Context) {
 		Preview:    out.Preview,
 	})
 }
+
 func (h *PolicyHandler) Desired(c *gin.Context) {
 	out, err := h.Service.PolicySync(c.Request.Context(), entity.PolicySyncQuery{NodeID: c.Param("node")})
 	if err != nil {
-		policyError(c, err)
+		status := http.StatusInternalServerError
+		message := "policy storage unavailable"
+		switch {
+		case errors.Is(err, taxonomy.ErrPolicyInvalid), errors.Is(err, taxonomy.ErrPolicyUnsupported):
+			status = http.StatusUnprocessableEntity
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPolicyConflict):
+			status = http.StatusConflict
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPolicyNotFound):
+			status = http.StatusNotFound
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPublishUnavailable):
+			status = http.StatusServiceUnavailable
+			message = "runtime compiler unavailable or rejected snapshot"
+		}
+		c.JSON(status, gin.H{"message": message})
 		return
 	}
-	c.JSON(200, dto.PolicySyncResponse{
+	c.JSON(http.StatusOK, dto.PolicySyncResponse{
 		ReleaseID: out.ReleaseID,
 		Digest:    out.Digest,
 		Payload:   out.Payload,
 	})
 }
+
 func (h *PolicyHandler) Report(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
+	d := json.NewDecoder(c.Request.Body)
+	d.DisallowUnknownFields()
 	var req dto.PolicyReportRequest
-	if !policyJSON(c, &req) {
+	if d.Decode(&req) != nil || d.Decode(&struct{}{}) != io.EOF {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid JSON request"})
 		return
 	}
 	nodeID := c.Param("node")
 	if nodeID == "" || req.ReleaseID < 1 || len(req.Message) > 512 || (req.Phase != "validated" && req.Phase != "reload_requested" && req.Phase != "observed" && req.Phase != "failed") {
-		policyError(c, taxonomy.ErrPolicyInvalid)
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"message": taxonomy.ErrPolicyInvalid.Error()})
 		return
 	}
 	cmd := entity.PolicyReportCommand{
@@ -329,9 +424,24 @@ func (h *PolicyHandler) Report(c *gin.Context) {
 		Message:   req.Message,
 	}
 	if err := h.Service.PolicyReport(c.Request.Context(), cmd); err != nil {
-		policyError(c, err)
+		status := http.StatusInternalServerError
+		message := "policy storage unavailable"
+		switch {
+		case errors.Is(err, taxonomy.ErrPolicyInvalid), errors.Is(err, taxonomy.ErrPolicyUnsupported):
+			status = http.StatusUnprocessableEntity
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPolicyConflict):
+			status = http.StatusConflict
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPolicyNotFound):
+			status = http.StatusNotFound
+			message = err.Error()
+		case errors.Is(err, taxonomy.ErrPublishUnavailable):
+			status = http.StatusServiceUnavailable
+			message = "runtime compiler unavailable or rejected snapshot"
+		}
+		c.JSON(status, gin.H{"message": message})
 		return
 	}
-	c.Status(204)
+	c.Status(http.StatusNoContent)
 }
-
