@@ -241,50 +241,50 @@ export default function SecurityEventsPage() {
   return (
     <div className="p-6 w-full space-y-4 font-sans selection:bg-emerald-500/30 selection:text-emerald-200">
       {/* Header */}
-          <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-[#152030]">
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight font-sans">
-                  Security Events
-                </h1>
-                <span className="px-2 py-0.5 text-[10px] font-sans font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-700 uppercase rounded-xs">
-                  LIVE MONITORING
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-sans">
-                Inspect blocked, logged, and suspicious requests across protected applications.
-              </p>
-            </div>
+      <div className="flex items-center justify-between pb-3 border-b border-border">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight font-sans">
+              Security Events
+            </h1>
+            <span className="px-2 py-0.5 text-[10px] font-sans font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-700 uppercase rounded-xs">
+              LIVE MONITORING
+            </span>
           </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-sans">
+            Inspect blocked, logged, and suspicious requests across protected applications.
+          </p>
+        </div>
+      </div>
 
-          {/* 4 Summary Stat Cards Section */}
-          <EventsStats />
+      {/* 4 Summary Stat Cards Section */}
+      <EventsStats />
 
-          {/* Table + Details Grid Section */}
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
-            <EventsTable
-              events={filteredEvents}
-              selectedId={selectedEventId || ''}
-              onSelect={(id) => setSelectedEventId(selectedEventId === id ? null : id)}
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
-              actionFilter={actionFilter}
-              onActionFilterChange={setActionFilter}
-              severityFilter={severityFilter}
-              onSeverityFilterChange={setSeverityFilter}
-              hostFilter={hostFilter}
-              onHostFilterChange={setHostFilter}
-              timeFilter={timeFilter}
-              onTimeFilterChange={setTimeFilter}
-            />
+      {/* Table + Details Grid Section */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
+        <EventsTable
+          events={filteredEvents}
+          selectedId={selectedEventId || ''}
+          onSelect={(id) => setSelectedEventId(selectedEventId === id ? null : id)}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          actionFilter={actionFilter}
+          onActionFilterChange={setActionFilter}
+          severityFilter={severityFilter}
+          onSeverityFilterChange={setSeverityFilter}
+          hostFilter={hostFilter}
+          onHostFilterChange={setHostFilter}
+          timeFilter={timeFilter}
+          onTimeFilterChange={setTimeFilter}
+        />
 
-            {selectedEvent && (
-              <EventDetail
-                event={selectedEvent}
-                onClose={() => setSelectedEventId(null)}
-              />
-            )}
-          </div>
+        {selectedEvent && (
+          <EventDetail
+            event={selectedEvent}
+            onClose={() => setSelectedEventId(null)}
+          />
+        )}
+      </div>
     </div>
   );
 }

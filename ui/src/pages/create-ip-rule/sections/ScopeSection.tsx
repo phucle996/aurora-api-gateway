@@ -34,12 +34,12 @@ export function ScopeSection({ form, setForm, hosts = [] }: ScopeSectionProps) {
   ];
 
   return (
-    <section className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-5 space-y-4 shadow-xs rounded-sm font-sans text-xs">
+    <section className="bg-card border border-border p-5 space-y-4 shadow-xs rounded-sm font-sans text-xs">
       <div>
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+        <h2 className="text-sm font-semibold text-foreground">
           3. Scope (Optional)
         </h2>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+        <p className="text-xs text-muted-foreground mt-0.5">
           Define where this rule will be applied across protected hosts and paths.
         </p>
       </div>
@@ -48,11 +48,11 @@ export function ScopeSection({ form, setForm, hosts = [] }: ScopeSectionProps) {
         {/* Target (Domain) */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <label className="block text-slate-700 dark:text-slate-300 font-medium">
+            <label className="block text-foreground font-medium">
               Target Host
             </label>
             {hosts.length > 0 && (
-              <span className="text-[10px] text-blue-600 dark:text-blue-400 font-mono">
+              <span className="text-[10px] text-primary font-mono">
                 {hosts.length} active {hosts.length === 1 ? 'host' : 'hosts'}
               </span>
             )}
@@ -71,7 +71,7 @@ export function ScopeSection({ form, setForm, hosts = [] }: ScopeSectionProps) {
                   setForm((prev) => ({ ...prev, host: val }));
                 }
               }}
-              className="w-full bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] px-3 py-2 text-slate-900 dark:text-white rounded-sm focus:outline-none focus:border-blue-500 transition-colors cursor-pointer appearance-none pr-8 font-mono text-xs"
+              className="w-full bg-background border border-input px-3 py-2 text-foreground rounded-sm focus:outline-none focus:border-primary transition-colors cursor-pointer appearance-none pr-8 font-mono text-xs"
             >
               <option value="*">All Domains (*)</option>
               {hosts.map((h) => (
@@ -81,7 +81,7 @@ export function ScopeSection({ form, setForm, hosts = [] }: ScopeSectionProps) {
               ))}
               <option value="custom">-- Custom Host / Domain --</option>
             </select>
-            <div className="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none text-slate-400">
+            <div className="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none text-muted-foreground">
               ▼
             </div>
           </div>
@@ -96,14 +96,14 @@ export function ScopeSection({ form, setForm, hosts = [] }: ScopeSectionProps) {
                 setCustomHost(val);
                 setForm((prev) => ({ ...prev, host: val || '*' }));
               }}
-              className="w-full mt-1.5 bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] px-3 py-1.5 text-slate-900 dark:text-white font-mono text-xs rounded-sm focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full mt-1.5 bg-background border border-input px-3 py-1.5 text-foreground font-mono text-xs rounded-sm focus:outline-none focus:border-primary transition-colors"
             />
           )}
         </div>
 
         {/* Path (URL Path) */}
         <div className="space-y-1.5">
-          <label className="block text-slate-700 dark:text-slate-300 font-medium">
+          <label className="block text-foreground font-medium">
             Path (URL Path)
           </label>
           <input
@@ -117,20 +117,20 @@ export function ScopeSection({ form, setForm, hosts = [] }: ScopeSectionProps) {
                 path_prefix: val ? (val.startsWith('/') ? val : '/' + val) : '/',
               }));
             }}
-            className="w-full bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] px-3 py-2 text-slate-900 dark:text-white font-mono text-xs rounded-sm focus:outline-none focus:border-blue-500 transition-colors"
+            className="w-full bg-background border border-input px-3 py-2 text-foreground font-mono text-xs rounded-sm focus:outline-none focus:border-primary transition-colors"
           />
         </div>
 
         {/* HTTP Method */}
         <div className="space-y-1.5">
-          <label className="block text-slate-700 dark:text-slate-300 font-medium">
+          <label className="block text-foreground font-medium">
             HTTP Method
           </label>
           <div className="relative">
             <select
               value={form.method}
               onChange={(e) => setForm((prev) => ({ ...prev, method: e.target.value }))}
-              className="w-full bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] px-3 py-2 text-slate-900 dark:text-white rounded-sm focus:outline-none focus:border-blue-500 transition-colors cursor-pointer appearance-none pr-8 font-mono text-xs"
+              className="w-full bg-background border border-input px-3 py-2 text-foreground rounded-sm focus:outline-none focus:border-primary transition-colors cursor-pointer appearance-none pr-8 font-mono text-xs"
             >
               {methodOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -138,7 +138,7 @@ export function ScopeSection({ form, setForm, hosts = [] }: ScopeSectionProps) {
                 </option>
               ))}
             </select>
-            <div className="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none text-slate-400">
+            <div className="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none text-muted-foreground">
               ▼
             </div>
           </div>
@@ -146,14 +146,14 @@ export function ScopeSection({ form, setForm, hosts = [] }: ScopeSectionProps) {
 
         {/* Time Window (Schedule) */}
         <div className="space-y-1.5">
-          <label className="block text-slate-700 dark:text-slate-300 font-medium">
+          <label className="block text-foreground font-medium">
             Time Window
           </label>
           <div className="relative">
             <select
               value={form.schedule}
               onChange={(e) => setForm((prev) => ({ ...prev, schedule: e.target.value }))}
-              className="w-full bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] px-3 py-2 text-slate-900 dark:text-white rounded-sm focus:outline-none focus:border-blue-500 transition-colors cursor-pointer appearance-none pr-8 text-xs"
+              className="w-full bg-background border border-input px-3 py-2 text-foreground rounded-sm focus:outline-none focus:border-primary transition-colors cursor-pointer appearance-none pr-8 text-xs"
             >
               {scheduleOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -161,7 +161,7 @@ export function ScopeSection({ form, setForm, hosts = [] }: ScopeSectionProps) {
                 </option>
               ))}
             </select>
-            <div className="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none text-slate-400">
+            <div className="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none text-muted-foreground">
               ▼
             </div>
           </div>

@@ -13,9 +13,12 @@ import CreateIpRulePage from './pages/create-ip-rule/page';
 import CreateRateLimitPage from './pages/create-rate-limit/page';
 import SecurityEventsPage from './pages/events/page';
 import IpAccessPage from './pages/ip-access/page';
+import DatasetEntriesPage from './pages/dataset-entries/page';
+import AddDatasetPage from './pages/add-dataset/page';
 import RateLimitsPage from './pages/rate-limits/page';
 import NodesPage from './pages/nodes/page';
 import SettingsPage from './pages/settings/page';
+import DomainsPage from './pages/domains/page';
 import ConsoleLayout from './layouts/ConsoleLayout';
 import { ThemeProvider } from './components/theme-provider';
 import './style.css';
@@ -32,6 +35,7 @@ createRoot(document.getElementById('root')!).render(
         <Route element={<ConsoleLayout />}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/domains" element={<DomainsPage />} />
           <Route path="/events" element={<SecurityEventsPage />} />
 
           {/* Rules Management */}
@@ -58,6 +62,10 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/ip-access/create" element={<CreateIpRulePage />} />
           <Route path="/access-control/create" element={<CreateIpRulePage />} />
           <Route path="/ip-access/add" element={<CreateIpRulePage />} />
+          <Route path="/ip-access/datasets/new" element={<AddDatasetPage />} />
+          <Route path="/ip-access/datasets/:id" element={<DatasetEntriesPage />} />
+          <Route path="/ip-access/dataset/:id" element={<DatasetEntriesPage />} />
+          <Route path="/access-control/datasets/:id" element={<DatasetEntriesPage />} />
 
           {/* Rate Limiting */}
           <Route path="/rate-limits" element={<RateLimitsPage />} />

@@ -37,7 +37,7 @@ export function BasicInfoSection({
   }, [description]);
 
   return (
-    <section className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-5 space-y-4 shadow-xs rounded-sm font-sans text-xs">
+    <section className="bg-card border border-border p-5 space-y-4 shadow-xs rounded-sm font-sans text-xs">
       <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
         1. Basic Information
       </h2>
@@ -57,7 +57,7 @@ export function BasicInfoSection({
               placeholder="e.g. production-api"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] px-3 py-2 text-slate-900 dark:text-white text-xs rounded-sm focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full bg-muted border border-input px-3 py-2 text-foreground text-xs rounded-sm focus:outline-none focus:border-primary transition-colors"
             />
           </div>
 
@@ -78,7 +78,7 @@ export function BasicInfoSection({
               max={1000000}
               value={priority}
               onChange={(e) => setPriority(Math.max(0, Math.min(1000000, Number(e.target.value) || 0)))}
-              className="w-full bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] px-3 py-2 text-slate-900 dark:text-white text-xs tabular-nums rounded-sm focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full bg-muted border border-input px-3 py-2 text-foreground text-xs tabular-nums rounded-sm focus:outline-none focus:border-primary transition-colors"
             />
           </div>
         </div>
@@ -100,13 +100,13 @@ export function BasicInfoSection({
               onClick={() => setMode('mixed')}
               className={`p-3 border rounded-sm cursor-pointer transition-all ${
                 mode === 'mixed'
-                  ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-950/30'
-                  : 'border-slate-200 dark:border-[#1C293D] hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-[#080E18]/50'
+                  ? 'border-primary bg-primary/10'
+                  : 'border-border hover:border-input bg-muted/30'
               }`}
             >
               <div className="flex items-center gap-2 mb-1">
-                <Shield className={`w-3.5 h-3.5 ${mode === 'mixed' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
-                <span className={`font-semibold ${mode === 'mixed' ? 'text-blue-900 dark:text-blue-300' : 'text-slate-800 dark:text-slate-200'}`}>
+                <Shield className={`w-3.5 h-3.5 ${mode === 'mixed' ? 'text-primary' : 'text-slate-400'}`} />
+                <span className={`font-semibold ${mode === 'mixed' ? 'text-primary' : 'text-slate-800 dark:text-slate-200'}`}>
                   Mixed (Default)
                 </span>
               </div>
@@ -121,7 +121,7 @@ export function BasicInfoSection({
               className={`p-3 border rounded-sm cursor-pointer transition-all ${
                 mode === 'block'
                   ? 'border-rose-500 bg-rose-50/40 dark:bg-rose-950/30'
-                  : 'border-slate-200 dark:border-[#1C293D] hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-[#080E18]/50'
+                  : 'border-border hover:border-input bg-muted/30'
               }`}
             >
               <div className="flex items-center gap-2 mb-1">
@@ -141,7 +141,7 @@ export function BasicInfoSection({
               className={`p-3 border rounded-sm cursor-pointer transition-all ${
                 mode === 'detect'
                   ? 'border-amber-500 bg-amber-50/40 dark:bg-amber-950/30'
-                  : 'border-slate-200 dark:border-[#1C293D] hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-[#080E18]/50'
+                  : 'border-border hover:border-input bg-muted/30'
               }`}
             >
               <div className="flex items-center gap-2 mb-1">
@@ -174,7 +174,7 @@ export function BasicInfoSection({
             placeholder="Security policy description and intended operational boundary..."
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="w-full bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] px-3 py-2 text-slate-900 dark:text-white text-xs rounded-sm focus:outline-none focus:border-blue-500 transition-colors resize-none overflow-hidden min-h-[64px]"
+            className="w-full bg-muted border border-input px-3 py-2 text-foreground text-xs rounded-sm focus:outline-none focus:border-primary transition-colors resize-none overflow-hidden min-h-[64px]"
           />
         </div>
       </div>

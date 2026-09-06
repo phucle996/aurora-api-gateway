@@ -20,6 +20,7 @@ export interface AccessRuleDocument {
 
 export interface AccessGroupDocument {
   name: string;
+  description?: string;
   networks: string[];
 }
 

@@ -61,9 +61,9 @@ export function PolicyDetail({
   }
 
   return (
-    <aside className="xl:col-span-5 bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-4 space-y-4 shadow-xs rounded-sm font-sans text-slate-800 dark:text-slate-200">
+    <aside className="xl:col-span-5 bg-card border border-border p-4 space-y-4 shadow-xs rounded-sm font-sans text-slate-800 dark:text-slate-200">
       {/* Header */}
-      <div className="flex justify-between items-center border-b border-slate-200 dark:border-[#152030] pb-2">
+      <div className="flex justify-between items-center border-b border-border pb-2">
         <h2 className="font-bold text-sm text-slate-900 dark:text-white font-sans">
           {policy.document.name}
         </h2>
@@ -82,7 +82,7 @@ export function PolicyDetail({
       </p>
 
       {/* Revisions & Scope Info Box */}
-      <div className="p-2.5 bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] text-xs font-sans space-y-1 rounded-sm">
+      <div className="p-2.5 bg-muted/30 border border-border text-xs font-sans space-y-1 rounded-sm">
         <div>
           Draft revision:{' '}
           <span className="font-semibold text-slate-900 dark:text-white font-mono">
@@ -112,9 +112,9 @@ export function PolicyDetail({
         <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">
           Rules ({policy.document.rules.length})
         </div>
-        <div className="border border-slate-200 dark:border-[#172338] rounded-sm overflow-hidden text-xs">
+        <div className="border border-border rounded-sm overflow-hidden text-xs">
           <table className="w-full text-left font-sans">
-            <thead className="bg-slate-50 dark:bg-[#080E18] text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-[#172338]">
+            <thead className="bg-muted/40 text-muted-foreground border-b border-border">
               <tr>
                 <th className="py-2 px-2.5 font-medium">Rule</th>
                 <th className="py-2 px-2 font-medium w-14 text-center">Ver</th>
@@ -122,7 +122,7 @@ export function PolicyDetail({
                 <th className="py-2 px-2.5 font-medium text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-[#172338]/60">
+            <tbody className="divide-y divide-border">
               {policy.document.rules.length === 0 ? (
                 <tr>
                   <td
@@ -136,7 +136,7 @@ export function PolicyDetail({
                 policy.document.rules.map((r) => (
                   <tr
                     key={r.id}
-                    className="hover:bg-slate-50 dark:hover:bg-[#0E1726]/40 transition-colors"
+                    className="hover:bg-muted/40 transition-colors"
                   >
                     <td className="py-2 px-2.5 font-medium text-slate-900 dark:text-white">
                       <div>{r.name}</div>
@@ -150,7 +150,7 @@ export function PolicyDetail({
                       v{r.version}
                     </td>
                     <td className="py-2 px-2.5 text-slate-600 dark:text-slate-300">
-                      <span className="px-1.5 py-0.5 rounded-xs bg-slate-100 dark:bg-[#152030] text-slate-600 dark:text-slate-300 text-[11px]">
+                      <span className="px-1.5 py-0.5 rounded-xs bg-muted text-muted-foreground text-[11px]">
                         {r.group || 'default'}
                       </span>
                     </td>
@@ -189,13 +189,13 @@ export function PolicyDetail({
       <div className="grid grid-cols-2 gap-2 text-xs font-sans pt-1">
         <Link
           to={`/policies/create?edit=${policy.id}`}
-          className="p-2 text-center bg-slate-100 hover:bg-slate-200 dark:bg-[#0E1726] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-800 dark:text-slate-200 rounded-sm cursor-pointer transition-colors"
+          className="p-2 text-center bg-muted hover:bg-accent border border-border text-foreground rounded-sm cursor-pointer transition-colors"
         >
           Edit draft
         </Link>
         <Link
           to={`/policies/create?clone=${policy.id}`}
-          className="p-2 text-center bg-slate-100 hover:bg-slate-200 dark:bg-[#0E1726] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-800 dark:text-slate-200 rounded-sm cursor-pointer transition-colors"
+          className="p-2 text-center bg-muted hover:bg-accent border border-border text-foreground rounded-sm cursor-pointer transition-colors"
         >
           Clone policy
         </Link>
@@ -203,7 +203,7 @@ export function PolicyDetail({
           type="button"
           disabled={busy}
           onClick={() => setConfirmDialog('publish')}
-          className="p-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-sm col-span-2 cursor-pointer disabled:opacity-40 transition-colors shadow-xs"
+          className="p-2 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-sm col-span-2 cursor-pointer disabled:opacity-40 transition-colors shadow-xs"
         >
           Publish policy
         </button>
@@ -224,13 +224,13 @@ export function PolicyDetail({
           onClick={() => !busy && setConfirmDialog(null)}
         >
           <div
-            className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#1C293D] w-full max-w-md rounded-sm shadow-2xl overflow-hidden text-xs"
+            className="bg-card border border-border w-full max-w-md rounded-sm shadow-2xl overflow-hidden text-xs"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Dialog Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-[#172338] bg-slate-50/70 dark:bg-[#080E18]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-muted/40">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-sm bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400">
+                <div className="p-2 rounded-sm bg-primary/10 border border-primary/20 text-primary">
                   <Rocket className="w-4 h-4" />
                 </div>
                 <div>
@@ -258,7 +258,7 @@ export function PolicyDetail({
                 Are you sure you want to publish <strong className="text-slate-900 dark:text-white font-semibold">{policy.document.name}</strong> to the entire cluster?
               </p>
 
-              <div className="p-3 bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#172338] rounded-sm space-y-1.5 text-[11px]">
+              <div className="p-3 bg-muted/30 border border-border rounded-sm space-y-1.5 text-[11px]">
                 <div className="flex justify-between">
                   <span className="text-slate-500 dark:text-slate-400">Draft Revision:</span>
                   <span className="font-semibold text-slate-900 dark:text-white">v{policy.version}</span>
@@ -289,12 +289,12 @@ export function PolicyDetail({
             </div>
 
             {/* Dialog Footer */}
-            <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-slate-200 dark:border-[#172338] bg-slate-50/50 dark:bg-[#080E18]/60">
+            <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-border bg-muted/40">
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => setConfirmDialog(null)}
-                className="px-3.5 py-1.5 bg-white dark:bg-[#0B1320] hover:bg-slate-100 dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-300 rounded-sm cursor-pointer disabled:opacity-50 transition-colors"
+                className="px-3.5 py-1.5 bg-muted hover:bg-accent border border-border text-foreground rounded-sm cursor-pointer disabled:opacity-50 transition-colors"
               >
                 Cancel
               </button>
@@ -302,7 +302,7 @@ export function PolicyDetail({
                 type="button"
                 disabled={busy}
                 onClick={() => void run('publish')}
-                className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-sm cursor-pointer disabled:opacity-50 shadow-xs transition-colors"
+                className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-sm cursor-pointer disabled:opacity-50 shadow-xs transition-colors"
               >
                 {busy ? (
                   <>
@@ -328,11 +328,11 @@ export function PolicyDetail({
           onClick={() => !busy && setConfirmDialog(null)}
         >
           <div
-            className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#1C293D] w-full max-w-md rounded-sm shadow-2xl overflow-hidden text-xs"
+            className="bg-card border border-border w-full max-w-md rounded-sm shadow-2xl overflow-hidden text-xs"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Dialog Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-[#172338] bg-slate-50/70 dark:bg-[#080E18]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-muted/40">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-sm bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400">
                   <AlertTriangle className="w-4 h-4" />
@@ -367,12 +367,12 @@ export function PolicyDetail({
             </div>
 
             {/* Dialog Footer */}
-            <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-slate-200 dark:border-[#172338] bg-slate-50/50 dark:bg-[#080E18]/60">
+            <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-border bg-muted/40">
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => setConfirmDialog(null)}
-                className="px-3.5 py-1.5 bg-white dark:bg-[#0B1320] hover:bg-slate-100 dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-300 rounded-sm cursor-pointer disabled:opacity-50 transition-colors"
+                className="px-3.5 py-1.5 bg-muted hover:bg-accent border border-border text-foreground rounded-sm cursor-pointer disabled:opacity-50 transition-colors"
               >
                 Cancel
               </button>

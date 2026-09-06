@@ -13,7 +13,6 @@ type ClusterNodeRecord struct {
 	Name                   string
 	Hostname               string
 	IP                     string
-	Role                   string
 	Status                 string // "Ready" | "Not Ready" | "Draining"
 	Version                string
 	ActiveReleaseID        *int64

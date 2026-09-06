@@ -11,21 +11,21 @@ export function LoggingSettingsSection() {
   const [remoteSyslog, setRemoteSyslog] = useState(false);
 
   return (
-    <div className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#152030] p-4 flex flex-col justify-between shadow-xs">
+    <div className="bg-card border border-border p-4 flex flex-col justify-between shadow-xs">
       <div>
-        <div className="flex items-center gap-2 pb-3 border-b border-slate-200 dark:border-[#152030] text-sm font-semibold text-slate-900 dark:text-white font-mono">
-          <FileText className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+        <div className="flex items-center gap-2 pb-3 border-b border-border text-sm font-semibold text-foreground">
+          <FileText className="w-4 h-4 text-primary" />
           <span>Logging</span>
         </div>
 
-        <div className="mt-3 space-y-3 text-xs font-mono">
+        <div className="mt-3 space-y-3 text-xs">
           {/* Log Level */}
           <div className="flex items-center justify-between">
-            <span className="text-slate-500 dark:text-slate-400">Log Level</span>
+            <span className="text-muted-foreground">Log Level</span>
             <select
               value={logLevel}
               onChange={(e) => setLogLevel(e.target.value)}
-              className="bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] px-2.5 py-1 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:border-emerald-500 cursor-pointer"
+              className="bg-background border border-input px-2.5 py-1 text-foreground text-xs focus:outline-none focus:border-primary cursor-pointer"
             >
               <option value="Debug">Debug</option>
               <option value="Info">Info</option>
@@ -36,11 +36,11 @@ export function LoggingSettingsSection() {
 
           {/* Log Retention */}
           <div className="flex items-center justify-between">
-            <span className="text-slate-500 dark:text-slate-400">Log Retention</span>
+            <span className="text-muted-foreground">Log Retention</span>
             <select
               value={logRetention}
               onChange={(e) => setLogRetention(e.target.value)}
-              className="bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] px-2.5 py-1 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:border-emerald-500 cursor-pointer"
+              className="bg-background border border-input px-2.5 py-1 text-foreground text-xs focus:outline-none focus:border-primary cursor-pointer"
             >
               <option value="7 days">7 days</option>
               <option value="14 days">14 days</option>
@@ -52,11 +52,11 @@ export function LoggingSettingsSection() {
 
           {/* Max Log Size */}
           <div className="flex items-center justify-between">
-            <span className="text-slate-500 dark:text-slate-400">Max Log Size</span>
+            <span className="text-muted-foreground">Max Log Size</span>
             <select
               value={maxLogSize}
               onChange={(e) => setMaxLogSize(e.target.value)}
-              className="bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] px-2.5 py-1 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:border-emerald-500 cursor-pointer"
+              className="bg-background border border-input px-2.5 py-1 text-foreground text-xs focus:outline-none focus:border-primary cursor-pointer"
             >
               <option value="250 MB">250 MB</option>
               <option value="500 MB">500 MB</option>
@@ -65,75 +65,67 @@ export function LoggingSettingsSection() {
             </select>
           </div>
 
-          <div className="pt-2 border-t border-slate-100 dark:border-[#152030]/60 space-y-2.5">
+          <div className="pt-2 border-t border-border space-y-2.5">
             {/* Enable Access Log */}
             <div className="flex items-center justify-between">
-              <span className="text-slate-500 dark:text-slate-400">Enable Access Log</span>
+              <span className="text-muted-foreground">Enable Access Log</span>
               <button
                 type="button"
                 onClick={() => setEnableAccessLog(!enableAccessLog)}
-                className={`w-9 h-5 flex items-center p-0.5 cursor-pointer transition-colors ${
-                  enableAccessLog ? 'bg-emerald-600 dark:bg-emerald-500' : 'bg-slate-300 dark:bg-[#152030]'
-                }`}
+                className={`w-9 h-5 flex items-center p-0.5 cursor-pointer transition-colors ${enableAccessLog ? 'bg-primary' : 'bg-muted border border-border'
+                  }`}
               >
                 <div
-                  className={`w-4 h-4 bg-white transition-transform ${
-                    enableAccessLog ? 'translate-x-4' : 'translate-x-0'
-                  }`}
+                  className={`w-4 h-4 bg-white transition-transform ${enableAccessLog ? 'translate-x-4' : 'translate-x-0'
+                    }`}
                 />
               </button>
             </div>
 
             {/* Enable Audit Log */}
             <div className="flex items-center justify-between">
-              <span className="text-slate-500 dark:text-slate-400">Enable Audit Log</span>
+              <span className="text-muted-foreground">Enable Audit Log</span>
               <button
                 type="button"
                 onClick={() => setEnableAuditLog(!enableAuditLog)}
-                className={`w-9 h-5 flex items-center p-0.5 cursor-pointer transition-colors ${
-                  enableAuditLog ? 'bg-emerald-600 dark:bg-emerald-500' : 'bg-slate-300 dark:bg-[#152030]'
-                }`}
+                className={`w-9 h-5 flex items-center p-0.5 cursor-pointer transition-colors ${enableAuditLog ? 'bg-primary' : 'bg-muted border border-border'
+                  }`}
               >
                 <div
-                  className={`w-4 h-4 bg-white transition-transform ${
-                    enableAuditLog ? 'translate-x-4' : 'translate-x-0'
-                  }`}
+                  className={`w-4 h-4 bg-white transition-transform ${enableAuditLog ? 'translate-x-4' : 'translate-x-0'
+                    }`}
                 />
               </button>
             </div>
 
             {/* Enable Error Log */}
             <div className="flex items-center justify-between">
-              <span className="text-slate-500 dark:text-slate-400">Enable Error Log</span>
+              <span className="text-muted-foreground">Enable Error Log</span>
               <button
                 type="button"
                 onClick={() => setEnableErrorLog(!enableErrorLog)}
-                className={`w-9 h-5 flex items-center p-0.5 cursor-pointer transition-colors ${
-                  enableErrorLog ? 'bg-emerald-600 dark:bg-emerald-500' : 'bg-slate-300 dark:bg-[#152030]'
-                }`}
+                className={`w-9 h-5 flex items-center p-0.5 cursor-pointer transition-colors ${enableErrorLog ? 'bg-primary' : 'bg-muted border border-border'
+                  }`}
               >
                 <div
-                  className={`w-4 h-4 bg-white transition-transform ${
-                    enableErrorLog ? 'translate-x-4' : 'translate-x-0'
-                  }`}
+                  className={`w-4 h-4 bg-white transition-transform ${enableErrorLog ? 'translate-x-4' : 'translate-x-0'
+                    }`}
                 />
               </button>
             </div>
 
             {/* Remote Syslog */}
             <div className="flex items-center justify-between">
-              <span className="text-slate-500 dark:text-slate-400">Remote Syslog</span>
+              <span className="text-muted-foreground">Remote Syslog</span>
               <button
                 type="button"
                 onClick={() => setRemoteSyslog(!remoteSyslog)}
-                className={`w-9 h-5 flex items-center p-0.5 cursor-pointer transition-colors ${
-                  remoteSyslog ? 'bg-emerald-600 dark:bg-emerald-500' : 'bg-slate-300 dark:bg-[#152030]'
-                }`}
+                className={`w-9 h-5 flex items-center p-0.5 cursor-pointer transition-colors ${remoteSyslog ? 'bg-primary' : 'bg-muted border border-border'
+                  }`}
               >
                 <div
-                  className={`w-4 h-4 bg-white transition-transform ${
-                    remoteSyslog ? 'translate-x-4' : 'translate-x-0'
-                  }`}
+                  className={`w-4 h-4 bg-white transition-transform ${remoteSyslog ? 'translate-x-4' : 'translate-x-0'
+                    }`}
                 />
               </button>
             </div>

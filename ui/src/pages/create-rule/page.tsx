@@ -194,10 +194,10 @@ export default function CreateRulePage() {
                 isLoadingPolicies={isLoadingPolicies}
               />
 
-              <div className="grid grid-cols-3 gap-3 bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#152030] p-4 text-xs text-slate-800 dark:text-slate-200">
-                <label>Group<select aria-label="Rule group" value={group} onChange={e => setGroup(e.target.value)} className="block w-full bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] p-2 mt-1">{['custom','sqli','xss','traversal','bot','endpoint','authentication'].map(g => <option key={g}>{g}</option>)}</select></label>
-                <label>Severity<select aria-label="Severity" value={severity} onChange={e => setSeverity(e.target.value)} className="block w-full bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] p-2 mt-1">{['low','medium','high','critical'].map(s => <option key={s}>{s}</option>)}</select></label>
-                <label>Score<input aria-label="Score" type="number" min={0} max={1000} value={score} onChange={e => setScore(Number(e.target.value))} className="block w-full bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] p-2 mt-1" /></label>
+              <div className="grid grid-cols-3 gap-3 bg-card border border-border p-4 text-xs text-foreground">
+                <label>Group<select aria-label="Rule group" value={group} onChange={e => setGroup(e.target.value)} className="block w-full bg-background border border-input p-2 mt-1 text-foreground focus:outline-none focus:border-primary">{['custom','sqli','xss','traversal','bot','endpoint','authentication'].map(g => <option key={g}>{g}</option>)}</select></label>
+                <label>Severity<select aria-label="Severity" value={severity} onChange={e => setSeverity(e.target.value)} className="block w-full bg-background border border-input p-2 mt-1 text-foreground focus:outline-none focus:border-primary">{['low','medium','high','critical'].map(s => <option key={s}>{s}</option>)}</select></label>
+                <label>Score<input aria-label="Score" type="number" min={0} max={1000} value={score} onChange={e => setScore(Number(e.target.value))} className="block w-full bg-background border border-input p-2 mt-1 text-foreground focus:outline-none focus:border-primary" /></label>
               </div>
 
               {/* 2. Match Conditions */}
@@ -241,7 +241,7 @@ export default function CreateRulePage() {
                   type="button"
                   disabled={busy || uncertain}
                   onClick={() => navigate('/rules')}
-                  className="px-4 py-2 bg-slate-100 dark:bg-[#0E1726] hover:bg-slate-200 dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-sans rounded-sm transition-colors cursor-pointer"
+                  className="px-4 py-2 bg-muted hover:bg-accent border border-border text-foreground text-xs font-sans rounded-sm transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -250,7 +250,7 @@ export default function CreateRulePage() {
                   type="button"
                   disabled={busy}
                   onClick={handleInitiateSubmit}
-                  className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-500 border border-blue-500 text-white text-xs font-semibold font-sans rounded-sm transition-colors cursor-pointer shadow-sm"
+                  className="flex items-center gap-2 px-5 py-2 bg-primary hover:bg-primary/90 border border-primary text-primary-foreground text-xs font-semibold font-sans rounded-sm transition-colors cursor-pointer shadow-sm"
                 >
                   <Save className="w-3.5 h-3.5" />
                   <span>{busy ? 'Saving…' : uncertain ? 'Retry same submission' : 'Create Rule'}</span>

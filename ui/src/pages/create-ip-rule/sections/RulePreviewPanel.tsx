@@ -143,17 +143,17 @@ export function RulePreviewPanel({ form, values }: RulePreviewProps) {
   const nginxLines = generateNginxLines();
 
   return (
-    <section className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] shadow-xs rounded-sm font-sans text-xs overflow-hidden">
+    <section className="bg-card border border-border shadow-xs rounded-sm font-sans text-xs overflow-hidden">
       {/* Header & Tabs */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50/50 dark:bg-[#080E18] border-b border-slate-200 dark:border-[#172338]">
+      <div className="flex items-center justify-between px-4 py-2.5 bg-muted/20 border-b border-border">
         <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={() => setActiveTab('nginx')}
             className={`px-2.5 py-1 font-medium rounded text-xs transition-colors cursor-pointer ${
               activeTab === 'nginx'
-                ? 'bg-white dark:bg-[#152030] text-slate-900 dark:text-white shadow-xs font-semibold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                ? 'bg-card text-foreground shadow-xs font-semibold'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             NGINX Config
@@ -163,8 +163,8 @@ export function RulePreviewPanel({ form, values }: RulePreviewProps) {
             onClick={() => setActiveTab('json')}
             className={`px-2.5 py-1 font-medium rounded text-xs transition-colors cursor-pointer ${
               activeTab === 'json'
-                ? 'bg-white dark:bg-[#152030] text-slate-900 dark:text-white shadow-xs font-semibold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                ? 'bg-card text-foreground shadow-xs font-semibold'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             JSON Document
@@ -174,13 +174,13 @@ export function RulePreviewPanel({ form, values }: RulePreviewProps) {
         <button
           type="button"
           onClick={handleCopy}
-          className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer text-xs"
+          className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-xs"
           title="Copy code"
         >
           {copied ? (
             <>
-              <Check className="w-3.5 h-3.5 text-emerald-500" />
-              <span className="text-emerald-600 dark:text-emerald-400 font-medium">Copied!</span>
+              <Check className="w-3.5 h-3.5 text-primary" />
+              <span className="text-primary font-medium">Copied!</span>
             </>
           ) : (
             <>
@@ -192,13 +192,13 @@ export function RulePreviewPanel({ form, values }: RulePreviewProps) {
       </div>
 
       {/* Code Display Area */}
-      <div className="p-4 bg-[#0F172A] text-slate-300 font-mono text-[11px] leading-relaxed overflow-x-auto min-h-[160px] max-h-[300px]">
+      <div className="p-4 bg-slate-950 text-slate-200 font-mono text-[11px] leading-relaxed overflow-x-auto min-h-[160px] max-h-[300px]">
         {activeTab === 'nginx' ? (
           <table className="w-full border-collapse">
             <tbody>
               {nginxLines.map((l) => (
                 <tr key={l.num} className="hover:bg-slate-800/40">
-                  <td className="w-8 select-none text-right pr-4 text-slate-600 dark:text-slate-600 align-top">
+                  <td className="w-8 select-none text-right pr-4 text-slate-600 align-top">
                     {l.num}
                   </td>
                   <td className="whitespace-pre align-top">{l.content}</td>
@@ -214,9 +214,9 @@ export function RulePreviewPanel({ form, values }: RulePreviewProps) {
       </div>
 
       {/* Footer Info */}
-      <div className="px-4 py-2 bg-slate-50/50 dark:bg-[#080E18] border-t border-slate-200 dark:border-[#172338] text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+      <div className="px-4 py-2 bg-muted/20 border-t border-border text-[11px] text-muted-foreground flex items-center justify-between">
         <span className="flex items-center gap-1.5">
-          <FileCode className="w-3 h-3 text-slate-400" />
+          <FileCode className="w-3 h-3 text-muted-foreground" />
           <span>Real-time snapshot preview</span>
         </span>
         <span className="font-mono">

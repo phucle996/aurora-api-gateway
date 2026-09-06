@@ -9,9 +9,9 @@ interface BasicInfoProps {
 
 export function BasicInfoSection({ form, setForm }: BasicInfoProps) {
   return (
-    <section className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-5 space-y-4 shadow-xs rounded-sm font-sans text-xs">
+    <section className="bg-card border border-border p-5 space-y-4 shadow-xs rounded-sm font-sans text-xs">
       <div>
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+        <h2 className="text-sm font-semibold text-foreground">
           1. Basic Information
         </h2>
       </div>
@@ -19,8 +19,8 @@ export function BasicInfoSection({ form, setForm }: BasicInfoProps) {
       {/* Row 1: Name and Description */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <label className="block text-slate-700 dark:text-slate-300 font-medium">
-            Rule Name <span className="text-rose-500">*</span>
+          <label className="block text-foreground font-medium">
+            Rule Name <span className="text-destructive">*</span>
           </label>
           <input
             type="text"
@@ -29,12 +29,12 @@ export function BasicInfoSection({ form, setForm }: BasicInfoProps) {
             placeholder="e.g. block-suspicious-ip"
             value={form.name}
             onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-            className="w-full bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] px-3 py-2 text-slate-900 dark:text-white rounded-sm focus:outline-none focus:border-blue-500 transition-colors"
+            className="w-full bg-background border border-input px-3 py-2 text-foreground rounded-sm focus:outline-none focus:border-primary transition-colors"
           />
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-slate-700 dark:text-slate-300 font-medium">
+          <label className="block text-foreground font-medium">
             Description
           </label>
           <input
@@ -43,7 +43,7 @@ export function BasicInfoSection({ form, setForm }: BasicInfoProps) {
             placeholder="e.g. Block requests from high-risk IP addresses."
             value={form.description}
             onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-            className="w-full bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] px-3 py-2 text-slate-900 dark:text-white rounded-sm focus:outline-none focus:border-blue-500 transition-colors"
+            className="w-full bg-background border border-input px-3 py-2 text-foreground rounded-sm focus:outline-none focus:border-primary transition-colors"
           />
         </div>
       </div>
@@ -52,8 +52,8 @@ export function BasicInfoSection({ form, setForm }: BasicInfoProps) {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1 items-end">
         {/* Action */}
         <div className="space-y-1.5">
-          <label className="block text-slate-700 dark:text-slate-300 font-medium">
-            Action <span className="text-rose-500">*</span>
+          <label className="block text-foreground font-medium">
+            Action <span className="text-destructive">*</span>
           </label>
           <div className="relative">
             <select
@@ -64,13 +64,13 @@ export function BasicInfoSection({ form, setForm }: BasicInfoProps) {
                   action: e.target.value as AccessRuleDocument['action'],
                 }))
               }
-              className="w-full bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] px-3 py-2 text-slate-900 dark:text-white rounded-sm focus:outline-none focus:border-blue-500 transition-colors cursor-pointer appearance-none pr-8"
+              className="w-full bg-background border border-input px-3 py-2 text-foreground rounded-sm focus:outline-none focus:border-primary transition-colors cursor-pointer appearance-none pr-8"
             >
               <option value="block">🚫 Block</option>
               <option value="allow">✅ Allow</option>
               <option value="log">📋 Log only</option>
             </select>
-            <div className="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none text-slate-400">
+            <div className="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none text-muted-foreground">
               ▼
             </div>
           </div>
@@ -78,7 +78,7 @@ export function BasicInfoSection({ form, setForm }: BasicInfoProps) {
 
         {/* Status Toggle */}
         <div className="space-y-1.5">
-          <label className="block text-slate-700 dark:text-slate-300 font-medium">
+          <label className="block text-foreground font-medium">
             Status
           </label>
           <div className="flex items-center gap-3 h-[34px]">
@@ -88,16 +88,16 @@ export function BasicInfoSection({ form, setForm }: BasicInfoProps) {
               aria-checked={form.enabled}
               onClick={() => setForm((prev) => ({ ...prev, enabled: !prev.enabled }))}
               className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out focus:outline-none ${
-                form.enabled ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-700'
+                form.enabled ? 'bg-primary' : 'bg-muted'
               }`}
             >
               <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition duration-200 ease-in-out mt-0.5 ${
+                className={`inline-block h-4 w-4 transform rounded-full bg-background shadow-sm transition duration-200 ease-in-out mt-0.5 ${
                   form.enabled ? 'translate-x-5' : 'translate-x-0.5'
                 }`}
               />
             </button>
-            <span className="text-xs font-medium text-slate-700 dark:text-slate-300 select-none">
+            <span className="text-xs font-medium text-foreground select-none">
               {form.enabled ? 'Enabled' : 'Disabled'}
             </span>
           </div>
@@ -105,9 +105,9 @@ export function BasicInfoSection({ form, setForm }: BasicInfoProps) {
 
         {/* Priority */}
         <div className="space-y-1.5">
-          <label className="flex items-center gap-1 text-slate-700 dark:text-slate-300 font-medium">
+          <label className="flex items-center gap-1 text-foreground font-medium">
             <span>Priority</span>
-            <HelpCircle className="w-3.5 h-3.5 text-slate-400" />
+            <HelpCircle className="w-3.5 h-3.5 text-muted-foreground" />
           </label>
           <input
             type="number"
@@ -118,7 +118,7 @@ export function BasicInfoSection({ form, setForm }: BasicInfoProps) {
             onChange={(e) =>
               setForm((prev) => ({ ...prev, priority: Number(e.target.value) || 0 }))
             }
-            className="w-full bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] px-3 py-2 text-slate-900 dark:text-white rounded-sm focus:outline-none focus:border-blue-500 transition-colors font-mono"
+            className="w-full bg-background border border-input px-3 py-2 text-foreground rounded-sm focus:outline-none focus:border-primary transition-colors font-mono"
           />
         </div>
       </div>

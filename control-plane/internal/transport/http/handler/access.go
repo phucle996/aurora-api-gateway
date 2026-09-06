@@ -193,6 +193,10 @@ func (h *AccessHandler) Change(c *gin.Context) {
 				return
 			}
 			doc.Name = strings.TrimSpace(doc.Name)
+			doc.Description = strings.TrimSpace(doc.Description)
+			if len(doc.Description) > 255 {
+				doc.Description = doc.Description[:255]
+			}
 			if doc.Name == "" || len(doc.Name) > 120 || len(doc.Networks) == 0 || len(doc.Networks) > 4096 {
 				c.JSON(http.StatusUnprocessableEntity, gin.H{"message": taxonomy.ErrAccessInvalid.Error()})
 				return

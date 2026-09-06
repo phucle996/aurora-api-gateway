@@ -134,28 +134,28 @@ export function CreateIpRulePage() {
   return (
     <div className="p-6 w-full space-y-5 font-sans">
       {/* Header & Breadcrumbs */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-[#152030] pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
         <div>
-          <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mb-1">
-            <Link to="/ip-access" className="hover:text-blue-500 transition-colors">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+            <Link to="/ip-access" className="hover:text-primary transition-colors">
               IP & Access Control
             </Link>
             <span>/</span>
-            <span className="text-slate-800 dark:text-slate-200 font-medium">
+            <span className="text-foreground font-medium">
               {id ? 'Edit Rule' : clone ? 'Clone Rule' : 'Add Rule'}
             </span>
           </div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
+          <h1 className="text-xl font-bold text-foreground tracking-tight">
             {id ? 'Edit Access Rule' : clone ? 'Clone Access Rule' : 'Add Access Rule'}
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+          <p className="text-xs text-muted-foreground mt-0.5">
             Configure deterministic perimeter filtering across IP addresses, subnets, countries, and ASNs.
           </p>
         </div>
 
         <Link
           to="/ip-access"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-[#0B1320] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-300 text-xs font-medium rounded-sm transition-colors cursor-pointer self-start sm:self-auto"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-card hover:bg-muted border border-border text-foreground text-xs font-medium rounded-sm transition-colors cursor-pointer self-start sm:self-auto"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           <span>Back to IP & Access Control</span>
@@ -166,7 +166,7 @@ export function CreateIpRulePage() {
       {error && (
         <div
           role="alert"
-          className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs flex items-center justify-between rounded-sm"
+          className="p-3 bg-destructive/10 border border-destructive/30 text-destructive text-xs flex items-center justify-between rounded-sm"
         >
           <span>{error}</span>
           <button
@@ -180,8 +180,8 @@ export function CreateIpRulePage() {
       )}
 
       {!authority && !error && (
-        <p role="status" className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
-          <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-500" />
+        <p role="status" className="text-xs text-muted-foreground flex items-center gap-2">
+          <RefreshCw className="w-3.5 h-3.5 animate-spin text-primary" />
           <span>Loading access authority & cluster catalog…</span>
         </p>
       )}
@@ -209,7 +209,7 @@ export function CreateIpRulePage() {
                 <button
                   type="button"
                   onClick={() => navigate('/ip-access')}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-[#0B1320] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-300 text-xs font-medium rounded-sm transition-colors cursor-pointer"
+                  className="px-4 py-2 bg-card hover:bg-muted border border-border text-foreground text-xs font-medium rounded-sm transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -217,7 +217,7 @@ export function CreateIpRulePage() {
                 <button
                   type="submit"
                   disabled={busy || !form.name.trim()}
-                  className="inline-flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-semibold rounded-sm shadow-sm transition-all cursor-pointer"
+                  className="inline-flex items-center gap-2 px-5 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground text-xs font-semibold rounded-sm shadow-sm transition-all cursor-pointer"
                 >
                   <Lock className="w-3.5 h-3.5" />
                   <span>{busy ? 'Saving rule...' : id ? 'Save Changes' : 'Create Rule'}</span>
@@ -231,13 +231,13 @@ export function CreateIpRulePage() {
               <RuleSummaryPanel form={form} values={values} />
 
               {/* Tip Box */}
-              <div className="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-900/40 rounded-sm p-3.5 flex items-start gap-2.5 text-xs text-slate-600 dark:text-slate-300">
-                <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+              <div className="bg-primary/5 border border-primary/20 rounded-sm p-3.5 flex items-start gap-2.5 text-xs text-muted-foreground">
+                <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-semibold text-blue-700 dark:text-blue-300 block mb-0.5">
+                  <span className="font-semibold text-primary block mb-0.5">
                     Tip
                   </span>
-                  <span className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                  <span className="text-[11px] text-muted-foreground leading-relaxed">
                     Rules are compiled into an immutable snapshot. More specific rules (higher priority number) are evaluated first.
                   </span>
                 </div>

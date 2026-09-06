@@ -6,12 +6,12 @@ import { LoginFooter } from './sections/LoginFooter';
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-[#070B12] text-slate-100 flex flex-col justify-between selection:bg-emerald-500/30 selection:text-emerald-200 relative overflow-x-hidden font-sans">
+    <div className="min-h-screen bg-background text-foreground flex flex-col justify-between selection:bg-primary/25 relative overflow-x-hidden font-sans">
       {/* Background subtle dot matrix pattern */}
       <div
         className="absolute inset-0 opacity-[0.035] pointer-events-none"
         style={{
-          backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)',
+          backgroundImage: 'radial-gradient(var(--border) 1px, transparent 1px)',
           backgroundSize: '24px 24px',
         }}
       />

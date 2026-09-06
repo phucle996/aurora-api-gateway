@@ -35,14 +35,14 @@ export function PoliciesTable({
   onStatusFilterChange,
 }: PoliciesTableProps) {
   return (
-    <div className={`${selectedId ? 'xl:col-span-7' : 'xl:col-span-12'} bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-4 space-y-3 shadow-xs rounded-sm transition-all duration-200`}>
+    <div className={`${selectedId ? 'xl:col-span-7' : 'xl:col-span-12'} bg-card border border-border p-4 space-y-3 shadow-xs rounded-sm transition-all duration-200`}>
       {/* Table Header Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200 dark:border-[#172338]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
         <div className="flex items-center gap-2">
           <h2 className="text-xs font-sans font-semibold text-slate-900 dark:text-white uppercase tracking-wider">
             Policies
           </h2>
-          <span className="px-1.5 py-0.2 bg-slate-100 dark:bg-[#172338] text-[11px] font-sans text-slate-700 dark:text-slate-300 rounded-xs">
+          <span className="px-1.5 py-0.2 bg-muted text-[11px] font-sans text-foreground rounded-xs">
             {policies.length}
           </span>
         </div>
@@ -50,13 +50,13 @@ export function PoliciesTable({
         <div className="flex items-center gap-2 flex-wrap font-sans">
           {/* Search */}
           <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder="Filter policies..."
-              className="bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] pl-8 pr-3 py-1 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-blue-500 rounded-sm transition-colors font-sans w-44"
+              className="bg-muted border border-input pl-8 pr-3 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary rounded-sm transition-colors font-sans w-44"
             />
           </div>
 
@@ -65,23 +65,23 @@ export function PoliciesTable({
             <select
               value={statusFilter}
               onChange={(e) => onStatusFilterChange(e.target.value)}
-              className="appearance-none bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] pl-2.5 pr-6 py-1 text-xs text-slate-800 dark:text-slate-300 focus:outline-none focus:border-blue-500 rounded-sm transition-colors font-sans cursor-pointer"
+              className="appearance-none bg-muted border border-input pl-2.5 pr-6 py-1 text-xs text-foreground focus:outline-none focus:border-primary rounded-sm transition-colors font-sans cursor-pointer"
             >
               <option>All Statuses</option>
               <option>Published</option>
               <option>Draft</option>
               <option>Disabled</option>
             </select>
-            <ChevronDown className="w-3 h-3 text-slate-400 dark:text-slate-500 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <ChevronDown className="w-3 h-3 text-muted-foreground absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
         </div>
       </div>
 
       {/* Table */}
-      <div className="border border-slate-200 dark:border-[#172338] overflow-x-auto rounded-sm">
+      <div className="border border-border overflow-x-auto rounded-sm">
         <table className="w-full text-left border-collapse text-xs font-sans">
           <thead>
-            <tr className="bg-slate-50 dark:bg-[#09101B] border-b border-slate-200 dark:border-[#18263D] text-xs font-sans text-slate-500 dark:text-slate-400 select-none">
+            <tr className="bg-muted/40 border-b border-border text-xs font-sans text-muted-foreground select-none">
               <th className="py-2.5 px-3">POLICY NAME</th>
               <th className="py-2.5 px-3">SCOPE</th>
               <th className="py-2.5 px-3">MODE</th>
@@ -91,7 +91,7 @@ export function PoliciesTable({
               <th className="py-2.5 px-2 text-right"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-[#18263D]">
+          <tbody className="divide-y divide-border">
             {policies.length === 0 ? (
               <tr>
                 <td colSpan={7} className="py-12 text-center text-xs text-slate-400 dark:text-slate-500 font-sans">
@@ -107,23 +107,23 @@ export function PoliciesTable({
                   onClick={() => onSelect(p.id)}
                   className={`cursor-pointer transition-colors ${
                     isSelected
-                      ? 'bg-blue-50/70 dark:bg-emerald-950/30 border-l-2 border-blue-600 dark:border-emerald-400 text-slate-900 dark:text-white'
-                      : 'hover:bg-slate-50 dark:hover:bg-[#0E1726] text-slate-700 dark:text-slate-300'
+                      ? 'bg-primary/10 border-l-2 border-primary text-foreground'
+                      : 'hover:bg-muted/60 text-muted-foreground'
                   }`}
                 >
                   <td className="py-2.5 px-3 font-medium whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <FileText
                         className={`w-3.5 h-3.5 shrink-0 ${
-                          isSelected ? 'text-blue-600 dark:text-emerald-400' : 'text-slate-400'
+                          isSelected ? 'text-primary' : 'text-muted-foreground'
                         }`}
                       />
-                      <span className={isSelected ? 'text-slate-900 dark:text-white font-bold' : 'text-slate-800 dark:text-slate-200'}>
+                      <span className={isSelected ? 'text-foreground font-bold' : 'text-foreground'}>
                         {p.name}
                       </span>
                     </div>
                   </td>
-                  <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400 font-mono text-[11px] whitespace-nowrap">
+                  <td className="py-2.5 px-3 text-muted-foreground font-mono text-[11px] whitespace-nowrap">
                     {p.scope}
                   </td>
                   <td className="py-2.5 px-3 whitespace-nowrap">
@@ -139,10 +139,10 @@ export function PoliciesTable({
                       {p.mode}
                     </span>
                   </td>
-                  <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300 font-sans text-xs whitespace-nowrap">
+                  <td className="py-2.5 px-3 text-foreground font-sans text-xs whitespace-nowrap">
                     {p.ruleSetsCount} rules
                   </td>
-                  <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400 font-sans text-xs whitespace-nowrap">
+                  <td className="py-2.5 px-3 text-muted-foreground font-sans text-xs whitespace-nowrap">
                     {p.lastUpdated}
                   </td>
                   <td className="py-2.5 px-3 whitespace-nowrap">
@@ -151,8 +151,8 @@ export function PoliciesTable({
                         p.status === 'Published'
                           ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-700'
                           : p.status === 'Draft'
-                          ? 'bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
-                          : 'bg-slate-100 dark:bg-slate-950 text-slate-500 dark:text-slate-500 border-slate-300 dark:border-slate-800'
+                          ? 'bg-muted text-muted-foreground border-border'
+                          : 'bg-muted/50 text-muted-foreground border-border'
                       }`}
                     >
                       {p.status}
@@ -161,7 +161,7 @@ export function PoliciesTable({
                   <td className="py-2.5 px-2 text-right">
                     <button
                       type="button"
-                      className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#18263D] transition-colors rounded-xs"
+                      className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors rounded-xs"
                       onClick={(e) => {
                         e.stopPropagation();
                         onSelect(p.id);

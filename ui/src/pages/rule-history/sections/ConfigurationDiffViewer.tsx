@@ -102,7 +102,7 @@ export function ConfigurationDiffViewer({
               <select
                 value={fromVersion}
                 onChange={(e) => onChangeFromVersion(Number(e.target.value))}
-                className="appearance-none bg-slate-100 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] text-slate-800 dark:text-slate-200 py-1 pl-2.5 pr-7 rounded-xs text-xs font-mono focus:outline-none focus:border-blue-500 cursor-pointer"
+                className="appearance-none bg-muted border border-input text-foreground py-1 pl-2.5 pr-7 rounded-xs text-xs font-mono focus:outline-none focus:border-primary cursor-pointer"
               >
                 {versions.map((v) => (
                   <option key={v.version} value={v.version}>
@@ -120,7 +120,7 @@ export function ConfigurationDiffViewer({
               <select
                 value={toVersion}
                 onChange={(e) => onChangeToVersion(Number(e.target.value))}
-                className="appearance-none bg-slate-100 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] text-slate-800 dark:text-slate-200 py-1 pl-2.5 pr-7 rounded-xs text-xs font-mono focus:outline-none focus:border-blue-500 cursor-pointer"
+                className="appearance-none bg-muted border border-input text-foreground py-1 pl-2.5 pr-7 rounded-xs text-xs font-mono focus:outline-none focus:border-primary cursor-pointer"
               >
                 {versions.map((v) => (
                   <option key={v.version} value={v.version}>
@@ -137,8 +137,8 @@ export function ConfigurationDiffViewer({
       {/* Side-by-side JSON diff viewer */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Left Side: Previous Version */}
-        <div className="border border-border rounded-xs overflow-hidden bg-slate-50/50 dark:bg-[#080E18]">
-          <div className="flex items-center justify-between px-3 py-2 bg-slate-100 dark:bg-[#0E1726] border-b border-border text-xs font-sans">
+        <div className="border border-border rounded-xs overflow-hidden bg-muted/20">
+          <div className="flex items-center justify-between px-3 py-2 bg-muted border-b border-border text-xs font-sans">
             <span className="text-slate-700 dark:text-slate-300 font-medium">
               Previous Version (<span className="font-mono">{fromObj?.versionLabel || `v${fromVersion}`}</span>)
             </span>
@@ -179,8 +179,8 @@ export function ConfigurationDiffViewer({
         </div>
 
         {/* Right Side: Selected Version */}
-        <div className="border border-border rounded-xs overflow-hidden bg-slate-50/50 dark:bg-[#080E18]">
-          <div className="flex items-center justify-between px-3 py-2 bg-slate-100 dark:bg-[#0E1726] border-b border-border text-xs font-sans">
+        <div className="border border-border rounded-xs overflow-hidden bg-muted/20">
+          <div className="flex items-center justify-between px-3 py-2 bg-muted border-b border-border text-xs font-sans">
             <span className="text-slate-700 dark:text-slate-300 font-medium">
               Selected Version (<span className="font-mono">{toObj?.versionLabel || `v${toVersion}`}</span>)
             </span>

@@ -63,17 +63,17 @@ export function AccessRulesTab({
   return (
     <div className="space-y-4 font-sans text-xs">
       {/* Search & Filter Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-3 rounded-sm shadow-xs">
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-card border border-border p-3 rounded-sm shadow-xs">
         <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">
           {/* Search Box */}
           <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
+            <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-muted-foreground" />
             <input
               type="text"
               placeholder="Search rules, IP, host, description..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] pl-9 pr-3 py-1.5 text-slate-900 dark:text-white rounded-sm text-xs focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full bg-background border border-input pl-9 pr-3 py-1.5 text-foreground rounded-sm text-xs focus:outline-none focus:border-primary transition-colors"
             />
           </div>
 
@@ -81,7 +81,7 @@ export function AccessRulesTab({
           <select
             value={actionFilter}
             onChange={(e) => setActionFilter(e.target.value)}
-            className="bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] px-2.5 py-1.5 text-slate-700 dark:text-slate-300 rounded-sm text-xs focus:outline-none focus:border-blue-500 cursor-pointer"
+            className="bg-background border border-input px-2.5 py-1.5 text-foreground rounded-sm text-xs focus:outline-none focus:border-primary cursor-pointer"
           >
             <option value="all">All Actions</option>
             <option value="block">Blocklist (Block)</option>
@@ -93,7 +93,7 @@ export function AccessRulesTab({
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] px-2.5 py-1.5 text-slate-700 dark:text-slate-300 rounded-sm text-xs focus:outline-none focus:border-blue-500 cursor-pointer"
+            className="bg-background border border-input px-2.5 py-1.5 text-foreground rounded-sm text-xs focus:outline-none focus:border-primary cursor-pointer"
           >
             <option value="all">All Sources / Status</option>
             <option value="ip">IP Address</option>
@@ -111,18 +111,18 @@ export function AccessRulesTab({
         <button
           type="button"
           onClick={handleExport}
-          className="inline-flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-[#152030] hover:bg-slate-200 dark:hover:bg-[#1C293D] border border-slate-200 dark:border-[#22334D] px-3 py-1.5 rounded-sm cursor-pointer transition-colors shadow-xs"
+          className="inline-flex items-center gap-1.5 text-xs text-foreground bg-card hover:bg-muted border border-border px-3 py-1.5 rounded-sm cursor-pointer transition-colors shadow-xs"
         >
-          <Download className="w-3.5 h-3.5 text-slate-500" />
+          <Download className="w-3.5 h-3.5 text-muted-foreground" />
           <span>Export JSON</span>
         </button>
       </div>
 
       {/* Access Rules Table */}
-      <div className="border border-slate-200 dark:border-[#172338] bg-white dark:bg-[#080E18] rounded-sm overflow-hidden shadow-xs">
+      <div className="border border-border bg-card rounded-sm overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
-            <thead className="bg-slate-50 dark:bg-[#0B1320] text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-[#172338] text-[11px] uppercase tracking-wider font-semibold">
+            <thead className="bg-muted/50 text-muted-foreground border-b border-border text-[11px] uppercase tracking-wider font-semibold">
               <tr>
                 <th className="p-3">Rule Name & Action</th>
                 <th className="p-3">Source Targets</th>
@@ -132,7 +132,7 @@ export function AccessRulesTab({
                 <th className="p-3 text-right pr-4">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-[#172338] text-xs">
+            <tbody className="divide-y divide-border text-xs">
               {filtered.map((item) => {
                 const d = item.document as AccessRuleDocument;
                 const isExpired = d.expires_at > 0 && d.expires_at <= now;
@@ -141,7 +141,7 @@ export function AccessRulesTab({
                 return (
                   <tr
                     key={item.id}
-                    className="hover:bg-slate-50 dark:hover:bg-[#0F1A2E]/50 text-slate-800 dark:text-slate-200 transition-colors"
+                    className="hover:bg-muted/50 text-foreground transition-colors"
                   >
                     {/* Rule Name & Action */}
                     <td className="p-3 max-w-[220px]">
@@ -149,7 +149,7 @@ export function AccessRulesTab({
                         <button
                           type="button"
                           onClick={() => onSelectHistory(item)}
-                          className="font-semibold text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors text-left cursor-pointer truncate"
+                          className="font-semibold text-foreground hover:text-primary transition-colors text-left cursor-pointer truncate"
                           title="Click to view revision history"
                         >
                           {d.name}
@@ -157,21 +157,21 @@ export function AccessRulesTab({
                       </div>
                       <div className="flex items-center gap-1.5 mt-1">
                         {d.action === 'block' && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50">
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-destructive/10 text-destructive border border-destructive/30">
                             Block
                           </span>
                         )}
                         {d.action === 'allow' && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/50">
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-primary/10 text-primary border border-primary/20">
                             Allow
                           </span>
                         )}
                         {d.action === 'log' && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-cyan-50 dark:bg-cyan-950/50 text-cyan-600 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-900/50">
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-sky-50 dark:bg-sky-950/50 text-sky-600 dark:text-sky-400 border border-sky-200 dark:border-sky-900/50">
                             Log Only
                           </span>
                         )}
-                        <span className="text-[10px] text-slate-400 font-mono">
+                        <span className="text-[10px] text-muted-foreground font-mono">
                           v{item.version}
                         </span>
                       </div>
@@ -179,11 +179,11 @@ export function AccessRulesTab({
 
                     {/* Source */}
                     <td className="p-3 max-w-[240px]">
-                      <div className="font-mono text-[11px] truncate text-slate-700 dark:text-slate-300">
+                      <div className="font-mono text-[11px] truncate text-foreground">
                         {d.values.slice(0, 3).join(', ')}
                         {d.values.length > 3 && ` +${d.values.length - 3} more`}
                       </div>
-                      <div className="text-[10px] text-slate-400 uppercase tracking-wider mt-0.5">
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">
                         {d.source === 'ip'
                           ? 'IP Address'
                           : d.source === 'cidr'
@@ -198,45 +198,45 @@ export function AccessRulesTab({
 
                     {/* Scope */}
                     <td className="p-3">
-                      <div className="font-mono text-[11px] text-slate-700 dark:text-slate-300">
+                      <div className="font-mono text-[11px] text-foreground">
                         {d.host === '*' ? 'All Domains' : d.host}
                         {d.path_prefix && d.path_prefix !== '/' ? d.path_prefix : ''}
                       </div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">
+                      <div className="text-[10px] text-muted-foreground mt-0.5">
                         {d.method === '*' ? 'All Methods' : d.method} · {d.schedule}
                       </div>
                     </td>
 
                     {/* Priority */}
-                    <td className="p-3 text-center font-mono font-bold text-slate-700 dark:text-slate-300">
+                    <td className="p-3 text-center font-mono font-bold text-foreground">
                       {d.priority}
                     </td>
 
                     {/* Status */}
                     <td className="p-3">
                       {!d.enabled ? (
-                        <span className="inline-flex items-center gap-1.5 text-slate-400 font-medium text-[11px]">
-                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                        <span className="inline-flex items-center gap-1.5 text-muted-foreground font-medium text-[11px]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground" />
                           Disabled
                         </span>
                       ) : isExpired ? (
-                        <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium text-[11px]">
+                        <span className="inline-flex items-center gap-1.5 text-amber-500 font-medium text-[11px]">
                           <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                           Expired
                         </span>
                       ) : isTemp ? (
                         <div>
-                          <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium text-[11px]">
+                          <span className="inline-flex items-center gap-1.5 text-amber-500 font-medium text-[11px]">
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                             Temporary
                           </span>
-                          <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                          <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
                             Until {new Date(d.expires_at * 1000).toLocaleTimeString()}
                           </p>
                         </div>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium text-[11px]">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        <span className="inline-flex items-center gap-1.5 text-primary font-medium text-[11px]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-primary" />
                           Enabled
                         </span>
                       )}
@@ -247,7 +247,7 @@ export function AccessRulesTab({
                       <div className="flex items-center justify-end gap-2.5">
                         <Link
                           to={`/ip-access/create?edit=${item.id}`}
-                          className="text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors p-1"
+                          className="text-muted-foreground hover:text-primary transition-colors p-1"
                           title="Edit Rule"
                         >
                           <Pencil className="w-3.5 h-3.5" />
@@ -255,7 +255,7 @@ export function AccessRulesTab({
 
                         <Link
                           to={`/ip-access/create?clone=${item.id}`}
-                          className="text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors p-1"
+                          className="text-muted-foreground hover:text-primary transition-colors p-1"
                           title="Clone Rule"
                         >
                           <Copy className="w-3.5 h-3.5" />
@@ -265,7 +265,7 @@ export function AccessRulesTab({
                           type="button"
                           disabled={busy || !status}
                           onClick={() => onSelectHistory(item)}
-                          className="text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors p-1 cursor-pointer"
+                          className="text-muted-foreground hover:text-primary transition-colors p-1 cursor-pointer"
                           title="View Revision History"
                         >
                           <History className="w-3.5 h-3.5" />
@@ -286,8 +286,8 @@ export function AccessRulesTab({
                           }
                           className={`p-1 cursor-pointer transition-colors ${
                             d.enabled
-                              ? 'text-slate-400 hover:text-amber-500'
-                              : 'text-slate-400 hover:text-emerald-500'
+                              ? 'text-muted-foreground hover:text-amber-500'
+                              : 'text-muted-foreground hover:text-primary'
                           }`}
                           title={d.enabled ? 'Disable Rule' : 'Enable Rule'}
                         >
@@ -309,7 +309,7 @@ export function AccessRulesTab({
                               });
                             }
                           }}
-                          className="text-slate-400 hover:text-rose-500 transition-colors p-1 cursor-pointer"
+                          className="text-muted-foreground hover:text-destructive transition-colors p-1 cursor-pointer"
                           title="Delete Rule"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -322,11 +322,11 @@ export function AccessRulesTab({
 
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-400">
-                    <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                  <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                    <p className="text-sm font-medium text-foreground">
                       No matching access rules found.
                     </p>
-                    <p className="text-xs text-slate-400 mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                       Try adjusting your search criteria or add a new access rule.
                     </p>
                   </td>

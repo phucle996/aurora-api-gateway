@@ -16,7 +16,6 @@ export interface NodeRecord {
   name: string;
   hostname?: string;
   ip: string;
-  role: string;
   status: 'Ready' | 'Not Ready' | 'Draining';
   version: string;
   active_release_id?: number;

@@ -26,8 +26,8 @@ export function PolicySummaryPanel({
   const activeRulesCount = rules.filter((r) => r.enabled).length;
 
   return (
-    <section className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-4 shadow-xs rounded-sm font-sans text-xs space-y-3">
-      <h2 className="text-sm font-semibold text-slate-900 dark:text-white border-b border-slate-200 dark:border-[#152030] pb-2">
+    <section className="bg-card border border-border p-4 shadow-xs rounded-sm font-sans text-xs space-y-3">
+      <h2 className="text-sm font-semibold text-slate-900 dark:text-white border-b border-border pb-2">
         Policy Summary
       </h2>
 
@@ -45,7 +45,7 @@ export function PolicySummaryPanel({
           <span className="text-slate-500 dark:text-slate-400">Mode</span>
           <div className="flex items-center gap-1.5">
             {mode === 'mixed' && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-xs bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900/50 font-bold uppercase text-[10px]">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-xs bg-primary/10 text-primary border border-primary/20 font-bold uppercase text-[10px]">
                 <Shield className="w-3 h-3" />
                 Mixed
               </span>
@@ -88,7 +88,7 @@ export function PolicySummaryPanel({
         </div>
 
         {/* Revision */}
-        <div className="flex items-center justify-between border-t border-slate-100 dark:border-[#152030] pt-2 text-[11px]">
+        <div className="flex items-center justify-between border-t border-border pt-2 text-[11px]">
           <span className="text-slate-400">Revision State</span>
           <span className="text-slate-600 dark:text-slate-400">
             {isEditing ? `Targeting v${expectedVersion + 1}` : 'New Policy (Draft)'}

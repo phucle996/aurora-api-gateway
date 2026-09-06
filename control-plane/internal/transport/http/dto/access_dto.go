@@ -120,8 +120,9 @@ type AccessRuleDocument struct {
 
 // AccessGroupDocument defines the transport schema for an access IP group document payload.
 type AccessGroupDocument struct {
-	Name     string   `json:"name"`
-	Networks []string `json:"networks"`
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	Networks    []string `json:"networks"`
 }
 
 // AccessDatasetNetwork defines a CIDR network mapping within an access dataset.

@@ -9,7 +9,6 @@ type ClusterNodeResponse struct {
 	Name                   string  `json:"name"`
 	Hostname               string  `json:"hostname"`
 	IP                     string  `json:"ip"`
-	Role                   string  `json:"role"`
 	Status                 string  `json:"status"`
 	Version                string  `json:"version"`
 	ActiveReleaseID        *int64  `json:"active_release_id,omitempty"`

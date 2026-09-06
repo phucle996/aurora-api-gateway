@@ -27,12 +27,12 @@ export function EditActionsSection({
   setAddToReputation,
 }: EditActionsProps) {
   return (
-    <div className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#152030] p-4 space-y-4 font-sans text-xs">
+    <div className="bg-card border border-border p-4 space-y-4 font-sans text-xs">
       <div>
-        <div className="text-sm font-semibold text-slate-900 dark:text-white">
+        <div className="text-sm font-semibold text-foreground">
           3. Actions
         </div>
-        <p className="text-slate-500 dark:text-slate-400 text-[11px] mt-0.5 font-sans">
+        <p className="text-muted-foreground text-[11px] mt-0.5 font-sans">
           When the conditions are met:
         </p>
       </div>
@@ -41,14 +41,14 @@ export function EditActionsSection({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Action Type */}
         <div>
-          <label className="block text-slate-600 dark:text-slate-400 mb-1 text-[11px]">
+          <label className="block text-muted-foreground mb-1 text-[11px]">
             Action Type
           </label>
           <select
             aria-label="Action type"
             value={actionType}
             onChange={(e) => setActionType(e.target.value)}
-            className="w-full bg-slate-50 dark:bg-[#0E1726] border border-slate-300 dark:border-[#1C293D] px-3 py-1.5 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
+            className="w-full bg-background border border-input px-3 py-1.5 text-foreground focus:outline-none focus:border-primary cursor-pointer"
           >
             <option value="Block Request">Block Request</option>
             <option value="Allow Request">Allow Request</option>
@@ -59,7 +59,7 @@ export function EditActionsSection({
 
         {/* Response Code */}
         <div>
-          <label className="block text-slate-600 dark:text-slate-400 mb-1 text-[11px]">
+          <label className="block text-muted-foreground mb-1 text-[11px]">
             Response Code
           </label>
           <select
@@ -67,7 +67,7 @@ export function EditActionsSection({
             aria-label="Response code"
             disabled={actionType !== 'Block Request'}
             onChange={(e) => setResponseCode(e.target.value)}
-            className="w-full bg-slate-50 dark:bg-[#0E1726] border border-slate-300 dark:border-[#1C293D] px-3 py-1.5 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-background border border-input px-3 py-1.5 text-foreground focus:outline-none focus:border-primary cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <optgroup label="Client Errors (4xx)">
               <option value="400 Bad Request">400 Bad Request</option>
@@ -134,9 +134,9 @@ export function EditActionsSection({
 
       {/* Row 2: Custom Response (Textarea) */}
       <div>
-        <div className="flex items-center justify-between text-slate-600 dark:text-slate-400 mb-1 text-[11px]">
+        <div className="flex items-center justify-between text-muted-foreground mb-1 text-[11px]">
           <span>Custom Response (optional)</span>
-          <span className="text-slate-400 dark:text-slate-500 text-[10px]">{customResponse.length}/512</span>
+          <span className="text-muted-foreground text-[10px]">{customResponse.length}/512</span>
         </div>
         <textarea
           rows={3}
@@ -146,12 +146,12 @@ export function EditActionsSection({
           maxLength={512}
           onChange={(e) => setCustomResponse(e.target.value)}
           placeholder="Request blocked by security policy."
-          className="w-full bg-slate-50 dark:bg-[#0E1726] border border-slate-300 dark:border-[#1C293D] p-2.5 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-blue-500 resize-none font-mono text-xs disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="w-full bg-background border border-input p-2.5 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary resize-none font-mono text-xs disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         />
       </div>
 
       {/* Row 3: Checkboxes */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-200 dark:border-[#152030]/60">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border">
         <label className="flex items-start gap-2.5 cursor-pointer select-none group">
           <div className="relative flex items-center justify-center shrink-0 mt-0.5">
             <input
@@ -162,18 +162,17 @@ export function EditActionsSection({
               className="peer sr-only"
             />
             <div
-              className={`w-4 h-4 rounded-xs border transition-colors flex items-center justify-center ${
-                logEvent
-                  ? 'bg-blue-600 border-blue-600 text-white'
-                  : 'bg-white dark:bg-[#0E1726] border-slate-300 dark:border-[#1C293D] text-transparent group-hover:border-slate-400 dark:group-hover:border-slate-500'
-              }`}
+              className={`w-4 h-4 rounded-xs border transition-colors flex items-center justify-center ${logEvent
+                  ? 'bg-primary border-primary text-primary-foreground'
+                  : 'bg-background border-input text-transparent group-hover:border-primary/50'
+                }`}
             >
               <Check className="w-3 h-3 stroke-[3]" />
             </div>
           </div>
           <div>
-            <div className="text-slate-900 dark:text-slate-200 font-semibold">Log this event</div>
-            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-sans mt-0.5">
+            <div className="text-foreground font-semibold">Log this event</div>
+            <div className="text-[11px] text-muted-foreground font-sans mt-0.5">
               Record the matched request in security events.
             </div>
           </div>
@@ -189,18 +188,17 @@ export function EditActionsSection({
               className="peer sr-only"
             />
             <div
-              className={`w-4 h-4 rounded-xs border transition-colors flex items-center justify-center ${
-                addToReputation
-                  ? 'bg-blue-600 border-blue-600 text-white'
-                  : 'bg-white dark:bg-[#0E1726] border-slate-300 dark:border-[#1C293D] text-transparent group-hover:border-slate-400 dark:group-hover:border-slate-500'
-              }`}
+              className={`w-4 h-4 rounded-xs border transition-colors flex items-center justify-center ${addToReputation
+                  ? 'bg-primary border-primary text-primary-foreground'
+                  : 'bg-background border-input text-transparent group-hover:border-primary/50'
+                }`}
             >
               <Check className="w-3 h-3 stroke-[3]" />
             </div>
           </div>
           <div>
-            <div className="text-slate-900 dark:text-slate-200 font-semibold">Add to IP reputation (optional)</div>
-            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-sans mt-0.5">
+            <div className="text-foreground font-semibold">Add to IP reputation (optional)</div>
+            <div className="text-[11px] text-muted-foreground font-sans mt-0.5">
               Increase risk score for the source IP.
             </div>
           </div>

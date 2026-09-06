@@ -198,7 +198,7 @@ export default function CreatePolicyPage() {
               <button
                 type="button"
                 onClick={() => navigate('/policies')}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-[#0B1320] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-300 text-xs rounded-sm transition-colors cursor-pointer"
+                className="px-4 py-2 bg-muted hover:bg-accent border border-border text-foreground text-xs rounded-sm transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -206,7 +206,7 @@ export default function CreatePolicyPage() {
               <button
                 type="submit"
                 disabled={isSaving || !name.trim()}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-semibold rounded-sm shadow-lg shadow-blue-500/20 transition-all cursor-pointer"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground text-xs font-semibold rounded-sm shadow-lg shadow-primary/20 transition-all cursor-pointer"
               >
                 {isSaving ? (
                   <span>Saving policy...</span>

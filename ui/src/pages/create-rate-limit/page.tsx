@@ -77,127 +77,127 @@ export function CreateRateLimitPage() {
       {/* Header */}
       <CreateRateLimitHeader />
 
-          {/* Success Notification */}
-          {success && (
-            <div className="p-3 bg-emerald-950/60 border border-emerald-500/60 text-emerald-300 text-xs flex items-center gap-2">
-              <Check className="w-4 h-4 text-emerald-400" />
-              <span>Rate Limit Rule created successfully! Redirecting...</span>
-            </div>
-          )}
+      {/* Success Notification */}
+      {success && (
+        <div className="p-3 bg-emerald-950/60 border border-emerald-500/60 text-emerald-300 text-xs flex items-center gap-2">
+          <Check className="w-4 h-4 text-emerald-400" />
+          <span>Rate Limit Rule created successfully! Redirecting...</span>
+        </div>
+      )}
 
-          {/* Grid Layout: Left form, Right panels */}
-          <form
-            onSubmit={handleCreateRule}
-            className="grid grid-cols-1 lg:grid-cols-12 gap-5"
-          >
-            {/* Left Column (Inputs: Sections 1 - 4) */}
-            <div className="lg:col-span-7 space-y-4">
-              <RateLimitBasicInfoSection
-                name={name}
-                setName={setName}
-                description={description}
-                setDescription={setDescription}
-                policy={policy}
-                setPolicy={setPolicy}
-                enabled={enabled}
-                setEnabled={setEnabled}
-                priority={priority}
-                setPriority={setPriority}
-              />
+      {/* Grid Layout: Left form, Right panels */}
+      <form
+        onSubmit={handleCreateRule}
+        className="grid grid-cols-1 lg:grid-cols-12 gap-5"
+      >
+        {/* Left Column (Inputs: Sections 1 - 4) */}
+        <div className="lg:col-span-7 space-y-4">
+          <RateLimitBasicInfoSection
+            name={name}
+            setName={setName}
+            description={description}
+            setDescription={setDescription}
+            policy={policy}
+            setPolicy={setPolicy}
+            enabled={enabled}
+            setEnabled={setEnabled}
+            priority={priority}
+            setPriority={setPriority}
+          />
 
-              <RateLimitConfigSection
-                dimension={dimension}
-                setDimension={setDimension}
-                rateLimit={rateLimit}
-                setRateLimit={setRateLimit}
-                rateUnit={rateUnit}
-                setRateUnit={setRateUnit}
-                burst={burst}
-                setBurst={setBurst}
-                actionExceeded={actionExceeded}
-                setActionExceeded={setActionExceeded}
-                customResponse={customResponse}
-                setCustomResponse={setCustomResponse}
-                responseCode={responseCode}
-                setResponseCode={setResponseCode}
-                responseBody={responseBody}
-                setResponseBody={setResponseBody}
-              />
+          <RateLimitConfigSection
+            dimension={dimension}
+            setDimension={setDimension}
+            rateLimit={rateLimit}
+            setRateLimit={setRateLimit}
+            rateUnit={rateUnit}
+            setRateUnit={setRateUnit}
+            burst={burst}
+            setBurst={setBurst}
+            actionExceeded={actionExceeded}
+            setActionExceeded={setActionExceeded}
+            customResponse={customResponse}
+            setCustomResponse={setCustomResponse}
+            responseCode={responseCode}
+            setResponseCode={setResponseCode}
+            responseBody={responseBody}
+            setResponseBody={setResponseBody}
+          />
 
-              <RateLimitConditionsSection
-                conditions={conditions}
-                setConditions={setConditions}
-              />
+          <RateLimitConditionsSection
+            conditions={conditions}
+            setConditions={setConditions}
+          />
 
-              <RateLimitAdvancedSection
-                logEvents={logEvents}
-                setLogEvents={setLogEvents}
-                addReputation={addReputation}
-                setAddReputation={setAddReputation}
-                enableAlert={enableAlert}
-                setEnableAlert={setEnableAlert}
-              />
+          <RateLimitAdvancedSection
+            logEvents={logEvents}
+            setLogEvents={setLogEvents}
+            addReputation={addReputation}
+            setAddReputation={setAddReputation}
+            enableAlert={enableAlert}
+            setEnableAlert={setEnableAlert}
+          />
 
-              {/* Action Buttons */}
-              <div className="flex items-center gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => navigate('/rate-limits')}
-                  className="px-4 py-2 bg-[#0E1726] hover:bg-[#152030] border border-[#1C293D] text-slate-300 hover:text-white text-xs cursor-pointer transition-colors"
-                >
-                  Cancel
-                </button>
+          {/* Action Buttons */}
+          <div className="flex items-center gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => navigate('/rate-limits')}
+              className="px-4 py-2 bg-card hover:bg-muted border border-border text-foreground text-xs cursor-pointer transition-colors"
+            >
+              Cancel
+            </button>
 
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs shadow-lg shadow-blue-900/30 cursor-pointer transition-colors disabled:opacity-50"
-                >
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>{submitting ? 'Creating Rule...' : 'Create Rule'}</span>
-                </button>
-              </div>
-            </div>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="flex items-center gap-2 px-5 py-2 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-xs cursor-pointer transition-colors disabled:opacity-50"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span>{submitting ? 'Creating Rule...' : 'Create Rule'}</span>
+            </button>
+          </div>
+        </div>
 
-            {/* Right Column (Panels) */}
-            <div className="lg:col-span-5 space-y-4">
-              <RateLimitPreviewPanel
-                name={name}
-                policy={policy}
-                priority={priority}
-                enabled={enabled}
-                dimension={dimension}
-                rateLimit={rateLimit}
-                rateUnit={rateUnit}
-                burst={burst}
-                actionExceeded={actionExceeded}
-                customResponse={customResponse}
-                responseCode={responseCode}
-                responseBody={responseBody}
-                conditions={conditions}
-              />
+        {/* Right Column (Panels) */}
+        <div className="lg:col-span-5 space-y-4">
+          <RateLimitPreviewPanel
+            name={name}
+            policy={policy}
+            priority={priority}
+            enabled={enabled}
+            dimension={dimension}
+            rateLimit={rateLimit}
+            rateUnit={rateUnit}
+            burst={burst}
+            actionExceeded={actionExceeded}
+            customResponse={customResponse}
+            responseCode={responseCode}
+            responseBody={responseBody}
+            conditions={conditions}
+          />
 
-              <RateLimitTesterPanel rateLimit={rateLimit} />
+          <RateLimitTesterPanel rateLimit={rateLimit} />
 
-              <RateLimitSummaryPanel
-                name={name}
-                actionExceeded={actionExceeded}
-                rateLimit={rateLimit}
-                rateUnit={rateUnit}
-                burst={burst}
-                conditions={conditions}
-                policy={policy}
-                logEvents={logEvents}
-                enableAlert={enableAlert}
-              />
+          <RateLimitSummaryPanel
+            name={name}
+            actionExceeded={actionExceeded}
+            rateLimit={rateLimit}
+            rateUnit={rateUnit}
+            burst={burst}
+            conditions={conditions}
+            policy={policy}
+            logEvents={logEvents}
+            enableAlert={enableAlert}
+          />
 
-              <RateLimitBehaviorPanel
-                rateLimit={rateLimit}
-                rateUnit={rateUnit}
-                burst={burst}
-              />
-            </div>
-          </form>
+          <RateLimitBehaviorPanel
+            rateLimit={rateLimit}
+            rateUnit={rateUnit}
+            burst={burst}
+          />
+        </div>
+      </form>
     </div>
   );
 }

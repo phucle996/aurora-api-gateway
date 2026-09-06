@@ -80,7 +80,7 @@ export function RuleActivationDialog({
             type="button"
             disabled={isSaving}
             onClick={() => onConfirm(true)}
-            className="flex items-center justify-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold font-mono transition-colors cursor-pointer shadow-sm"
+            className="flex items-center justify-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold font-mono transition-colors cursor-pointer shadow-sm"
           >
             <Zap className="w-3.5 h-3.5" />
             <span>Bật ngay</span>

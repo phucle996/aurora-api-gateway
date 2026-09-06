@@ -300,14 +300,14 @@ export default function EditRulePage() {
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => setRetry((r) => r + 1)}
-            className="px-3.5 py-1.5 bg-blue-600 text-white rounded-xs font-semibold hover:bg-blue-500 cursor-pointer"
+            onClick={() => setRetry((c) => c + 1)}
+            className="px-3.5 py-1.5 bg-muted hover:bg-accent border border-border rounded-xs text-foreground transition-colors cursor-pointer"
           >
             Retry
           </button>
           <Link
             to="/rules"
-            className="px-3.5 py-1.5 bg-slate-100 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] rounded-xs text-slate-700 dark:text-slate-300 hover:text-white"
+            className="px-3.5 py-1.5 bg-muted hover:bg-accent border border-border rounded-xs text-foreground transition-colors"
           >
             Back to Rules
           </Link>
@@ -362,14 +362,14 @@ export default function EditRulePage() {
           />
 
           {/* Group, Severity, Score */}
-          <div className="grid grid-cols-3 gap-3 bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#152030] p-4 text-xs font-mono text-slate-800 dark:text-slate-200">
+          <div className="grid grid-cols-3 gap-3 bg-card border border-border p-4 text-xs font-mono text-foreground">
             <div>
-              <label className="block text-slate-500 dark:text-slate-400 mb-1 text-[11px]">Group</label>
+              <label className="block text-muted-foreground mb-1 text-[11px]">Group</label>
               <select
                 aria-label="Rule group"
                 value={group}
                 onChange={(e) => setGroup(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] p-2"
+                className="w-full bg-background border border-input p-2 text-foreground focus:outline-none focus:border-primary"
               >
                 {['custom', 'sqli', 'xss', 'traversal', 'bot', 'endpoint', 'authentication'].map((g) => (
                   <option key={g} value={g}>{g}</option>
@@ -377,12 +377,12 @@ export default function EditRulePage() {
               </select>
             </div>
             <div>
-              <label className="block text-slate-500 dark:text-slate-400 mb-1 text-[11px]">Severity</label>
+              <label className="block text-muted-foreground mb-1 text-[11px]">Severity</label>
               <select
                 aria-label="Severity"
                 value={severity}
                 onChange={(e) => setSeverity(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] p-2"
+                className="w-full bg-background border border-input p-2 text-foreground focus:outline-none focus:border-primary"
               >
                 {['low', 'medium', 'high', 'critical'].map((s) => (
                   <option key={s} value={s}>{s}</option>
@@ -390,7 +390,7 @@ export default function EditRulePage() {
               </select>
             </div>
             <div>
-              <label className="block text-slate-500 dark:text-slate-400 mb-1 text-[11px]">Score</label>
+              <label className="block text-muted-foreground mb-1 text-[11px]">Score</label>
               <input
                 aria-label="Score"
                 type="number"
@@ -398,7 +398,7 @@ export default function EditRulePage() {
                 max={1000}
                 value={score}
                 onChange={(e) => setScore(Number(e.target.value))}
-                className="w-full bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] p-2"
+                className="w-full bg-background border border-input p-2 text-foreground focus:outline-none focus:border-primary"
               />
             </div>
           </div>
@@ -442,7 +442,7 @@ export default function EditRulePage() {
             <button
               type="button"
               onClick={() => navigate('/rules')}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-[#0E1726] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs rounded-sm transition-colors cursor-pointer"
+              className="px-4 py-2 bg-muted hover:bg-accent border border-border text-foreground text-xs rounded-sm transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -451,7 +451,7 @@ export default function EditRulePage() {
               type="button"
               disabled={isSaving}
               onClick={handleInitiateSave}
-              className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 border border-blue-500 text-white text-xs font-semibold rounded-sm transition-colors cursor-pointer shadow-sm"
+              className="flex items-center gap-2 px-5 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 border border-primary text-primary-foreground text-xs font-semibold rounded-sm transition-colors cursor-pointer shadow-sm"
             >
               <Save className="w-3.5 h-3.5" />
               <span>{isSaving ? 'Saving...' : 'Save Changes'}</span>
@@ -503,6 +503,7 @@ export default function EditRulePage() {
         onClose={() => setIsDeleteDialogOpen(false)}
         onConfirmDelete={handleConfirmDelete}
         ruleName={ruleName}
+        ruleId={ruleId}
         isDeleting={isDeleting}
       />
     </div>

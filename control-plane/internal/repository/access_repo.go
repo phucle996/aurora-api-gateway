@@ -53,8 +53,9 @@ type accessRuleDoc struct {
 }
 
 type accessGroupDoc struct {
-	Name     string   `json:"name"`
-	Networks []string `json:"networks"`
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	Networks    []string `json:"networks"`
 }
 
 type accessDatasetNetworkDoc struct {
@@ -308,10 +309,10 @@ func (r *accessRepository) Change(ctx context.Context, c entity.AccessChangeComm
 	}
 
 	digest := fmt.Sprintf("%x", sha256.Sum256(payload))
-	if _, e = tx.ExecContext(ctx, `INSERT INTO access_releases(id,digest,payload) VALUES(?,?,?)`, next, digest, string(payload)); e != nil {
+	if _, e = tx.ExecContext(ctx, `INSERT INTO access_releases(id,digest,payload,actor) VALUES(?,?,?,?)`, next, digest, string(payload), c.Actor); e != nil {
 		return out, e
 	}
-	if _, e = tx.ExecContext(ctx, `INSERT INTO access_head(singleton,release_id,updated_at) VALUES(1,?,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(singleton) DO UPDATE SET release_id=excluded.release_id,updated_at=excluded.updated_at`, next); e != nil {
+	if _, e = tx.ExecContext(ctx, `INSERT INTO access_head(singleton,release_id) VALUES(1,?) ON CONFLICT(singleton) DO UPDATE SET release_id=excluded.release_id`, next); e != nil {
 		return out, e
 	}
 

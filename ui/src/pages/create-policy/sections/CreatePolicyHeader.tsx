@@ -8,13 +8,13 @@ interface CreatePolicyHeaderProps {
 
 export function CreatePolicyHeader({ isEditing }: CreatePolicyHeaderProps) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-[#152030]">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border">
       <div>
         {/* Breadcrumbs */}
         <nav className="flex items-center gap-1.5 text-xs font-sans text-slate-500 dark:text-slate-400 mb-1">
           <Link
             to="/policies"
-            className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
+            className="hover:text-primary transition-colors"
           >
             Policies
           </Link>
@@ -36,7 +36,7 @@ export function CreatePolicyHeader({ isEditing }: CreatePolicyHeaderProps) {
       {/* Back to Policies Button */}
       <Link
         to="/policies"
-        className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-white dark:bg-[#0B1320] hover:bg-slate-50 dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-300 text-xs font-sans transition-colors rounded-sm shadow-xs shrink-0 self-start sm:self-auto"
+        className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-card hover:bg-muted border border-border text-foreground text-xs font-sans transition-colors rounded-sm shadow-xs shrink-0 self-start sm:self-auto"
       >
         <ArrowLeft className="w-3.5 h-3.5" />
         <span>Back to Policies</span>

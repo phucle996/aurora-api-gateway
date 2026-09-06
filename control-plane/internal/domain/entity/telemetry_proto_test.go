@@ -17,7 +17,6 @@ func TestNodeHeartbeatProtobufRoundTrip(t *testing.T) {
 		RequestsPerSecond: 2850.75,
 		ActiveReleaseID:   12,
 		Version:           "0.4.1",
-		Role:              "Edge Node",
 	}
 
 	data := original.MarshalBinary()

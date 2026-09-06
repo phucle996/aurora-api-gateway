@@ -51,7 +51,6 @@ func (r *sqliteNodeRepository) ListNodes(ctx context.Context) ([]entity.ClusterN
 		n.name,
 		n.hostname,
 		n.ip,
-		n.role,
 		n.status,
 		n.version,
 		COALESCE(n.observed_release_id, CASE WHEN pnr.phase = 'observed' THEN pnr.release_id END, n.active_release_id) AS active_release_id,
@@ -91,7 +90,6 @@ func (r *sqliteNodeRepository) ListNodes(ctx context.Context) ([]entity.ClusterN
 			&item.Name,
 			&item.Hostname,
 			&item.IP,
-			&item.Role,
 			&item.Status,
 			&item.Version,
 			&item.ActiveReleaseID,
@@ -152,7 +150,6 @@ func (r *sqliteNodeRepository) GetNodeByID(ctx context.Context, id string) (*ent
 		n.name,
 		n.hostname,
 		n.ip,
-		n.role,
 		n.status,
 		n.version,
 		COALESCE(n.observed_release_id, CASE WHEN pnr.phase = 'observed' THEN pnr.release_id END, n.active_release_id) AS active_release_id,
@@ -185,7 +182,6 @@ func (r *sqliteNodeRepository) GetNodeByID(ctx context.Context, id string) (*ent
 		&item.Name,
 		&item.Hostname,
 		&item.IP,
-		&item.Role,
 		&item.Status,
 		&item.Version,
 		&item.ActiveReleaseID,
@@ -230,20 +226,20 @@ func (r *sqliteNodeRepository) UpdateHeartbeat(ctx context.Context, payload enti
 	}
 	query := `
     INSERT INTO cluster_nodes
-      (id,name,hostname,ip,role,status,version,sync_status,join_method,certificate,last_heartbeat,created_at,
+      (id,name,hostname,ip,status,version,sync_status,join_method,certificate,last_heartbeat,created_at,
        observed_release_id,runtime_started_at,worker_identity,metrics_scope,last_applied_at)
-    VALUES (?,?,?,?,?,'Ready',?,'Syncing',?,?,datetime(?,'unixepoch'),datetime(?,'unixepoch'),?,?,?,?,
+    VALUES (?,?,?,?,'Ready',?,'Syncing',?,?,datetime(?,'unixepoch'),datetime(?,'unixepoch'),?,?,?,?,
             CASE WHEN ? > 0 THEN datetime(?,'unixepoch') ELSE '' END)
     ON CONFLICT(id) DO UPDATE SET
       hostname=excluded.hostname, ip=CASE WHEN excluded.ip != '' THEN excluded.ip ELSE cluster_nodes.ip END,
-      role=excluded.role, version=excluded.version, join_method=excluded.join_method, certificate=excluded.certificate,
+      version=excluded.version, join_method=excluded.join_method, certificate=excluded.certificate,
       last_heartbeat=excluded.last_heartbeat,status='Ready',
       last_applied_at=CASE WHEN excluded.observed_release_id > 0 AND (cluster_nodes.observed_release_id IS NULL OR cluster_nodes.observed_release_id != excluded.observed_release_id) THEN excluded.last_heartbeat ELSE cluster_nodes.last_applied_at END,
       observed_release_id=excluded.observed_release_id,
       reload_status=CASE WHEN cluster_nodes.reload_status='reloading' AND cluster_nodes.worker_identity != '' AND excluded.worker_identity != '' AND cluster_nodes.worker_identity != excluded.worker_identity THEN 'completed' ELSE cluster_nodes.reload_status END,
       runtime_started_at=excluded.runtime_started_at, worker_identity=excluded.worker_identity,metrics_scope=excluded.metrics_scope
     WHERE cluster_nodes.observed_release_id IS NULL OR unixepoch(excluded.last_heartbeat) > unixepoch(cluster_nodes.last_heartbeat);`
-	_, err := r.db.ExecContext(ctx, query, payload.NodeID, payload.NodeID, payload.Hostname, payload.IP, payload.Role, payload.Version,
+	_, err := r.db.ExecContext(ctx, query, payload.NodeID, payload.NodeID, payload.Hostname, payload.IP, payload.Version,
 		deployment, auth, payload.Timestamp, payload.Timestamp, payload.ActiveReleaseID, payload.RuntimeStartedAt, payload.WorkerIdentity, payload.MetricsScope, payload.ActiveReleaseID, payload.Timestamp)
 	return err
 }

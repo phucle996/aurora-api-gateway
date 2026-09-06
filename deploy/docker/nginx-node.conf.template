@@ -40,11 +40,18 @@ http {
         add_header X-Aurora-Node "${NODE_ID}" always;
         add_header X-Aurora-Generation $aurora_waf_generation always;
 
-        root /deploy/demo;
         default_type text/plain;
 
+        location = /ok {
+            return 200 "Aurora demo backend: allowed.\n";
+        }
+
+        location = /__aurora_blocked {
+            return 200 "Aurora demo backend: this file must not be served in enforce mode.\n";
+        }
+
         location / {
-            try_files $uri =404;
+            return 404 "Not Found\n";
         }
 
         location = /_aurora/config {

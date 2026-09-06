@@ -117,57 +117,30 @@ export default function IpAccessPage() {
   return (
     <div className="p-6 w-full space-y-5 font-sans">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-[#172338] pb-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-border pb-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2.5">
-            <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
+            <h1 className="text-xl font-bold text-foreground tracking-tight">
               IP & Access Control
             </h1>
-            {status && (
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/60">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-                </span>
-                Release #{status.release_id}
-              </span>
-            )}
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className="text-xs text-muted-foreground">
             Deterministic edge perimeter filtering, CIDR lists, IP groups, and Geo/ASN custom datasets.
           </p>
         </div>
 
-        {/* Header Actions */}
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={() => void refresh()}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] hover:border-slate-300 dark:hover:border-[#223552] rounded-xs shadow-xs transition-colors cursor-pointer"
-            title="Refresh access state"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
-            <span>Refresh</span>
-          </button>
 
-          <Link
-            to="/ip-access/create"
-            className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xs shadow-xs transition-colors cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Access Rule</span>
-          </Link>
-        </div>
+
       </div>
 
       {/* Alerts / Feedback */}
       {error && (
         <div
           role="alert"
-          className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs flex items-center justify-between rounded-xs"
+          className="p-3 bg-destructive/10 border border-destructive/30 text-destructive text-xs flex items-center justify-between rounded-xs"
         >
           <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+            <AlertCircle className="w-4 h-4 shrink-0 text-destructive" />
             <span>{error}</span>
           </div>
           <button
@@ -186,10 +159,10 @@ export default function IpAccessPage() {
       {notice && (
         <div
           role="status"
-          className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-300 text-xs flex items-center justify-between rounded-xs"
+          className="p-3 bg-primary/10 border border-primary/20 text-primary text-xs flex items-center justify-between rounded-xs"
         >
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-primary" />
             <span>{notice}</span>
           </div>
           <button
@@ -203,8 +176,8 @@ export default function IpAccessPage() {
       )}
 
       {!loaded && !error && (
-        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 py-4">
-          <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-500" />
+        <div className="flex items-center gap-2 text-xs text-muted-foreground py-4">
+          <RefreshCw className="w-3.5 h-3.5 animate-spin text-primary" />
           <span>Loading IP & Access configuration…</span>
         </div>
       )}

@@ -25,7 +25,6 @@ type NodeHeartbeatPayload struct {
 	ActiveReleaseID   int64
 	IP                string
 	Version           string
-	Role              string
 }
 
 // NodeMetricHistoryRecord đại diện cho 1 bản ghi rollup 1 phút được lưu vào bảng node_metrics_history.
@@ -73,10 +72,6 @@ func (p *NodeHeartbeatPayload) MarshalBinary() []byte {
 	if p.Version != "" {
 		b = protowire.AppendTag(b, 8, protowire.BytesType)
 		b = protowire.AppendString(b, p.Version)
-	}
-	if p.Role != "" {
-		b = protowire.AppendTag(b, 9, protowire.BytesType)
-		b = protowire.AppendString(b, p.Role)
 	}
 	for tag, value := range map[protowire.Number]string{10: p.MetricsScope, 11: p.Hostname, 13: p.WorkerIdentity} {
 		if value != "" {
@@ -175,12 +170,11 @@ func UnmarshalNodeHeartbeat(b []byte) (*NodeHeartbeatPayload, error) {
 			}
 			p.Version = v
 			b = b[n:]
-		case 9: // Role
-			v, n := protowire.ConsumeString(b)
+		case 9: // Role (deprecated/ignored)
+			_, n := protowire.ConsumeString(b)
 			if n < 0 {
 				return nil, errors.New("invalid role string in protobuf")
 			}
-			p.Role = v
 			b = b[n:]
 		case 10, 11, 13:
 			v, n := protowire.ConsumeString(b)

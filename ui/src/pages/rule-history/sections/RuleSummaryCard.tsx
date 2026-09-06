@@ -54,7 +54,7 @@ export function RuleSummaryCard({
             type="button"
             onClick={handleCopyId}
             title="Click to copy Rule ID"
-            className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] rounded-xs font-mono text-slate-800 dark:text-slate-200 hover:border-slate-300 dark:hover:border-slate-600 transition-colors cursor-pointer text-[11px]"
+            className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-muted border border-border rounded-xs font-mono text-foreground hover:border-input transition-colors cursor-pointer text-[11px]"
           >
             <span>{ruleId}</span>
             {copied ? (
@@ -70,7 +70,7 @@ export function RuleSummaryCard({
           <div className="text-slate-500 dark:text-slate-400 text-[11px] mb-1">
             Current Version
           </div>
-          <div className="font-bold text-blue-600 dark:text-blue-400 font-mono">
+          <div className="font-bold text-primary font-mono">
             {currentVersion}
           </div>
         </div>

@@ -11,7 +11,7 @@ export function ScopeSection({
   setTarget,
 }: ScopeSectionProps) {
   return (
-    <section className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-5 space-y-4 shadow-xs rounded-sm font-sans">
+    <section className="bg-card border border-border p-5 space-y-4 shadow-xs rounded-sm font-sans">
       <div>
         <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
           2. Target Scope (Host / Domain)
@@ -35,10 +35,10 @@ export function ScopeSection({
             placeholder="* (All Domains) or specific host (e.g. api.yourdomain.com)"
             value={target}
             onChange={(e) => setTarget(e.target.value)}
-            className="w-full bg-slate-50 dark:bg-[#080E18] border border-slate-200 dark:border-[#1C293D] px-3 py-2 text-slate-900 dark:text-white text-xs font-mono rounded-sm focus:outline-none focus:border-blue-500 transition-colors"
+            className="w-full bg-muted border border-input px-3 py-2 text-foreground text-xs font-mono rounded-sm focus:outline-none focus:border-primary transition-colors"
           />
           <p className="text-[11px] text-slate-400 dark:text-slate-500">
-            Use <code className="text-blue-500">*</code> to protect all incoming hosts or specify a strict FQDN (e.g. <code className="text-blue-500">api.example.com</code>).
+            Use <code className="text-primary">*</code> to protect all incoming hosts or specify a strict FQDN (e.g. <code className="text-primary">api.example.com</code>).
           </p>
         </div>
       </div>

@@ -124,24 +124,24 @@ export default function RateLimitsPage() {
   return (
     <div className="p-6 w-full space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-200 dark:border-[#152030]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-border">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight font-sans">
+            <h1 className="text-xl font-bold text-foreground tracking-tight font-sans">
               Rate Limiting
             </h1>
-            <span className="px-2 py-0.5 text-[10px] font-sans font-bold bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-700 uppercase rounded-xs">
+            <span className="px-2 py-0.5 text-[10px] font-sans font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 uppercase rounded-xs">
               ACTIVE THROTTLING
             </span>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-sans">
+          <p className="text-xs text-muted-foreground mt-0.5 font-sans">
             Configure and manage rate limiting rules to protect your services from abuse and overuse.
           </p>
         </div>
 
         <Link
           to="/rate-limits/create"
-          className="bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-semibold px-3.5 py-2 flex items-center gap-1.5 transition-colors cursor-pointer uppercase tracking-wider font-sans w-fit"
+          className="bg-primary hover:bg-primary/90 active:bg-primary/80 text-primary-foreground text-xs font-semibold px-3.5 py-2 flex items-center gap-1.5 transition-colors cursor-pointer uppercase tracking-wider font-sans w-fit rounded-sm shadow-xs"
         >
           <Plus className="w-4 h-4" />
           <span>Create Rate Limit Rule</span>

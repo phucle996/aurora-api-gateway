@@ -56,11 +56,11 @@ export function DashboardNodesSummary() {
   ];
 
   return (
-    <div className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#152030] p-4 flex flex-col justify-between shadow-xs rounded-sm transition-colors">
+    <div className="bg-card border border-border p-4 flex flex-col justify-between shadow-xs rounded-sm transition-colors">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-[#152030]">
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-border">
         <div className="flex items-center gap-3">
-          <span className="text-sm font-semibold text-slate-900 dark:text-white font-sans">
+          <span className="text-sm font-semibold text-foreground font-sans">
             NGINX Nodes
           </span>
           <div className="flex items-center gap-2 text-[11px] font-sans">
@@ -70,15 +70,15 @@ export function DashboardNodesSummary() {
             <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1">
               <span className="w-1.5 h-1.5 bg-amber-500 inline-block rounded-full" /> 1 Not Ready
             </span>
-            <span className="text-rose-600 dark:text-rose-400 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 bg-rose-500 inline-block rounded-full" /> 1 Offline
+            <span className="text-destructive flex items-center gap-1">
+              <span className="w-1.5 h-1.5 bg-destructive inline-block rounded-full" /> 1 Offline
             </span>
           </div>
         </div>
 
         <Link
           to="/nodes"
-          className="text-xs font-sans text-blue-600 dark:text-cyan-400 hover:underline transition-colors"
+          className="text-xs font-sans text-primary hover:underline transition-colors"
         >
           View All
         </Link>
@@ -88,7 +88,7 @@ export function DashboardNodesSummary() {
       <div className="py-2 overflow-x-auto">
         <table className="w-full text-left border-collapse text-xs font-sans">
           <thead>
-            <tr className="text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-[#152030]">
+            <tr className="text-muted-foreground border-b border-border">
               <th className="py-1.5 font-normal">Name</th>
               <th className="py-1.5 font-normal">IP Address</th>
               <th className="py-1.5 font-normal">Region</th>
@@ -98,12 +98,12 @@ export function DashboardNodesSummary() {
               <th className="py-1.5 font-normal">Memory</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-[#152030]/50">
+          <tbody className="divide-y divide-border">
             {nodes.map((node) => (
-              <tr key={node.name} className="hover:bg-slate-50 dark:hover:bg-[#0E1726]/50 transition-colors">
-                <td className="py-2 text-slate-900 dark:text-white font-medium">{node.name}</td>
-                <td className="py-2 text-slate-600 dark:text-slate-300">{node.ip}</td>
-                <td className="py-2 text-slate-600 dark:text-slate-300">
+              <tr key={node.name} className="hover:bg-muted/50 transition-colors">
+                <td className="py-2 text-foreground font-medium">{node.name}</td>
+                <td className="py-2 text-muted-foreground">{node.ip}</td>
+                <td className="py-2 text-muted-foreground">
                   <span className="mr-1">{node.flag}</span>
                   <span>{node.region}</span>
                 </td>
@@ -118,9 +118,9 @@ export function DashboardNodesSummary() {
                     </span>
                   )}
                 </td>
-                <td className="py-2 text-slate-800 dark:text-slate-200">{node.rps}</td>
-                <td className="py-2 text-slate-600 dark:text-slate-300">{node.cpu}</td>
-                <td className="py-2 text-slate-600 dark:text-slate-300">{node.memory}</td>
+                <td className="py-2 text-foreground">{node.rps}</td>
+                <td className="py-2 text-muted-foreground">{node.cpu}</td>
+                <td className="py-2 text-muted-foreground">{node.memory}</td>
               </tr>
             ))}
           </tbody>

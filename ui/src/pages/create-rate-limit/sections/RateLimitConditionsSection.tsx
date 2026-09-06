@@ -42,12 +42,12 @@ export function RateLimitConditionsSection({
   };
 
   return (
-    <div className="bg-[#0B1320] border border-[#152030] p-4 space-y-4 font-sans text-xs">
+    <div className="bg-card border border-border p-4 space-y-4 font-sans text-xs">
       <div>
-        <div className="text-sm font-semibold text-white">
+        <div className="text-sm font-semibold text-foreground">
           3. Match Conditions (Optional)
         </div>
-        <p className="text-slate-400 text-[11px] mt-0.5 font-sans">
+        <p className="text-muted-foreground text-[11px] mt-0.5 font-sans">
           Apply this rate limit only when ALL conditions match.
         </p>
       </div>
@@ -56,7 +56,7 @@ export function RateLimitConditionsSection({
         {conditions.map((cond) => (
           <div
             key={cond.id}
-            className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 bg-[#080E18] border border-[#152030] p-2"
+            className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 bg-muted/30 border border-border p-2"
           >
             {/* Field */}
             <select
@@ -64,7 +64,7 @@ export function RateLimitConditionsSection({
               onChange={(e) =>
                 handleUpdateCondition(cond.id, 'field', e.target.value)
               }
-              className="bg-[#0E1726] border border-[#1C293D] px-3 py-1.5 text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer text-xs sm:w-1/3"
+              className="bg-background border border-input px-3 py-1.5 text-foreground focus:outline-none focus:border-primary cursor-pointer text-xs sm:w-1/3"
             >
               <option value="Request Path">Request Path</option>
               <option value="Client IP">Client IP</option>
@@ -79,7 +79,7 @@ export function RateLimitConditionsSection({
               onChange={(e) =>
                 handleUpdateCondition(cond.id, 'operator', e.target.value)
               }
-              className="bg-[#0E1726] border border-[#1C293D] px-3 py-1.5 text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer text-xs sm:w-1/3"
+              className="bg-background border border-input px-3 py-1.5 text-foreground focus:outline-none focus:border-primary cursor-pointer text-xs sm:w-1/3"
             >
               <option value="Starts With">Starts With</option>
               <option value="Equals">Equals</option>
@@ -96,14 +96,14 @@ export function RateLimitConditionsSection({
                 handleUpdateCondition(cond.id, 'value', e.target.value)
               }
               placeholder="/login"
-              className="flex-1 bg-[#0E1726] border border-[#1C293D] px-3 py-1.5 text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500 text-xs"
+              className="flex-1 bg-background border border-input px-3 py-1.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-xs"
             />
 
             {/* Delete button */}
             <button
               type="button"
               onClick={() => handleRemoveCondition(cond.id)}
-              className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-950/30 transition-colors self-end sm:self-center cursor-pointer"
+              className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors self-end sm:self-center cursor-pointer"
               title="Delete Condition"
             >
               <Trash2 className="w-4 h-4" />
@@ -114,7 +114,7 @@ export function RateLimitConditionsSection({
         <button
           type="button"
           onClick={handleAddCondition}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0E1726] hover:bg-[#152030] border border-[#1C293D] text-cyan-400 hover:text-cyan-300 text-xs cursor-pointer transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-background hover:bg-muted border border-border text-primary hover:text-primary/80 text-xs cursor-pointer transition-colors"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>Add Condition</span>

@@ -1,25 +1,24 @@
 import React, { useState } from 'react';
-import { ChevronDown } from 'lucide-react';
 
 export function DashboardTrafficChart() {
   const [range, setRange] = useState('Last 24 hours');
 
   return (
-    <div className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#152030] p-4 flex flex-col justify-between shadow-xs rounded-sm transition-colors">
+    <div className="bg-card border border-border p-4 flex flex-col justify-between shadow-xs rounded-sm transition-colors">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-[#152030]">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border">
         <div className="flex items-center gap-4">
-          <span className="text-sm font-semibold text-slate-900 dark:text-white font-sans">
+          <span className="text-sm font-semibold text-foreground font-sans">
             Request Traffic
           </span>
           <div className="flex items-center gap-3 text-xs font-sans">
             <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 bg-blue-500 inline-block rounded-xs" />
-              <span className="text-slate-600 dark:text-slate-300">Allowed</span>
+              <span className="w-2.5 h-2.5 bg-[var(--chart-allowed)] inline-block rounded-xs" />
+              <span className="text-muted-foreground">Allowed</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 bg-rose-500 inline-block rounded-xs" />
-              <span className="text-slate-600 dark:text-slate-300">Blocked</span>
+              <span className="w-2.5 h-2.5 bg-[var(--chart-blocked)] inline-block rounded-xs" />
+              <span className="text-muted-foreground">Blocked</span>
             </div>
           </div>
         </div>
@@ -27,7 +26,7 @@ export function DashboardTrafficChart() {
         <select
           value={range}
           onChange={(e) => setRange(e.target.value)}
-          className="bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] px-2 py-1 text-slate-800 dark:text-slate-300 text-xs font-sans focus:outline-none focus:border-blue-500 rounded-sm cursor-pointer transition-colors"
+          className="bg-background border border-input px-2 py-1 text-foreground text-xs font-sans focus:outline-none focus:border-primary rounded-sm cursor-pointer transition-colors"
         >
           <option value="Last 24 hours">Last 24 hours</option>
           <option value="Last 7 days">Last 7 days</option>
@@ -39,7 +38,7 @@ export function DashboardTrafficChart() {
       <div className="relative pt-6 pb-2">
         <div className="flex items-center">
           {/* Y Axis */}
-          <div className="flex flex-col justify-between h-44 text-[10px] font-sans tabular-nums text-slate-500 pr-2 select-none">
+          <div className="flex flex-col justify-between h-44 text-[10px] font-sans tabular-nums text-muted-foreground pr-2 select-none">
             <span>400K</span>
             <span>300K</span>
             <span>200K</span>
@@ -52,21 +51,21 @@ export function DashboardTrafficChart() {
             <svg className="w-full h-full" viewBox="0 0 500 150" preserveAspectRatio="none">
               <defs>
                 <linearGradient id="allowedGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.4" />
-                  <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.0" />
+                  <stop offset="0%" stopColor="var(--chart-allowed)" stopOpacity="0.4" />
+                  <stop offset="100%" stopColor="var(--chart-allowed)" stopOpacity="0.0" />
                 </linearGradient>
                 <linearGradient id="blockedGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#ef4444" stopOpacity="0.4" />
-                  <stop offset="100%" stopColor="#ef4444" stopOpacity="0.0" />
+                  <stop offset="0%" stopColor="var(--chart-blocked)" stopOpacity="0.4" />
+                  <stop offset="100%" stopColor="var(--chart-blocked)" stopOpacity="0.0" />
                 </linearGradient>
               </defs>
 
               {/* Grid Lines */}
-              <line x1="0" y1="0" x2="500" y2="0" stroke="#152030" strokeDasharray="3 3" />
-              <line x1="0" y1="37.5" x2="500" y2="37.5" stroke="#152030" strokeDasharray="3 3" />
-              <line x1="0" y1="75" x2="500" y2="75" stroke="#152030" strokeDasharray="3 3" />
-              <line x1="0" y1="112.5" x2="500" y2="112.5" stroke="#152030" strokeDasharray="3 3" />
-              <line x1="0" y1="150" x2="500" y2="150" stroke="#152030" />
+              <line x1="0" y1="0" x2="500" y2="0" stroke="var(--border)" strokeDasharray="3 3" />
+              <line x1="0" y1="37.5" x2="500" y2="37.5" stroke="var(--border)" strokeDasharray="3 3" />
+              <line x1="0" y1="75" x2="500" y2="75" stroke="var(--border)" strokeDasharray="3 3" />
+              <line x1="0" y1="112.5" x2="500" y2="112.5" stroke="var(--border)" strokeDasharray="3 3" />
+              <line x1="0" y1="150" x2="500" y2="150" stroke="var(--border)" />
 
               {/* Allowed Area & Line */}
               <path
@@ -76,7 +75,7 @@ export function DashboardTrafficChart() {
               <path
                 d="M0,130 Q40,120 80,105 T160,85 T240,40 T320,70 T400,60 T500,80"
                 fill="none"
-                stroke="#3b82f6"
+                stroke="var(--chart-allowed)"
                 strokeWidth="2.5"
               />
 
@@ -88,7 +87,7 @@ export function DashboardTrafficChart() {
               <path
                 d="M0,145 Q40,142 80,140 T160,135 T240,120 T320,130 T400,125 T500,135"
                 fill="none"
-                stroke="#ef4444"
+                stroke="var(--chart-blocked)"
                 strokeWidth="2"
               />
             </svg>
@@ -96,7 +95,7 @@ export function DashboardTrafficChart() {
         </div>
 
         {/* X Axis */}
-        <div className="flex justify-between pl-8 pt-2 text-[10px] font-sans tabular-nums text-slate-500">
+        <div className="flex justify-between pl-8 pt-2 text-[10px] font-sans tabular-nums text-muted-foreground">
           <span>00:00</span>
           <span>04:00</span>
           <span>08:00</span>

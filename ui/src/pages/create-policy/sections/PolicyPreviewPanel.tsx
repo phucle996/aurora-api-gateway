@@ -83,9 +83,9 @@ export function PolicyPreviewPanel({
   };
 
   return (
-    <section className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] shadow-xs rounded-sm overflow-hidden font-sans">
+    <section className="bg-card border border-border shadow-xs rounded-sm overflow-hidden font-sans">
       {/* Header */}
-      <div className="p-4 border-b border-slate-200 dark:border-[#152030]">
+      <div className="p-4 border-b border-border">
         <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
           Policy Preview
         </h2>
@@ -95,15 +95,15 @@ export function PolicyPreviewPanel({
       </div>
 
       {/* Tabs & Copy Button */}
-      <div className="flex items-center justify-between px-4 bg-slate-50 dark:bg-[#080E18] border-b border-slate-200 dark:border-[#152030] text-xs">
+      <div className="flex items-center justify-between px-4 bg-muted/40 border-b border-border text-xs">
         <div className="flex">
           <button
             type="button"
             onClick={() => setActiveTab('draft')}
             className={`py-2 px-3 border-b-2 font-semibold transition-colors cursor-pointer ${
               activeTab === 'draft'
-                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
             Draft API Payload
@@ -113,8 +113,8 @@ export function PolicyPreviewPanel({
             onClick={() => setActiveTab('runtime')}
             className={`py-2 px-3 border-b-2 font-semibold transition-colors cursor-pointer ${
               activeTab === 'runtime'
-                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
             Node Runtime Snapshot
@@ -124,7 +124,7 @@ export function PolicyPreviewPanel({
         <button
           type="button"
           onClick={handleCopy}
-          className="inline-flex items-center gap-1.5 px-2 py-1 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-[#152030] rounded-xs text-[11px] transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 px-2 py-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded-xs text-[11px] transition-colors cursor-pointer"
           title="Copy to clipboard"
         >
           {copied ? (
@@ -142,10 +142,10 @@ export function PolicyPreviewPanel({
       </div>
 
       {/* Code Display Box with Line Numbers */}
-      <div className="p-3 bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-[11px] overflow-x-auto leading-relaxed max-h-[380px] select-text">
+      <div className="p-3 bg-muted/30 text-foreground text-[11px] overflow-x-auto leading-relaxed max-h-[380px] select-text">
         <div className="flex">
           {/* Line Numbers */}
-          <div className="pr-3 text-right text-slate-400 dark:text-slate-600 select-none border-r border-slate-300 dark:border-slate-800 shrink-0 font-mono">
+          <div className="pr-3 text-right text-muted-foreground/60 select-none border-r border-border shrink-0 font-mono">
             {lines.map((_, i) => (
               <div key={i} className="leading-relaxed">
                 {i + 1}

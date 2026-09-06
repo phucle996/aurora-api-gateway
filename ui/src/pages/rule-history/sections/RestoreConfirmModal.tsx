@@ -28,7 +28,7 @@ export function RestoreConfirmModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-slate-50/50 dark:bg-[#0E1726]/60">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-muted/40">
           <div className="flex items-center gap-2">
             <div className="p-1.5 rounded-xs bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-900/60 text-amber-600 dark:text-amber-400">
               <RotateCcw className="w-4 h-4" />
@@ -65,13 +65,13 @@ export function RestoreConfirmModal({
           </div>
 
           {/* Snapshot Summary */}
-          <div className="border border-border rounded-xs p-3 bg-slate-50/50 dark:bg-[#080E18] space-y-2 text-xs font-sans">
+          <div className="border border-border rounded-xs p-3 bg-muted/30 space-y-2 text-xs font-sans">
             <div className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
               Configuration to be restored:
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500 dark:text-slate-400">Target Revision:</span>
-              <span className="font-bold text-blue-600 dark:text-blue-400 font-mono">{targetVersion.versionLabel}</span>
+              <span className="font-bold text-primary font-mono">{targetVersion.versionLabel}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500 dark:text-slate-400">Action:</span>
@@ -89,12 +89,12 @@ export function RestoreConfirmModal({
         </div>
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-end gap-2.5 px-5 py-3 border-t border-border bg-slate-50/50 dark:bg-[#0E1726]/60">
+        <div className="flex items-center justify-end gap-2.5 px-5 py-3 border-t border-border bg-muted/40">
           <button
             type="button"
             onClick={onClose}
             disabled={isRestoring}
-            className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-[#0E1726] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-300 text-xs font-sans rounded-xs transition-colors cursor-pointer"
+            className="px-3.5 py-1.5 bg-muted hover:bg-accent border border-border text-foreground text-xs font-sans rounded-xs transition-colors cursor-pointer"
           >
             Cancel
           </button>
@@ -103,7 +103,7 @@ export function RestoreConfirmModal({
             type="button"
             onClick={() => onConfirm(targetVersion.version)}
             disabled={isRestoring}
-            className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold font-sans rounded-xs shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+            className="px-4 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold font-sans rounded-xs shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
           >
             {isRestoring ? (
               <>

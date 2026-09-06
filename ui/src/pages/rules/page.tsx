@@ -149,17 +149,17 @@ export default function RulesPage() {
   }));
   return (
     <div className="p-6 w-full space-y-4 font-sans">
-      <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#172338] pb-3">
+      <div className="flex items-center justify-between border-b border-border pb-3">
         <div>
-          <h1 className="text-xl font-bold tracking-tight font-sans text-slate-900 dark:text-white">Security Rules</h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Saved definitions and immutable revisions. Enabled does not mean deployed.</p>
+          <h1 className="text-xl font-bold tracking-tight font-sans text-foreground">Security Rules</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">Saved definitions and immutable revisions. Enabled does not mean deployed.</p>
         </div>
-        <Link to="/rules/create" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 flex gap-2 items-center text-xs font-semibold rounded-sm shadow-xs transition-colors">
+        <Link to="/rules/create" className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 flex gap-2 items-center text-xs font-semibold rounded-sm shadow-xs transition-colors">
           <Plus className="w-4 h-4" />Create Rule
         </Link>
       </div>
       {location.state?.createdId === selected && (
-        <p role="status" className="text-emerald-300">Rule #{selected} saved successfully. No NGINX deployment was performed.</p>
+        <p role="status" className="text-primary font-medium">Rule #{selected} saved successfully. No NGINX deployment was performed.</p>
       )}
       <RulesStats stats={stats} />
       {error && (

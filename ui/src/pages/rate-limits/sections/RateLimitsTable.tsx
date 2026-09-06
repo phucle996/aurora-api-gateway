@@ -65,17 +65,17 @@ export function RateLimitsTable({
   };
 
   return (
-    <div className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-4 space-y-3 font-sans shadow-sm dark:shadow-none">
+    <div className="bg-card border border-border p-4 space-y-3 font-sans shadow-sm">
       {/* Filters Bar */}
       <div className="flex flex-wrap items-center gap-2 font-sans">
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search rules by name, path, host..."
-            className="w-full bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] pl-8 pr-3 py-1.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+            className="w-full bg-background border border-input pl-8 pr-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
           />
         </div>
 
@@ -84,13 +84,13 @@ export function RateLimitsTable({
           <select
             value={statusFilter}
             onChange={(e) => onStatusFilterChange(e.target.value)}
-            className="appearance-none bg-white dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] pl-3 pr-7 py-1.5 text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer"
+            className="appearance-none bg-background border border-input pl-3 pr-7 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary transition-colors cursor-pointer"
           >
             <option>All Status</option>
             <option>Active</option>
             <option>Disabled</option>
           </select>
-          <ChevronDown className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
 
         {/* Types Dropdown */}
@@ -98,13 +98,13 @@ export function RateLimitsTable({
           <select
             value={typeFilter}
             onChange={(e) => onTypeFilterChange(e.target.value)}
-            className="appearance-none bg-white dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] pl-3 pr-7 py-1.5 text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer"
+            className="appearance-none bg-background border border-input pl-3 pr-7 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary transition-colors cursor-pointer"
           >
             <option>All Types</option>
             <option>Request</option>
             <option>Connection</option>
           </select>
-          <ChevronDown className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
 
         {/* Hosts Dropdown */}
@@ -112,32 +112,32 @@ export function RateLimitsTable({
           <select
             value={hostFilter}
             onChange={(e) => onHostFilterChange(e.target.value)}
-            className="appearance-none bg-white dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] pl-3 pr-7 py-1.5 text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer"
+            className="appearance-none bg-background border border-input pl-3 pr-7 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary transition-colors cursor-pointer"
           >
             <option>All Hosts</option>
             <option>api.example.com</option>
             <option>app.example.com</option>
             <option>admin.aurora.local</option>
           </select>
-          <ChevronDown className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
 
         {/* Reset */}
         <button
           type="button"
           onClick={onResetFilters}
-          className="flex items-center gap-1.5 bg-slate-100 dark:bg-[#0E1726] hover:bg-slate-200 dark:hover:bg-[#142034] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-[#1C293D] px-3 py-1.5 text-xs transition-colors cursor-pointer"
+          className="flex items-center gap-1.5 bg-muted hover:bg-muted/80 text-foreground border border-border px-3 py-1.5 text-xs transition-colors cursor-pointer"
         >
-          <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
+          <RotateCcw className="w-3.5 h-3.5 text-muted-foreground" />
           <span>Reset</span>
         </button>
       </div>
 
       {/* Table Container */}
-      <div className="border border-slate-200 dark:border-[#172338] overflow-x-auto">
+      <div className="border border-border overflow-x-auto">
         <table className="w-full text-left text-xs border-collapse font-sans">
           <thead>
-            <tr className="bg-slate-50 dark:bg-[#09101B] border-b border-slate-200 dark:border-[#172338] text-slate-600 dark:text-slate-400 font-sans text-xs select-none">
+            <tr className="bg-muted/40 border-b border-border text-muted-foreground font-sans text-xs select-none">
               <th className="py-2.5 px-3 w-8">
                 <input
                   type="checkbox"
@@ -145,7 +145,7 @@ export function RateLimitsTable({
                     rules.length > 0 && selectedIds.length === rules.length
                   }
                   onChange={(e) => handleSelectAll(e.target.checked)}
-                  className="w-3.5 h-3.5 border-slate-300 dark:border-[#2B3B52] bg-white dark:bg-[#111A29] text-emerald-500 focus:ring-0 cursor-pointer accent-emerald-500"
+                  className="w-3.5 h-3.5 border-border bg-background text-primary focus:ring-0 cursor-pointer accent-primary"
                 />
               </th>
               <th className="py-2.5 px-3">NAME</th>
@@ -160,7 +160,7 @@ export function RateLimitsTable({
               <th className="py-2.5 px-3 text-right">ACTIONS</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-[#172338]">
+          <tbody className="divide-y divide-border">
             {rules.map((rule) => {
               const isChecked = selectedIds.includes(rule.id);
               return (
@@ -168,8 +168,8 @@ export function RateLimitsTable({
                   key={rule.id}
                   className={`transition-colors ${
                     isChecked
-                      ? 'bg-emerald-50 dark:bg-emerald-950/20 text-slate-900 dark:text-white'
-                      : 'hover:bg-slate-50 dark:hover:bg-[#0E1726] text-slate-700 dark:text-slate-300'
+                      ? 'bg-primary/10 border-l-2 border-primary text-foreground'
+                      : 'hover:bg-muted/50 text-foreground'
                   }`}
                 >
                   <td className="py-2.5 px-3">
@@ -177,53 +177,53 @@ export function RateLimitsTable({
                       type="checkbox"
                       checked={isChecked}
                       onChange={() => handleToggleRow(rule.id)}
-                      className="w-3.5 h-3.5 border-slate-300 dark:border-[#2B3B52] bg-white dark:bg-[#111A29] text-emerald-500 focus:ring-0 cursor-pointer accent-emerald-500"
+                      className="w-3.5 h-3.5 border-border bg-background text-primary focus:ring-0 cursor-pointer accent-primary"
                     />
                   </td>
 
                   {/* Name */}
-                  <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-white whitespace-nowrap">
+                  <td className="py-2.5 px-3 font-semibold text-foreground whitespace-nowrap">
                     {rule.name}
                   </td>
 
                   {/* Type */}
                   <td className="py-2.5 px-3 whitespace-nowrap">
-                    <span className="px-1.5 py-0.5 text-[10px] font-bold bg-cyan-50 dark:bg-[#142034] text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-[#233857]">
+                    <span className="px-1.5 py-0.5 text-[10px] font-bold bg-primary/10 text-primary border border-primary/20">
                       {rule.type}
                     </span>
                   </td>
 
                   {/* Key */}
-                  <td className="py-2.5 px-3 font-mono text-[11px] text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                  <td className="py-2.5 px-3 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
                     {rule.key}
                   </td>
 
                   {/* Limit */}
-                  <td className="py-2.5 px-3 font-mono text-[11px] font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                  <td className="py-2.5 px-3 font-mono text-[11px] font-bold text-foreground whitespace-nowrap">
                     {rule.limit}
                   </td>
 
                   {/* Window */}
-                  <td className="py-2.5 px-3 font-mono text-[11px] text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                  <td className="py-2.5 px-3 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
                     {rule.window}
                   </td>
 
                   {/* Action Badge */}
                   <td className="py-2.5 px-3 whitespace-nowrap">
                     {rule.action === 'BLOCK' && (
-                      <span className="px-1.5 py-0.5 text-[10px] font-bold bg-rose-50 dark:bg-[#3E1418] text-rose-700 dark:text-[#FCA5A5] border border-rose-200 dark:border-red-800 uppercase">
+                      <span className="px-1.5 py-0.5 text-[10px] font-bold bg-destructive/10 text-destructive border border-destructive/20 uppercase">
                         BLOCK
                       </span>
                     )}
                     {rule.action === 'RATE LIMIT' && (
-                      <span className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 uppercase">
+                      <span className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 uppercase">
                         RATE LIMIT
                       </span>
                     )}
                   </td>
 
                   {/* Scope */}
-                  <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300 font-mono text-[11px] whitespace-nowrap">
+                  <td className="py-2.5 px-3 text-muted-foreground font-mono text-[11px] whitespace-nowrap">
                     {rule.scope}
                   </td>
 
@@ -236,7 +236,7 @@ export function RateLimitsTable({
                   </td>
 
                   {/* Description */}
-                  <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400 text-[11px] max-w-[200px] truncate">
+                  <td className="py-2.5 px-3 text-muted-foreground text-[11px] max-w-[200px] truncate">
                     {rule.description}
                   </td>
 
@@ -245,21 +245,21 @@ export function RateLimitsTable({
                     <div className="flex items-center justify-end gap-2">
                       <button
                         type="button"
-                        className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#152338] transition-colors cursor-pointer"
+                        className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
                         title="Edit Rule"
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
                       <button
                         type="button"
-                        className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#152338] transition-colors cursor-pointer"
+                        className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
                         title="Clone Rule"
                       >
                         <Copy className="w-3.5 h-3.5" />
                       </button>
                       <button
                         type="button"
-                        className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-slate-100 dark:hover:bg-[#152338] transition-colors cursor-pointer"
+                        className="p-1 text-muted-foreground hover:text-destructive hover:bg-muted transition-colors cursor-pointer"
                         title="Delete Rule"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -274,7 +274,7 @@ export function RateLimitsTable({
       </div>
 
       {/* Pagination Footer */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 text-xs text-slate-500 dark:text-slate-400 font-sans">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 text-xs text-muted-foreground font-sans">
         <div>
           Showing 1 to {rules.length} of 18 rules
         </div>
@@ -282,31 +282,31 @@ export function RateLimitsTable({
         <div className="flex items-center gap-1">
           <button
             type="button"
-            className="p-1 bg-white dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
+            className="p-1 bg-card border border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
           </button>
           <button
             type="button"
-            className="px-2 py-0.5 bg-emerald-600 text-white font-bold"
+            className="px-2 py-0.5 bg-primary text-primary-foreground font-bold"
           >
             1
           </button>
           <button
             type="button"
-            className="px-2 py-0.5 bg-white dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#142034] transition-colors cursor-pointer"
+            className="px-2 py-0.5 bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
           >
             2
           </button>
           <button
             type="button"
-            className="px-2 py-0.5 bg-white dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#142034] transition-colors cursor-pointer"
+            className="px-2 py-0.5 bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
           >
             3
           </button>
           <button
             type="button"
-            className="p-1 bg-white dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
+            className="p-1 bg-card border border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           >
             <ChevronRight className="w-3.5 h-3.5" />
           </button>

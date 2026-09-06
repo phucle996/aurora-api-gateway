@@ -48,18 +48,18 @@ export function RateLimitConfigSection({
   ];
 
   return (
-    <div className="bg-[#0B1320] border border-[#152030] p-4 space-y-4 font-sans text-xs">
+    <div className="bg-card border border-border p-4 space-y-4 font-sans text-xs">
       <div>
-        <div className="text-sm font-semibold text-white">
+        <div className="text-sm font-semibold text-foreground">
           2. Rate Limit Configuration
         </div>
-        <p className="text-slate-400 text-[11px] mt-0.5 font-sans">
+        <p className="text-muted-foreground text-[11px] mt-0.5 font-sans">
           Define the request rate and behavior when the limit is exceeded.
         </p>
       </div>
 
       {/* Limiting Dimension Tabs */}
-      <div className="flex border-b border-[#152030] bg-[#080E18] overflow-x-auto">
+      <div className="flex border-b border-border bg-muted/30 overflow-x-auto">
         {tabs.map((tab) => {
           const active = dimension === tab.id;
           return (
@@ -69,8 +69,8 @@ export function RateLimitConfigSection({
               onClick={() => setDimension(tab.id)}
               className={`flex items-center gap-2 px-4 py-2 transition-colors cursor-pointer whitespace-nowrap text-xs ${
                 active
-                  ? 'text-cyan-400 border-b-2 border-cyan-400 font-semibold bg-[#0B1320]'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-[#0E1726]'
+                  ? 'text-primary border-b-2 border-primary font-semibold bg-card'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
               }`}
             >
               {tab.icon}
@@ -84,21 +84,21 @@ export function RateLimitConfigSection({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
         {/* Rate Limit */}
         <div>
-          <label className="block text-slate-400 mb-1 text-[11px]">
-            Rate Limit <span className="text-rose-400">*</span>
+          <label className="block text-muted-foreground mb-1 text-[11px]">
+            Rate Limit <span className="text-destructive">*</span>
           </label>
           <div className="flex items-center gap-2">
             <input
               type="number"
               value={rateLimit}
               onChange={(e) => setRateLimit(parseInt(e.target.value) || 0)}
-              className="w-20 bg-[#0E1726] border border-[#1C293D] px-3 py-1.5 text-white focus:outline-none focus:border-blue-500"
+              className="w-20 bg-background border border-input px-3 py-1.5 text-foreground focus:outline-none focus:border-primary"
             />
-            <span className="text-slate-400 text-[11px] shrink-0">requests per</span>
+            <span className="text-muted-foreground text-[11px] shrink-0">requests per</span>
             <select
               value={rateUnit}
               onChange={(e) => setRateUnit(e.target.value)}
-              className="bg-[#0E1726] border border-[#1C293D] px-2 py-1.5 text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer text-xs"
+              className="bg-background border border-input px-2 py-1.5 text-foreground focus:outline-none focus:border-primary cursor-pointer text-xs"
             >
               <option value="1 minute">1 minute</option>
               <option value="1 second">1 second</option>
@@ -109,29 +109,29 @@ export function RateLimitConfigSection({
 
         {/* Burst */}
         <div>
-          <label className="block text-slate-400 mb-1 text-[11px]">
+          <label className="block text-muted-foreground mb-1 text-[11px]">
             Burst (Optional)
           </label>
           <input
             type="number"
             value={burst}
             onChange={(e) => setBurst(parseInt(e.target.value) || 0)}
-            className="w-full bg-[#0E1726] border border-[#1C293D] px-3 py-1.5 text-white focus:outline-none focus:border-blue-500"
+            className="w-full bg-background border border-input px-3 py-1.5 text-foreground focus:outline-none focus:border-primary"
           />
-          <span className="text-slate-500 text-[10px] mt-0.5 block">
+          <span className="text-muted-foreground text-[10px] mt-0.5 block">
             Allow short bursts above the rate limit.
           </span>
         </div>
 
         {/* Action When Exceeded */}
         <div>
-          <label className="block text-slate-400 mb-1 text-[11px]">
-            Action When Exceeded <span className="text-rose-400">*</span>
+          <label className="block text-muted-foreground mb-1 text-[11px]">
+            Action When Exceeded <span className="text-destructive">*</span>
           </label>
           <select
             value={actionExceeded}
             onChange={(e) => setActionExceeded(e.target.value)}
-            className="w-full bg-[#0E1726] border border-[#1C293D] px-3 py-1.5 text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer text-xs"
+            className="w-full bg-background border border-input px-3 py-1.5 text-foreground focus:outline-none focus:border-primary cursor-pointer text-xs"
           >
             <option value="block_429">🚫 Block Request (HTTP 429)</option>
             <option value="challenge">🛡 Challenge (Captcha)</option>
@@ -142,17 +142,17 @@ export function RateLimitConfigSection({
       </div>
 
       {/* Return Custom Response Checkbox & Subform */}
-      <div className="space-y-3 pt-2 border-t border-[#152030]">
+      <div className="space-y-3 pt-2 border-t border-border">
         <label className="flex items-start gap-2.5 cursor-pointer">
           <input
             type="checkbox"
             checked={customResponse}
             onChange={(e) => setCustomResponse(e.target.checked)}
-            className="mt-0.5 w-4 h-4 bg-[#0E1726] border border-[#1C293D] text-blue-600 focus:ring-0 cursor-pointer"
+            className="mt-0.5 w-4 h-4 bg-background border border-input text-primary focus:ring-0 cursor-pointer accent-primary"
           />
           <div>
-            <div className="text-white font-medium text-xs">Return custom response</div>
-            <div className="text-slate-400 text-[11px] font-sans mt-0.5">
+            <div className="text-foreground font-medium text-xs">Return custom response</div>
+            <div className="text-muted-foreground text-[11px] font-sans mt-0.5">
               Send a custom response when rate limit is exceeded.
             </div>
           </div>
@@ -162,13 +162,13 @@ export function RateLimitConfigSection({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-6 pt-1">
             {/* Response Code */}
             <div>
-              <label className="block text-slate-400 mb-1 text-[11px]">
+              <label className="block text-muted-foreground mb-1 text-[11px]">
                 Response Code
               </label>
               <select
                 value={responseCode}
                 onChange={(e) => setResponseCode(e.target.value)}
-                className="w-full bg-[#0E1726] border border-[#1C293D] px-3 py-1.5 text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer text-xs"
+                className="w-full bg-background border border-input px-3 py-1.5 text-foreground focus:outline-none focus:border-primary cursor-pointer text-xs"
               >
                 <option value="429">429 Too Many Requests</option>
                 <option value="403">403 Forbidden</option>
@@ -180,10 +180,10 @@ export function RateLimitConfigSection({
             {/* Response Body (JSON) */}
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="block text-slate-400 text-[11px]">
+                <label className="block text-muted-foreground text-[11px]">
                   Response Body (JSON)
                 </label>
-                <span className="text-slate-500 text-[10px]">
+                <span className="text-muted-foreground text-[10px]">
                   {responseBody.length}/512
                 </span>
               </div>
@@ -192,7 +192,7 @@ export function RateLimitConfigSection({
                 onChange={(e) => setResponseBody(e.target.value)}
                 rows={4}
                 maxLength={512}
-                className="w-full bg-[#0E1726] border border-[#1C293D] p-2.5 text-slate-300 font-mono text-xs focus:outline-none focus:border-blue-500"
+                className="w-full bg-background border border-input p-2.5 text-foreground font-mono text-xs focus:outline-none focus:border-primary"
               />
             </div>
           </div>

@@ -12,7 +12,7 @@ export function PoliciesStats({policies}:{policies:SavedPolicy[]}) {
       {counts.map(([label, value]) => (
         <div
           key={label}
-          className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-4 shadow-xs rounded-sm transition-colors"
+          className="bg-card border border-border p-4 shadow-xs rounded-sm transition-colors"
         >
           <div className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider font-sans font-medium">
             {label}

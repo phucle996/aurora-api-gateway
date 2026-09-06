@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import logoImg from '../assets/logo.png';
 import {
   LayoutDashboard,
+  Globe,
   ShieldAlert,
   Shield,
   Layers,
@@ -80,6 +81,12 @@ export function ConsoleSidebar() {
       icon: <LayoutDashboard className="w-4 h-4 shrink-0" />,
     },
     {
+      label: 'Domains',
+      path: '/domains',
+      aliases: [],
+      icon: <Globe className="w-4 h-4 shrink-0" />,
+    },
+    {
       label: 'Security Events',
       path: '/events',
       aliases: [],
@@ -125,13 +132,13 @@ export function ConsoleSidebar() {
 
   return (
     <aside
-      className={`bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col justify-between shrink-0 font-sans select-none h-full min-h-screen transition-all duration-300 ease-in-out ${
+      className={`bg-card border-r border-border flex flex-col justify-between shrink-0 font-sans select-none h-full min-h-screen transition-all duration-300 ease-in-out ${
         collapsed ? 'w-16' : 'w-60'
       }`}
     >
       <div>
         {/* Brand Header */}
-        <div className="h-14 flex items-center px-3 border-b border-slate-200 dark:border-slate-800 justify-between overflow-hidden">
+        <div className="h-14 flex items-center px-3 border-b border-border justify-between overflow-hidden">
           <Link
             to="/dashboard"
             className={`flex items-center gap-2.5 transition-colors min-w-0 ${
@@ -142,10 +149,10 @@ export function ConsoleSidebar() {
             <img src={logoImg} alt="Aurora Logo" className="w-8 h-8 object-contain shrink-0" />
             {!collapsed && (
               <div className="flex flex-col min-w-0">
-                <span className="font-bold text-slate-900 dark:text-white text-sm tracking-wider uppercase truncate">
+                <span className="font-bold text-foreground text-sm tracking-wider uppercase truncate">
                   Aurora WAF
                 </span>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-sans tracking-wide uppercase truncate">
+                <span className="text-[10px] text-muted-foreground font-sans tracking-wide uppercase truncate">
                   Cloud Console
                 </span>
               </div>
@@ -157,7 +164,7 @@ export function ConsoleSidebar() {
               type="button"
               onClick={toggleCollapsed}
               title="Collapse sidebar (Ctrl+B)"
-              className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0 rounded-xs"
+              className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer shrink-0 rounded-xs"
             >
               <PanelLeftClose className="w-4 h-4" />
             </button>
@@ -179,8 +186,8 @@ export function ConsoleSidebar() {
                     : 'gap-3 px-3 py-2'
                 } ${
                   active
-                    ? 'bg-cyan-50 text-cyan-700 border-l-2 border-cyan-600 font-semibold dark:bg-cyan-950/40 dark:text-cyan-400 dark:border-cyan-400'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/60'
+                    ? 'bg-primary/10 text-primary border-l-2 border-primary font-semibold'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
                 }`}
               >
                 {item.icon}
@@ -195,7 +202,7 @@ export function ConsoleSidebar() {
               type="button"
               onClick={toggleCollapsed}
               title="Expand sidebar (Ctrl+B)"
-              className="w-full flex items-center justify-center py-2.5 text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              className="w-full flex items-center justify-center py-2.5 text-muted-foreground hover:text-primary hover:bg-muted/60 transition-colors cursor-pointer"
             >
               <PanelLeftOpen className="w-4 h-4" />
             </button>
@@ -204,23 +211,23 @@ export function ConsoleSidebar() {
       </div>
 
       {/* User Footer */}
-      <div className={`border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 ${
+      <div className={`border-t border-border bg-muted/20 ${
         collapsed ? 'p-2 space-y-2' : 'p-3 space-y-2'
       }`}>
         <Link
           to="/settings"
           title={`${user?.username || 'admin'} (${user?.role || 'Administrator'})`}
-          className={`flex items-center hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors rounded-sm ${
+          className={`flex items-center hover:bg-muted transition-colors rounded-sm ${
             collapsed ? 'justify-center p-1.5' : 'gap-2.5 px-2 py-1.5'
           }`}
         >
-          <div className="w-7 h-7 bg-blue-100 dark:bg-blue-950/80 border border-blue-300 dark:border-blue-800/80 flex items-center justify-center text-blue-700 dark:text-blue-300 text-xs font-bold shrink-0 uppercase rounded-sm">
+          <div className="w-7 h-7 bg-primary/15 border border-primary/30 flex items-center justify-center text-primary text-xs font-bold shrink-0 uppercase rounded-sm">
             {(user?.username || 'A')[0]}
           </div>
           {!collapsed && (
             <div className="flex flex-col min-w-0">
-              <span className="text-xs text-slate-900 dark:text-white font-medium truncate">{user?.username || 'admin'}</span>
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate capitalize">{user?.role || 'Administrator'}</span>
+              <span className="text-xs text-foreground font-medium truncate">{user?.username || 'admin'}</span>
+              <span className="text-[10px] text-muted-foreground truncate capitalize">{user?.role || 'Administrator'}</span>
             </div>
           )}
         </Link>
@@ -229,7 +236,7 @@ export function ConsoleSidebar() {
           type="button"
           onClick={() => logout()}
           title="Logout"
-          className={`flex items-center text-xs text-slate-600 hover:text-rose-600 hover:bg-rose-50 dark:text-slate-400 dark:hover:text-rose-400 dark:hover:bg-rose-950/30 transition-colors cursor-pointer rounded-sm ${
+          className={`flex items-center text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer rounded-sm ${
             collapsed ? 'justify-center p-1.5 w-full' : 'gap-2 px-2 py-1.5 w-full text-left'
           }`}
         >

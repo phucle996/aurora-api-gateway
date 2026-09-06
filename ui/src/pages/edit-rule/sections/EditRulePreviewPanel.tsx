@@ -71,16 +71,16 @@ ${conditions
   };
 
   return (
-    <div className="bg-[#0B1320] border border-[#152030] p-4 flex flex-col font-sans text-xs">
-      <div className="pb-2 border-b border-[#152030]">
-        <div className="text-sm font-semibold text-white">Rule Preview</div>
-        <div className="text-[11px] text-slate-400 font-sans mt-0.5">
+    <div className="bg-card border border-border p-4 flex flex-col font-sans text-xs">
+      <div className="pb-2 border-b border-border">
+        <div className="text-sm font-semibold text-foreground">Rule Preview</div>
+        <div className="text-[11px] text-muted-foreground font-sans mt-0.5">
           This is how the rule will be represented in the system (NGINX + Lua).
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-[#152030] bg-[#080E18] mt-3">
+      <div className="flex border-b border-border bg-muted/40 mt-3">
         {(['NGINX Config', 'Lua Script (Generated)', 'JSON'] as const).map((t) => (
           <button
             key={t}
@@ -88,8 +88,8 @@ ${conditions
             onClick={() => setTab(t)}
             className={`px-3 py-1.5 transition-colors cursor-pointer text-[11px] ${
               tab === t
-                ? 'text-cyan-400 border-b-2 border-cyan-400 font-semibold bg-[#0B1320]'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-[#0E1726]'
+                ? 'text-primary border-b-2 border-primary font-semibold bg-card'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
             }`}
           >
             {t}
@@ -98,39 +98,39 @@ ${conditions
       </div>
 
       {/* Code Area with Line Numbers */}
-      <div className="relative mt-3 p-3 bg-[#04070D] border border-[#1C293D] overflow-x-auto text-[11px] leading-relaxed">
+      <div className="relative mt-3 p-3 bg-muted/30 border border-border overflow-x-auto text-[11px] leading-relaxed">
         <button
           type="button"
           onClick={handleCopy}
-          className="absolute top-2.5 right-2.5 p-1 bg-[#152030] hover:bg-[#1C293D] text-slate-300 hover:text-white transition-colors cursor-pointer"
+          className="absolute top-2.5 right-2.5 p-1 bg-card hover:bg-accent text-foreground transition-colors cursor-pointer border border-border"
           title="Copy snippet"
         >
           {copied ? (
-            <Check className="w-3.5 h-3.5 text-emerald-400" />
+            <Check className="w-3.5 h-3.5 text-primary" />
           ) : (
             <Copy className="w-3.5 h-3.5" />
           )}
         </button>
 
         {tab === 'NGINX Config' && (
-          <div className="font-mono text-slate-300">
+          <div className="font-mono text-foreground">
             {nginxLines.map((line, i) => (
               <div key={i} className="flex">
-                <span className="w-6 text-slate-600 select-none text-right pr-3 shrink-0">
+                <span className="w-6 text-muted-foreground select-none text-right pr-3 shrink-0">
                   {i + 1}
                 </span>
-                <span className="text-rose-300">{line}</span>
+                <span className="text-primary">{line}</span>
               </div>
             ))}
           </div>
         )}
 
         {tab === 'Lua Script (Generated)' && (
-          <pre className="text-cyan-300 whitespace-pre-wrap">{luaSnippet}</pre>
+          <pre className="text-primary whitespace-pre-wrap">{luaSnippet}</pre>
         )}
 
         {tab === 'JSON' && (
-          <pre className="text-emerald-300 whitespace-pre-wrap">{jsonSnippet}</pre>
+          <pre className="text-primary whitespace-pre-wrap">{jsonSnippet}</pre>
         )}
       </div>
     </div>

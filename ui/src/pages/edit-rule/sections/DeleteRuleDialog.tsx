@@ -6,6 +6,7 @@ interface DeleteRuleDialogProps {
   onClose: () => void;
   onConfirmDelete: () => Promise<void> | void;
   ruleName: string;
+  ruleId?: string;
   isDeleting?: boolean;
 }
 
@@ -14,6 +15,7 @@ export function DeleteRuleDialog({
   onClose,
   onConfirmDelete,
   ruleName,
+  ruleId,
   isDeleting = false,
 }: DeleteRuleDialogProps) {
   const [confirmInput, setConfirmInput] = useState('');
@@ -43,16 +45,16 @@ export function DeleteRuleDialog({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-slate-50/50 dark:bg-[#0E1726]/60">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-muted/40">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xs bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900/60 text-rose-600 dark:text-rose-400">
+            <div className="p-2 rounded-xs bg-destructive/10 border border-destructive/20 text-destructive">
               <Trash2 className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+              <h3 className="text-sm font-semibold text-foreground">
                 Delete Security Rule
               </h3>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+              <p className="text-[11px] text-muted-foreground font-mono">
                 Are you sure you want to delete this rule?
               </p>
             </div>
@@ -62,40 +64,52 @@ export function DeleteRuleDialog({
             type="button"
             onClick={onClose}
             disabled={isDeleting}
-            className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors rounded-xs cursor-pointer"
+            className="p-1 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Form Body */}
+        {/* Content */}
         <form onSubmit={handleSubmit}>
           <div className="p-5 space-y-4">
-            {/* Warning Message */}
-            <div className="p-3.5 bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-900/50 rounded-xs text-xs text-rose-900 dark:text-rose-300 flex items-start gap-2.5 leading-relaxed">
-              <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
-              <div>
-                This action is <strong className="font-semibold">permanent</strong> and cannot be undone. This will permanently delete the security rule{' '}
-                <span className="font-mono font-bold text-rose-700 dark:text-rose-300">
-                  {ruleName}
-                </span>{' '}
-                and remove its configuration from runtime.
+            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-xs text-xs space-y-1.5">
+              <div className="font-semibold text-destructive flex items-center gap-1.5">
+                <span>Warning: Irreversible Action</span>
               </div>
+              <p className="text-muted-foreground text-[11px] leading-relaxed">
+                This will permanently delete the rule{' '}
+                <strong className="text-foreground font-mono">{ruleName}</strong> from Aurora WAF.
+                Traffic previously matched by this rule will no longer be inspected or blocked by it.
+              </p>
             </div>
 
-            {/* Input prompt */}
-            <div className="space-y-2">
+            {/* Rule Metadata preview */}
+            <div className="bg-muted/40 border border-border p-3 rounded-xs space-y-1.5 text-xs font-mono">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Rule Name:</span>
+                <span className="text-foreground font-semibold truncate max-w-[200px]">{ruleName}</span>
+              </div>
+              {ruleId && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Rule ID:</span>
+                  <span className="text-muted-foreground truncate max-w-[200px]">{ruleId}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Type to confirm */}
+            <div className="space-y-1.5">
               <label
                 htmlFor="confirm-rule-name-input"
-                className="block text-xs font-sans text-slate-700 dark:text-slate-300"
+                className="block text-xs font-sans text-muted-foreground"
               >
-                To confirm deletion, please type{' '}
-                <span className="font-bold text-rose-600 dark:text-rose-400 underline underline-offset-2 select-all font-mono">
+                To confirm, type{' '}
+                <code className="px-1 py-0.5 bg-muted text-destructive font-mono text-[11px] rounded-xs font-semibold">
                   {ruleName}
-                </span>{' '}
-                below:
+                </code>{' '}
+                in the box below:
               </label>
-
               <div className="relative">
                 <input
                   id="confirm-rule-name-input"
@@ -106,18 +120,17 @@ export function DeleteRuleDialog({
                   onChange={(e) => setConfirmInput(e.target.value)}
                   placeholder={`Type "${ruleName}" to confirm`}
                   disabled={isDeleting}
-                  className={`w-full py-2 pl-3 pr-8 bg-slate-100 dark:bg-[#0E1726] border text-slate-900 dark:text-white rounded-xs font-mono text-xs focus:outline-none transition-colors ${
-                    isMatched
-                      ? 'border-emerald-500 focus:border-emerald-500'
-                      : 'border-slate-300 dark:border-[#1C293D] focus:border-rose-500'
-                  }`}
+                  className={`w-full py-2 pl-3 pr-8 bg-background border text-foreground rounded-xs font-mono text-xs focus:outline-none transition-colors ${isMatched
+                      ? 'border-primary focus:border-primary'
+                      : 'border-input focus:border-destructive'
+                    }`}
                 />
                 {isMatched && (
-                  <Check className="w-4 h-4 text-emerald-500 absolute right-2.5 top-2.5 pointer-events-none animate-in zoom-in-50 duration-150" />
+                  <Check className="w-4 h-4 text-primary absolute right-2.5 top-2.5 pointer-events-none animate-in zoom-in-50 duration-150" />
                 )}
               </div>
               {!isMatched && confirmInput.length > 0 && (
-                <p className="text-[11px] font-sans text-slate-400 dark:text-slate-500">
+                <p className="text-[11px] font-sans text-muted-foreground">
                   Name does not match yet.
                 </p>
               )}
@@ -125,12 +138,12 @@ export function DeleteRuleDialog({
           </div>
 
           {/* Footer Actions */}
-          <div className="flex items-center justify-end gap-2.5 px-5 py-3 border-t border-border bg-slate-50/50 dark:bg-[#0E1726]/60">
+          <div className="flex items-center justify-end gap-2.5 px-5 py-3 border-t border-border bg-muted/40">
             <button
               type="button"
               onClick={onClose}
               disabled={isDeleting}
-              className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-[#0E1726] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-300 text-xs font-sans rounded-xs transition-colors cursor-pointer"
+              className="px-3.5 py-1.5 bg-muted hover:bg-accent border border-border text-foreground text-xs font-sans rounded-xs transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -138,7 +151,7 @@ export function DeleteRuleDialog({
             <button
               type="submit"
               disabled={!isMatched || isDeleting}
-              className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 disabled:bg-slate-200 dark:disabled:bg-[#1C293D] text-white disabled:text-slate-400 dark:disabled:text-slate-600 text-xs font-semibold font-sans rounded-xs shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:cursor-not-allowed"
+              className="px-4 py-1.5 bg-destructive hover:bg-destructive/90 disabled:bg-muted text-destructive-foreground disabled:text-muted-foreground text-xs font-semibold font-sans rounded-xs shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:cursor-not-allowed"
             >
               {isDeleting ? (
                 <>

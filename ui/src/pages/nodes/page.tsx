@@ -34,7 +34,8 @@ export default function NodesPage() {
   const requestID = useRef(0);
   const nodes: NodeItem[] = records.map(n => {
     const fresh = !!n.lastHeartbeatTimestamp && now - n.lastHeartbeatTimestamp <= 45000;
-    return { ...n, status: fresh ? n.status : 'Not Ready',
+    return {
+      ...n, status: fresh ? n.status : 'Not Ready',
       metricsAvailable: fresh && n.metricsAvailable,
       lastHeartbeat: formatRelativeTime(n.lastHeartbeatTimestamp),
       policySync: fresh ? n.policySync : 'Unknown (stale heartbeat)',
@@ -81,21 +82,23 @@ export default function NodesPage() {
       try {
         const parsed = JSON.parse(event.data);
         const updates: NodeHeartbeat[] = (Array.isArray(parsed) ? parsed : [parsed]).filter((u: NodeHeartbeat) =>
-          typeof u.node_id === 'string' && Number.isFinite(u.timestamp) && u.timestamp > 0 && u.timestamp <= Date.now()/1000 + 5 &&
-          [u.rps,u.active_conns,u.cpu_usage,u.memory_usage].every(v => typeof v === 'number' && Number.isFinite(v) && v >= 0));
+          typeof u.node_id === 'string' && Number.isFinite(u.timestamp) && u.timestamp > 0 && u.timestamp <= Date.now() / 1000 + 5 &&
+          [u.rps, u.active_conns, u.cpu_usage, u.memory_usage].every(v => typeof v === 'number' && Number.isFinite(v) && v >= 0));
         setHeartbeats(prev => {
           const next = { ...prev };
           for (const u of updates) if (!next[u.node_id] || next[u.node_id].timestamp < u.timestamp) next[u.node_id] = u;
           return next;
         });
         setRecords(prev => prev.map(n => {
-          const u = updates.filter(it => it.node_id === n.id).sort((a,b) => b.timestamp-a.timestamp)[0];
+          const u = updates.filter(it => it.node_id === n.id).sort((a, b) => b.timestamp - a.timestamp)[0];
           if (!u || u.timestamp * 1000 <= (n.lastHeartbeatTimestamp || 0)) return n;
-          return { ...n, ip: u.ip || n.ip, status: u.status, requestsPerSecond: u.rps.toFixed(1),
+          return {
+            ...n, ip: u.ip || n.ip, status: u.status, requestsPerSecond: u.rps.toFixed(1),
             activeConnections: String(u.active_conns), cpuUsage: u.cpu_usage, memoryUsage: u.memory_usage,
             sync: u.sync, policySync: u.sync, ruleset: u.ruleset, metricsScope: u.metrics_scope,
             metricsAvailable: u.metrics_available, runtimeStartedAt: u.runtime_started_at,
-            lastHeartbeatTimestamp: u.timestamp * 1000 };
+            lastHeartbeatTimestamp: u.timestamp * 1000
+          };
         }));
       } catch { setStreamState('Invalid event — waiting for refresh'); }
     };
@@ -113,8 +116,6 @@ export default function NodesPage() {
     <div className="p-6 w-full space-y-6">
       {/* Top KPI Metrics & Cluster Status */}
       <NodesStats nodes={nodes} />
-      <div role="status" className="text-xs text-slate-500">Telemetry: {streamState}{error && <span role="alert" className="text-rose-500 ml-3">{error} — showing last known data</span>}</div>
-
       {/* Grid: Nodes Table + Right Drawer / Detail */}
       <div className={`flex flex-col lg:flex-row items-start transition-all duration-300 ${selectedNode ? 'gap-5' : 'gap-0'}`}>
         {/* Table Area: Tự động kéo dãn toàn màn hình khi đóng panel chi tiết */}
@@ -130,11 +131,10 @@ export default function NodesPage() {
 
         {/* Selected Node Detail Panel: Co dãn và xuất hiện mượt mà */}
         <div
-          className={`shrink-0 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] overflow-hidden ${
-            selectedNode
+          className={`shrink-0 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] overflow-hidden ${selectedNode
               ? 'w-full lg:w-[420px] opacity-100 translate-x-0 max-h-[3000px]'
               : 'w-0 lg:w-0 opacity-0 lg:translate-x-8 max-h-0 lg:max-h-none pointer-events-none'
-          }`}
+            }`}
         >
           <div className="w-full lg:w-[420px]">
             {displayNode && (

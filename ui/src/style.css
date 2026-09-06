@@ -12,33 +12,42 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   color-scheme: light;
-  --background: #f1f5f9;
+  --background: #f8fafc;
   --foreground: #0f172a;
   --card: #ffffff;
   --card-foreground: #0f172a;
   --popover: #ffffff;
   --popover-foreground: #0f172a;
-  --primary: #0284c7;
+  --primary: #059669;
   --primary-foreground: #ffffff;
   --secondary: #f1f5f9;
   --secondary-foreground: #0f172a;
-  --muted: #f8fafc;
+  --muted: #f1f5f9;
   --muted-foreground: #64748b;
-  --accent: #f1f5f9;
-  --accent-foreground: #0f172a;
+  --accent: #ecfdf5;
+  --accent-foreground: #065f46;
   --destructive: #ef4444;
   --border: #e2e8f0;
   --input: #e2e8f0;
-  --ring: #0284c7;
+  --ring: #059669;
   --radius: 2px;
+  /* Chart colors (attack types) */
+  --chart-1: #ef4444; /* SQLi - red */
+  --chart-2: #f97316; /* XSS - orange */
+  --chart-3: #eab308; /* LFI - yellow */
+  --chart-4: #3b82f6; /* Bad Bot - blue */
+  --chart-5: #a855f7; /* Rate Limit - purple */
+  --chart-6: #64748b; /* Others - slate */
+  --chart-allowed: #3b82f6;
+  --chart-blocked: #ef4444;
   --sidebar: #ffffff;
   --sidebar-foreground: #0f172a;
-  --sidebar-primary: #0284c7;
+  --sidebar-primary: #059669;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #f1f5f9;
   --sidebar-accent-foreground: #0f172a;
   --sidebar-border: #e2e8f0;
-  --sidebar-ring: #0284c7;
+  --sidebar-ring: #059669;
 }
 
 body {
@@ -74,11 +83,15 @@ body {
   --border: #172338;
   --input: #1C293D;
   --ring: #10b981;
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  /* Chart colors (attack types) */
+  --chart-1: #f87171; /* SQLi - red */
+  --chart-2: #fb923c; /* XSS - orange */
+  --chart-3: #facc15; /* LFI - yellow */
+  --chart-4: #60a5fa; /* Bad Bot - blue */
+  --chart-5: #c084fc; /* Rate Limit - purple */
+  --chart-6: #94a3b8; /* Others - slate */
+  --chart-allowed: #60a5fa;
+  --chart-blocked: #f87171;
   --sidebar: #080E18;
   --sidebar-foreground: #f8fafc;
   --sidebar-primary: #10b981;
@@ -108,7 +121,7 @@ body {
   }
 
   ::selection {
-    background-color: rgba(2, 132, 199, 0.35);
+    background-color: rgba(5, 150, 105, 0.25);
     color: inherit;
   }
 
@@ -120,16 +133,23 @@ body {
     font-weight: 600;
   }
 
-  p, span, label, a, button {
+  p, span, label, a {
     font-family: inherit;
     color: inherit;
   }
 
-  /* Central Form Inputs */
-  input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="file"]),
+  /* Form controls default to main app font (Geist) */
+  button,
+  input,
   select,
   textarea {
     font-family: var(--font-sans);
+  }
+
+  /* Specific form text field defaults */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="file"]),
+  select,
+  textarea {
     color: var(--foreground);
     border-color: var(--border);
   }
@@ -224,7 +244,7 @@ html.light,
   textarea:focus {
     background-color: #ffffff !important;
     color: #0f172a !important;
-    border-color: #0284c7 !important;
+    border-color: #059669 !important;
     outline: none !important;
   }
 

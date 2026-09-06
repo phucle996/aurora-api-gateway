@@ -27,29 +27,29 @@ export function RateLimitBasicInfoSection({
   setPriority,
 }: RateLimitBasicInfoProps) {
   return (
-    <div className="bg-[#0B1320] border border-[#152030] p-4 space-y-4 font-sans text-xs">
-      <div className="text-sm font-semibold text-white">
+    <div className="bg-card border border-border p-4 space-y-4 font-sans text-xs">
+      <div className="text-sm font-semibold text-foreground">
         1. Basic Information
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Rule Name */}
         <div>
-          <label className="block text-slate-400 mb-1 text-[11px]">
-            Rule Name <span className="text-rose-400">*</span>
+          <label className="block text-muted-foreground mb-1 text-[11px]">
+            Rule Name <span className="text-destructive">*</span>
           </label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="limit-login-attempts"
-            className="w-full bg-[#0E1726] border border-[#1C293D] px-3 py-1.5 text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500"
+            className="w-full bg-background border border-input px-3 py-1.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
           />
         </div>
 
         {/* Description */}
         <div>
-          <label className="block text-slate-400 mb-1 text-[11px]">
+          <label className="block text-muted-foreground mb-1 text-[11px]">
             Description
           </label>
           <input
@@ -57,7 +57,7 @@ export function RateLimitBasicInfoSection({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Limit login requests to prevent brute force attacks."
-            className="w-full bg-[#0E1726] border border-[#1C293D] px-3 py-1.5 text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500"
+            className="w-full bg-background border border-input px-3 py-1.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
           />
         </div>
       </div>
@@ -65,13 +65,13 @@ export function RateLimitBasicInfoSection({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
         {/* Policy */}
         <div>
-          <label className="block text-slate-400 mb-1 text-[11px]">
+          <label className="block text-muted-foreground mb-1 text-[11px]">
             Policy
           </label>
           <select
             value={policy}
             onChange={(e) => setPolicy(e.target.value)}
-            className="w-full bg-[#0E1726] border border-[#1C293D] px-3 py-1.5 text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
+            className="w-full bg-background border border-input px-3 py-1.5 text-foreground focus:outline-none focus:border-primary cursor-pointer"
           >
             <option value="Default Policy">Default Policy</option>
             <option value="API Gateway Policy">API Gateway Policy</option>
@@ -82,7 +82,7 @@ export function RateLimitBasicInfoSection({
 
         {/* Status */}
         <div>
-          <label className="block text-slate-400 mb-1 text-[11px]">
+          <label className="block text-muted-foreground mb-1 text-[11px]">
             Status
           </label>
           <div className="flex items-center gap-2.5 h-[34px]">
@@ -90,7 +90,7 @@ export function RateLimitBasicInfoSection({
               type="button"
               onClick={() => setEnabled(!enabled)}
               className={`w-9 h-5 flex items-center p-0.5 cursor-pointer transition-colors ${
-                enabled ? 'bg-blue-600' : 'bg-[#152030]'
+                enabled ? 'bg-primary' : 'bg-muted'
               }`}
             >
               <div
@@ -99,7 +99,7 @@ export function RateLimitBasicInfoSection({
                 }`}
               />
             </button>
-            <span className={enabled ? 'text-blue-400' : 'text-slate-500'}>
+            <span className={enabled ? 'text-primary' : 'text-muted-foreground'}>
               {enabled ? 'Enabled' : 'Disabled'}
             </span>
           </div>
@@ -107,15 +107,15 @@ export function RateLimitBasicInfoSection({
 
         {/* Priority */}
         <div>
-          <div className="flex items-center gap-1 text-slate-400 mb-1 text-[11px]">
+          <div className="flex items-center gap-1 text-muted-foreground mb-1 text-[11px]">
             <span>Priority</span>
-            <HelpCircle className="w-3 h-3 text-slate-500 cursor-pointer" />
+            <HelpCircle className="w-3 h-3 text-muted-foreground cursor-pointer" />
           </div>
           <input
             type="number"
             value={priority}
             onChange={(e) => setPriority(parseInt(e.target.value) || 0)}
-            className="w-full bg-[#0E1726] border border-[#1C293D] px-3 py-1.5 text-white focus:outline-none focus:border-blue-500"
+            className="w-full bg-background border border-input px-3 py-1.5 text-foreground focus:outline-none focus:border-primary"
           />
         </div>
       </div>

@@ -5,7 +5,7 @@ export function EventsStats() {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 font-sans">
       {/* Total Events */}
-      <div className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-4 hover:border-slate-300 dark:hover:border-[#223554] shadow-xs rounded-sm transition-all">
+      <div className="bg-card border border-border p-4 hover:border-input shadow-xs rounded-sm transition-all">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-sans font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
             Total Events
@@ -22,7 +22,7 @@ export function EventsStats() {
       </div>
 
       {/* Blocked Requests */}
-      <div className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-4 hover:border-slate-300 dark:hover:border-[#223554] shadow-xs rounded-sm transition-all">
+      <div className="bg-card border border-border p-4 hover:border-input shadow-xs rounded-sm transition-all">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-sans font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
             Blocked Requests
@@ -39,7 +39,7 @@ export function EventsStats() {
       </div>
 
       {/* Logged Events */}
-      <div className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-4 hover:border-slate-300 dark:hover:border-[#223554] shadow-xs rounded-sm transition-all">
+      <div className="bg-card border border-border p-4 hover:border-input shadow-xs rounded-sm transition-all">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-sans font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
             Logged Events
@@ -56,7 +56,7 @@ export function EventsStats() {
       </div>
 
       {/* Critical Alerts */}
-      <div className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-4 hover:border-slate-300 dark:hover:border-[#223554] shadow-xs rounded-sm transition-all">
+      <div className="bg-card border border-border p-4 hover:border-input shadow-xs rounded-sm transition-all">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-sans font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
             Critical Alerts

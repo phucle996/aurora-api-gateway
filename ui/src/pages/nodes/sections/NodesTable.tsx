@@ -16,7 +16,6 @@ export interface NodeItem {
   ip: string;
   region?: string;
   regionFull?: string;
-  role: string;
   status: 'Ready' | 'Not Ready' | 'Draining';
   version: string;
   ruleset: string;
@@ -54,7 +53,6 @@ export function NodesTable({
 }: NodesTableProps) {
   const nodes = nodesProp || [];
   const [searchQuery, setSearchQuery] = useState('');
-  const [roleFilter, setRoleFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [sort, setSort] = useState<{field: 'name' | 'status'; direction: number}>({field:'name',direction:1});
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -107,17 +105,16 @@ export function NodesTable({
       (node.hostname && node.hostname.toLowerCase().includes(searchQuery.toLowerCase())) ||
       node.ruleset.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesRole = roleFilter === 'ALL' || node.role.includes(roleFilter);
     const matchesStatus =
       statusFilter === 'ALL' || node.status === statusFilter;
 
-    return matchesSearch && matchesRole && matchesStatus;
+    return matchesSearch && matchesStatus;
   }).sort((a,b) => sort.direction * a[sort.field].localeCompare(b[sort.field], undefined, {numeric:true}));
 
   return (
-    <div className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#152030] flex flex-col shadow-xs rounded-sm transition-colors">
+    <div className="bg-card border border-border flex flex-col shadow-xs rounded-sm transition-colors">
       {/* Header Bar */}
-      <div className="p-4 border-b border-slate-200 dark:border-[#152030] flex flex-wrap items-center justify-between gap-3">
+      <div className="p-4 border-b border-border flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-slate-900 dark:text-white">
             Nodes ({nodes.length})
@@ -128,10 +125,10 @@ export function NodesTable({
           <button
             type="button"
             onClick={handleRefresh}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] hover:border-slate-400 dark:hover:border-slate-500 text-xs font-sans text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer rounded-sm"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-muted hover:bg-accent border border-border text-xs font-sans text-foreground transition-colors cursor-pointer rounded-sm"
           >
             <RotateCw
-              className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-emerald-500 dark:text-emerald-400' : 'text-slate-400'}`}
+              className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-primary' : 'text-slate-400'}`}
             />
             <span>Refresh</span>
           </button>
@@ -139,36 +136,24 @@ export function NodesTable({
       </div>
 
       {/* Filter Toolbar */}
-      <div className="px-4 py-2.5 bg-slate-50/70 dark:bg-[#080E18] border-b border-slate-200 dark:border-[#152030] flex flex-wrap items-center gap-3 font-sans">
+      <div className="px-4 py-2.5 bg-muted/40 border-b border-border flex flex-wrap items-center gap-3 font-sans">
         {/* Search */}
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search nodes..."
-            className="w-full bg-white dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] pl-8 pr-3 py-1 text-xs text-slate-900 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 font-sans focus:outline-none focus:border-blue-500 rounded-sm"
+            className="w-full bg-background border border-input pl-8 pr-3 py-1 text-xs text-foreground placeholder:text-muted-foreground font-sans focus:outline-none focus:border-primary rounded-sm"
           />
         </div>
-
-        {/* Role Filter */}
-        <select
-          value={roleFilter}
-          onChange={(e) => setRoleFilter(e.target.value)}
-          className="bg-white dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] px-2.5 py-1 text-xs text-slate-800 dark:text-slate-300 font-sans focus:outline-none focus:border-blue-500 cursor-pointer rounded-sm"
-        >
-          <option value="ALL">All Roles</option>
-          <option value="Edge">Edge</option>
-          <option value="Ingress">Ingress</option>
-          <option value="Internal">Internal</option>
-        </select>
 
         {/* Status Filter */}
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="bg-white dark:bg-[#0E1726] border border-slate-200 dark:border-[#1C293D] px-2.5 py-1 text-xs text-slate-800 dark:text-slate-300 font-sans focus:outline-none focus:border-blue-500 cursor-pointer rounded-sm"
+          className="bg-background border border-input px-2.5 py-1 text-xs text-foreground font-sans focus:outline-none focus:border-primary cursor-pointer rounded-sm"
         >
           <option value="ALL">All Statuses</option>
           <option value="Ready">Ready</option>
@@ -178,7 +163,7 @@ export function NodesTable({
       </div>
 
       {/* Refresh Progress Indicator Line */}
-      <div className="h-0.5 w-full bg-[#152030] overflow-hidden relative">
+      <div className="h-0.5 w-full bg-border overflow-hidden relative">
         {isRefreshing && (
           <div className="h-full bg-gradient-to-r from-transparent via-emerald-400 to-transparent w-full animate-pulse transition-all duration-300" />
         )}
@@ -199,20 +184,19 @@ export function NodesTable({
 
         <table className="w-full text-left border-collapse whitespace-nowrap">
           <thead>
-            <tr className="border-b border-slate-200 dark:border-[#152030] bg-slate-50 dark:bg-[#0E1726]/70 text-xs font-sans text-slate-500 dark:text-slate-400">
+            <tr className="border-b border-border bg-muted/40 text-xs font-sans text-muted-foreground">
               <th className="py-2.5 px-3 font-medium">
-                <button type="button" onClick={() => setSort(prev => ({field: 'name', direction: prev.field === 'name' ? -prev.direction : 1}))} className="flex items-center gap-1 cursor-pointer hover:text-slate-700 dark:hover:text-slate-200">
+                <button type="button" onClick={() => setSort(prev => ({field: 'name', direction: prev.field === 'name' ? -prev.direction : 1}))} className="flex items-center gap-1 cursor-pointer hover:text-foreground">
                   <span>Node Name</span>
-                  <ArrowUpDown className="w-3 h-3 text-slate-400 dark:text-slate-500" />
+                  <ArrowUpDown className="w-3 h-3 text-muted-foreground" />
                 </button>
               </th>
               <th className="py-2.5 px-3 font-medium">IP Address</th>
               <th className="py-2.5 px-3 font-medium">Hostname</th>
-              <th className="py-2.5 px-3 font-medium">Role</th>
               <th className="py-2.5 px-3 font-medium">
-                <button type="button" onClick={() => setSort(prev => ({field: 'status', direction: prev.field === 'status' ? -prev.direction : 1}))} className="flex items-center gap-1 cursor-pointer hover:text-slate-700 dark:hover:text-slate-200">
+                <button type="button" onClick={() => setSort(prev => ({field: 'status', direction: prev.field === 'status' ? -prev.direction : 1}))} className="flex items-center gap-1 cursor-pointer hover:text-foreground">
                   <span>Status</span>
-                  <ArrowUpDown className="w-3 h-3 text-slate-400 dark:text-slate-500" />
+                  <ArrowUpDown className="w-3 h-3 text-muted-foreground" />
                 </button>
               </th>
               <th className="py-2.5 px-3 font-medium">Version</th>
@@ -224,22 +208,22 @@ export function NodesTable({
             </tr>
           </thead>
           <tbody
-            className={`divide-y divide-slate-100 dark:divide-[#152030] text-xs font-sans transition-opacity duration-300 ${
+            className={`divide-y divide-border text-xs font-sans transition-opacity duration-300 ${
               isRefreshing ? 'opacity-60' : 'opacity-100'
             }`}
           >
             {isLoading && nodes.length === 0 ? (
               <tr>
-                <td colSpan={11} className="py-12 text-center text-slate-400 dark:text-slate-500">
+                <td colSpan={10} className="py-12 text-center text-muted-foreground">
                   <div className="flex flex-col items-center justify-center gap-2">
-                    <RotateCw className="w-5 h-5 animate-spin text-emerald-500 dark:text-emerald-400" />
+                    <RotateCw className="w-5 h-5 animate-spin text-primary" />
                     <span>Loading cluster nodes...</span>
                   </div>
                 </td>
               </tr>
             ) : filteredNodes.length === 0 ? (
               <tr>
-                <td colSpan={11} className="py-12 text-center text-slate-400 dark:text-slate-500">
+                <td colSpan={10} className="py-12 text-center text-muted-foreground">
                   {nodes.length === 0
                     ? 'No nodes registered in the cluster yet.'
                     : 'No nodes found matching the filter criteria.'}
@@ -257,8 +241,8 @@ export function NodesTable({
                     onClick={() => onSelectNode(node)}
                     className={`cursor-pointer transition-colors duration-200 ${
                       isSelected
-                        ? 'bg-sky-50/80 dark:bg-emerald-950/25'
-                        : 'hover:bg-slate-50 dark:hover:bg-[#0E1726]/60'
+                        ? 'bg-primary/10'
+                        : 'hover:bg-muted/60'
                     }`}
                   >
                     {/* Node Name */}
@@ -273,9 +257,6 @@ export function NodesTable({
 
                     {/* Hostname */}
                     <td className="py-2 px-3 text-slate-500 dark:text-slate-400">{node.hostname || 'Unknown'}</td>
-
-                    {/* Role */}
-                    <td className="py-2 px-3 text-slate-700 dark:text-slate-300">{node.role || 'Unknown'}</td>
 
                     {/* Status */}
                     <td className="py-2 px-3">
@@ -330,7 +311,7 @@ export function NodesTable({
       </div>
 
       {/* Table Footer */}
-      <div className="p-3 bg-slate-50 dark:bg-[#080E18] border-t border-slate-200 dark:border-[#152030] flex items-center justify-between text-xs font-mono text-slate-500 dark:text-slate-400">
+      <div className="p-3 bg-muted/40 border-t border-border flex items-center justify-between text-xs font-mono text-muted-foreground">
         <div>
           Tổng số: <span className="text-slate-900 dark:text-slate-200 font-semibold">{filteredNodes.length}</span> node
         </div>

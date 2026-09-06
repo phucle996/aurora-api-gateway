@@ -32,15 +32,15 @@ export function VersionHistoryTable({
   const getBadgeClass = (changeType: string) => {
     switch (changeType) {
       case 'Logic Update':
-        return 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/50 dark:text-blue-400 dark:border-blue-900/60';
+        return 'bg-primary/10 text-primary border border-primary/20';
       case 'Condition Update':
         return 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/50 dark:text-amber-400 dark:border-amber-900/60';
       case 'Initial Creation':
-        return 'bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
+        return 'bg-muted text-foreground border border-border';
       case 'Rollback Restore':
         return 'bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950/50 dark:text-purple-400 dark:border-purple-900/60';
       default:
-        return 'bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
+        return 'bg-muted text-foreground border border-border';
     }
   };
 
@@ -77,12 +77,12 @@ export function VersionHistoryTable({
                   onClick={() => onSelectVersion(v.version)}
                   className={`transition-colors cursor-pointer ${
                     isSelected
-                      ? 'bg-blue-50/50 dark:bg-blue-950/20'
-                      : 'hover:bg-slate-50 dark:hover:bg-[#0E1726]/60'
+                      ? 'bg-primary/10'
+                      : 'hover:bg-muted/60'
                   }`}
                 >
                   {/* Version */}
-                  <td className="py-3 px-3 font-mono font-bold text-blue-600 dark:text-blue-400">
+                  <td className="py-3 px-3 font-mono font-bold text-primary">
                     {v.versionLabel}
                   </td>
 
@@ -142,7 +142,7 @@ export function VersionHistoryTable({
                           e.stopPropagation();
                           onSelectVersion(v.version);
                         }}
-                        className="text-blue-600 dark:text-blue-400 hover:underline font-medium cursor-pointer"
+                        className="text-primary hover:underline font-medium cursor-pointer"
                       >
                         View
                       </button>
@@ -153,7 +153,7 @@ export function VersionHistoryTable({
                           e.stopPropagation();
                           onCompareVersion(v.version);
                         }}
-                        className="text-blue-600 dark:text-blue-400 hover:underline font-medium cursor-pointer"
+                        className="text-primary hover:underline font-medium cursor-pointer"
                       >
                         Compare
                       </button>
@@ -168,7 +168,7 @@ export function VersionHistoryTable({
                               activeMenuVersion === v.version ? null : v.version
                             );
                           }}
-                          className="p-1 hover:bg-slate-200 dark:hover:bg-[#1C293D] rounded-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                          className="p-1 hover:bg-accent rounded-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                         >
                           <MoreHorizontal className="w-3.5 h-3.5" />
                         </button>
@@ -185,7 +185,7 @@ export function VersionHistoryTable({
                                 setActiveMenuVersion(null);
                                 onRestoreVersion(v.version);
                               }}
-                              className="w-full text-left px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-[#152030] text-slate-800 dark:text-slate-200 flex items-center gap-2 cursor-pointer"
+                              className="w-full text-left px-3 py-1.5 hover:bg-muted text-foreground flex items-center gap-2 cursor-pointer"
                             >
                               <RotateCcw className="w-3 h-3 text-amber-500" />
                               <span>Restore to {v.versionLabel}</span>
@@ -194,7 +194,7 @@ export function VersionHistoryTable({
                             <button
                               type="button"
                               onClick={(e) => handleCopyJson(v, e)}
-                              className="w-full text-left px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-[#152030] text-slate-800 dark:text-slate-200 flex items-center gap-2 cursor-pointer"
+                              className="w-full text-left px-3 py-1.5 hover:bg-muted text-foreground flex items-center gap-2 cursor-pointer"
                             >
                               {copiedVersion === v.version ? (
                                 <>

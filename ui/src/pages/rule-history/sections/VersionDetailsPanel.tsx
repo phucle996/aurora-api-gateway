@@ -20,29 +20,29 @@ export function VersionDetailsPanel({ version }: VersionDetailsPanelProps) {
   const getBadgeClass = (changeType: string) => {
     switch (changeType) {
       case 'Logic Update':
-        return 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/50 dark:text-blue-400 dark:border-blue-900/60';
+        return 'bg-primary/10 text-primary border border-primary/20';
       case 'Condition Update':
         return 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/50 dark:text-amber-400 dark:border-amber-900/60';
       case 'Initial Creation':
-        return 'bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
+        return 'bg-muted text-foreground border border-border';
       case 'Rollback Restore':
         return 'bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950/50 dark:text-purple-400 dark:border-purple-900/60';
       default:
-        return 'bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
+        return 'bg-muted text-foreground border border-border';
     }
   };
 
   const getFieldIcon = (iconName: string) => {
     switch (iconName) {
       case 'shield':
-        return <Shield className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />;
+        return <Shield className="w-3.5 h-3.5 text-primary shrink-0" />;
       case 'code':
-        return <Code className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />;
+        return <Code className="w-3.5 h-3.5 text-primary shrink-0" />;
       case 'layers':
       case 'filter':
-        return <Layers className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />;
+        return <Layers className="w-3.5 h-3.5 text-primary shrink-0" />;
       default:
-        return <FileText className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />;
+        return <FileText className="w-3.5 h-3.5 text-primary shrink-0" />;
     }
   };
 
@@ -53,7 +53,7 @@ export function VersionDetailsPanel({ version }: VersionDetailsPanelProps) {
         <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
           Version Details
         </h2>
-        <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-400 font-mono font-bold text-xs border border-blue-200 dark:border-blue-900/60">
+        <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-mono font-bold text-xs border border-primary/20">
           {version.versionLabel}
         </span>
       </div>
@@ -110,7 +110,7 @@ export function VersionDetailsPanel({ version }: VersionDetailsPanelProps) {
         <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2">
           Change Summary
         </h3>
-        <div className="p-3 bg-slate-50 dark:bg-[#0E1726]/60 border border-border rounded-xs text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-sans text-[11px]">
+        <div className="p-3 bg-muted/40 border border-border rounded-xs text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-sans text-[11px]">
           {version.summaryOfChanges}
         </div>
       </div>
@@ -123,7 +123,7 @@ export function VersionDetailsPanel({ version }: VersionDetailsPanelProps) {
         <div className="space-y-2.5 font-sans">
           {version.modifiedFields.map((field, idx) => (
             <div key={idx} className="flex items-start gap-2 text-xs">
-              <div className="p-1 bg-blue-50 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-900/40 rounded-xs">
+              <div className="p-1 bg-primary/10 border border-primary/20 rounded-xs">
                 {getFieldIcon(field.icon)}
               </div>
               <div className="min-w-0 flex-1">
@@ -182,7 +182,7 @@ export function VersionDetailsPanel({ version }: VersionDetailsPanelProps) {
             <div key={idx} className="relative">
               <span
                 className={`absolute -left-5 top-1 w-2.5 h-2.5 rounded-full ring-2 ring-card ${
-                  audit.type === 'green' ? 'bg-emerald-500' : 'bg-blue-500'
+                  audit.type === 'green' ? 'bg-emerald-500' : 'bg-primary'
                 }`}
               />
               <div className="flex items-center justify-between text-xs">

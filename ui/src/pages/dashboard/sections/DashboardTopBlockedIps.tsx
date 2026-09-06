@@ -11,15 +11,15 @@ export function DashboardTopBlockedIps() {
   ];
 
   return (
-    <div className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#152030] p-4 flex flex-col justify-between shadow-xs rounded-sm transition-colors">
+    <div className="bg-card border border-border p-4 flex flex-col justify-between shadow-xs rounded-sm transition-colors">
       {/* Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-[#152030]">
-        <span className="text-sm font-semibold text-slate-900 dark:text-white font-sans">
+      <div className="flex items-center justify-between pb-3 border-b border-border">
+        <span className="text-sm font-semibold text-foreground font-sans">
           Top Source IPs (Blocked)
         </span>
         <Link
           to="/ip-access"
-          className="text-xs font-sans text-blue-600 dark:text-cyan-400 hover:underline transition-colors"
+          className="text-xs font-sans text-primary hover:underline transition-colors"
         >
           View All
         </Link>
@@ -29,23 +29,23 @@ export function DashboardTopBlockedIps() {
       <div className="py-2 overflow-x-auto">
         <table className="w-full text-left border-collapse text-xs font-sans">
           <thead>
-            <tr className="text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-[#152030] pb-1">
+            <tr className="text-muted-foreground border-b border-border pb-1">
               <th className="py-1.5 font-normal">IP Address</th>
               <th className="py-1.5 font-normal">Requests</th>
               <th className="py-1.5 font-normal text-right">Block Rate</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-[#152030]/50">
+          <tbody className="divide-y divide-border">
             {ips.map((item) => (
-              <tr key={item.ip} className="hover:bg-slate-50 dark:hover:bg-[#0E1726]/50 transition-colors">
-                <td className="py-2 text-slate-800 dark:text-slate-200 font-bold">{item.ip}</td>
-                <td className="py-2 text-slate-600 dark:text-slate-400">{item.requests}</td>
+              <tr key={item.ip} className="hover:bg-muted/50 transition-colors">
+                <td className="py-2 text-foreground font-bold">{item.ip}</td>
+                <td className="py-2 text-muted-foreground">{item.requests}</td>
                 <td className="py-2 text-right">
                   <div className="flex items-center justify-end gap-2">
-                    <span className="text-rose-600 dark:text-rose-400 font-semibold">{item.blockRate}%</span>
-                    <div className="w-16 h-1.5 bg-slate-100 dark:bg-[#152030] overflow-hidden rounded-full">
+                    <span className="text-destructive font-semibold">{item.blockRate}%</span>
+                    <div className="w-16 h-1.5 bg-muted overflow-hidden rounded-full">
                       <div
-                        className="h-full bg-rose-500"
+                        className="h-full bg-destructive"
                         style={{ width: `${item.blockRate}%` }}
                       />
                     </div>

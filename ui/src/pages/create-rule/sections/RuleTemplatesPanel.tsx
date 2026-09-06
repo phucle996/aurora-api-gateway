@@ -90,10 +90,10 @@ export function RuleTemplatesPanel({ onSelectTemplate }: RuleTemplatesProps) {
   ];
 
   return (
-    <div id="rule-templates" className="bg-[#0B1320] border border-[#152030] p-4 flex flex-col font-sans text-xs">
-      <div className="pb-2 border-b border-[#152030]">
-        <div className="text-sm font-semibold text-white">Common Rule Templates</div>
-        <div className="text-[11px] text-slate-400 font-sans mt-0.5">
+    <div id="rule-templates" className="bg-card border border-border p-4 flex flex-col font-sans text-xs">
+      <div className="pb-2 border-b border-border">
+        <div className="text-sm font-semibold text-foreground">Common Rule Templates</div>
+        <div className="text-[11px] text-muted-foreground font-sans mt-0.5">
           Start from a template and customize it for your needs.
         </div>
       </div>
@@ -103,23 +103,23 @@ export function RuleTemplatesPanel({ onSelectTemplate }: RuleTemplatesProps) {
           <div
             key={tmpl.title}
             onClick={() => onSelectTemplate(tmpl.data)}
-            className="p-2.5 bg-[#080E18] hover:bg-[#0E1726] border border-[#152030] hover:border-[#1C293D] flex items-center justify-between gap-3 cursor-pointer transition-colors group"
+            className="p-2.5 bg-muted/40 hover:bg-muted border border-border hover:border-input flex items-center justify-between gap-3 cursor-pointer transition-colors group"
           >
             <div className="flex items-center gap-3">
               <div className={`p-1.5 border shrink-0 ${tmpl.color}`}>
                 {tmpl.icon}
               </div>
               <div>
-                <div className="font-semibold text-slate-200 group-hover:text-cyan-400 transition-colors">
+                <div className="font-semibold text-foreground group-hover:text-primary transition-colors">
                   {tmpl.title}
                 </div>
-                <div className="text-[11px] text-slate-500 font-sans">
+                <div className="text-[11px] text-muted-foreground font-sans">
                   {tmpl.description}
                 </div>
               </div>
             </div>
 
-            <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-slate-300 transition-colors shrink-0" />
+            <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
           </div>
         ))}
       </div>

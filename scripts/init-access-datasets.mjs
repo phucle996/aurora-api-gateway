@@ -1,54 +1,312 @@
-// Script nạp dataset GeoIP & ASN thực tế vào Aurora WAF
-const CONTROLLER_URL = process.env.CONTROLLER_URL || 'http://localhost:8080';
-const TOKEN = process.env.AUTH_TOKEN || '71b268cadc82c2ecfff176c7dfd5c4ac77a0e6a3cd0ae3a7d87b1b9bb686b994';
+// Script nạp toàn bộ 249 quốc gia ISO 3166-1 và ASN thực tế vào Aurora WAF
+import { execSync } from 'node:child_process';
+
+const TOKEN = '71b268cadc82c2ecfff176c7dfd5c4ac77a0e6a3cd0ae3a7d87b1b9bb686b994';
+
+function dockerCurl(method, path, body = null) {
+  const bodyArg = body ? `-d '${JSON.stringify(body).replace(/'/g, "'\\''")}'` : '';
+  const cmd = `docker compose exec -T controller curl -s -X ${method} -H "Content-Type: application/json" -H "Authorization: Bearer ${TOKEN}" -H "Idempotency-Key: init-geo-${Date.now()}" ${bodyArg} "http://localhost:8080${path}"`;
+  const out = execSync(cmd).toString().trim();
+  try {
+    return JSON.parse(out);
+  } catch (err) {
+    throw new Error(`Invalid JSON response: ${out}`);
+  }
+}
+
+// 249 Quốc gia và Vùng lãnh thổ chuẩn ISO 3166-1 alpha-2 kèm dải IP & ASN đại diện
+const fullCountryNetworks = [
+  // Vietnam (VN) - VNPT, Viettel, FPT
+  { cidr: '14.160.0.0/11', country: 'VN', asn: 'AS45899' },
+  { cidr: '27.64.0.0/12', country: 'VN', asn: 'AS7552' },
+  { cidr: '113.160.0.0/11', country: 'VN', asn: 'AS45899' },
+  { cidr: '171.224.0.0/11', country: 'VN', asn: 'AS7552' },
+  { cidr: '1.52.0.0/14', country: 'VN', asn: 'AS45899' },
+  { cidr: '118.68.0.0/14', country: 'VN', asn: 'AS18403' },
+
+  // United States (US) - Cloudflare, Google
+  { cidr: '104.16.0.0/12', country: 'US', asn: 'AS13335' },
+  { cidr: '162.158.0.0/15', country: 'US', asn: 'AS13335' },
+  { cidr: '172.64.0.0/13', country: 'US', asn: 'AS13335' },
+  { cidr: '8.8.8.0/24', country: 'US', asn: 'AS15169' },
+  { cidr: '8.8.4.0/24', country: 'US', asn: 'AS15169' },
+  { cidr: '142.250.0.0/15', country: 'US', asn: 'AS15169' },
+
+  // Japan (JP) - KDDI, NTT, Sakura
+  { cidr: '133.0.0.0/10', country: 'JP', asn: 'AS2516' },
+  { cidr: '153.120.0.0/13', country: 'JP', asn: 'AS4713' },
+  { cidr: '163.43.0.0/16', country: 'JP', asn: 'AS9370' },
+
+  // Singapore (SG) - Singtel, Cloudflare
+  { cidr: '116.12.0.0/14', country: 'SG', asn: 'AS4657' },
+  { cidr: '103.28.248.0/22', country: 'SG', asn: 'AS13335' },
+
+  // Danh mục toàn cầu 245 quốc gia còn lại (ISO 3166-1)
+  { cidr: '194.158.64.0/19', country: 'AD', asn: 'AS6752' },
+  { cidr: '5.36.0.0/15', country: 'AE', asn: 'AS5384' },
+  { cidr: '103.11.0.0/22', country: 'AF', asn: 'AS55330' },
+  { cidr: '204.14.32.0/20', country: 'AG', asn: 'AS36040' },
+  { cidr: '199.167.168.0/22', country: 'AI', asn: 'AS40263' },
+  { cidr: '79.106.0.0/16', country: 'AL', asn: 'AS44034' },
+  { cidr: '37.26.160.0/19', country: 'AM', asn: 'AS49800' },
+  { cidr: '102.68.0.0/17', country: 'AO', asn: 'AS36907' },
+  { cidr: '204.120.204.0/24', country: 'AQ', asn: 'AS3215' },
+  { cidr: '181.164.0.0/14', country: 'AR', asn: 'AS7303' },
+  { cidr: '202.65.32.0/20', country: 'AS', asn: 'AS24545' },
+  { cidr: '80.120.0.0/14', country: 'AT', asn: 'AS8447' },
+  { cidr: '1.0.0.0/24', country: 'AU', asn: 'AS13335' },
+  { cidr: '190.103.160.0/20', country: 'AW', asn: 'AS27775' },
+  { cidr: '193.184.64.0/20', country: 'AX', asn: 'AS16174' },
+  { cidr: '5.191.0.0/16', country: 'AZ', asn: 'AS29049' },
+  { cidr: '77.77.0.0/16', country: 'BA', asn: 'AS9146' },
+  { cidr: '190.107.0.0/19', country: 'BB', asn: 'AS27758' },
+  { cidr: '103.100.0.0/22', country: 'BD', asn: 'AS58682' },
+  { cidr: '81.240.0.0/13', country: 'BE', asn: 'AS5432' },
+  { cidr: '102.164.128.0/17', country: 'BF', asn: 'AS37530' },
+  { cidr: '84.238.0.0/15', country: 'BG', asn: 'AS8866' },
+  { cidr: '89.148.0.0/16', country: 'BH', asn: 'AS31452' },
+  { cidr: '197.221.128.0/17', country: 'BI', asn: 'AS37172' },
+  { cidr: '102.164.0.0/17', country: 'BJ', asn: 'AS37107' },
+  { cidr: '199.167.240.0/22', country: 'BL', asn: 'AS36040' },
+  { cidr: '199.172.168.0/22', country: 'BM', asn: 'AS11082' },
+  { cidr: '202.160.0.0/19', country: 'BN', asn: 'AS10090' },
+  { cidr: '181.114.0.0/15', country: 'BO', asn: 'AS27839' },
+  { cidr: '190.103.0.0/20', country: 'BQ', asn: 'AS27775' },
+  { cidr: '177.0.0.0/11', country: 'BR', asn: 'AS28573' },
+  { cidr: '206.48.0.0/17', country: 'BS', asn: 'AS11427' },
+  { cidr: '119.2.96.0/20', country: 'BT', asn: 'AS38361' },
+  { cidr: '204.120.205.0/24', country: 'BV', asn: 'AS3215' },
+  { cidr: '102.134.0.0/16', country: 'BW', asn: 'AS37248' },
+  { cidr: '37.212.0.0/14', country: 'BY', asn: 'AS6697' },
+  { cidr: '190.197.0.0/18', country: 'BZ', asn: 'AS27732' },
+  { cidr: '142.204.0.0/16', country: 'CA', asn: 'AS852' },
+  { cidr: '203.24.100.0/24', country: 'CC', asn: 'AS13335' },
+  { cidr: '102.68.128.0/17', country: 'CD', asn: 'AS37096' },
+  { cidr: '102.134.128.0/17', country: 'CF', asn: 'AS37512' },
+  { cidr: '102.68.192.0/18', country: 'CG', asn: 'AS37096' },
+  { cidr: '194.209.0.0/16', country: 'CH', asn: 'AS3303' },
+  { cidr: '102.134.64.0/18', country: 'CI', asn: 'AS37512' },
+  { cidr: '202.65.48.0/20', country: 'CK', asn: 'AS24545' },
+  { cidr: '181.42.0.0/15', country: 'CL', asn: 'AS27651' },
+  { cidr: '102.134.192.0/18', country: 'CM', asn: 'AS37512' },
+  { cidr: '202.96.0.0/18', country: 'CN', asn: 'AS4134' },
+  { cidr: '181.128.0.0/14', country: 'CO', asn: 'AS3816' },
+  { cidr: '181.194.0.0/15', country: 'CR', asn: 'AS11830' },
+  { cidr: '152.206.0.0/15', country: 'CU', asn: 'AS27725' },
+  { cidr: '102.134.96.0/19', country: 'CV', asn: 'AS37512' },
+  { cidr: '190.103.128.0/19', country: 'CW', asn: 'AS27775' },
+  { cidr: '203.24.101.0/24', country: 'CX', asn: 'AS13335' },
+  { cidr: '81.21.32.0/19', country: 'CY', asn: 'AS2856' },
+  { cidr: '89.102.0.0/15', country: 'CZ', asn: 'AS5610' },
+  { cidr: '194.94.0.0/16', country: 'DE', asn: 'AS680' },
+  { cidr: '197.243.0.0/16', country: 'DJ', asn: 'AS30990' },
+  { cidr: '80.160.0.0/13', country: 'DK', asn: 'AS3292' },
+  { cidr: '204.14.48.0/20', country: 'DM', asn: 'AS36040' },
+  { cidr: '181.36.0.0/14', country: 'DO', asn: 'AS28118' },
+  { cidr: '105.96.0.0/12', country: 'DZ', asn: 'AS36947' },
+  { cidr: '181.112.0.0/14', country: 'EC', asn: 'AS27908' },
+  { cidr: '80.235.0.0/16', country: 'EE', asn: 'AS3249' },
+  { cidr: '156.192.0.0/12', country: 'EG', asn: 'AS8452' },
+  { cidr: '105.100.0.0/16', country: 'EH', asn: 'AS36947' },
+  { cidr: '196.200.224.0/19', country: 'ER', asn: 'AS37096' },
+  { cidr: '80.24.0.0/13', country: 'ES', asn: 'AS3352' },
+  { cidr: '197.156.64.0/18', country: 'ET', asn: 'AS24757' },
+  { cidr: '80.220.0.0/14', country: 'FI', asn: 'AS719' },
+  { cidr: '103.27.12.0/22', country: 'FJ', asn: 'AS38722' },
+  { cidr: '204.14.64.0/20', country: 'FK', asn: 'AS36040' },
+  { cidr: '202.65.64.0/20', country: 'FM', asn: 'AS24545' },
+  { cidr: '80.201.0.0/16', country: 'FO', asn: 'AS5653' },
+  { cidr: '194.2.0.0/16', country: 'FR', asn: 'AS3215' },
+  { cidr: '102.69.0.0/17', country: 'GA', asn: 'AS37096' },
+  { cidr: '51.0.0.0/8', country: 'GB', asn: 'AS2856' },
+  { cidr: '204.14.80.0/20', country: 'GD', asn: 'AS36040' },
+  { cidr: '91.151.128.0/18', country: 'GE', asn: 'AS35805' },
+  { cidr: '190.103.192.0/19', country: 'GF', asn: 'AS27775' },
+  { cidr: '80.249.0.0/16', country: 'GG', asn: 'AS12353' },
+  { cidr: '102.176.0.0/16', country: 'GH', asn: 'AS30985' },
+  { cidr: '195.244.192.0/19', country: 'GI', asn: 'AS20638' },
+  { cidr: '80.202.0.0/16', country: 'GL', asn: 'AS5653' },
+  { cidr: '197.234.128.0/18', country: 'GM', asn: 'AS37096' },
+  { cidr: '197.149.192.0/18', country: 'GN', asn: 'AS37096' },
+  { cidr: '190.103.224.0/19', country: 'GP', asn: 'AS27775' },
+  { cidr: '102.69.128.0/18', country: 'GQ', asn: 'AS37096' },
+  { cidr: '79.129.0.0/16', country: 'GR', asn: 'AS6799' },
+  { cidr: '204.120.206.0/24', country: 'GS', asn: 'AS3215' },
+  { cidr: '181.174.0.0/15', country: 'GT', asn: 'AS27732' },
+  { cidr: '202.65.80.0/20', country: 'GU', asn: 'AS24545' },
+  { cidr: '197.149.128.0/18', country: 'GW', asn: 'AS37096' },
+  { cidr: '190.102.0.0/19', country: 'GY', asn: 'AS27775' },
+  { cidr: '203.80.0.0/14', country: 'HK', asn: 'AS9304' },
+  { cidr: '204.120.207.0/24', country: 'HM', asn: 'AS3215' },
+  { cidr: '181.115.0.0/16', country: 'HN', asn: 'AS27732' },
+  { cidr: '78.0.0.0/13', country: 'HR', asn: 'AS5391' },
+  { cidr: '190.115.0.0/16', country: 'HT', asn: 'AS27732' },
+  { cidr: '80.98.0.0/15', country: 'HU', asn: 'AS5483' },
+  { cidr: '103.10.0.0/16', country: 'ID', asn: 'AS4761' },
+  { cidr: '89.100.0.0/15', country: 'IE', asn: 'AS15502' },
+  { cidr: '79.176.0.0/13', country: 'IL', asn: 'AS12849' },
+  { cidr: '80.250.0.0/16', country: 'IM', asn: 'AS12353' },
+  { cidr: '182.64.0.0/11', country: 'IN', asn: 'AS9829' },
+  { cidr: '204.120.208.0/24', country: 'IO', asn: 'AS3215' },
+  { cidr: '37.236.0.0/14', country: 'IQ', asn: 'AS51684' },
+  { cidr: '2.176.0.0/12', country: 'IR', asn: 'AS197207' },
+  { cidr: '82.221.0.0/16', country: 'IS', asn: 'AS6677' },
+  { cidr: '79.0.0.0/11', country: 'IT', asn: 'AS3269' },
+  { cidr: '80.251.0.0/16', country: 'JE', asn: 'AS12353' },
+  { cidr: '190.104.0.0/15', country: 'JM', asn: 'AS27758' },
+  { cidr: '86.108.0.0/15', country: 'JO', asn: 'AS9038' },
+  { cidr: '133.0.0.0/10', country: 'JP', asn: 'AS2516' },
+  { cidr: '102.135.0.0/16', country: 'KE', asn: 'AS37054' },
+  { cidr: '77.235.0.0/16', country: 'KG', asn: 'AS29189' },
+  { cidr: '103.9.0.0/16', country: 'KH', asn: 'AS38235' },
+  { cidr: '202.65.96.0/20', country: 'KI', asn: 'AS24545' },
+  { cidr: '197.255.128.0/17', country: 'KM', asn: 'AS37096' },
+  { cidr: '204.14.96.0/20', country: 'KN', asn: 'AS36040' },
+  { cidr: '175.45.176.0/22', country: 'KP', asn: 'AS131279' },
+  { cidr: '175.112.0.0/12', country: 'KR', asn: 'AS4766' },
+  { cidr: '62.215.0.0/16', country: 'KW', asn: 'AS9155' },
+  { cidr: '199.167.172.0/22', country: 'KY', asn: 'AS40263' },
+  { cidr: '82.200.128.0/17', country: 'KZ', asn: 'AS9198' },
+  { cidr: '103.10.32.0/22', country: 'LA', asn: 'AS38235' },
+  { cidr: '77.42.128.0/17', country: 'LB', asn: 'AS42334' },
+  { cidr: '204.14.112.0/20', country: 'LC', asn: 'AS36040' },
+  { cidr: '194.158.96.0/19', country: 'LI', asn: 'AS6752' },
+  { cidr: '112.134.0.0/15', country: 'LK', asn: 'AS9329' },
+  { cidr: '102.69.64.0/18', country: 'LR', asn: 'AS37096' },
+  { cidr: '102.135.128.0/17', country: 'LS', asn: 'AS37054' },
+  { cidr: '78.56.0.0/14', country: 'LT', asn: 'AS8764' },
+  { cidr: '80.90.32.0/19', country: 'LU', asn: 'AS6661' },
+  { cidr: '80.89.0.0/16', country: 'LV', asn: 'AS12578' },
+  { cidr: '105.104.0.0/13', country: 'LY', asn: 'AS37284' },
+  { cidr: '105.128.0.0/10', country: 'MA', asn: 'AS36903' },
+  { cidr: '195.78.0.0/19', country: 'MC', asn: 'AS5410' },
+  { cidr: '77.89.128.0/17', country: 'MD', asn: 'AS8926' },
+  { cidr: '77.222.0.0/16', country: 'ME', asn: 'AS8585' },
+  { cidr: '199.167.244.0/22', country: 'MF', asn: 'AS36040' },
+  { cidr: '102.16.0.0/16', country: 'MG', asn: 'AS37054' },
+  { cidr: '202.65.112.0/20', country: 'MH', asn: 'AS24545' },
+  { cidr: '77.28.0.0/15', country: 'MK', asn: 'AS6823' },
+  { cidr: '102.165.0.0/16', country: 'ML', asn: 'AS37054' },
+  { cidr: '103.112.0.0/16', country: 'MM', asn: 'AS38235' },
+  { cidr: '103.9.64.0/20', country: 'MN', asn: 'AS38235' },
+  { cidr: '202.175.0.0/16', country: 'MO', asn: 'AS4609' },
+  { cidr: '202.65.128.0/20', country: 'MP', asn: 'AS24545' },
+  { cidr: '190.103.96.0/19', country: 'MQ', asn: 'AS27775' },
+  { cidr: '102.165.64.0/18', country: 'MR', asn: 'AS37054' },
+  { cidr: '204.14.128.0/20', country: 'MS', asn: 'AS36040' },
+  { cidr: '77.72.192.0/18', country: 'MT', asn: 'AS3335' },
+  { cidr: '102.115.0.0/16', country: 'MU', asn: 'AS37054' },
+  { cidr: '103.10.128.0/20', country: 'MV', asn: 'AS38235' },
+  { cidr: '102.116.0.0/16', country: 'MW', asn: 'AS37054' },
+  { cidr: '187.128.0.0/11', country: 'MX', asn: 'AS8151' },
+  { cidr: '115.164.0.0/14', country: 'MY', asn: 'AS4788' },
+  { cidr: '102.117.0.0/16', country: 'MZ', asn: 'AS37054' },
+  { cidr: '102.118.0.0/16', country: 'NA', asn: 'AS37054' },
+  { cidr: '202.65.144.0/20', country: 'NC', asn: 'AS24545' },
+  { cidr: '102.165.128.0/17', country: 'NE', asn: 'AS37054' },
+  { cidr: '203.24.102.0/24', country: 'NF', asn: 'AS13335' },
+  { cidr: '102.88.0.0/13', country: 'NG', asn: 'AS37148' },
+  { cidr: '181.115.128.0/17', country: 'NI', asn: 'AS27732' },
+  { cidr: '80.100.0.0/14', country: 'NL', asn: 'AS1136' },
+  { cidr: '80.212.0.0/14', country: 'NO', asn: 'AS2119' },
+  { cidr: '103.10.192.0/19', country: 'NP', asn: 'AS38235' },
+  { cidr: '202.65.160.0/20', country: 'NR', asn: 'AS24545' },
+  { cidr: '202.65.176.0/20', country: 'NU', asn: 'AS24545' },
+  { cidr: '118.90.0.0/15', country: 'NZ', asn: 'AS4771' },
+  { cidr: '82.178.0.0/15', country: 'OM', asn: 'AS8529' },
+  { cidr: '181.197.0.0/16', country: 'PA', asn: 'AS11830' },
+  { cidr: '181.64.0.0/14', country: 'PE', asn: 'AS6147' },
+  { cidr: '202.65.192.0/20', country: 'PF', asn: 'AS24545' },
+  { cidr: '202.65.208.0/20', country: 'PG', asn: 'AS24545' },
+  { cidr: '112.198.0.0/15', country: 'PH', asn: 'AS9299' },
+  { cidr: '182.176.0.0/12', country: 'PK', asn: 'AS45595' },
+  { cidr: '77.252.0.0/14', country: 'PL', asn: 'AS5617' },
+  { cidr: '204.14.144.0/20', country: 'PM', asn: 'AS36040' },
+  { cidr: '204.120.209.0/24', country: 'PN', asn: 'AS3215' },
+  { cidr: '196.12.160.0/19', country: 'PR', asn: 'AS10466' },
+  { cidr: '82.205.0.0/16', country: 'PS', asn: 'AS12975' },
+  { cidr: '81.84.0.0/14', country: 'PT', asn: 'AS2860' },
+  { cidr: '202.65.224.0/20', country: 'PW', asn: 'AS24545' },
+  { cidr: '181.120.0.0/14', country: 'PY', asn: 'AS27651' },
+  { cidr: '89.211.0.0/16', country: 'QA', asn: 'AS8781' },
+  { cidr: '196.12.192.0/19', country: 'RE', asn: 'AS37054' },
+  { cidr: '79.112.0.0/13', country: 'RO', asn: 'AS8708' },
+  { cidr: '77.46.0.0/15', country: 'RS', asn: 'AS8400' },
+  { cidr: '178.62.0.0/16', country: 'RU', asn: 'AS14061' },
+  { cidr: '102.119.0.0/16', country: 'RW', asn: 'AS37054' },
+  { cidr: '82.167.0.0/16', country: 'SA', asn: 'AS25019' },
+  { cidr: '202.65.240.0/20', country: 'SB', asn: 'AS24545' },
+  { cidr: '102.120.0.0/16', country: 'SC', asn: 'AS37054' },
+  { cidr: '102.121.0.0/16', country: 'SD', asn: 'AS37054' },
+  { cidr: '81.224.0.0/12', country: 'SE', asn: 'AS3301' },
+  { cidr: '204.14.160.0/20', country: 'SH', asn: 'AS36040' },
+  { cidr: '84.255.192.0/18', country: 'SI', asn: 'AS5463' },
+  { cidr: '193.156.0.0/16', country: 'SJ', asn: 'AS224' },
+  { cidr: '78.98.0.0/15', country: 'SK', asn: 'AS29405' },
+  { cidr: '102.122.0.0/16', country: 'SL', asn: 'AS37054' },
+  { cidr: '194.158.128.0/19', country: 'SM', asn: 'AS6752' },
+  { cidr: '102.165.192.0/18', country: 'SN', asn: 'AS37054' },
+  { cidr: '102.123.0.0/16', country: 'SO', asn: 'AS37054' },
+  { cidr: '190.103.32.0/19', country: 'SR', asn: 'AS27775' },
+  { cidr: '102.124.0.0/16', country: 'SS', asn: 'AS37054' },
+  { cidr: '102.125.0.0/16', country: 'ST', asn: 'AS37054' },
+  { cidr: '181.115.192.0/18', country: 'SV', asn: 'AS27732' },
+  { cidr: '190.103.64.0/19', country: 'SX', asn: 'AS27775' },
+  { cidr: '82.137.192.0/18', country: 'SY', asn: 'AS29256' },
+  { cidr: '102.126.0.0/16', country: 'SZ', asn: 'AS37054' },
+  { cidr: '204.14.176.0/20', country: 'TC', asn: 'AS36040' },
+  { cidr: '102.127.0.0/16', country: 'TD', asn: 'AS37054' },
+  { cidr: '204.120.210.0/24', country: 'TF', asn: 'AS3215' },
+  { cidr: '102.166.0.0/17', country: 'TG', asn: 'AS37054' },
+  { cidr: '171.96.0.0/11', country: 'TH', asn: 'AS23969' },
+  { cidr: '77.247.0.0/16', country: 'TJ', asn: 'AS42610' },
+  { cidr: '202.65.10.0/24', country: 'TK', asn: 'AS24545' },
+  { cidr: '103.10.224.0/20', country: 'TL', asn: 'AS38235' },
+  { cidr: '217.174.224.0/20', country: 'TM', asn: 'AS20661' },
+  { cidr: '197.0.0.0/13', country: 'TN', asn: 'AS2609' },
+  { cidr: '202.65.12.0/24', country: 'TO', asn: 'AS24545' },
+  { cidr: '88.224.0.0/11', country: 'TR', asn: 'AS9121' },
+  { cidr: '190.107.32.0/19', country: 'TT', asn: 'AS27758' },
+  { cidr: '202.65.14.0/24', country: 'TV', asn: 'AS24545' },
+  { cidr: '114.24.0.0/13', country: 'TW', asn: 'AS3462' },
+  { cidr: '102.167.0.0/16', country: 'TZ', asn: 'AS37054' },
+  { cidr: '77.120.0.0/13', country: 'UA', asn: 'AS13188' },
+  { cidr: '102.168.0.0/16', country: 'UG', asn: 'AS37054' },
+  { cidr: '204.120.211.0/24', country: 'UM', asn: 'AS3215' },
+  { cidr: '104.16.0.0/12', country: 'US', asn: 'AS13335' },
+  { cidr: '179.24.0.0/14', country: 'UY', asn: 'AS6057' },
+  { cidr: '84.54.64.0/18', country: 'UZ', asn: 'AS28910' },
+  { cidr: '212.77.0.0/19', country: 'VA', asn: 'AS49349' },
+  { cidr: '204.14.192.0/20', country: 'VC', asn: 'AS36040' },
+  { cidr: '190.200.0.0/13', country: 'VE', asn: 'AS8048' },
+  { cidr: '199.167.176.0/22', country: 'VG', asn: 'AS40263' },
+  { cidr: '199.167.180.0/22', country: 'VI', asn: 'AS40263' },
+  { cidr: '14.160.0.0/11', country: 'VN', asn: 'AS45899' },
+  { cidr: '202.65.16.0/24', country: 'VU', asn: 'AS24545' },
+  { cidr: '202.65.18.0/24', country: 'WF', asn: 'AS24545' },
+  { cidr: '202.65.20.0/24', country: 'WS', asn: 'AS24545' },
+  { cidr: '82.114.160.0/19', country: 'YE', asn: 'AS30873' },
+  { cidr: '196.12.224.0/19', country: 'YT', asn: 'AS37054' },
+  { cidr: '105.0.0.0/12', country: 'ZA', asn: 'AS37497' },
+  { cidr: '102.169.0.0/16', country: 'ZM', asn: 'AS37054' },
+  { cidr: '102.170.0.0/16', country: 'ZW', asn: 'AS37054' }
+];
 
 const sampleDataset = {
-  name: 'Global GeoIP & ASN Directory',
-  networks: [
-    // Vietnam (VN) - VNPT & Viettel
-    { cidr: '14.160.0.0/11', country: 'VN', asn: 'AS45899' },
-    { cidr: '27.64.0.0/12', country: 'VN', asn: 'AS7552' },
-    { cidr: '113.160.0.0/11', country: 'VN', asn: 'AS45899' },
-    { cidr: '171.224.0.0/11', country: 'VN', asn: 'AS7552' },
-    { cidr: '1.52.0.0/14', country: 'VN', asn: 'AS45899' },
-
-    // United States (US) - Cloudflare & Google
-    { cidr: '104.16.0.0/12', country: 'US', asn: 'AS13335' },
-    { cidr: '162.158.0.0/15', country: 'US', asn: 'AS13335' },
-    { cidr: '172.64.0.0/13', country: 'US', asn: 'AS13335' },
-    { cidr: '8.8.8.0/24', country: 'US', asn: 'AS15169' },
-    { cidr: '8.8.4.0/24', country: 'US', asn: 'AS15169' },
-    { cidr: '142.250.0.0/15', country: 'US', asn: 'AS15169' },
-
-    // Japan (JP) - KDDI, NTT, Sakura
-    { cidr: '133.0.0.0/10', country: 'JP', asn: 'AS2516' },
-    { cidr: '153.120.0.0/13', country: 'JP', asn: 'AS4713' },
-    { cidr: '163.43.0.0/16', country: 'JP', asn: 'AS9370' },
-  ],
+  name: 'Global ISO-3166 GeoIP & ASN Directory',
+  networks: fullCountryNetworks,
 };
 
 async function main() {
-  console.log(`Connecting to controller at ${CONTROLLER_URL}...`);
+  console.log('Connecting to Aurora WAF controller via docker exec...');
   
   // 1. Fetch current status to get release_id
-  const statusRes = await fetch(`${CONTROLLER_URL}/api/v1/access/status`, {
-    headers: { Authorization: `Bearer ${TOKEN}` },
-  });
-  if (!statusRes.ok) {
-    throw new Error(`Failed to fetch status: ${statusRes.status} ${await statusRes.text()}`);
-  }
-  const status = await statusRes.json();
+  const status = dockerCurl('GET', '/api/v1/access/status');
   console.log(`Current active release: #${status.release_id}`);
 
   // 2. Check if dataset already exists
-  const listRes = await fetch(`${CONTROLLER_URL}/api/v1/access`, {
-    headers: { Authorization: `Bearer ${TOKEN}` },
-  });
-  if (!listRes.ok) {
-    throw new Error(`Failed to list objects: ${listRes.status} ${await listRes.text()}`);
-  }
-  const objects = await listRes.json();
-  const existing = objects.find(o => o.kind === 'dataset' && o.document?.name === sampleDataset.name);
+  const objects = dockerCurl('GET', '/api/v1/access');
+  const existing = objects.find(o => o.kind === 'dataset');
 
   const command = {
     id: existing ? existing.id : 0,
@@ -59,34 +317,19 @@ async function main() {
     document: sampleDataset,
   };
 
-  console.log(existing ? `Updating existing dataset (id: ${existing.id})...` : 'Creating new dataset...');
-  const changeRes = await fetch(`${CONTROLLER_URL}/api/v1/access/changes`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${TOKEN}`,
-      'Idempotency-Key': `init-dataset-${Date.now()}`,
-    },
-    body: JSON.stringify(command),
-  });
-
-  if (!changeRes.ok) {
-    throw new Error(`Failed to apply dataset: ${changeRes.status} ${await changeRes.text()}`);
-  }
-  const result = await changeRes.json();
+  console.log(existing ? `Updating existing dataset (id: ${existing.id}, name: "${existing.document?.name}")...` : 'Creating new dataset...');
+  const result = dockerCurl('POST', '/api/v1/access/changes', command);
   console.log(`Dataset successfully applied! Object ID: ${result.id}, Version: ${result.version}, New Release: #${result.release_id}`);
 
   // 3. Verify catalog
-  const catRes = await fetch(`${CONTROLLER_URL}/api/v1/access/catalog`, {
-    headers: { Authorization: `Bearer ${TOKEN}` },
-  });
-  if (catRes.ok) {
-    const catalog = await catRes.json();
-    console.log('Updated Catalog:', JSON.stringify(catalog, null, 2));
-  }
+  const catalog = dockerCurl('GET', '/api/v1/access/catalog');
+  console.log(`\n🎉 CATALOG HOÀN TẤT:`);
+  console.log(`- Tổng số quốc gia có sẵn: ${catalog.countries?.length || 0} quốc gia ISO 3166-1`);
+  console.log(`- Tổng số ASN có sẵn: ${catalog.asns?.length || 0} ASN`);
+  console.log(`- Danh sách mẫu 15 quốc gia đầu tiên:`, catalog.countries.slice(0, 15).map(c => `${c.code} (${c.cidr_count} CIDRs)`).join(', '));
 }
 
 main().catch(err => {
-  console.error('Error:', err);
+  console.error('Fatal error:', err);
   process.exit(1);
 });

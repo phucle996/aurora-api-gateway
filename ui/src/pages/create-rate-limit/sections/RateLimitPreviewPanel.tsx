@@ -118,19 +118,19 @@ end`;
   };
 
   return (
-    <div className="bg-[#0B1320] border border-[#152030] p-4 space-y-3 font-sans text-xs">
-      <div className="text-sm font-semibold text-white">Rule Preview</div>
+    <div className="bg-card border border-border p-4 space-y-3 font-sans text-xs">
+      <div className="text-sm font-semibold text-foreground">Rule Preview</div>
 
       {/* Preview Tabs */}
-      <div className="flex items-center justify-between border-b border-[#152030] bg-[#080E18]">
+      <div className="flex items-center justify-between border-b border-border bg-muted/30">
         <div className="flex overflow-x-auto">
           <button
             type="button"
             onClick={() => setTab('nginx')}
             className={`px-3 py-1.5 text-xs transition-colors cursor-pointer whitespace-nowrap ${
               tab === 'nginx'
-                ? 'text-cyan-400 border-b-2 border-cyan-400 font-semibold bg-[#0B1320]'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'text-primary border-b-2 border-primary font-semibold bg-card'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             NGINX Config
@@ -140,8 +140,8 @@ end`;
             onClick={() => setTab('lua')}
             className={`px-3 py-1.5 text-xs transition-colors cursor-pointer whitespace-nowrap ${
               tab === 'lua'
-                ? 'text-cyan-400 border-b-2 border-cyan-400 font-semibold bg-[#0B1320]'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'text-primary border-b-2 border-primary font-semibold bg-card'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             Lua Script (Generated)
@@ -151,8 +151,8 @@ end`;
             onClick={() => setTab('json')}
             className={`px-3 py-1.5 text-xs transition-colors cursor-pointer whitespace-nowrap ${
               tab === 'json'
-                ? 'text-cyan-400 border-b-2 border-cyan-400 font-semibold bg-[#0B1320]'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'text-primary border-b-2 border-primary font-semibold bg-card'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             JSON
@@ -162,32 +162,32 @@ end`;
         <button
           type="button"
           onClick={handleCopy}
-          className="flex items-center gap-1 px-2.5 py-1 bg-[#0E1726] hover:bg-[#152030] border border-[#1C293D] text-slate-300 hover:text-white text-[11px] cursor-pointer transition-colors m-1"
+          className="flex items-center gap-1 px-2.5 py-1 bg-card hover:bg-muted border border-border text-muted-foreground hover:text-foreground text-[11px] cursor-pointer transition-colors m-1"
         >
-          {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+          {copied ? <Check className="w-3 h-3 text-primary" /> : <Copy className="w-3 h-3" />}
           <span>{copied ? 'Copied' : 'Copy'}</span>
         </button>
       </div>
 
       {/* Code Window with line numbers */}
-      <div className="bg-[#060A10] border border-[#152030] p-3 text-xs font-mono overflow-x-auto">
+      <div className="bg-background border border-border p-3 text-xs font-mono overflow-x-auto">
         <div className="space-y-0.5">
           {lines.map((line, idx) => (
             <div key={idx} className="flex leading-5">
-              <span className="w-6 text-slate-600 select-none text-right pr-3 shrink-0">
+              <span className="w-6 text-muted-foreground/50 select-none text-right pr-3 shrink-0">
                 {idx + 1}
               </span>
-              <span className="text-slate-300 whitespace-pre">
+              <span className="text-foreground whitespace-pre">
                 {line.startsWith('#') || line.startsWith('--') ? (
-                  <span className="text-slate-500 italic">{line}</span>
+                  <span className="text-muted-foreground italic">{line}</span>
                 ) : line.includes('limit_req') || line.includes('return') || line.includes('add_header') || line.includes('server') || line.includes('location') ? (
                   <span>
                     {line.split(/(limit_req_zone|limit_req_status|limit_req|add_header|return|server|location)/g).map((chunk, cIdx) => {
                       if (['limit_req_zone', 'limit_req_status', 'limit_req', 'add_header', 'return', 'server', 'location'].includes(chunk)) {
-                        return <span key={cIdx} className="text-cyan-400 font-semibold">{chunk}</span>;
+                        return <span key={cIdx} className="text-primary font-semibold">{chunk}</span>;
                       }
                       if (chunk.includes('429') || chunk.includes('20')) {
-                        return <span key={cIdx} className="text-amber-300">{chunk}</span>;
+                        return <span key={cIdx} className="text-amber-500 dark:text-amber-300">{chunk}</span>;
                       }
                       return <span key={cIdx}>{chunk}</span>;
                     })}

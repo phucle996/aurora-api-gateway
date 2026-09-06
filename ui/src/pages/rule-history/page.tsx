@@ -306,7 +306,7 @@ export default function RuleHistoryPage() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[500px] gap-3 text-slate-500 dark:text-slate-400 font-sans text-xs">
-        <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
         <span>Loading rule history...</span>
       </div>
     );
@@ -326,7 +326,7 @@ export default function RuleHistoryPage() {
           <div className="pt-2">
             <Link
               to="/rules"
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded-xs transition-colors"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-xs rounded-xs transition-colors"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Back to Security Rules</span>
@@ -381,16 +381,16 @@ export default function RuleHistoryPage() {
               const elem = document.getElementById('configuration-diff-section');
               if (elem) elem.scrollIntoView({ behavior: 'smooth' });
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-[#0E1726] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer rounded-xs"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-muted hover:bg-accent border border-border text-foreground transition-colors cursor-pointer rounded-xs"
           >
-            <GitCompare className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+            <GitCompare className="w-3.5 h-3.5 text-primary" />
             <span>Compare Versions</span>
           </button>
 
           <button
             type="button"
             onClick={() => handleOpenRestoreModal(selectedVersion)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-[#0E1726] dark:hover:bg-[#152030] border border-slate-200 dark:border-[#1C293D] text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer rounded-xs"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-muted hover:bg-accent border border-border text-foreground transition-colors cursor-pointer rounded-xs"
           >
             <RotateCcw className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
             <span>Restore Selected</span>
@@ -399,7 +399,7 @@ export default function RuleHistoryPage() {
           <button
             type="button"
             onClick={() => navigate(`/edit-rule?id=${ruleId}`)}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-medium shadow-xs transition-colors cursor-pointer rounded-xs"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-xs transition-colors cursor-pointer rounded-xs"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Back to Edit Rule</span>

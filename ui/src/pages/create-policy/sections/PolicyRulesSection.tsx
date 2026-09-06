@@ -98,7 +98,7 @@ export function PolicyRulesSection({
   };
 
   return (
-    <section className="bg-white dark:bg-[#0B1320] border border-slate-200 dark:border-[#172338] p-5 space-y-4 shadow-xs rounded-sm font-sans">
+    <section className="bg-card border border-border p-5 space-y-4 shadow-xs rounded-sm font-sans">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
@@ -108,15 +108,15 @@ export function PolicyRulesSection({
             Select and configure real rules from your catalog that will be applied by this policy.
           </p>
         </div>
-        <span className="text-xs font-semibold px-2 py-0.5 bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-900/60 text-blue-700 dark:text-blue-400 rounded-xs">
+        <span className="text-xs font-semibold px-2 py-0.5 bg-primary/10 border border-primary/20 text-primary rounded-xs">
           {rules.length} rule{rules.length === 1 ? '' : 's'} configured
         </span>
       </div>
 
       {/* Rules Table */}
-      <div className="border border-slate-200 dark:border-[#172338] overflow-x-auto rounded-sm">
+      <div className="border border-border overflow-x-auto rounded-sm">
         <table className="w-full text-left text-xs">
-          <thead className="bg-slate-50 dark:bg-[#080E18] text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-[#172338]">
+          <thead className="bg-muted/40 text-muted-foreground border-b border-border">
             <tr>
               <th className="py-2.5 px-3 w-16 text-center">Order</th>
               <th className="py-2.5 px-3">Rule</th>
@@ -125,7 +125,7 @@ export function PolicyRulesSection({
               <th className="py-2.5 px-3 w-28 text-right pr-4">Status</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-[#172338]/60">
+          <tbody className="divide-y divide-border">
             {isLoading ? (
               <tr>
                 <td
@@ -133,7 +133,7 @@ export function PolicyRulesSection({
                   className="py-8 text-center text-slate-400 dark:text-slate-500"
                 >
                   <div className="flex items-center justify-center gap-2">
-                    <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                     <span>Loading rules from catalog...</span>
                   </div>
                 </td>
@@ -151,7 +151,7 @@ export function PolicyRulesSection({
               rules.map((rule, index) => (
                 <tr
                   key={rule.id}
-                  className="hover:bg-slate-50 dark:hover:bg-[#0E1726]/40 transition-colors"
+                  className="hover:bg-muted/40 transition-colors"
                 >
                   {/* Order & Drag Handle */}
                   <td className="py-3 px-3">
@@ -170,7 +170,7 @@ export function PolicyRulesSection({
                         {rule.name}
                       </span>
                       {rule.group && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-xs bg-slate-100 dark:bg-[#152030] text-slate-500 dark:text-slate-400">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-xs bg-muted text-muted-foreground">
                           {rule.group}
                         </span>
                       )}
@@ -179,7 +179,7 @@ export function PolicyRulesSection({
 
                   {/* Type */}
                   <td className="py-3 px-3">
-                    <div className="flex items-center gap-1.5 text-cyan-600 dark:text-cyan-400 font-medium">
+                    <div className="flex items-center gap-1.5 text-primary font-medium">
                       {rule.type === 'custom' && (
                         <>
                           <Code className="w-3.5 h-3.5" />
@@ -233,7 +233,7 @@ export function PolicyRulesSection({
                       aria-checked={rule.enabled}
                       onClick={() => toggleRuleEnabled(rule.id)}
                       className={`inline-flex w-9 h-5 items-center p-0.5 rounded-full cursor-pointer transition-colors ${
-                        rule.enabled ? 'bg-blue-600' : 'bg-slate-300 dark:bg-[#1C293D]'
+                        rule.enabled ? 'bg-primary' : 'bg-muted'
                       }`}
                     >
                       <div
@@ -255,7 +255,7 @@ export function PolicyRulesSection({
         <button
           type="button"
           onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/30 dark:hover:bg-blue-950/50 border border-blue-300 dark:border-blue-500/40 text-blue-700 dark:text-blue-400 text-xs font-semibold rounded-sm transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary text-xs font-semibold rounded-sm transition-colors cursor-pointer"
         >
           <Pencil className="w-3.5 h-3.5" />
           <span>Edit Rules</span>
