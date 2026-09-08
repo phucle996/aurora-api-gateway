@@ -165,7 +165,29 @@ id -u aurora &>/dev/null || useradd --system --no-create-home --shell /bin/false
 echo "==> Creating data directories..."
 install -d -m 750 -o aurora -g aurora /var/lib/aurora-waf
 install -d -m 750 -o aurora -g aurora /etc/aurora-waf
-mkdir -p /var/run/aurora-waf
+mkdir -p /run/aurora-waf
+chown -R aurora:aurora /run/aurora-waf 2>/dev/null || true
+
+# ── Security tokens & Environment ──────────────────────────────────────────────
+if [ ! -f /etc/aurora-waf/controller.env ]; then
+  echo "==> Generating production secrets in /etc/aurora-waf/controller.env..."
+  JWT_SECRET=$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | od -A n -v -t x1 | tr -d ' \n')
+  cat > /etc/aurora-waf/controller.env << ENV_EOF
+# Aurora WAF Controller Environment
+AURORA_ENV=production
+AURORA_JWT_SECRET=${JWT_SECRET}
+ENV_EOF
+  chmod 600 /etc/aurora-waf/controller.env
+  chown aurora:aurora /etc/aurora-waf/controller.env
+fi
+
+if [ ! -f /etc/aurora-waf/admin.token ]; then
+  echo "==> Generating admin token in /etc/aurora-waf/admin.token..."
+  ADMIN_TOKEN=$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | od -A n -v -t x1 | tr -d ' \n')
+  echo "${ADMIN_TOKEN}" > /etc/aurora-waf/admin.token
+  chmod 600 /etc/aurora-waf/admin.token
+  chown aurora:aurora /etc/aurora-waf/admin.token
+fi
 
 # ── Binaries ───────────────────────────────────────────────────────────────────
 echo "==> Installing Aurora WAF binaries..."
@@ -229,7 +251,9 @@ Group=aurora
 
 StateDirectory=aurora-waf
 ConfigurationDirectory=aurora-waf
+ConfigurationDirectoryMode=0750
 RuntimeDirectory=aurora-waf
+RuntimeDirectoryMode=0750
 
 Environment="AURORA_ENV=production"
 Environment="AURORA_HTTP_ADDR=127.0.0.1:8080"
@@ -275,7 +299,7 @@ Wants=network-online.target
 [Service]
 Environment="AURORA_METRICS_SCOPE=host"
 Type=forking
-PIDFile=/var/run/aurora-waf/nginx.pid
+PIDFile=/run/aurora-waf/nginx.pid
 
 Environment="NODE_ID=node-01"
 Environment="CONTROL_PLANE_URL=https://control-plane.internal:8080"
@@ -286,7 +310,7 @@ EnvironmentFile=-/etc/aurora-waf/node.env
 
 ExecStartPre=/usr/bin/bash -c '\\
     set -euo pipefail; \\
-    mkdir -p \$(dirname "\$POLICY_DEST") /var/run/aurora-waf; \\
+    mkdir -p \$(dirname "\$POLICY_DEST") /run/aurora-waf; \\
     if [ ! -f "\$POLICY_DEST" ]; then \\
         echo "[Aurora WAF] Initializing baseline policy..."; \\
         printf "{\\n  \\"schema_version\\": 1,\\n  \\"block_paths\\": [\\n    \\"/blocked\\",\\n    \\"/__aurora_blocked\\"\\n  ]\\n}\\n" > "\$POLICY_DEST"; \\
@@ -331,15 +355,24 @@ WantedBy=multi-user.target
 UNIT_EOF
 
 # ── Activate ───────────────────────────────────────────────────────────────────
-systemctl daemon-reload
+if systemctl is-system-running &>/dev/null || [ -d /run/systemd/system ]; then
+  systemctl daemon-reload
 
-echo "==> Enabling and starting aurora-waf-controller..."
-systemctl enable --now aurora-waf-controller
+  echo "==> Enabling and starting aurora-waf-controller..."
+  systemctl enable --now aurora-waf-controller
 
-echo ""
-echo "========================================"
-echo "  Aurora WAF Control Plane is running."
-echo "========================================"
+  echo ""
+  echo "========================================"
+  echo "  Aurora WAF Control Plane is running."
+  echo "========================================"
+else
+  echo ""
+  echo "========================================"
+  echo "  Aurora WAF installed successfully."
+  echo "========================================"
+  echo "  Notice: systemd is not booted as PID 1. Skipping live service activation."
+  echo "  Systemd units have been installed to /etc/systemd/system/."
+fi
 echo ""
 if [ -n "$SELECTED_NGINX" ]; then
   echo "  NGINX detected: ${SELECTED_NGINX} (v${SELECTED_VERSION})"
