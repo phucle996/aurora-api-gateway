@@ -1,36 +1,138 @@
-name: foundation
+name: CI
+
 on:
   push:
+    branches: [main]
   pull_request:
+    branches: [main]
+
 permissions:
   contents: read
+
 jobs:
-  check:
+  rust-checks:
+    name: Rust (Format, Clippy, Test)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-go@v7.0.0
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@master
         with:
-          go-version-file: control-plane/go.mod
-          cache-dependency-path: control-plane/go.sum
-      - uses: actions/setup-node@v7.0.0
+          toolchain: "1.98.1"
+          components: rustfmt, clippy
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check code formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy linter
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run unit tests
+        run: cargo test --workspace
+
+  ui-checks:
+    name: UI (TypeScript & Vite Build)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: ui/package-lock.json
-      - name: Rust toolchain
-        run: rustup show active-toolchain
-      - name: npm toolchain
+
+      - name: Install dependencies
         working-directory: ui
-        run: npm install --global "$(node -p 'require("./package.json").packageManager')"
-      - run: make ui-install
-      - run: make check
-      - name: NGINX module build dependencies
+        run: npm ci
+
+      - name: Typecheck and build UI
+        working-directory: ui
+        run: npm run build
+
+  control-plane-checks:
+    name: Control Plane (Go Tests & Vet)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: control-plane/go.mod
+          cache-dependency-path: control-plane/go.sum
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.98.1"
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build compiler binary
+        run: cargo build --locked -p aurora-engine --bin aurora-compile --release
+
+      - name: Run Go vet
+        working-directory: control-plane
+        run: go vet ./...
+
+      - name: Run Go unit and integration tests
+        working-directory: control-plane
+        env:
+          AURORA_TEST_COMPILER: ${{ github.workspace }}/target/release/aurora-compile
+        run: go test -count=1 ./...
+
+  nginx-module-integration:
+    name: NGINX Dynamic Module Integration
+    needs: [rust-checks, control-plane-checks]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: control-plane/go.mod
+          cache-dependency-path: control-plane/go.sum
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.98.1"
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install NGINX module build dependencies
         run: sudo apt-get update && sudo apt-get install --yes libpcre2-dev
-      - run: make module
+
+      - name: Build compiler and module
+        run: |
+          make compiler
+          make module
+
       - name: Build matching NGINX test host
         run: make -C build/nginx-source/nginx-1.30.4 -j2
-      - name: Module lifecycle integration
+
+      - name: Module lifecycle integration test
         run: NGINX="$PWD/build/nginx-source/nginx-1.30.4/objs/nginx" node scripts/test-nginx-module.mjs
+
       - name: Rules publication and activation under traffic
         run: make rules-test NGINX="$PWD/build/nginx-source/nginx-1.30.4/objs/nginx"

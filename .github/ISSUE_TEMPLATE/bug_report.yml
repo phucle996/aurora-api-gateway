@@ -1,0 +1,67 @@
+name: Bug Report
+description: Report a reproducible problem or unexpected error in Aurora WAF
+title: "[BUG]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting an issue! Please check existing issues before submitting.
+  - type: checkboxes
+    id: component
+    attributes:
+      label: Affected Component(s)
+      description: Select all components involved in this issue.
+      options:
+        - label: Core Engine (`crates/engine` - Rust)
+        - label: C FFI ABI (`crates/ffi` - Rust C ABI)
+        - label: NGINX Dynamic Module (`adapters/nginx`)
+        - label: Control Plane Backend (`control-plane` - Go)
+        - label: Management Console UI (`ui` - React/Vite)
+        - label: Deployment & Manifests (`deploy/`, Systemd, Docker)
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Describe what happened...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Step-by-step instructions to reproduce the problem.
+      placeholder: |
+        1. Start controller via '...'
+        2. Send HTTP request '...'
+        3. Observe error '...'
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen instead?
+      placeholder: Expected behavior...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment Information
+      description: Operating system, compiler, and package versions.
+      value: |
+        - OS: [e.g. Ubuntu 24.04 LTS]
+        - NGINX Version: [e.g. 1.30.4]
+        - Go Version: [e.g. 1.27.1]
+        - Rust Version: [e.g. 1.98.1]
+        - Aurora WAF Version/Commit:
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Logs and Additional Context
+      description: Paste relevant logs, stack traces, or terminal output here.
+      placeholder: Logs or stack traces...

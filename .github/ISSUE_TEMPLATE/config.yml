@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Aurora WAF Security Advisory
+    url: https://github.com/phucle996/aurora-waf/blob/main/SECURITY.md
+    about: Please report security vulnerabilities privately according to our security policy.

@@ -1,0 +1,47 @@
+name: Feature Request
+description: Propose a new feature, architecture enhancement, or rule capability
+title: "[FEAT]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting an improvement for Aurora WAF!
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: Is your feature request related to a problem or limitation? Please describe.
+      placeholder: I'm always frustrated when...
+    validations:
+      required: true
+  - type: textarea
+    id: proposed_solution
+    attributes:
+      label: Proposed Solution
+      description: A clear and concise description of the behavior or architecture you want.
+      placeholder: Describe the solution...
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any alternative designs, tools, or workarounds you have evaluated.
+      placeholder: Alternatives considered...
+  - type: checkboxes
+    id: architecture_impact
+    attributes:
+      label: Architecture & Workflow Impact
+      description: Check all areas affected by this proposal.
+      options:
+        - label: Data plane hot path (requires zero-allocation in Rust)
+        - label: C FFI ABI boundary (`crates/ffi`)
+        - label: Control plane API & CTE query schema (`control-plane`)
+        - label: Management Console UI (`ui`)
+        - label: Breaking change to existing configurations
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional Context
+      description: Add any diagrams, benchmarks, references, or specifications.
