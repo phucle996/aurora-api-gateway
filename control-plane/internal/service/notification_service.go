@@ -150,7 +150,7 @@ func testSlackChannel(cfg map[string]interface{}) (error, string) {
 	}
 
 	// Nếu là URL dummy template
-	if strings.Contains(webhookURL, "XXXXXXXXXXXXXXXXXXXXXXXX") {
+	if strings.Contains(webhookURL, "placeholder") || strings.Contains(webhookURL, "example.com") || strings.Contains(webhookURL, "XXXXXXXXXXXXXXXXXXXXXXXX") {
 		return nil, "Cú pháp Webhook URL hợp lệ (Sử dụng URL thực từ Slack App để nhận tin nhắn trực tiếp)"
 	}
 
