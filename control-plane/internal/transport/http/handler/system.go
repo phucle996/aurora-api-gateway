@@ -36,10 +36,10 @@ func (h *SystemHandler) Info(c *gin.Context) {
 	info, err := h.service.GetSystemInfo(ctx)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn thông tin hệ thống đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "system info query timed out"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể lấy thông tin hệ thống: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get system info: " + err.Error()})
 		return
 	}
 

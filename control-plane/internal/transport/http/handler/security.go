@@ -57,7 +57,7 @@ func (h *SecurityHandler) GetOverview(c *gin.Context) {
 	overview, err := h.service.GetOverview(ctx, userID)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn thông tin bảo mật đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "security overview query timed out"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -95,7 +95,7 @@ func (h *SecurityHandler) UpdateProvider(c *gin.Context) {
 
 	var req dto.UpdateAuthProviderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu cấu hình không hợp lệ: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid configuration data: " + err.Error()})
 		return
 	}
 
@@ -104,7 +104,7 @@ func (h *SecurityHandler) UpdateProvider(c *gin.Context) {
 
 	if err := h.service.UpdateProvider(ctx, id, req.Enabled, req.ConfigJSON); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Cập nhật phương thức xác thực đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "update auth provider timed out"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -112,7 +112,7 @@ func (h *SecurityHandler) UpdateProvider(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Cập nhật phương thức xác thực thành công",
+		"message": "auth provider updated successfully",
 		"id":      id,
 		"enabled": req.Enabled,
 	})
@@ -129,7 +129,7 @@ func (h *SecurityHandler) Init2FA(c *gin.Context) {
 	out, err := h.service.Init2FA(ctx, userID, username)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Khởi tạo 2FA đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "init 2FA timed out"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -150,7 +150,7 @@ func (h *SecurityHandler) Verify2FA(c *gin.Context) {
 
 	var req dto.Verify2FARequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Vui lòng nhập đầy đủ secret và mã xác thực 6 số"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "please provide secret and 6-digit verification code"})
 		return
 	}
 
@@ -163,7 +163,7 @@ func (h *SecurityHandler) Verify2FA(c *gin.Context) {
 	})
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Xác thực 2FA đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "verify 2FA timed out"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -186,14 +186,14 @@ func (h *SecurityHandler) Disable2FA(c *gin.Context) {
 
 	if err := h.service.Disable2FA(ctx, userID); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Tắt xác thực 2FA đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "disable 2FA timed out"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Đã tắt xác thực hai yếu tố (2FA)"})
+	c.JSON(http.StatusOK, gin.H{"message": "two-factor authentication (2FA) disabled"})
 }
 
 // ChangePassword cập nhật mật khẩu đăng nhập của người dùng.
@@ -203,7 +203,7 @@ func (h *SecurityHandler) ChangePassword(c *gin.Context) {
 
 	var req dto.ChangePasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Mật khẩu mới phải có ít nhất 8 ký tự"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "new password must be at least 8 characters"})
 		return
 	}
 
@@ -216,12 +216,12 @@ func (h *SecurityHandler) ChangePassword(c *gin.Context) {
 	})
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Đổi mật khẩu đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "change password timed out"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Đổi mật khẩu thành công"})
+	c.JSON(http.StatusOK, gin.H{"message": "password changed successfully"})
 }

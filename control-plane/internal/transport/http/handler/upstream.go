@@ -54,7 +54,7 @@ func (h *UpstreamHandler) Create(c *gin.Context) {
 			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body exceeds 256KB limit"})
 			return
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu yêu cầu không hợp lệ: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request data: " + err.Error()})
 		return
 	}
 
@@ -65,7 +65,7 @@ func (h *UpstreamHandler) Create(c *gin.Context) {
 
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Tên upstream pool không được để trống"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "upstream pool name cannot be empty"})
 		return
 	}
 
@@ -134,7 +134,7 @@ func (h *UpstreamHandler) Create(c *gin.Context) {
 	item, err := h.service.CreateUpstream(ctx, cmd)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Thao tác tạo upstream pool đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "create upstream pool timed out"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -242,7 +242,7 @@ func (h *UpstreamHandler) Update(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "ID upstream không hợp lệ"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid upstream ID"})
 		return
 	}
 
@@ -263,7 +263,7 @@ func (h *UpstreamHandler) Update(c *gin.Context) {
 			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body exceeds 256KB limit"})
 			return
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu cập nhật upstream không hợp lệ: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid upstream update data: " + err.Error()})
 		return
 	}
 
@@ -338,7 +338,7 @@ func (h *UpstreamHandler) Update(c *gin.Context) {
 	item, err := h.service.UpdateUpstream(ctx, cmd)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Thao tác cập nhật upstream pool đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "update upstream pool timed out"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -472,10 +472,10 @@ func (h *UpstreamHandler) List(c *gin.Context) {
 	items, total, err := h.service.ListUpstreams(ctx, query)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn danh sách upstream đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "upstream list query timed out"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi truy vấn danh sách upstream: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to query upstreams: " + err.Error()})
 		return
 	}
 
@@ -590,7 +590,7 @@ func (h *UpstreamHandler) GetByID(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "ID upstream không hợp lệ"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid upstream ID"})
 		return
 	}
 
@@ -600,14 +600,14 @@ func (h *UpstreamHandler) GetByID(c *gin.Context) {
 	item, err := h.service.GetUpstream(ctx, id)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn chi tiết upstream đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "get upstream timed out"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi truy vấn upstream: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get upstream: " + err.Error()})
 		return
 	}
 	if item == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Không tìm thấy upstream"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "upstream not found"})
 		return
 	}
 
@@ -712,7 +712,7 @@ func (h *UpstreamHandler) Delete(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil || id <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "ID upstream không hợp lệ"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid upstream ID"})
 		return
 	}
 
@@ -721,18 +721,18 @@ func (h *UpstreamHandler) Delete(c *gin.Context) {
 
 	if err := h.service.DeleteUpstream(ctx, id); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Thao tác xóa upstream đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "delete upstream timed out"})
 			return
 		}
 		if strings.Contains(err.Error(), "still referenced by domains") {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		if strings.Contains(err.Error(), "không tồn tại") {
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "upstream not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi xóa upstream: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete upstream: " + err.Error()})
 		return
 	}
 
@@ -744,7 +744,7 @@ func (h *UpstreamHandler) Delete(c *gin.Context) {
 func (h *UpstreamHandler) Desired(c *gin.Context) {
 	nodeID := c.Param("node")
 	if nodeID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Node ID không được để trống"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "node ID cannot be empty"})
 		return
 	}
 
@@ -754,10 +754,10 @@ func (h *UpstreamHandler) Desired(c *gin.Context) {
 	snapshot, err := h.service.GetDesiredSnapshot(ctx, nodeID)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Lấy cấu hình upstream mong muốn đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "get desired upstream snapshot timed out"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi lấy cấu hình upstream mong muốn: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get desired upstream snapshot: " + err.Error()})
 		return
 	}
 
@@ -872,7 +872,7 @@ func (h *UpstreamHandler) Desired(c *gin.Context) {
 func (h *UpstreamHandler) Report(c *gin.Context) {
 	nodeID := c.Param("node")
 	if nodeID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Node ID không được để trống"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "node ID cannot be empty"})
 		return
 	}
 
@@ -893,7 +893,7 @@ func (h *UpstreamHandler) Report(c *gin.Context) {
 			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body exceeds 64KB limit"})
 			return
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu báo cáo không hợp lệ: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid report data: " + err.Error()})
 		return
 	}
 
@@ -908,10 +908,10 @@ func (h *UpstreamHandler) Report(c *gin.Context) {
 	err := h.service.ReportSyncStatus(ctx, nodeID, req.ReleaseID, req.Phase, req.Message)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Ghi nhận báo cáo đồng bộ đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "record sync report timed out"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi ghi nhận báo cáo đồng bộ: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to record sync report: " + err.Error()})
 		return
 	}
 

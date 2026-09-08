@@ -41,10 +41,10 @@ func (h *NodeHandler) List(c *gin.Context) {
 	nodes, err := h.service.ListNodes(ctx)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn danh sách nodes đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "node list query timed out"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi truy vấn danh sách nodes: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list nodes: " + err.Error()})
 		return
 	}
 
@@ -90,7 +90,7 @@ func (h *NodeHandler) GetByID(c *gin.Context) {
 	// Bước 1: Lấy và thẩm định tham số ID từ URL path
 	id := c.Param("id")
 	if id == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Mã định danh node không được để trống"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "node ID cannot be empty"})
 		return
 	}
 
@@ -101,16 +101,16 @@ func (h *NodeHandler) GetByID(c *gin.Context) {
 	node, err := h.service.GetNodeByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn node đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "get node timed out"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi truy vấn node: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get node: " + err.Error()})
 		return
 	}
 
 	// Bước 3: Kiểm tra sự tồn tại của node
 	if node == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Không tìm thấy node"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "node not found"})
 		return
 	}
 
@@ -147,7 +147,7 @@ func (h *NodeHandler) GetByID(c *gin.Context) {
 func (h *NodeHandler) Heartbeat(c *gin.Context) {
 	nodeID := c.Param("id")
 	if nodeID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Mã node không được để trống"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "node ID cannot be empty"})
 		return
 	}
 
@@ -155,7 +155,7 @@ func (h *NodeHandler) Heartbeat(c *gin.Context) {
 	contentType := c.GetHeader("Content-Type")
 	if contentType != "application/x-protobuf" {
 		c.JSON(http.StatusUnsupportedMediaType, gin.H{
-			"error": "Định dạng không được hỗ trợ: bắt buộc application/x-protobuf",
+			"error": "unsupported media type: application/x-protobuf required",
 		})
 		return
 	}
@@ -163,13 +163,13 @@ func (h *NodeHandler) Heartbeat(c *gin.Context) {
 	// Đọc dữ liệu nhị phân (giới hạn tối đa 4KB)
 	body, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, 4096))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Không thể đọc dữ liệu binary hoặc payload vượt quá 4KB"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unable to read binary payload or payload exceeds 4KB"})
 		return
 	}
 
 	payload, err := entity.UnmarshalNodeHeartbeat(body)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Giải mã Protobuf binary thất bại: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to unmarshal Protobuf binary: " + err.Error()})
 		return
 	}
 
@@ -177,7 +177,7 @@ func (h *NodeHandler) Heartbeat(c *gin.Context) {
 	if payload.NodeID == "" {
 		payload.NodeID = nodeID
 	} else if payload.NodeID != nodeID {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Mã node trong đường dẫn không khớp với dữ liệu gói tin"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "node ID in path does not match payload"})
 		return
 	}
 
@@ -196,10 +196,10 @@ func (h *NodeHandler) Heartbeat(c *gin.Context) {
 	directive, err := h.service.RecordHeartbeat(ctx, *payload)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Xử lý heartbeat đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "heartbeat processing timed out"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ghi nhận heartbeat thất bại: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to record heartbeat: " + err.Error()})
 		return
 	}
 
@@ -214,7 +214,7 @@ func (h *NodeHandler) Heartbeat(c *gin.Context) {
 func (h *NodeHandler) ReloadNode(c *gin.Context) {
 	nodeID := c.Param("id")
 	if nodeID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Mã node không được để trống"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "node ID cannot be empty"})
 		return
 	}
 
@@ -223,7 +223,7 @@ func (h *NodeHandler) ReloadNode(c *gin.Context) {
 
 	if err := h.service.TriggerNodeReload(ctx, nodeID); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Reload node đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "node reload timed out"})
 			return
 		}
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -231,7 +231,7 @@ func (h *NodeHandler) ReloadNode(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Đã gửi lệnh reload tới node " + nodeID + ". Lệnh sẽ được thực thi tại chu kỳ heartbeat tiếp theo.",
+		"message": "Reload command dispatched to node " + nodeID + ". It will be executed on next heartbeat.",
 		"status":  "pending",
 	})
 }
@@ -244,7 +244,7 @@ func (h *NodeHandler) RollingReloadCluster(c *gin.Context) {
 	status, err := h.service.TriggerClusterRollingReload(ctx)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Khởi động rolling reload cluster đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "cluster rolling reload timed out"})
 			return
 		}
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
@@ -268,7 +268,7 @@ func (h *NodeHandler) GetRollingStatus(c *gin.Context) {
 	status, err := h.service.GetClusterRollingStatus(ctx)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Lấy trạng thái rolling reload đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "get rolling reload status timed out"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -350,7 +350,7 @@ func (h *NodeHandler) EventsStream(c *gin.Context) {
 func (h *NodeHandler) GetSyncLogs(c *gin.Context) {
 	nodeID := c.Param("id")
 	if nodeID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Mã định danh node không được để trống"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "node ID cannot be empty"})
 		return
 	}
 
@@ -360,10 +360,10 @@ func (h *NodeHandler) GetSyncLogs(c *gin.Context) {
 	logs, err := h.service.ListNodeSyncLogs(ctx, nodeID, 30)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Lấy lịch sử đồng bộ đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "sync history query timed out"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi truy vấn lịch sử sync: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to query sync history: " + err.Error()})
 		return
 	}
 
@@ -386,7 +386,7 @@ func (h *NodeHandler) GetSyncLogs(c *gin.Context) {
 func (h *NodeHandler) GetConfig(c *gin.Context) {
 	nodeID := c.Param("id")
 	if nodeID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Mã định danh node không được để trống"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "node ID cannot be empty"})
 		return
 	}
 
@@ -396,7 +396,7 @@ func (h *NodeHandler) GetConfig(c *gin.Context) {
 	config, err := h.service.GetNodeConfig(ctx, nodeID)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Lấy cấu hình node đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "get node config timed out"})
 			return
 		}
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})

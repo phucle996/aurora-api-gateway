@@ -551,7 +551,7 @@ func (s *UpstreamService) DeleteUpstream(ctx context.Context, id int64) error {
 		remaining = append(remaining, u)
 	}
 	if !found {
-		return fmt.Errorf("upstream không tồn tại")
+		return fmt.Errorf("upstream not found")
 	}
 
 	// 3. Sinh cấu hình NGINX mới

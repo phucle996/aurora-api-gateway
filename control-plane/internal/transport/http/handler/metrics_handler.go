@@ -41,10 +41,10 @@ func (h *MetricsHandler) GetConfig(c *gin.Context) {
 	cfg, err := h.service.GetConfig(ctx)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn cấu hình metrics đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "metrics config query timed out"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi truy vấn cấu hình metrics: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to query metrics config: " + err.Error()})
 		return
 	}
 
@@ -81,7 +81,7 @@ func (h *MetricsHandler) UpdateConfig(c *gin.Context) {
 			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body exceeds 64KB limit"})
 			return
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu JSON không hợp lệ: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON data: " + err.Error()})
 		return
 	}
 
@@ -101,7 +101,7 @@ func (h *MetricsHandler) UpdateConfig(c *gin.Context) {
 
 	if err := h.service.SaveConfig(ctx, cfg); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Lưu cấu hình metrics đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "save metrics config timed out"})
 			return
 		}
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
@@ -109,7 +109,7 @@ func (h *MetricsHandler) UpdateConfig(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":        "Cập nhật cấu hình tích hợp metrics thành công",
+		"message":        "metrics integration config updated successfully",
 		"mode":           cfg.Mode,
 		"prometheus_url": cfg.PrometheusURL,
 		"prometheus_job": cfg.PrometheusJob,
@@ -138,7 +138,7 @@ func (h *MetricsHandler) TestConnection(c *gin.Context) {
 			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body exceeds 64KB limit"})
 			return
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu JSON không hợp lệ: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON data: " + err.Error()})
 		return
 	}
 
@@ -148,7 +148,7 @@ func (h *MetricsHandler) TestConnection(c *gin.Context) {
 	}
 
 	if strings.TrimSpace(req.URL) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Địa chỉ URL không được để trống"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "URL cannot be empty"})
 		return
 	}
 
@@ -158,7 +158,7 @@ func (h *MetricsHandler) TestConnection(c *gin.Context) {
 	res, err := h.service.TestPrometheus(ctx, req.URL)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Kiểm tra kết nối Prometheus đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Prometheus connection test timed out"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -180,7 +180,7 @@ func (h *MetricsHandler) TestConnection(c *gin.Context) {
 func (h *MetricsHandler) GetNodeMetrics(c *gin.Context) {
 	nodeID := c.Param("id")
 	if nodeID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Mã node không được để trống"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "node ID cannot be empty"})
 		return
 	}
 
@@ -190,24 +190,24 @@ func (h *MetricsHandler) GetNodeMetrics(c *gin.Context) {
 	points, err := h.service.GetNodeMetrics(ctx, nodeID)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn metrics node đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "node metrics query timed out"})
 			return
 		}
 		if errors.Is(err, taxonomy.ErrMetricsDisabled) {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"error":   "METRICS_DISABLED",
-				"message": "Nguồn thu thập metrics đang ở trạng thái tắt. Vui lòng kích hoạt trong Cài đặt -> Tích hợp.",
+				"message": "Metrics collection is disabled. Please enable it in Settings -> Integrations.",
 			})
 			return
 		}
 		if errors.Is(err, taxonomy.ErrMetricsUnavailable) {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"error":   "PROMETHEUS_UNAVAILABLE",
-				"message": "Không thể kết nối tới máy chủ Prometheus. Vui lòng kiểm tra lại cấu hình kết nối trong Cài đặt.",
+				"message": "Unable to connect to Prometheus server. Please check the connection configuration in Settings.",
 			})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi truy xuất metrics: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve metrics: " + err.Error()})
 		return
 	}
 

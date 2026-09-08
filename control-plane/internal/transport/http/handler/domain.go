@@ -69,7 +69,7 @@ func (h *DomainHandler) List(c *gin.Context) {
 	result, err := h.service.ListDomains(ctx, query)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn danh sách domain đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "domain list query timed out"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to query domains: " + err.Error()})
@@ -129,7 +129,7 @@ func (h *DomainHandler) Catalog(c *gin.Context) {
 	result, err := h.service.DomainCatalog(ctx)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn danh mục domain đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "domain catalog query timed out"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to query domain catalog: " + err.Error()})
@@ -211,7 +211,7 @@ func (h *DomainHandler) Create(c *gin.Context) {
 	item, err := h.service.CreateDomain(ctx, cmd)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Thao tác tạo domain đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "create domain timed out"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to create domain: " + err.Error()})
@@ -235,7 +235,7 @@ func (h *DomainHandler) GetByID(c *gin.Context) {
 	item, err := h.service.GetDomain(ctx, id)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn domain đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "get domain timed out"})
 			return
 		}
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -299,7 +299,7 @@ func (h *DomainHandler) Update(c *gin.Context) {
 	item, err := h.service.UpdateDomain(ctx, id, cmd)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Thao tác cập nhật domain đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "update domain timed out"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to update domain: " + err.Error()})
@@ -322,7 +322,7 @@ func (h *DomainHandler) Delete(c *gin.Context) {
 
 	if err := h.service.DeleteDomain(ctx, id); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Thao tác xóa domain đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "delete domain timed out"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to delete domain: " + err.Error()})

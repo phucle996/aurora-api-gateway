@@ -234,7 +234,7 @@ func (s *nodeService) GetNodeConfig(ctx context.Context, nodeID string) (string,
 		return "", fmt.Errorf("nodeService.GetNodeConfig: %w", err)
 	}
 	if node == nil {
-		return "", errors.New("node không tồn tại trong cluster")
+		return "", errors.New("node does not exist in cluster")
 	}
 
 	// Thử các endpoint khả dụng của node theo thứ tự:

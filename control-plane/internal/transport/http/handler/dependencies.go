@@ -38,7 +38,7 @@ func (h *DependenciesHandler) List(c *gin.Context) {
 	out, e := h.service.List(ctx, entity.ListDependenciesQuery{})
 	if e != nil {
 		if errors.Is(e, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn danh sách phụ thuộc đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "list dependencies query timed out"})
 			return
 		}
 		c.AbortWithStatus(500)
@@ -99,7 +99,7 @@ func (h *DependenciesHandler) Queue(c *gin.Context) {
 	})
 	if e != nil {
 		if errors.Is(e, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Tạo tác vụ cài đặt phụ thuộc đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "queue dependency job timed out"})
 			return
 		}
 		c.JSON(422, gin.H{"error": e.Error()})
@@ -121,7 +121,7 @@ func (h *DependenciesHandler) Poll(c *gin.Context) {
 	out, e := h.service.Poll(ctx, entity.PollDependencyQuery{NodeID: c.Param("node")})
 	if e != nil {
 		if errors.Is(e, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Thăm dò công việc phụ thuộc đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "poll dependency job timed out"})
 			return
 		}
 		c.AbortWithStatus(500)
@@ -171,7 +171,7 @@ func (h *DependenciesHandler) Report(c *gin.Context) {
 
 	if e := h.service.Report(ctx, cmd); e != nil {
 		if errors.Is(e, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Báo cáo phụ thuộc đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "report dependencies timed out"})
 			return
 		}
 		c.JSON(422, gin.H{"error": e.Error()})

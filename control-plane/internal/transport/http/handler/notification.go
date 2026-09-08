@@ -38,7 +38,7 @@ func (h *NotificationHandler) GetOverview(c *gin.Context) {
 	overview, err := h.service.GetOverview(ctx)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn danh sách thông báo đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "notifications query timed out"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -85,7 +85,7 @@ func (h *NotificationHandler) UpdateChannel(c *gin.Context) {
 
 	var req dto.UpdateNotificationChannelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu cấu hình không hợp lệ: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid configuration data: " + err.Error()})
 		return
 	}
 
@@ -94,7 +94,7 @@ func (h *NotificationHandler) UpdateChannel(c *gin.Context) {
 
 	if err := h.service.UpdateChannel(ctx, id, req.Enabled, req.ConfigJSON); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Cập nhật kênh thông báo đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "update notification channel timed out"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -102,7 +102,7 @@ func (h *NotificationHandler) UpdateChannel(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Cập nhật kênh thông báo thành công",
+		"message": "notification channel updated successfully",
 		"id":      id,
 		"enabled": req.Enabled,
 	})
@@ -115,7 +115,7 @@ func (h *NotificationHandler) UpdateRule(c *gin.Context) {
 
 	var req dto.UpdateNotificationRuleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu cập nhật quy tắc không hợp lệ: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid rule update data: " + err.Error()})
 		return
 	}
 
@@ -124,7 +124,7 @@ func (h *NotificationHandler) UpdateRule(c *gin.Context) {
 
 	if err := h.service.UpdateRule(ctx, id, req.Enabled); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Cập nhật quy tắc cảnh báo đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "update notification rule timed out"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -132,7 +132,7 @@ func (h *NotificationHandler) UpdateRule(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Cập nhật quy tắc cảnh báo thành công",
+		"message": "notification rule updated successfully",
 		"id":      id,
 		"enabled": req.Enabled,
 	})
@@ -149,7 +149,7 @@ func (h *NotificationHandler) TestChannel(c *gin.Context) {
 	result, err := h.service.TestChannel(ctx, id)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Kiểm thử kênh thông báo đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "test notification channel timed out"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

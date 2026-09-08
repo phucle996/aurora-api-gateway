@@ -41,7 +41,7 @@ func (h *BackupHandler) GetOverview(c *gin.Context) {
 	overview, err := h.service.GetOverview(ctx)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn thông tin sao lưu đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "backup overview query timed out"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -88,7 +88,7 @@ func (h *BackupHandler) UpdateConfig(c *gin.Context) {
 
 	var req dto.UpdateBackupConfigRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu cấu hình không hợp lệ: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid configuration data: " + err.Error()})
 		return
 	}
 
@@ -110,14 +110,14 @@ func (h *BackupHandler) UpdateConfig(c *gin.Context) {
 
 	if err := h.service.UpdateConfig(ctx, cfg); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Cập nhật cấu hình sao lưu đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "backup config update timed out"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Cập nhật cấu hình sao lưu thành công"})
+	c.JSON(http.StatusOK, gin.H{"message": "backup configuration updated successfully"})
 }
 
 // DownloadLocalBackup xuất file cơ sở dữ liệu SQLite và truyền về máy người dùng dưới dạng binary attachment.
@@ -130,10 +130,10 @@ func (h *BackupHandler) DownloadLocalBackup(c *gin.Context) {
 	data, filename, err := h.service.CreateLocalSnapshot(ctx)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Tạo bản sao lưu đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "local snapshot creation timed out"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể tạo bản sao lưu: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create snapshot: " + err.Error()})
 		return
 	}
 
@@ -153,7 +153,7 @@ func (h *BackupHandler) TriggerS3Backup(c *gin.Context) {
 	item, err := h.service.TriggerS3Backup(ctx)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Đẩy bản sao lưu lên S3 đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "S3 backup trigger timed out"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -177,20 +177,20 @@ func (h *BackupHandler) RestoreSnapshot(c *gin.Context) {
 
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Vui lòng chọn file backup để phục hồi: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "please select a backup file to restore: " + err.Error()})
 		return
 	}
 
 	file, err := fileHeader.Open()
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Không thể đọc file upload: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unable to open uploaded file: " + err.Error()})
 		return
 	}
 	defer file.Close()
 
 	fileBytes, err := io.ReadAll(file)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi đọc dữ liệu file: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read file content: " + err.Error()})
 		return
 	}
 
@@ -200,7 +200,7 @@ func (h *BackupHandler) RestoreSnapshot(c *gin.Context) {
 	result, err := h.service.RestoreSnapshot(ctx, fileBytes)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Phục hồi bản sao lưu đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "snapshot restore timed out"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

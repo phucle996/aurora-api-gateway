@@ -543,7 +543,7 @@ func (r *UpstreamRepository) Delete(ctx context.Context, id int64, generatedConf
 	const checkSQL = `SELECT name FROM upstreams WHERE id = ?;`
 	if err := tx.QueryRowContext(ctx, checkSQL, id).Scan(&name); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("upstream không tồn tại")
+			return fmt.Errorf("upstream not found")
 		}
 		return fmt.Errorf("kiểm tra upstream: %w", err)
 	}

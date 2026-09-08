@@ -90,7 +90,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	})
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Xác thực tài khoản đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "authentication timed out"})
 			return
 		}
 		// Nếu tên đăng nhập không tồn tại hoặc sai mật khẩu, trả về HTTP 401 Unauthorized

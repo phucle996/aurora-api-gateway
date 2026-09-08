@@ -123,7 +123,7 @@ func (h *RateLimitHandler) Create(c *gin.Context) {
 	item, err := h.service.CreateRateLimitRule(ctx, cmd)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Thao tác tạo rate limit rule đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "create rate limit rule timed out"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -199,7 +199,7 @@ func (h *RateLimitHandler) List(c *gin.Context) {
 	res, err := h.service.ListRateLimitRules(ctx, q)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn danh sách rate limit rules đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "rate limit rules query timed out"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -258,7 +258,7 @@ func (h *RateLimitHandler) GetByID(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "ID rule không hợp lệ"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid rule ID"})
 		return
 	}
 
@@ -268,7 +268,7 @@ func (h *RateLimitHandler) GetByID(c *gin.Context) {
 	item, err := h.service.GetRateLimitRuleByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn chi tiết rate limit rule đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "get rate limit rule timed out"})
 			return
 		}
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -317,7 +317,7 @@ func (h *RateLimitHandler) Update(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "ID rule không hợp lệ"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid rule ID"})
 		return
 	}
 
@@ -400,7 +400,7 @@ func (h *RateLimitHandler) Update(c *gin.Context) {
 	rule, err := h.service.UpdateRateLimitRule(ctx, cmd)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Thao tác cập nhật rate limit rule đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "update rate limit rule timed out"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -449,7 +449,7 @@ func (h *RateLimitHandler) Delete(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "ID rule không hợp lệ"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid rule ID"})
 		return
 	}
 
@@ -458,14 +458,14 @@ func (h *RateLimitHandler) Delete(c *gin.Context) {
 
 	if err := h.service.DeleteRateLimitRule(ctx, id); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Thao tác xóa rate limit rule đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "delete rate limit rule timed out"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Xóa rate limit rule thành công", "id": id})
+	c.JSON(http.StatusOK, gin.H{"message": "rate limit rule deleted successfully", "id": id})
 }
 
 // GetStats xử lý HTTP GET /api/v1/rate-limits/stats: Lấy tổng hợp số liệu thống kê thực tế.
@@ -476,7 +476,7 @@ func (h *RateLimitHandler) GetStats(c *gin.Context) {
 	summary, err := h.service.GetStats(ctx)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn thống kê rate limit đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "rate limit stats query timed out"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -514,7 +514,7 @@ func (h *RateLimitHandler) GetMetrics(c *gin.Context) {
 	res, err := h.service.GetMetrics(ctx, timeRange, sortBy)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn metrics rate limit đã hết thời gian chờ"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "rate limit metrics query timed out"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
