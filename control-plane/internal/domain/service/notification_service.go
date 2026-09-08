@@ -12,4 +12,6 @@ type NotificationService interface {
 	UpdateChannel(ctx context.Context, id string, enabled bool, configJSON string) error
 	UpdateRule(ctx context.Context, id string, enabled bool) error
 	TestChannel(ctx context.Context, id string) (*entity.TestNotificationResult, error)
+	DispatchAlert(event entity.AlertEvent) bool
 }
+

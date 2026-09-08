@@ -197,3 +197,64 @@ func (r *sqliteNotificationRepository) GetActiveChannelsCount(ctx context.Contex
 	err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM notification_channels WHERE enabled = 1").Scan(&count)
 	return count, err
 }
+
+// GetEnabledChannels trả về danh sách các kênh thông báo đang được bật (enabled = 1).
+func (r *sqliteNotificationRepository) GetEnabledChannels(ctx context.Context) ([]entity.NotificationChannelItem, error) {
+	const query = `
+		WITH enabled_channels_cte AS (
+			SELECT id, name, description, enabled, config_json, last_tested_at, last_test_status, last_test_message, updated_at
+			FROM notification_channels
+			WHERE enabled = 1
+			ORDER BY CASE id 
+				WHEN 'email' THEN 1 
+				WHEN 'slack' THEN 2 
+				WHEN 'telegram' THEN 3 
+				WHEN 'discord' THEN 4 
+				WHEN 'webhook' THEN 5 
+				WHEN 'pagerduty' THEN 6 
+				ELSE 7 
+			END
+		)
+		SELECT id, name, description, enabled, config_json, last_tested_at, last_test_status, last_test_message, updated_at
+		FROM enabled_channels_cte;
+	`
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("truy vấn enabled channels thất bại: %w", err)
+	}
+	defer rows.Close()
+
+	var channels []entity.NotificationChannelItem
+	for rows.Next() {
+		var item entity.NotificationChannelItem
+		var enabledInt int
+		if err := rows.Scan(
+			&item.ID, &item.Name, &item.Description, &enabledInt,
+			&item.ConfigJSON, &item.LastTestedAt, &item.LastTestStatus, &item.LastTestMessage, &item.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("đọc bản ghi enabled channel thất bại: %w", err)
+		}
+		item.Enabled = enabledInt == 1
+		channels = append(channels, item)
+	}
+	return channels, rows.Err()
+}
+
+// IsRuleEnabled kiểm tra một quy tắc cảnh báo có đang bật hay không.
+func (r *sqliteNotificationRepository) IsRuleEnabled(ctx context.Context, id string) (bool, error) {
+	const query = `
+		SELECT enabled
+		FROM notification_rules
+		WHERE id = ?;
+	`
+	var enabledInt int
+	err := r.db.QueryRowContext(ctx, query, id).Scan(&enabledInt)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("truy vấn notification_rules thất bại: %w", err)
+	}
+	return enabledInt == 1, nil
+}
+

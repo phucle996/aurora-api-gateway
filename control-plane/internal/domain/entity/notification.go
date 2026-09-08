@@ -37,3 +37,15 @@ type TestNotificationResult struct {
 	Message   string
 	LatencyMs int64
 }
+
+// AlertEvent là thông điệp cảnh báo sự cố hệ thống được đưa vào hàng đợi bất đồng bộ.
+type AlertEvent struct {
+	RuleID    string
+	Title     string
+	Message   string
+	Severity  string // "critical" | "high" | "medium" | "low"
+	Source    string
+	Timestamp int64 // Unix timestamp (ms)
+	Metadata  map[string]interface{}
+}
+

@@ -37,6 +37,8 @@ type Module struct {
 	SystemHandler        *handler.SystemHandler
 	SecurityHandler      *handler.SecurityHandler
 	NotificationHandler  *handler.NotificationHandler
+	NotificationService  port.NotificationService
+	NotificationWorker   *service.NotificationWorker
 	BackupHandler        *handler.BackupHandler
 	BackupScheduler      *service.BackupScheduler
 }
@@ -112,7 +114,9 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	securityHdr := handler.NewSecurityHandler(securitySvc)
 
 	notificationRepo := repository.NewNotificationRepository(writerDB)
-	notificationSvc := service.NewNotificationService(notificationRepo)
+	notificationProvider := provider.NewNotificationProvider()
+	notificationWorker := service.NewNotificationWorker(notificationRepo, notificationProvider, 256)
+	notificationSvc := service.NewNotificationService(notificationRepo, notificationProvider, notificationWorker)
 	notificationHdr := handler.NewNotificationHandler(notificationSvc)
 
 	backupRepo := repository.NewBackupRepository(writerDB)
@@ -140,6 +144,8 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 		SystemHandler:        systemHdr,
 		SecurityHandler:      securityHdr,
 		NotificationHandler:  notificationHdr,
+		NotificationService:  notificationSvc,
+		NotificationWorker:   notificationWorker,
 		BackupHandler:        backupHdr,
 		BackupScheduler:      backupScheduler,
 	}

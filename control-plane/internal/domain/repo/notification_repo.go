@@ -14,4 +14,7 @@ type NotificationRepository interface {
 	UpdateRule(ctx context.Context, id string, enabled bool) error
 	RecordTestResult(ctx context.Context, id string, status string, message string) error
 	GetActiveChannelsCount(ctx context.Context) (int, error)
+	GetEnabledChannels(ctx context.Context) ([]entity.NotificationChannelItem, error)
+	IsRuleEnabled(ctx context.Context, id string) (bool, error)
 }
+

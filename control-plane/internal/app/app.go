@@ -24,12 +24,13 @@ import (
 //   - db: cặp pool kết nối SQLite (Writer + Reader) — đóng khi tắt
 //   - server: HTTP server với tất cả các route đã đăng ký
 type App struct {
-	db              *infra.DBPool
-	server          *http.Server
-	metrics         port.MetricsService
-	collector       *provider.RateLimitCollector
-	backupScheduler *service.BackupScheduler
-	checkpointDone  chan struct{}
+	db                 *infra.DBPool
+	server             *http.Server
+	metrics            port.MetricsService
+	collector          *provider.RateLimitCollector
+	backupScheduler    *service.BackupScheduler
+	notificationWorker *service.NotificationWorker
+	checkpointDone     chan struct{}
 }
 
 func init() {
@@ -116,6 +117,9 @@ func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
 
 	module.RateLimitCollector.Start(context.Background())
 	module.BackupScheduler.Start(context.Background())
+	if module.NotificationWorker != nil {
+		module.NotificationWorker.Start(context.Background())
+	}
 
 	// Khởi chạy goroutine duy trì WAL checkpoint định kỳ (mỗi 30 phút)
 	checkpointDone := make(chan struct{})
@@ -133,11 +137,12 @@ func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
 	}()
 
 	return &App{
-		db:              pools,
-		metrics:         module.MetricsService,
-		collector:       module.RateLimitCollector,
-		backupScheduler: module.BackupScheduler,
-		checkpointDone:  checkpointDone,
+		db:                 pools,
+		metrics:            module.MetricsService,
+		collector:          module.RateLimitCollector,
+		backupScheduler:    module.BackupScheduler,
+		notificationWorker: module.NotificationWorker,
+		checkpointDone:     checkpointDone,
 		server: &http.Server{
 			Addr:              cfg.HTTPAddr,
 			Handler:           router,
@@ -178,6 +183,9 @@ func (a *App) Close() error {
 	}
 	if a.collector != nil {
 		a.collector.Stop()
+	}
+	if a.notificationWorker != nil {
+		a.notificationWorker.Stop()
 	}
 
 	// Thực hiện TRUNCATE checkpoint để thu hồi toàn bộ dung lượng file WAL trước khi ngắt kết nối
