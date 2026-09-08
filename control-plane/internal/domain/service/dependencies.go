@@ -1,19 +1,15 @@
 package service
 
 import (
-	"aurora-waf.local/control-plane/internal/domain/entity"
 	"context"
+
+	"aurora-waf.local/control-plane/internal/domain/entity"
 )
 
-type ListDependenciesService interface {
-	List(context.Context, entity.ListDependenciesQuery) ([]entity.DependencyNode, error)
-}
-type QueueDependencyService interface {
-	Queue(context.Context, entity.QueueDependencyCommand) (entity.QueueDependencyResult, error)
-}
-type PollDependencyService interface {
-	Poll(context.Context, entity.PollDependencyQuery) (entity.PollDependencyResult, error)
-}
-type ReportDependencyService interface {
-	Report(context.Context, entity.ReportDependencyCommand) error
+// DependenciesService định nghĩa port nghiệp vụ quản lý dependencies và dispatch background jobs cho cluster nodes.
+type DependenciesService interface {
+	List(ctx context.Context, q entity.ListDependenciesQuery) ([]entity.DependencyNode, error)
+	Queue(ctx context.Context, c entity.QueueDependencyCommand) (entity.QueueDependencyResult, error)
+	Poll(ctx context.Context, q entity.PollDependencyQuery) (entity.PollDependencyResult, error)
+	Report(ctx context.Context, c entity.ReportDependencyCommand) error
 }

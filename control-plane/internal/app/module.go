@@ -129,12 +129,8 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	backupScheduler := service.NewBackupScheduler(backupSvc, backupRepo)
 
 	depRepo := repository.NewDependenciesRepository(writerDB, readerDB)
-	dependenciesHdr := handler.NewDependenciesHandler(
-		service.NewListDependenciesService(depRepo),
-		service.NewQueueDependencyService(depRepo),
-		service.NewPollDependencyService(depRepo),
-		service.NewReportDependencyService(depRepo),
-	)
+	depSvc := service.NewDependenciesService(depRepo)
+	dependenciesHdr := handler.NewDependenciesHandler(depSvc)
 
 	return &Module{
 		DependenciesHandler:  dependenciesHdr,
