@@ -30,6 +30,7 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 
 	// Route auth public — gọi để lấy token rồi mới gọi các route protected
 	r.POST("/api/v1/auth/login", loginLimiter.Handler(), m.AuthHandler.Login) // Đăng nhập, trả về JWT
+	r.POST("/api/v1/auth/2fa/login-verify", loginLimiter.Handler(), m.AuthHandler.Verify2FALogin) // Xác thực 2FA OTP bước 2
 	r.POST("/api/v1/auth/logout", m.AuthHandler.Logout)                       // Xoá cookie JWT
 
 	// authMidd kiểm tra JWT từ cả cookie HttpOnly lẫn Authorization header.

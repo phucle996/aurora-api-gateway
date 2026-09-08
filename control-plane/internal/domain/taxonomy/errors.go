@@ -61,6 +61,9 @@ var (
 
 	// ErrUserNotFound phát sinh khi tài khoản người dùng không tồn tại
 	ErrUserNotFound = errors.New("user not found")
+
+	// ErrInvalid2FACode phát sinh khi mã OTP 2FA hoặc recovery code không chính xác hoặc hết hạn
+	ErrInvalid2FACode = errors.New("invalid two-factor authentication code")
 )
 
 // ─── Metrics & Integration Domain Errors ──────────────────────────────────────

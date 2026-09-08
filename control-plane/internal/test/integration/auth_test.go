@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"aurora-waf.local/control-plane/infra"
 	"aurora-waf.local/control-plane/internal/app"
 	"aurora-waf.local/control-plane/internal/config"
 )
@@ -167,5 +168,150 @@ func TestAuthLoginAndMeWorkflow(t *testing.T) {
 
 	if unauthRec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected status 401 on /me without token, got %d", unauthRec.Code)
+	}
+}
+
+func TestAuthTwoFactorLoginWorkflow(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "auth_2fa_test.db")
+	a, err := app.NewApp(ctx, config.Config{
+		SQLitePath: dbPath,
+		JWTSecret:  "test-jwt-secret-key-32b-length!!",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	handler := a.Handler()
+
+	// Enable 2FA on user usr_admin_01 directly in test DB
+	pools, err := infra.OpenSQLitePool(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pools.Close()
+
+	secret := "JBSWY3DPEHPK3PXP"
+	recoveryCodes := `["WAF-AAAA-BBBB","WAF-CCCC-DDDD"]`
+	_, err = pools.Writer.ExecContext(ctx, "UPDATE users SET two_factor_enabled = 1, two_factor_secret = ?, two_factor_recovery_codes = ? WHERE id = 'usr_admin_01'",
+		secret, recoveryCodes)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Initial login: should return requires_2fa = true and two_factor_token
+	loginBody, _ := json.Marshal(map[string]string{
+		"username": "admin",
+		"password": "admin",
+	})
+	req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(loginBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var challengeResp struct {
+		Requires2FA    bool   `json:"requires_2fa"`
+		TwoFactorToken string `json:"two_factor_token"`
+		Token          string `json:"token"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &challengeResp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if !challengeResp.Requires2FA {
+		t.Fatal("expected requires_2fa to be true")
+	}
+	if challengeResp.TwoFactorToken == "" {
+		t.Fatal("expected non-empty two_factor_token")
+	}
+	if challengeResp.Token != "" {
+		t.Fatal("expected session token to be empty when 2FA is pending")
+	}
+
+	// 2. Attempt to use 2fa_pending token on protected endpoint /api/v1/auth/me -> 401 Unauthorized
+	protReq := httptest.NewRequest("GET", "/api/v1/auth/me", nil)
+	protReq.Header.Set("Authorization", "Bearer "+challengeResp.TwoFactorToken)
+	protRec := httptest.NewRecorder()
+	handler.ServeHTTP(protRec, protReq)
+
+	if protRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized when using 2fa_pending token on protected endpoint, got %d", protRec.Code)
+	}
+
+	// 3. Verify with invalid code -> 401 Unauthorized
+	badVerifyBody, _ := json.Marshal(map[string]string{
+		"two_factor_token": challengeResp.TwoFactorToken,
+		"code":             "000000",
+	})
+	badReq := httptest.NewRequest("POST", "/api/v1/auth/2fa/login-verify", bytes.NewReader(badVerifyBody))
+	badReq.Header.Set("Content-Type", "application/json")
+	badRec := httptest.NewRecorder()
+	handler.ServeHTTP(badRec, badReq)
+
+	if badRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 on wrong 2FA code, got %d", badRec.Code)
+	}
+
+	// 4. Verify with recovery code -> 200 OK and session JWT
+	goodVerifyBody, _ := json.Marshal(map[string]string{
+		"two_factor_token": challengeResp.TwoFactorToken,
+		"code":             "WAF-AAAA-BBBB",
+	})
+	goodReq := httptest.NewRequest("POST", "/api/v1/auth/2fa/login-verify", bytes.NewReader(goodVerifyBody))
+	goodReq.Header.Set("Content-Type", "application/json")
+	goodRec := httptest.NewRecorder()
+	handler.ServeHTTP(goodRec, goodReq)
+
+	if goodRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 on valid recovery code, got %d: %s", goodRec.Code, goodRec.Body.String())
+	}
+
+	var sessionResp struct {
+		Token string `json:"token"`
+		User  struct {
+			Username string `json:"username"`
+		} `json:"user"`
+	}
+	if err := json.Unmarshal(goodRec.Body.Bytes(), &sessionResp); err != nil {
+		t.Fatalf("failed to decode session response: %v", err)
+	}
+	if sessionResp.Token == "" || sessionResp.User.Username != "admin" {
+		t.Fatalf("invalid session response: %+v", sessionResp)
+	}
+
+	// 5. Test protected endpoint with real session token -> 200 OK
+	meReq := httptest.NewRequest("GET", "/api/v1/auth/me", nil)
+	meReq.Header.Set("Authorization", "Bearer "+sessionResp.Token)
+	meRec := httptest.NewRecorder()
+	handler.ServeHTTP(meRec, meReq)
+
+	if meRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 on /me with session token, got %d", meRec.Code)
+	}
+
+	// 6. Test single-step login with code in payload -> 200 OK
+	singleStepBody, _ := json.Marshal(map[string]string{
+		"username": "admin",
+		"password": "admin",
+		"code":     "WAF-CCCC-DDDD",
+	})
+	singleReq := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(singleStepBody))
+	singleReq.Header.Set("Content-Type", "application/json")
+	singleRec := httptest.NewRecorder()
+	handler.ServeHTTP(singleRec, singleReq)
+
+	if singleRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 on single-step login with recovery code, got %d: %s", singleRec.Code, singleRec.Body.String())
+	}
+
+	var singleResp struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(singleRec.Body.Bytes(), &singleResp)
+	if singleResp.Token == "" {
+		t.Fatal("expected valid token from single-step 2FA login")
 	}
 }

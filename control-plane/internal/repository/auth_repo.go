@@ -38,48 +38,100 @@ func (r *authRepository) FindByUsername(ctx context.Context, username string) (*
 	// - "LIMIT 1": Chỉ lấy đúng 1 người dùng đầu tiên tìm thấy, không quét tiếp cả bảng để tiết kiệm thời gian.
 	const query = `
 		WITH target_user AS (
-			SELECT id, username, password_hash, salt, role, created_at, updated_at
+			SELECT id, username, password_hash, salt, role,
+			       two_factor_enabled, two_factor_secret, two_factor_recovery_codes, two_factor_configured_at,
+			       created_at, updated_at
 			FROM users
 			WHERE LOWER(username) = LOWER(?)
 			LIMIT 1
 		)
-		SELECT id, username, password_hash, salt, role, created_at, updated_at
+		SELECT id, username, password_hash, salt, role,
+		       two_factor_enabled, two_factor_secret, two_factor_recovery_codes, two_factor_configured_at,
+		       created_at, updated_at
 		FROM target_user;
 	`
 
-	// Biến 'u' dùng để chứa dữ liệu tài khoản sau khi đọc từ database lên
 	var u entity.User
+	var twoFactorEnabledInt int
 
-	// QueryRowContext: Gửi câu lệnh SQL tới CSDL và yêu cầu trả về đúng 1 dòng kết quả.
-	// Biến 'ctx' (Context) giúp tự động hủy câu truy vấn nếu người dùng ngắt kết nối hoặc mạng bị treo quá lâu.
-	// Hàm .Scan(...): Lần lượt đọc từng cột dữ liệu từ bảng và gán vào các trường tương ứng của biến 'u':
-	// - ID: Mã số định danh của người dùng
-	// - Username: Tên tài khoản
-	// - PasswordHash: Mật khẩu đã được mã hóa an toàn (không phải mật khẩu gốc)
-	// - Salt: Chuỗi muối ngẫu nhiên dùng kèm khi băm mật khẩu
-	// - Role: Vai trò/quyền hạn (quản trị viên, nhân viên xem...)
-	// - CreatedAt, UpdatedAt: Ngày giờ tạo và sửa tài khoản
 	err := r.db.QueryRowContext(ctx, query, username).Scan(
 		&u.ID,
 		&u.Username,
 		&u.PasswordHash,
 		&u.Salt,
 		&u.Role,
+		&twoFactorEnabledInt,
+		&u.TwoFactorSecret,
+		&u.TwoFactorRecoveryCodes,
+		&u.TwoFactorConfiguredAt,
 		&u.CreatedAt,
 		&u.UpdatedAt,
 	)
 
-	// Xử lý khi có lỗi xảy ra
 	if err != nil {
-		// Nếu lỗi là 'sql.ErrNoRows', nghĩa là CSDL đã tìm hết bảng nhưng không thấy ai có tên đăng nhập này.
-		// Ta chuyển thành lỗi chuẩn của hệ thống: taxonomy.ErrUserNotFound (Không tìm thấy tài khoản)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, taxonomy.ErrUserNotFound
 		}
-		// Nếu là lỗi khác (ví dụ mất kết nối mạng CSDL, ổ cứng đầy...), trả về lỗi kỹ thuật ban đầu
 		return nil, err
 	}
 
-	// Đọc dữ liệu thành công! Trả về con trỏ tới thông tin người dùng và không có lỗi (nil).
+	u.TwoFactorEnabled = twoFactorEnabledInt == 1
 	return &u, nil
+}
+
+// FindByID tìm kiếm thông tin tài khoản người dùng theo ID duy nhất.
+func (r *authRepository) FindByID(ctx context.Context, id string) (*entity.User, error) {
+	const query = `
+		WITH target_user AS (
+			SELECT id, username, password_hash, salt, role,
+			       two_factor_enabled, two_factor_secret, two_factor_recovery_codes, two_factor_configured_at,
+			       created_at, updated_at
+			FROM users
+			WHERE id = ?
+			LIMIT 1
+		)
+		SELECT id, username, password_hash, salt, role,
+		       two_factor_enabled, two_factor_secret, two_factor_recovery_codes, two_factor_configured_at,
+		       created_at, updated_at
+		FROM target_user;
+	`
+
+	var u entity.User
+	var twoFactorEnabledInt int
+
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&u.ID,
+		&u.Username,
+		&u.PasswordHash,
+		&u.Salt,
+		&u.Role,
+		&twoFactorEnabledInt,
+		&u.TwoFactorSecret,
+		&u.TwoFactorRecoveryCodes,
+		&u.TwoFactorConfiguredAt,
+		&u.CreatedAt,
+		&u.UpdatedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, taxonomy.ErrUserNotFound
+		}
+		return nil, err
+	}
+
+	u.TwoFactorEnabled = twoFactorEnabledInt == 1
+	return &u, nil
+}
+
+// UpdateRecoveryCodes cập nhật danh sách mã dự phòng sau khi đã tiêu thụ 1 mã.
+func (r *authRepository) UpdateRecoveryCodes(ctx context.Context, id string, codesJSON string) error {
+	const query = `
+		UPDATE users
+		SET two_factor_recovery_codes = ?,
+		    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+		WHERE id = ?;
+	`
+	_, err := r.db.ExecContext(ctx, query, codesJSON, id)
+	return err
 }

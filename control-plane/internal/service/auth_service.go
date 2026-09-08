@@ -86,6 +86,38 @@ func (s *authService) Login(ctx context.Context, input entity.LoginInput) (*enti
 		return nil, taxonomy.ErrInvalidCredentials // Mật khẩu không trùng khớp -> Báo lỗi
 	}
 
+	// Nếu tài khoản có bật 2FA, kiểm tra mã 2FA
+	if user.TwoFactorEnabled {
+		if input.Code != "" {
+			// Người dùng gửi kèm mã 2FA (TOTP hoặc Recovery Code) ngay ở bước 1
+			valid, err := s.verifyUser2FACode(ctx, user, input.Code)
+			if err != nil || !valid {
+				return nil, taxonomy.ErrInvalid2FACode
+			}
+			// Mã hợp lệ, tiến hành cấp token phiên bên dưới
+		} else {
+			// Yêu cầu xác thực bước 2: sinh token tạm thời 5 phút với typ="2fa_pending"
+			now := time.Now()
+			tempClaims := entity.Claims{
+				Subject:   user.ID,
+				Username:  user.Username,
+				Role:      user.Role,
+				Issuer:    "aurora-control-plane",
+				IssuedAt:  now.Unix(),
+				ExpiresAt: now.Add(5 * time.Minute).Unix(),
+				Type:      "2fa_pending",
+			}
+			tempToken, err := s.generateJWT(tempClaims)
+			if err != nil {
+				return nil, err
+			}
+			return &entity.LoginOutput{
+				Requires2FA:    true,
+				TwoFactorToken: tempToken,
+			}, nil
+		}
+	}
+
 	// Bước 4: Chuẩn bị thông tin định danh (Claims) để nhúng vào thẻ phiên JWT
 	expiresIn := int64(86400) // Thời hạn hiệu lực của phiên: 86400 giây = 24 giờ
 	now := time.Now()
@@ -96,6 +128,7 @@ func (s *authService) Login(ctx context.Context, input entity.LoginInput) (*enti
 		Issuer:    "aurora-control-plane",         // Nơi phát hành token
 		IssuedAt:  now.Unix(),                     // Thời điểm phát hành
 		ExpiresAt: now.Add(24 * time.Hour).Unix(), // Thời điểm hết hạn
+		Type:      "session",
 	}
 
 	// Tạo chuỗi token JWT có chữ ký số
@@ -115,6 +148,106 @@ func (s *authService) Login(ctx context.Context, input entity.LoginInput) (*enti
 			Role:     user.Role,
 		},
 	}, nil
+}
+
+// Verify2FALogin xác thực mã OTP 2FA từ màn hình thử thách bước 2 và cấp phiên đăng nhập chính thức.
+func (s *authService) Verify2FALogin(ctx context.Context, input entity.Verify2FALoginInput) (*entity.LoginOutput, error) {
+	if strings.TrimSpace(input.TwoFactorToken) == "" || strings.TrimSpace(input.Code) == "" {
+		return nil, taxonomy.ErrInvalid2FACode
+	}
+
+	// Xác thực chữ ký token tạm thời 2FA
+	claims, err := s.validateTokenInternal(input.TwoFactorToken)
+	if err != nil || claims == nil || claims.Type != "2fa_pending" {
+		return nil, taxonomy.ErrUnauthorized
+	}
+
+	// Tra cứu thông tin người dùng theo ID từ token
+	user, err := s.repo.FindByID(ctx, claims.Subject)
+	if err != nil {
+		return nil, taxonomy.ErrUserNotFound
+	}
+
+	if !user.TwoFactorEnabled {
+		return nil, errors.New("tài khoản chưa kích hoạt xác thực 2 bước")
+	}
+
+	// Kiểm tra mã OTP 6 số hoặc mã dự phòng
+	valid, err := s.verifyUser2FACode(ctx, user, input.Code)
+	if err != nil || !valid {
+		return nil, taxonomy.ErrInvalid2FACode
+	}
+
+	// Mã chính xác! Cấp phiên làm việc JWT chính thức (24 giờ)
+	expiresIn := int64(86400)
+	now := time.Now()
+	sessionClaims := entity.Claims{
+		Subject:   user.ID,
+		Username:  user.Username,
+		Role:      user.Role,
+		Issuer:    "aurora-control-plane",
+		IssuedAt:  now.Unix(),
+		ExpiresAt: now.Add(24 * time.Hour).Unix(),
+		Type:      "session",
+	}
+
+	tokenString, err := s.generateJWT(sessionClaims)
+	if err != nil {
+		return nil, err
+	}
+
+	return &entity.LoginOutput{
+		Token:     tokenString,
+		TokenType: "Bearer",
+		ExpiresIn: expiresIn,
+		User: entity.User{
+			ID:       user.ID,
+			Username: user.Username,
+			Role:     user.Role,
+		},
+	}, nil
+}
+
+// verifyUser2FACode kiểm tra mã nhập vào có khớp với mã TOTP 6 số hoặc một trong các mã khôi phục không.
+func (s *authService) verifyUser2FACode(ctx context.Context, user *entity.User, code string) (bool, error) {
+	cleanCode := strings.TrimSpace(code)
+	if cleanCode == "" {
+		return false, nil
+	}
+
+	// 1. Kiểm tra mã TOTP RFC 6238 chuẩn 6 chữ số
+	if len(cleanCode) == 6 && user.TwoFactorSecret != "" {
+		valid, err := validateTOTP(user.TwoFactorSecret, cleanCode, 1)
+		if err == nil && valid {
+			return true, nil
+		}
+	}
+
+	// 2. Kiểm tra mã khôi phục dự phòng (Recovery Codes)
+	normCode := strings.ToUpper(cleanCode)
+	if user.TwoFactorRecoveryCodes != "" && user.TwoFactorRecoveryCodes != "[]" {
+		var codes []string
+		if err := json.Unmarshal([]byte(user.TwoFactorRecoveryCodes), &codes); err == nil {
+			matchedIdx := -1
+			for i, c := range codes {
+				if strings.ToUpper(strings.TrimSpace(c)) == normCode {
+					matchedIdx = i
+					break
+				}
+			}
+			if matchedIdx >= 0 {
+				// Tiêu hủy mã đã sử dụng khỏi danh sách
+				updatedCodes := append(codes[:matchedIdx], codes[matchedIdx+1:]...)
+				updatedJSON, err := json.Marshal(updatedCodes)
+				if err == nil {
+					_ = s.repo.UpdateRecoveryCodes(ctx, user.ID, string(updatedJSON))
+				}
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
 }
 
 // generateJWT tạo ra một chuỗi JSON Web Token hoàn chỉnh gồm 3 phần ghép bằng dấu chấm (Header.Payload.Signature):
@@ -152,36 +285,27 @@ func (s *authService) generateJWT(claims entity.Claims) (string, error) {
 	return signingInput + "." + signature, nil
 }
 
-// ValidateToken nhận vào một chuỗi JWT từ phía người dùng gửi lên và kiểm tra:
-// 1. Token có đủ 3 phần hợp lệ hay không.
-// 2. Chữ ký số có khớp với chữ ký máy chủ tự tính lại không (phát hiện giả mạo/chỉnh sửa).
-// 3. Token đã hết hạn sử dụng chưa.
-// Nếu hợp lệ, trả về thông tin người dùng được giải mã từ Payload.
-func (s *authService) ValidateToken(tokenString string) (*entity.Claims, error) {
-	// Bước 1: Tách token thành 3 phần dựa theo dấu chấm
+// validateTokenInternal giải mã và kiểm tra tính toàn vẹn của token JWT mà không lọc theo Type.
+func (s *authService) validateTokenInternal(tokenString string) (*entity.Claims, error) {
 	parts := strings.Split(tokenString, ".")
 	if len(parts) != 3 {
-		return nil, taxonomy.ErrUnauthorized // Cấu trúc token không đúng chuẩn
+		return nil, taxonomy.ErrUnauthorized
 	}
 
-	// Bước 2: Máy chủ tự ký lại phần Header.Payload bằng khóa bí mật của mình
 	signingInput := parts[0] + "." + parts[1]
 	mac := hmac.New(sha256.New, []byte(s.cfg.JWTSecret))
 	mac.Write([]byte(signingInput))
 	expectedSignature := mac.Sum(nil)
 
-	// Giải mã chữ ký được đính kèm trong token
 	actualSignature, err := base64.RawURLEncoding.DecodeString(parts[2])
 	if err != nil {
 		return nil, taxonomy.ErrUnauthorized
 	}
 
-	// So sánh chữ ký mong đợi và chữ ký thực tế bằng Constant-Time Compare
 	if subtle.ConstantTimeCompare(expectedSignature, actualSignature) != 1 {
-		return nil, taxonomy.ErrUnauthorized // Chữ ký không khớp -> Token đã bị can thiệp hoặc giả mạo
+		return nil, taxonomy.ErrUnauthorized
 	}
 
-	// Bước 3: Đọc dữ liệu người dùng từ phần Payload
 	payloadJSON, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
 		return nil, taxonomy.ErrUnauthorized
@@ -192,10 +316,23 @@ func (s *authService) ValidateToken(tokenString string) (*entity.Claims, error) 
 		return nil, taxonomy.ErrUnauthorized
 	}
 
-	// Bước 4: Kiểm tra thời hạn của token
 	if claims.ExpiresAt < time.Now().Unix() {
-		return nil, taxonomy.ErrUnauthorized // Token đã quá hạn 24 giờ -> Yêu cầu đăng nhập lại
+		return nil, taxonomy.ErrUnauthorized
 	}
 
-	return &claims, nil // Token hoàn toàn hợp lệ
+	return &claims, nil
+}
+
+// ValidateToken nhận vào một chuỗi JWT từ phía người dùng gửi lên và kiểm tra:
+// Token phải là token phiên làm việc chính thức (Type != "2fa_pending").
+func (s *authService) ValidateToken(tokenString string) (*entity.Claims, error) {
+	claims, err := s.validateTokenInternal(tokenString)
+	if err != nil {
+		return nil, err
+	}
+	// Ngăn chặn việc dùng token 2fa_pending để truy cập các tài nguyên API được bảo vệ
+	if claims.Type == "2fa_pending" {
+		return nil, taxonomy.ErrUnauthorized
+	}
+	return claims, nil
 }

@@ -69,6 +69,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	result, err := h.service.Login(ctx, entity.LoginInput{
 		Username: req.Username,
 		Password: req.Password,
+		Code:     req.Code,
 	})
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -79,7 +80,93 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
 			return
 		}
+		if errors.Is(err, taxonomy.ErrInvalid2FACode) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid two-factor authentication code"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Authentication failed"})
+		return
+	}
+
+	// Nếu tài khoản yêu cầu xác thực 2FA bước 2
+	if result.Requires2FA {
+		c.JSON(http.StatusOK, gin.H{
+			"requires_2fa":     true,
+			"two_factor_token": result.TwoFactorToken,
+		})
+		return
+	}
+
+	secure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(
+		"aurora_token",
+		result.Token,
+		int(result.ExpiresIn),
+		"/",
+		"",
+		secure,
+		true,
+	)
+
+	c.JSON(http.StatusOK, gin.H{
+		"token":      result.Token,
+		"token_type": result.TokenType,
+		"expires_in": result.ExpiresIn,
+		"user": gin.H{
+			"id":       result.User.ID,
+			"username": result.User.Username,
+			"role":     result.User.Role,
+		},
+	})
+}
+
+// Verify2FALogin verifies the 2FA TOTP or backup recovery code and issues full session JWT.
+func (h *AuthHandler) Verify2FALogin(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+
+	contentType := c.GetHeader("Content-Type")
+	if strings.Split(contentType, ";")[0] != "application/json" {
+		c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "application/json required"})
+		return
+	}
+
+	reader := http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
+	var req dto.Verify2FALoginRequest
+	decoder := json.NewDecoder(reader)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON or unknown field in request body"})
+		return
+	}
+
+	if strings.TrimSpace(req.TwoFactorToken) == "" || strings.TrimSpace(req.Code) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "two_factor_token and code are required"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), authLoginTimeout)
+	defer cancel()
+
+	result, err := h.service.Verify2FALogin(ctx, entity.Verify2FALoginInput{
+		TwoFactorToken: req.TwoFactorToken,
+		Code:           req.Code,
+	})
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "verification timed out"})
+			return
+		}
+		if errors.Is(err, taxonomy.ErrInvalid2FACode) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid two-factor authentication code"})
+			return
+		}
+		if errors.Is(err, taxonomy.ErrUnauthorized) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Two-factor verification session expired or invalid. Please sign in again."})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Verification failed"})
 		return
 	}
 
