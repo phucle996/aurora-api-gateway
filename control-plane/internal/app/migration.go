@@ -27,7 +27,7 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return err
 	}
-	if version > 5 {
+	if version > 13 {
 		return fmt.Errorf("unsupported database schema version %d", version)
 	}
 	if version < 1 {
@@ -74,6 +74,70 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 			return fmt.Errorf("domains schema: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version) VALUES(5)"); err != nil {
+			return err
+		}
+	}
+	if version < 6 {
+		if _, err := tx.ExecContext(ctx, migrations.Upstreams); err != nil {
+			return fmt.Errorf("upstreams schema: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version) VALUES(6)"); err != nil {
+			return err
+		}
+	}
+	if version < 7 {
+		if _, err := tx.ExecContext(ctx, migrations.RateLimits); err != nil {
+			return fmt.Errorf("rate limits schema: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version) VALUES(7)"); err != nil {
+			return err
+		}
+	}
+	if version < 8 {
+		if _, err := tx.ExecContext(ctx, migrations.RateLimitMetrics); err != nil {
+			return fmt.Errorf("rate limit metrics schema: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version) VALUES(8)"); err != nil {
+			return err
+		}
+	}
+	if version < 9 {
+		if _, err := tx.ExecContext(ctx, migrations.SecuritySettings); err != nil {
+			return fmt.Errorf("security settings schema: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version) VALUES(9)"); err != nil {
+			return err
+		}
+	}
+	if version < 10 {
+		if _, err := tx.ExecContext(ctx, migrations.NotificationChannels); err != nil {
+			return fmt.Errorf("notification channels schema: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version) VALUES(10)"); err != nil {
+			return err
+		}
+	}
+	if version < 11 {
+		if _, err := tx.ExecContext(ctx, migrations.BackupSettings); err != nil {
+			return fmt.Errorf("backup settings schema: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version) VALUES(11)"); err != nil {
+			return err
+		}
+	}
+	if version < 12 {
+		if _, err := tx.ExecContext(ctx, migrations.OriginObservations); err != nil {
+			return fmt.Errorf("origin observations schema: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version) VALUES(12)"); err != nil {
+			return err
+		}
+	}
+	if version < 13 {
+		if _, err := tx.ExecContext(ctx, migrations.NodeDependencies); err != nil {
+			return fmt.Errorf("dependencies schema: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version) VALUES(13)"); err != nil {
 			return err
 		}
 	}

@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g \
     ca-certificates \
     curl \
+    jq \
     gettext-base \
     && useradd -r -s /bin/false nginx \
     && mkdir -p /var/log/nginx /var/cache/nginx /opt/nginx /opt/modules /etc/nginx \
@@ -16,8 +17,14 @@ COPY build/nginx-runtime /opt/nginx
 COPY build/modules/ngx_http_aurora_waf_module.so /opt/modules/ngx_http_aurora_waf_module.so
 COPY deploy/docker/nginx-node.conf.template /etc/nginx/nginx-node.conf.template
 COPY deploy/docker/entrypoint-node.sh /entrypoint.sh
+COPY deploy/docker/domain-routing-agent.sh /domain-routing-agent.sh
+COPY deploy/docker/node-dependencies.sh /node-dependencies.sh
+COPY build/brotli-package /opt/aurora-dependencies/brotli
 
-RUN chmod +x /entrypoint.sh /opt/nginx/usr/sbin/nginx
+RUN chmod +x /node-dependencies.sh /domain-routing-agent.sh /entrypoint.sh /opt/nginx/usr/sbin/nginx \
+    && mkdir -p /usr/share/aurora-demo \
+    && printf 'Aurora demo backend: allowed.\n' > /usr/share/aurora-demo/ok \
+    && printf 'Aurora demo backend: this file must not be served in enforce mode.\n' > /usr/share/aurora-demo/__aurora_blocked
 
 EXPOSE 80
 

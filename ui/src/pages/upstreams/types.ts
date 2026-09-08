@@ -30,9 +30,13 @@ export interface InternalSslConfig {
   clientCertName?: string;
   clientCert?: string;
   clientKey?: string;
+  clientKeyConfigured?: boolean;
 }
 
 export interface UpstreamTransportConfig {
+  requestCompression?: 'none' | 'gzip' | 'deflate';
+  compressionMinBytes?: number;
+  compressionLevel?: number;
   httpVersion: 'HTTP/1.1' | 'HTTP/2' | 'HTTP/3' | 'HTTP/1.0';
   enableWebSocket: boolean;
   enableSse: boolean;

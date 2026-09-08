@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { History, Trash2, Save, ChevronRight } from 'lucide-react';
 
 interface EditRuleHeaderProps {
-  ruleId?: string;
+  ruleId: string;
   onDuplicate?: () => void;
   onDelete: () => void;
   onSave: () => void;
@@ -33,14 +33,14 @@ export function EditRuleHeader({
           Edit Security Rule
         </h1>
         <p className="text-xs text-muted-foreground mt-1">
-          Modify the rule configuration and deploy changes to protect your applications.
+          Edit a saved definition. Deploy it separately through policy publishing.
         </p>
       </div>
 
       {/* Action Buttons */}
       <div className="flex flex-wrap items-center gap-2.5 font-sans text-xs">
         <Link
-          to={`/rules/history?id=${ruleId || 'rule_01H8F3K9Z7'}`}
+          to={`/rules/${encodeURIComponent(ruleId)}/history`}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-muted hover:bg-accent border border-border text-foreground transition-colors cursor-pointer"
         >
           <History className="w-3.5 h-3.5 text-primary" />
@@ -50,6 +50,7 @@ export function EditRuleHeader({
         <button
           type="button"
           onClick={onDelete}
+          disabled={isSaving}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-destructive/10 hover:bg-destructive/20 border border-destructive/30 text-destructive transition-colors cursor-pointer"
         >
           <Trash2 className="w-3.5 h-3.5" />

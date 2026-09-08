@@ -1,11 +1,11 @@
 import React from 'react';
 
 export type SettingsTab =
+  | 'Dependencies'
   | 'General'
   | 'Security'
   | 'Notifications'
   | 'Integrations'
-  | 'Cluster'
   | 'Logging'
   | 'Backup & Restore';
 
@@ -17,10 +17,10 @@ interface SettingsHeaderProps {
 export function SettingsHeader({ activeTab, onTabChange }: SettingsHeaderProps) {
   const tabs: SettingsTab[] = [
     'General',
+    'Dependencies',
     'Security',
     'Notifications',
     'Integrations',
-    'Cluster',
     'Logging',
     'Backup & Restore',
   ];

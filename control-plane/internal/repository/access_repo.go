@@ -535,8 +535,13 @@ rule_hosts AS (
     SELECT DISTINCT json_extract(document, '$.host') AS host
     FROM access_objects
     WHERE kind = 'rule' AND deleted = 0 AND json_extract(document, '$.host') IS NOT NULL AND json_extract(document, '$.host') != '*' AND json_extract(document, '$.host') != ''
+),
+domain_hosts AS (
+    SELECT DISTINCT domain AS host
+    FROM domains
+    WHERE status = 'Active' AND domain != ''
 )
-SELECT host FROM policy_hosts UNION SELECT host FROM rule_hosts ORDER BY host ASC`)
+SELECT host FROM policy_hosts UNION SELECT host FROM rule_hosts UNION SELECT host FROM domain_hosts ORDER BY host ASC`)
 	if err == nil {
 		for rows.Next() {
 			var h string
@@ -544,7 +549,8 @@ SELECT host FROM policy_hosts UNION SELECT host FROM rule_hosts ORDER BY host AS
 				catalog.Hosts = append(catalog.Hosts, h)
 			}
 		}
-		rows.Close()
+		_ = rows.Err()
+		_ = rows.Close()
 	}
 
 	// 2. Query active datasets to extract available Country codes and ASNs with counts
@@ -571,6 +577,7 @@ SELECT host FROM policy_hosts UNION SELECT host FROM rule_hosts ORDER BY host AS
 				}
 			}
 		}
+		_ = datasetRows.Err()
 
 		for c, count := range countryCounts {
 			catalog.Countries = append(catalog.Countries, entity.AccessCatalogCountry{

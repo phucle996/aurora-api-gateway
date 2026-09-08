@@ -1,34 +1,32 @@
-import React, { useState } from 'react';
-import { Info, Monitor, Check } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Info, Monitor, RefreshCw } from 'lucide-react';
 import { useTheme, type Theme } from '../../../components/theme-provider';
-
-// Reusable toggle button for settings
-function Toggle({ value, onChange }: { value: boolean; onChange: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onChange}
-      className={`w-9 h-5 flex items-center p-0.5 cursor-pointer transition-colors ${
-        value ? 'bg-primary' : 'bg-muted border border-border'
-      }`}
-    >
-      <div
-        className={`w-4 h-4 bg-white transition-transform ${
-          value ? 'translate-x-4' : 'translate-x-0'
-        }`}
-      />
-    </button>
-  );
-}
+import { systemApi, type SystemInfo } from '../../../lib/api';
 
 export function GeneralSettingsSection() {
   const { theme, setTheme } = useTheme();
   const [language, setLanguage] = useState('English');
-  const [sessionTimeout, setSessionTimeout] = useState('30 minutes');
-  const [refreshInterval, setRefreshInterval] = useState('10 seconds');
-  const [showWelcomeBanner, setShowWelcomeBanner] = useState(true);
-  const [enableCommandPalette, setEnableCommandPalette] = useState(true);
-  const [compactMode, setCompactMode] = useState(false);
+  const [sysInfo, setSysInfo] = useState<SystemInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    systemApi
+      .getInfo()
+      .then((data) => {
+        if (mounted) {
+          setSysInfo(data);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load real system info:', err);
+        if (mounted) setLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const selectCls = 'bg-background border border-input px-2.5 py-1 text-foreground text-xs focus:outline-none focus:border-primary cursor-pointer';
   const rowCls = 'flex items-center justify-between py-1 border-b border-border';
@@ -38,51 +36,40 @@ export function GeneralSettingsSection() {
       {/* System Information Card */}
       <div className="bg-card border border-border p-4 flex flex-col justify-between shadow-xs">
         <div>
-          <div className="flex items-center gap-2 pb-3 border-b border-border text-sm font-semibold text-foreground">
-            <Info className="w-4 h-4 text-primary" />
-            <span>System Information</span>
+          <div className="flex items-center justify-between pb-3 border-b border-border">
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <Info className="w-4 h-4 text-primary" />
+              <span>System Information</span>
+            </div>
+            {loading && (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+            )}
           </div>
 
           <div className="mt-3 space-y-2.5 text-xs">
             <div className={rowCls}>
               <span className="text-muted-foreground">Product</span>
-              <span className="text-foreground font-semibold">AURORA WAF</span>
+              <span className="text-foreground font-semibold">{sysInfo?.product || 'AURORA WAF'}</span>
             </div>
             <div className={rowCls}>
               <span className="text-muted-foreground">Version</span>
-              <span className="text-foreground font-mono">v2024.11.3</span>
+              <span className="text-foreground font-mono">{sysInfo?.version || 'v2024.11.3'}</span>
             </div>
             <div className={rowCls}>
               <span className="text-muted-foreground">Build</span>
-              <span className="text-foreground font-mono">2026-09-05 08:30:12</span>
-            </div>
-            <div className={rowCls}>
-              <span className="text-muted-foreground">License</span>
-              <div className="flex items-center gap-1.5">
-                <span className="inline-flex items-center px-2 py-0.5 bg-primary/10 border border-primary/30 text-primary text-[10px]">
-                  Enterprise
-                </span>
-                <Info className="w-3 h-3 text-muted-foreground cursor-pointer" />
-              </div>
+              <span className="text-foreground font-mono">{sysInfo?.build || '2026-09-07'}</span>
             </div>
             <div className={rowCls}>
               <span className="text-muted-foreground">Uptime</span>
-              <span className="text-foreground">14 days 6 hours</span>
+              <span className="text-foreground">{sysInfo?.uptime_formatted || 'Calculating...'}</span>
             </div>
             <div className={rowCls}>
-              <span className="text-muted-foreground">Cluster Architecture</span>
-              <span className="text-foreground">HA NGINX Cluster</span>
-            </div>
-            <div className={rowCls}>
-              <span className="text-muted-foreground">HA Gateway</span>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 bg-emerald-500 inline-block" />
-                <span className="text-emerald-600 dark:text-emerald-400 font-semibold font-mono">aurora-lb (:8090)</span>
-              </div>
+              <span className="text-muted-foreground">Architecture</span>
+              <span className="text-foreground font-mono">{sysInfo?.architecture || 'linux/amd64'}</span>
             </div>
             <div className="flex items-center justify-between py-1">
               <span className="text-muted-foreground">State Persistence</span>
-              <span className="text-foreground">SQLite (WAL Mode)</span>
+              <span className="text-foreground">{sysInfo?.state_persistence || 'SQLite'}</span>
             </div>
           </div>
         </div>
@@ -116,43 +103,6 @@ export function GeneralSettingsSection() {
                 <option value="日本語">日本語</option>
                 <option value="Deutsch">Deutsch</option>
               </select>
-            </div>
-
-            {/* Session Timeout */}
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Session Timeout</span>
-              <select value={sessionTimeout} onChange={(e) => setSessionTimeout(e.target.value)} className={selectCls}>
-                <option value="15 minutes">15 minutes</option>
-                <option value="30 minutes">30 minutes</option>
-                <option value="1 hour">1 hour</option>
-                <option value="4 hours">4 hours</option>
-              </select>
-            </div>
-
-            {/* Refresh Interval */}
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Refresh Interval</span>
-              <select value={refreshInterval} onChange={(e) => setRefreshInterval(e.target.value)} className={selectCls}>
-                <option value="5 seconds">5 seconds</option>
-                <option value="10 seconds">10 seconds</option>
-                <option value="30 seconds">30 seconds</option>
-                <option value="Manual">Manual</option>
-              </select>
-            </div>
-
-            <div className="pt-2 border-t border-border space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Show Welcome Banner</span>
-                <Toggle value={showWelcomeBanner} onChange={() => setShowWelcomeBanner(!showWelcomeBanner)} />
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Enable Command Palette</span>
-                <Toggle value={enableCommandPalette} onChange={() => setEnableCommandPalette(!enableCommandPalette)} />
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Compact Mode</span>
-                <Toggle value={compactMode} onChange={() => setCompactMode(!compactMode)} />
-              </div>
             </div>
           </div>
         </div>

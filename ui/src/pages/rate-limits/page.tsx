@@ -1,103 +1,53 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus } from 'lucide-react';
+import { Plus, RefreshCw } from 'lucide-react';
 import { RateLimitsStats } from './sections/RateLimitsStats';
 import { RateLimitsCharts } from './sections/RateLimitsCharts';
 import { RateLimitsTable, RateLimitRuleItem } from './sections/RateLimitsTable';
-
-const initialRateLimitRules: RateLimitRuleItem[] = [
-  {
-    id: '1',
-    name: 'Login Protection',
-    type: 'Request',
-    key: 'IP',
-    limit: 10,
-    window: '1 minute',
-    action: 'BLOCK',
-    scope: 'Path: /api/login',
-    status: 'Active',
-    description: 'Prevent brute force login',
-  },
-  {
-    id: '2',
-    name: 'API Request Limit',
-    type: 'Request',
-    key: 'IP',
-    limit: 100,
-    window: '1 minute',
-    action: 'RATE LIMIT',
-    scope: 'Path: /api/',
-    status: 'Active',
-    description: 'General API rate limit',
-  },
-  {
-    id: '3',
-    name: 'Registration Limit',
-    type: 'Request',
-    key: 'IP',
-    limit: 5,
-    window: '1 hour',
-    action: 'BLOCK',
-    scope: 'Path: /api/register',
-    status: 'Active',
-    description: 'Prevent mass registration',
-  },
-  {
-    id: '4',
-    name: 'Search Protection',
-    type: 'Request',
-    key: 'IP',
-    limit: 60,
-    window: '1 minute',
-    action: 'RATE LIMIT',
-    scope: 'Path: /api/search',
-    status: 'Active',
-    description: 'Prevent search abuse',
-  },
-  {
-    id: '5',
-    name: 'Upload Limit',
-    type: 'Request',
-    key: 'IP',
-    limit: 20,
-    window: '5 minutes',
-    action: 'BLOCK',
-    scope: 'Path: /api/upload',
-    status: 'Active',
-    description: 'Limit file upload requests',
-  },
-  {
-    id: '6',
-    name: 'Global API Limit',
-    type: 'Request',
-    key: 'IP',
-    limit: 500,
-    window: '1 minute',
-    action: 'RATE LIMIT',
-    scope: 'Global',
-    status: 'Active',
-    description: 'Global API protection',
-  },
-  {
-    id: '7',
-    name: 'GraphQL Limit',
-    type: 'Request',
-    key: 'IP',
-    limit: 100,
-    window: '1 minute',
-    action: 'RATE LIMIT',
-    scope: 'Path: /graphql',
-    status: 'Active',
-    description: 'Protect GraphQL endpoint',
-  },
-];
+import { rateLimitsApi, RateLimitStats as RateLimitStatsType } from '../../lib/api/rate-limits';
 
 export default function RateLimitsPage() {
-  const [rules] = useState<RateLimitRuleItem[]>(initialRateLimitRules);
+  const [rules, setRules] = useState<RateLimitRuleItem[]>([]);
+  const [stats, setStats] = useState<RateLimitStatsType | null>(null);
+  const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All Status');
   const [typeFilter, setTypeFilter] = useState('All Types');
   const [hostFilter, setHostFilter] = useState('All Hosts');
+
+  const loadData = useCallback(() => {
+    setLoading(true);
+    Promise.allSettled([rateLimitsApi.list(), rateLimitsApi.getStats()])
+      .then(([rulesRes, statsRes]) => {
+        if (rulesRes.status === 'fulfilled' && rulesRes.value && rulesRes.value.items) {
+          const mapped: RateLimitRuleItem[] = rulesRes.value.items.map((item: any) => ({
+            id: String(item.id),
+            name: item.name,
+            type: 'Request',
+            key: (item.enabled_dimensions || []).join(' · ').toUpperCase() || 'IP',
+            limit: item.rate_limit,
+            window: item.rate_unit || '1s',
+            action: item.action_exceeded === 'block' ? 'BLOCK' : 'RATE LIMIT',
+            scope: item.path_config?.path ? `Path: ${item.path_config.path}` : 'Global',
+            status: item.status === 'Active' ? 'Active' : 'Disabled',
+            description: item.description || '',
+          }));
+          setRules(mapped);
+        }
+        if (statsRes.status === 'fulfilled' && statsRes.value) {
+          setStats(statsRes.value);
+        }
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, []);
+
+  useEffect(() => {
+    loadData();
+    const interval = setInterval(loadData, 10000); // 10s auto-refresh
+    return () => clearInterval(interval);
+  }, [loadData]);
 
   const filteredRules = rules.filter((rule) => {
     const matchesSearch =
@@ -121,38 +71,76 @@ export default function RateLimitsPage() {
     setHostFilter('All Hosts');
   };
 
+  const activeCount = rules.filter((r) => r.status === 'Active').length;
+  const isMetricsDisabled = stats?.mode === 'disabled' || stats?.enabled === false;
+
   return (
-    <div className="p-6 w-full space-y-4">
+    <div className="p-6 w-full space-y-4 font-sans">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-border">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-foreground tracking-tight font-sans">
+            <h1 className="text-xl font-bold text-foreground tracking-tight">
               Rate Limiting
             </h1>
-            <span className="px-2 py-0.5 text-[10px] font-sans font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 uppercase rounded-xs">
-              ACTIVE THROTTLING
+            <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-xs border ${
+              isMetricsDisabled
+                ? 'bg-muted text-muted-foreground border-border'
+                : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+            }`}>
+              {isMetricsDisabled ? 'METRICS DISABLED' : 'LIVE TELEMETRY'}
             </span>
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5 font-sans">
-            Configure and manage rate limiting rules to protect your services from abuse and overuse.
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Configure and manage rate limiting rules with off-main-path zero-allocation telemetry.
           </p>
         </div>
 
-        <Link
-          to="/rate-limits/create"
-          className="bg-primary hover:bg-primary/90 active:bg-primary/80 text-primary-foreground text-xs font-semibold px-3.5 py-2 flex items-center gap-1.5 transition-colors cursor-pointer uppercase tracking-wider font-sans w-fit rounded-sm shadow-xs"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Create Rate Limit Rule</span>
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={loadData}
+            title="Refresh Live Metrics"
+            className="p-2 bg-card hover:bg-muted active:bg-muted/80 text-foreground border border-border rounded-sm shadow-xs transition-colors cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-primary' : ''}`} />
+          </button>
+
+          <Link
+            to="/rate-limits/create"
+            className="bg-primary hover:bg-primary/90 active:bg-primary/80 text-primary-foreground text-xs font-semibold px-3.5 py-2 flex items-center gap-1.5 transition-colors cursor-pointer uppercase tracking-wider w-fit rounded-sm shadow-xs"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create Rate Limit Rule</span>
+          </Link>
+        </div>
       </div>
 
       {/* 4 Summary Stat Cards Section */}
-      <RateLimitsStats />
+      <RateLimitsStats
+        totalRules={rules.length}
+        activeRules={activeCount}
+        stats={stats}
+        loading={loading}
+      />
 
-      {/* Analytics Charts Section */}
-      <RateLimitsCharts />
+      {/* Analytics Charts Section (Ẩn hoàn toàn khi Disabled) */}
+      {!isMetricsDisabled ? (
+        <RateLimitsCharts
+          onSelectEndpoint={(path) => setSearchQuery(path)}
+          selectedEndpoint={searchQuery}
+        />
+      ) : (
+        <div className="p-3.5 bg-muted/20 border border-dashed border-border rounded-sm flex items-center justify-between text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-muted-foreground/40" />
+            <span>Thu thập số liệu Rate Limiting đang ở chế độ <strong>Tắt (Disabled)</strong>. Biểu đồ vận tốc và top endpoints được ẩn.</span>
+          </div>
+          <Link to="/settings" className="text-primary hover:underline text-[11px] font-medium">
+            Đi đến Cài đặt
+          </Link>
+        </div>
+      )}
 
       {/* Rate Limits Table */}
       <RateLimitsTable
@@ -170,3 +158,4 @@ export default function RateLimitsPage() {
     </div>
   );
 }
+

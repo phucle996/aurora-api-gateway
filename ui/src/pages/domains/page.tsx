@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus,
@@ -13,23 +13,14 @@ import { domainsApi } from '../../lib/api';
 import { DomainsStats } from './sections/DomainsStats';
 import { DomainsTable } from './sections/DomainsTable';
 import { DomainDrawer } from './sections/DomainDrawer';
-import { AddDomainModal } from './sections/AddDomainModal';
-import { EditDomainModal } from './sections/EditDomainModal';
 import { DeleteDomainDialog } from './sections/DeleteDomainDialog';
-import { ImportDomainsModal } from './sections/ImportDomainsModal';
 
 export default function DomainsPage() {
   const navigate = useNavigate();
-  const [domains, setDomains] = useState<DomainItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('aurora_waf_domains');
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // ignore
-    }
-    return [];
-  });
-
+  const [domains, setDomains] = useState<DomainItem[]>([]);
+  const [error, setError] = useState('');
+  const mutation = useRef(false);
+  const request = useRef(0);
   // Selected domain for side drawer
   const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
 
@@ -44,42 +35,27 @@ export default function DomainsPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Modals state
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [isImportOpen, setIsImportOpen] = useState(false);
-  const [editingDomain, setEditingDomain] = useState<DomainItem | null>(null);
   const [deletingDomain, setDeletingDomain] = useState<DomainItem | null>(null);
 
-  // Fetch from backend API
   const loadDomainsFromApi = useCallback(async () => {
+    const sequence = ++request.current;
     try {
-      const res = await domainsApi.list({ limit: 100 });
-      if (res && res.items) {
-        setDomains(res.items.map((item: any) => ({
-          ...item,
-          id: String(item.id),
-          tags: item.tags || [],
-          nodeBindings: item.nodeBindings || [],
-          recentActivities: item.recentActivities || [],
-        })));
+      const items: DomainItem[] = [];
+      for (let page = 1; ; page++) {
+        const res = await domainsApi.list({ limit: 100, page });
+        items.push(...res.items);
+        if (!res.items.length || items.length >= res.total_filtered) break;
       }
+      if (sequence === request.current) { setDomains(items); setError(''); }
     } catch (err) {
-      console.warn('Backend /api/v1/domains failed to fetch:', err);
+      if (sequence === request.current) setError(err instanceof Error ? err.message : 'Unable to load domains');
     }
   }, []);
-
   useEffect(() => {
     void loadDomainsFromApi();
+    const timer = setInterval(() => { if (!mutation.current) void loadDomainsFromApi(); }, 5000);
+    return () => { clearInterval(timer); request.current++; };
   }, [loadDomainsFromApi]);
-
-  // Persist helper
-  const saveDomains = (updated: DomainItem[]) => {
-    setDomains(updated);
-    try {
-      localStorage.setItem('aurora_waf_domains', JSON.stringify(updated));
-    } catch {
-      // ignore
-    }
-  };
 
   // Selected domain object
   const selectedDomain = useMemo(() => {
@@ -135,103 +111,49 @@ export default function DomainsPage() {
   }, [domains, statFilter, statusFilter, tlsFilter, tagFilter, searchQuery]);
 
   // Handlers
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setIsRefreshing(true);
+    await loadDomainsFromApi();
     setTimeout(() => {
       setIsRefreshing(false);
-    }, 600);
+    }, 400);
   };
 
-  const handleCreateDomain = (
-    newDomain: Omit<
-      DomainItem,
-      | 'id'
-      | 'createdAt'
-      | 'updatedAt'
-      | 'createdBy'
-      | 'rulesCount'
-      | 'policiesCount'
-      | 'ipRulesCount'
-      | 'rateLimitsCount'
-    >
-  ) => {
-    const now = new Date().toISOString().replace('T', ' ').slice(0, 16);
-    const created: DomainItem = {
-      ...newDomain,
-      id: `dom-${Date.now()}`,
-      createdAt: now,
-      updatedAt: now,
-      createdBy: 'admin',
-      rulesCount: 0,
-      policiesCount: 0,
-      ipRulesCount: 0,
-      rateLimitsCount: 0,
-      recentActivities: [
-        {
-          id: `act-${Date.now()}`,
-          type: 'created',
-          title: 'Domain created',
-          description: 'Initial deployment configuration',
-          timestamp: now,
-          color: 'slate',
-        },
-      ],
-    };
-    const next = [created, ...domains];
-    saveDomains(next);
-    setSelectedDomainId(created.id);
+  const handleUpdateDomain = async (updated: DomainItem) => {
+    if (mutation.current) return;
+    mutation.current = true; request.current++;
+    try {
+      await domainsApi.update(updated.id, {status: updated.status, tls_type: updated.tlsType,
+        min_tls_version: updated.minTlsVersion, hsts_enabled: updated.hstsEnabled,
+        ocsp_stapling: updated.ocspStapling, client_ca_subject: updated.clientCaSubject,
+        upstream: updated.upstream, upstream_algorithm: updated.upstreamAlgorithm,
+        health_check_path: updated.healthCheckPath, tags: updated.tags, description: updated.description});
+      await loadDomainsFromApi();
+    } catch (err) { setError(err instanceof Error ? err.message : 'Unable to update domain'); }
+    finally { mutation.current = false; }
   };
-
-  const handleUpdateDomain = (updated: DomainItem) => {
-    const next = domains.map((d) => (d.id === updated.id ? updated : d));
-    saveDomains(next);
+  const handleDeleteDomain = async (target: DomainItem) => {
+    if (mutation.current) return;
+    mutation.current = true; request.current++;
+    try {
+      await domainsApi.delete(target.id);
+      if (selectedDomainId === target.id) setSelectedDomainId(null);
+      await loadDomainsFromApi();
+    } catch (err) { setError(err instanceof Error ? err.message : 'Unable to delete domain'); }
+    finally { mutation.current = false; }
   };
-
-  const handleDeleteDomain = (target: DomainItem) => {
-    const next = domains.filter((d) => d.id !== target.id);
-    saveDomains(next);
-    if (selectedDomainId === target.id) {
-      setSelectedDomainId(null);
-    }
-  };
-
   const handleToggleStatus = (target: DomainItem) => {
-    const newStatus: DomainStatus = target.status === 'Active' ? 'Inactive' : 'Active';
-    const now = new Date().toISOString().replace('T', ' ').slice(0, 16);
-    const updated: DomainItem = {
-      ...target,
-      status: newStatus,
-      updatedAt: now,
-      recentActivities: [
-        {
-          id: `act-${Date.now()}`,
-          type: 'updated',
-          title: `Status changed to ${newStatus}`,
-          description: 'Updated via domain table action',
-          timestamp: now,
-          color: newStatus === 'Active' ? 'emerald' : 'amber',
-        },
-        ...(target.recentActivities || []),
-      ],
-    };
-    handleUpdateDomain(updated);
+    void handleUpdateDomain({...target, status: target.status === 'Active' ? 'Inactive' : 'Active'});
   };
-
-  const handleAddTag = (domainId: string, tag: string) => {
-    const target = domains.find((d) => d.id === domainId);
-    if (!target) return;
-    if (target.tags.includes(tag)) return;
-    const now = new Date().toISOString().replace('T', ' ').slice(0, 16);
-    const updated: DomainItem = {
-      ...target,
-      tags: [...target.tags, tag],
-      updatedAt: now,
-    };
-    handleUpdateDomain(updated);
+  const handleAddTag = (id: string, tag: string) => {
+    const target = domains.find(d => d.id === id);
+    if (target && !target.tags.includes(tag)) void handleUpdateDomain({...target, tags: [...target.tags, tag]});
   };
 
   return (
     <div className="p-4 sm:p-6 space-y-5 font-sans min-w-0">
+      {error && <p role="alert" className="text-destructive">{error}</p>}
+      <p className="text-xs text-muted-foreground">Status shows saved routing intent. Node activation is asynchronous. Edge TLS certificates are not provisioned by this runtime.</p>
       {/* Top Header & Breadcrumbs */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -358,7 +280,7 @@ export default function DomainsPage() {
                 setSelectedDomainId(item.id);
               }
             }}
-            onEditDomain={(item) => setEditingDomain(item)}
+            onEditDomain={(item) => navigate(`/domains/${item.id}/edit`)}
             onDeleteDomain={(item) => setDeletingDomain(item)}
             onToggleStatus={handleToggleStatus}
           />
@@ -369,7 +291,7 @@ export default function DomainsPage() {
           <DomainDrawer
             domain={selectedDomain}
             onClose={() => setSelectedDomainId(null)}
-            onEdit={(item) => setEditingDomain(item)}
+            onEdit={(item) => navigate(`/domains/${item.id}/edit`)}
             onDelete={(item) => setDeletingDomain(item)}
             onAddTag={handleAddTag}
             onUpdateDomain={handleUpdateDomain}
@@ -378,19 +300,6 @@ export default function DomainsPage() {
       </div>
 
       {/* Modals & Dialogs */}
-      <AddDomainModal
-        isOpen={isAddOpen}
-        onClose={() => setIsAddOpen(false)}
-        onAdd={handleCreateDomain}
-      />
-
-      <EditDomainModal
-        isOpen={!!editingDomain}
-        domain={editingDomain}
-        onClose={() => setEditingDomain(null)}
-        onSave={handleUpdateDomain}
-      />
-
       <DeleteDomainDialog
         isOpen={!!deletingDomain}
         domain={deletingDomain}
@@ -398,14 +307,6 @@ export default function DomainsPage() {
         onConfirm={handleDeleteDomain}
       />
 
-      <ImportDomainsModal
-        isOpen={isImportOpen}
-        onClose={() => setIsImportOpen(false)}
-        onImport={(importedList) => {
-          const next = [...importedList, ...domains];
-          saveDomains(next);
-        }}
-      />
     </div>
   );
 }

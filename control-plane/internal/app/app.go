@@ -5,6 +5,8 @@ import (
 	"aurora-waf.local/control-plane/internal/config"
 	"aurora-waf.local/control-plane/internal/console"
 	port "aurora-waf.local/control-plane/internal/domain/service"
+	"aurora-waf.local/control-plane/internal/provider"
+	"aurora-waf.local/control-plane/internal/service"
 	"context"
 	"errors"
 	"fmt"
@@ -20,9 +22,11 @@ import (
 //   - db: cặp pool kết nối SQLite (Writer + Reader) — đóng khi tắt
 //   - server: HTTP server với tất cả các route đã đăng ký
 type App struct {
-	db      *infra.DBPool
-	server  *http.Server
-	metrics port.MetricsService
+	db              *infra.DBPool
+	server          *http.Server
+	metrics         port.MetricsService
+	collector       *provider.RateLimitCollector
+	backupScheduler *service.BackupScheduler
 }
 
 func init() {
@@ -87,12 +91,21 @@ func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
 	}
 	router.NoRoute(gin.WrapH(ui))
 
-	return &App{db: pools, metrics: module.MetricsService, server: &http.Server{
-		Addr:              cfg.HTTPAddr,
-		Handler:           router,
-		ReadHeaderTimeout: 10 * time.Second,
-		IdleTimeout:       120 * time.Second,
-	}}, nil
+	module.RateLimitCollector.Start(context.Background())
+	module.BackupScheduler.Start(context.Background())
+
+	return &App{
+		db:              pools,
+		metrics:         module.MetricsService,
+		collector:       module.RateLimitCollector,
+		backupScheduler: module.BackupScheduler,
+		server: &http.Server{
+			Addr:              cfg.HTTPAddr,
+			Handler:           router,
+			ReadHeaderTimeout: 10 * time.Second,
+			IdleTimeout:       120 * time.Second,
+		},
+	}, nil
 }
 
 func (a *App) Run(ctx context.Context) error {
@@ -117,6 +130,14 @@ func (a *App) Run(ctx context.Context) error {
 }
 
 // Close is called after Run has drained HTTP requests.
-func (a *App) Close() error { return errors.Join(a.metrics.Close(), a.db.Close()) }
+func (a *App) Close() error {
+	if a.backupScheduler != nil {
+		a.backupScheduler.Stop()
+	}
+	if a.collector != nil {
+		a.collector.Stop()
+	}
+	return errors.Join(a.metrics.Close(), a.db.Close())
+}
 
 func (a *App) Handler() http.Handler { return a.server.Handler }

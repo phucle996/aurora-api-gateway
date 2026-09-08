@@ -54,10 +54,23 @@ impl AccessEngine {
         {
             return Err(crate::Error::InvalidPolicy);
         }
-        snap.rules.sort_by_key(|r| (r.priority, r.id));
+        snap.rules.sort_by_key(|r| (r.priority, crate::host_specificity(&r.host), r.id));
         let mut ids = std::collections::HashSet::new();
         let mut rules = Vec::new();
         for rule in snap.rules {
+            let host_valid = if rule.host == "*" {
+                true
+            } else if let Some(sub) = rule.host.strip_prefix("*.") {
+                !sub.is_empty()
+                    && sub
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
+            } else {
+                rule.host
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
+            };
+
             if rule.id == 0
                 || !ids.insert(rule.id)
                 || !matches!(rule.action.as_str(), "allow" | "block" | "log")
@@ -66,11 +79,7 @@ impl AccessEngine {
                 || rule.priority > 1_000_000
                 || rule.host.is_empty()
                 || rule.host.len() > 253
-                || (rule.host != "*"
-                    && !rule
-                        .host
-                        .bytes()
-                        .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-'))
+                || !host_valid
                 || !rule.path_prefix.starts_with('/')
                 || rule.path_prefix.len() > 8192
                 || rule
@@ -146,7 +155,7 @@ impl AccessEngine {
         for compiled in &self.rules {
             let r = &compiled.rule;
             if (r.expires_at != 0 && q.now >= r.expires_at)
-                || (r.host != "*" && !r.host.as_bytes().eq_ignore_ascii_case(q.host))
+                || !crate::host_matches(r.host.as_bytes(), q.host)
                 || (r.method != "*" && r.method.as_bytes() != q.method)
                 || !q.path.starts_with(r.path_prefix.as_bytes())
                 || (r.path_prefix != "/"
@@ -220,5 +229,57 @@ mod tests {
                 blocked
             );
         }
+    }
+
+    #[test]
+    fn wildcard_host_ip_access() {
+        let e = AccessEngine::from_snapshot(br#"{"schema_version":1,"generation":1,"rules":[
+            {"id":1,"priority":1,"action":"block","networks":["10.0.0.0/8"],"host":"*.corp.internal","path_prefix":"/","method":"*","schedule":"always","expires_at":0,"log":false,"reputation":false,"alert":false},
+            {"id":2,"priority":1,"action":"allow","networks":["10.0.0.0/8"],"host":"public.corp.internal","path_prefix":"/","method":"*","schedule":"always","expires_at":0,"log":false,"reputation":false,"alert":false}
+        ]}"#).unwrap();
+
+        // public.corp.internal is exact match (priority 1, specificity 0, id 2) -> Allow (action 0)
+        let res1 = e.evaluate(AccessRequest {
+            ip: b"10.0.0.1",
+            host: b"public.corp.internal",
+            path: b"/index",
+            method: b"GET",
+            now: 10,
+        }).unwrap();
+        assert_eq!(res1.rule_id, 2);
+        assert_eq!(res1.action, 0);
+
+        // secret.corp.internal matches wildcard *.corp.internal -> Block (action 1)
+        let res2 = e.evaluate(AccessRequest {
+            ip: b"10.0.0.1",
+            host: b"secret.corp.internal",
+            path: b"/index",
+            method: b"GET",
+            now: 10,
+        }).unwrap();
+        assert_eq!(res2.rule_id, 1);
+        assert_eq!(res2.action, 1);
+
+        // corp.internal apex matches wildcard *.corp.internal -> Block (action 1)
+        let res3 = e.evaluate(AccessRequest {
+            ip: b"10.0.0.1",
+            host: b"corp.internal",
+            path: b"/index",
+            method: b"GET",
+            now: 10,
+        }).unwrap();
+        assert_eq!(res3.rule_id, 1);
+        assert_eq!(res3.action, 1);
+
+        // other.internal does not match -> default Allow
+        let res4 = e.evaluate(AccessRequest {
+            ip: b"10.0.0.1",
+            host: b"other.internal",
+            path: b"/index",
+            method: b"GET",
+            now: 10,
+        }).unwrap();
+        assert_eq!(res4.rule_id, 0);
+        assert_eq!(res4.action, 0);
     }
 }

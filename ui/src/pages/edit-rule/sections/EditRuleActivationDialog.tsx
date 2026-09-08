@@ -34,7 +34,7 @@ export function EditRuleActivationDialog({
             </div>
             <div>
               <DialogTitle className="text-base font-bold text-foreground">
-                Kích hoạt Rule / Rule Activation
+                Lưu phiên bản rule
               </DialogTitle>
               <div className="text-[11px] text-muted-foreground">
                 Xác nhận trạng thái trước khi cập nhật
@@ -43,7 +43,7 @@ export function EditRuleActivationDialog({
           </div>
 
           <DialogDescription className="text-xs text-foreground/80 pt-2 leading-relaxed">
-            Bạn muốn bật rule này ngay lập tức để áp dụng chính sách bảo vệ hay lưu ở trạng thái tắt để kích hoạt sau?
+            Chọn trạng thái Enabled hoặc Disabled cho bản lưu. Thao tác này không triển khai rule xuống node; cần publish policy riêng.
           </DialogDescription>
         </DialogHeader>
 
@@ -73,7 +73,7 @@ export function EditRuleActivationDialog({
             className="flex items-center justify-center gap-1.5 px-4 py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground border border-border text-xs font-bold font-mono transition-colors cursor-pointer"
           >
             <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-            <span>Để sau</span>
+            <span>Lưu Disabled</span>
           </button>
 
           <button
@@ -83,7 +83,7 @@ export function EditRuleActivationDialog({
             className="flex items-center justify-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold font-mono transition-colors cursor-pointer shadow-sm"
           >
             <Zap className="w-3.5 h-3.5" />
-            <span>Bật ngay</span>
+            <span>Lưu Enabled</span>
           </button>
         </DialogFooter>
       </DialogContent>

@@ -46,8 +46,39 @@ if [ ! -f /var/lib/aurora-policy/active-access.json ]; then
     printf '%s' '{"schema_version":1,"generation":0,"rules":[]}' > /var/lib/aurora-policy/active-access.json
 fi
 
+if [ ! -f /var/lib/aurora-policy/active-upstreams.conf ]; then
+    printf '%s\n' '# Aurora WAF initial active upstreams' > /var/lib/aurora-policy/active-upstreams.conf
+fi
+
+chown -R nginx:nginx /var/lib/aurora-policy
+chmod 700 /var/lib/aurora-policy
+
+# Routing servers share the same WAF enforcement and node identity as the workload server.
+cat > /etc/nginx/domain-waf.conf <<EOF
+aurora_waf on;
+aurora_waf_policy /var/lib/aurora-policy/active-policy.json;
+aurora_access_policy /var/lib/aurora-policy/active-access.json;
+aurora_waf_mode enforce;
+aurora_waf_controller ${CONTROLLER_URL};
+aurora_waf_node_id ${NODE_ID};
+aurora_waf_token ${AUTH_TOKEN};
+aurora_waf_heartbeat_interval ${HEARTBEAT_INTERVAL};
+add_header X-Aurora-Node "${NODE_ID}" always;
+EOF
+chmod 600 /etc/nginx/domain-waf.conf
+mkdir -p /var/lib/aurora-routing
+chown root:root /var/lib/aurora-routing
+chmod 700 /var/lib/aurora-routing
+if [ ! -f /var/lib/aurora-routing/active-domain-routing.conf ]; then
+    printf '# No configured domains yet\n' > /var/lib/aurora-routing/active-domain-routing.conf
+fi
+
+# Discover and validate persisted optional modules before NGINX starts.
+/node-dependencies.sh init
+
 # Kiểm tra cú pháp NGINX
 /opt/nginx/usr/sbin/nginx -t -c /etc/nginx/nginx.conf
 
 echo "[Aurora Node: ${NODE_ID}] Khởi động NGINX WAF Data Plane (In-Process Native Rust)..."
+/domain-routing-agent.sh &
 exec /opt/nginx/usr/sbin/nginx -c /etc/nginx/nginx.conf -g 'daemon off;'

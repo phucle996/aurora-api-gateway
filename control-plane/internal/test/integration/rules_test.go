@@ -221,3 +221,44 @@ func TestPublishFreezesRevisionsAndRecoversCompilerFailure(t *testing.T) {
 		t.Fatal("release payload was mutable")
 	}
 }
+
+func TestRuleEvaluationRejectsInvalidEnvelope(t *testing.T) {
+	_, mux := rulesFixture(t)
+	for _, tc := range []struct {
+		name, path, body string
+		status           int
+	}{
+		{"trailing JSON", "/api/v1/rules/test", `{"conditions":[{"field":"path","operator":"equals","value":"/"}]} {}`, 400},
+		{"null", "/api/v1/rules/test", `null`, 422},
+		{"empty draft", "/api/v1/rules/test", `{}`, 422},
+		{"invalid body ID", "/api/v1/rules/test", `{"rule_id":0}`, 400},
+		{"invalid route ID", "/api/v1/rules/nope/test", `{}`, 400},
+		{"missing stored rule", "/api/v1/rules/999999/test", `{}`, 404},
+		{"no invented client IP", "/api/v1/rules/test", `{"conditions":[{"field":"client_ip","operator":"equals","value":"192.0.2.1"}]}`, 200},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", tc.path, bytes.NewBufferString(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer rules-test-token-at-least-32-bytes")
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+			if w.Code != tc.status {
+				t.Fatalf("got %d: %s", w.Code, w.Body.String())
+			}
+			if tc.status == 200 {
+				var got struct {
+					Matched bool `json:"matched"`
+					Details []struct {
+						Extracted string `json:"extracted_value"`
+					} `json:"details"`
+				}
+				if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+					t.Fatal(err)
+				}
+				if got.Matched || len(got.Details) != 1 || got.Details[0].Extracted != "" {
+					t.Fatalf("test used connection IP instead of sample input: %s", w.Body.String())
+				}
+			}
+		})
+	}
+}

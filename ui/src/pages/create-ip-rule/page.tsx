@@ -7,6 +7,7 @@ import {
   type AccessObject,
   type AccessCatalog,
 } from '../../lib/api/access';
+import { domainsApi } from '../../lib/api/domains';
 import { BasicInfoSection } from './sections/BasicInfoSection';
 import { SourceSection } from './sections/SourceSection';
 import { ScopeSection } from './sections/ScopeSection';
@@ -41,6 +42,7 @@ export function CreateIpRulePage() {
   const [values, setValues] = useState('');
   const [objects, setObjects] = useState<AccessObject[]>([]);
   const [catalog, setCatalog] = useState<AccessCatalog | null>(null);
+  const [domainHosts, setDomainHosts] = useState<string[]>([]);
   const [authority, setAuthority] = useState<{ version: number; release: number } | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -49,11 +51,19 @@ export function CreateIpRulePage() {
   useEffect(() => {
     let live = true;
     setAuthority(null);
-    Promise.all([accessApi.list(), accessApi.status(), accessApi.catalog()])
-      .then(([items, status, cat]) => {
+    Promise.all([
+      accessApi.list(),
+      accessApi.status(),
+      accessApi.catalog(),
+      domainsApi.catalog().catch(() => []),
+    ])
+      .then(([items, status, cat, domCatalog]) => {
         if (!live) return;
         setObjects(items);
         setCatalog(cat);
+        const domList = (domCatalog || []).map((d) => d.domain);
+        const combined = Array.from(new Set([...(cat.hosts || []), ...domList])).sort();
+        setDomainHosts(combined);
         const item = items.find((x) => x.id === (id || clone) && x.kind === 'rule');
         if ((id || clone) && !item) throw Error('Access rule not found');
         if (item) {
@@ -201,7 +211,7 @@ export function CreateIpRulePage() {
                 objects={objects}
                 catalog={catalog}
               />
-              <ScopeSection form={form} setForm={setForm} hosts={catalog?.hosts || []} />
+              <ScopeSection form={form} setForm={setForm} hosts={domainHosts.length > 0 ? domainHosts : (catalog?.hosts || [])} />
               <AdditionalOptionsSection form={form} setForm={setForm} />
 
               {/* Bottom Form Actions */}

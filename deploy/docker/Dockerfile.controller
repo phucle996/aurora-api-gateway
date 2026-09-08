@@ -14,11 +14,13 @@ COPY deploy/docker/entrypoint-controller.sh /entrypoint.sh
 
 RUN chmod +x /entrypoint.sh /app/aurora-controller /app/aurora-compile && mkdir -p /data
 
+ENV AURORA_COMPILER_PATH="/app/aurora-compile"
 ENV AURORA_HTTP_ADDR="0.0.0.0:8080"
 ENV AURORA_SQLITE_PATH="/data/aurora.db"
 ENV AURORA_ADMIN_TOKEN_FILE="/data/admin.token"
-ENV AURORA_COMPILER_PATH="/app/aurora-compile"
+ENV AURORA_RATE_LIMIT_UDP="0.0.0.0:5140"
 
 EXPOSE 8080
+EXPOSE 5140/udp
 
 ENTRYPOINT ["/entrypoint.sh"]

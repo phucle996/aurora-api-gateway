@@ -46,9 +46,51 @@ type ListDomainsCounts struct {
 	MTLSEnabled int
 }
 
+// DomainCatalogItem là flat projection của một bản ghi Domain phục vụ danh mục lựa chọn (Catalog workflow).
+type DomainCatalogItem struct {
+	ID         int64
+	Domain     string
+	RootDomain string
+	Status     string
+	Upstream   string
+}
+
 // ListDomainsResult là kết quả trả về của workflow List Domains trong tầng Domain.
 type ListDomainsResult struct {
 	Items         []ListDomainsItem
 	Counts        ListDomainsCounts
 	TotalFiltered int
+}
+
+// CreateDomainCommand đại diện cho payload yêu cầu tạo mới một Domain.
+type CreateDomainCommand struct {
+	Domain            string
+	RootDomain        string
+	Status            string
+	TLSType           string
+	MinTLSVersion     string
+	HSTSEnabled       bool
+	OCSPStapling      bool
+	ClientCASubject   string
+	Upstream          string
+	UpstreamAlgorithm string
+	HealthCheckPath   string
+	Tags              []string
+	Description       string
+	CreatedBy         string
+}
+
+// UpdateDomainCommand đại diện cho payload yêu cầu cập nhật một Domain hiện có.
+type UpdateDomainCommand struct {
+	Status            string
+	TLSType           string
+	MinTLSVersion     string
+	HSTSEnabled       bool
+	OCSPStapling      bool
+	ClientCASubject   string
+	Upstream          string
+	UpstreamAlgorithm string
+	HealthCheckPath   string
+	Tags              []string
+	Description       string
 }

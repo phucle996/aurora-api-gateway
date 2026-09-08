@@ -947,11 +947,11 @@ func (r *ruleRepository) CreateDefinition(ctx context.Context, c entity.CreateRu
 	// Bước 6: Ghi nhận bản ghi lịch sử phiên bản đầu tiên vào bảng 'rule_revisions'
 	const insertRevisionQuery = `
 		INSERT INTO rule_revisions 
-		SELECT id, version, name, description, rule_group, action, severity, score, priority, path, enabled, updated_at, 'management-token' 
+		SELECT id, version, name, description, rule_group, action, severity, score, priority, path, enabled, updated_at, ?
 		FROM rules 
 		WHERE id = ?;
 	`
-	if _, err = tx.ExecContext(ctx, insertRevisionQuery, out.ID); err != nil {
+	if _, err = tx.ExecContext(ctx, insertRevisionQuery, c.Actor, out.ID); err != nil {
 		return out, err
 	}
 
@@ -1087,7 +1087,7 @@ func (r *ruleRepository) UpdateDefinition(ctx context.Context, c entity.UpdateRu
 	// Bước 6: Ghi nhận bản ghi lịch sử phiên bản đầu tiên vào bảng 'rule_revisions'
 	const insertRevisionQuery = `
 		INSERT INTO rule_revisions 
-		SELECT id, version, name, description, rule_group, action, severity, score, priority, path, enabled, updated_at, ? 
+		SELECT id, version, name, description, rule_group, action, severity, score, priority, path, enabled, updated_at, ?
 		FROM rules 
 		WHERE id = ?;
 	`

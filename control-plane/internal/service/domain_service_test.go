@@ -23,6 +23,34 @@ func (m *mockDomainRepo) ListDomains(ctx context.Context, q entity.ListDomainsQu
 	}, nil
 }
 
+func (m *mockDomainRepo) DomainCatalog(ctx context.Context) ([]entity.DomainCatalogItem, error) {
+	return []entity.DomainCatalogItem{
+		{ID: 1, Domain: "test.example.com", RootDomain: "example.com", Status: "Active", Upstream: "prod-be"},
+	}, nil
+}
+
+func (m *mockDomainRepo) Create(ctx context.Context, cmd entity.CreateDomainCommand) (int64, error) {
+	return 1, nil
+}
+
+func (m *mockDomainRepo) GetByID(ctx context.Context, id int64) (*entity.ListDomainsItem, error) {
+	return &entity.ListDomainsItem{
+		ID:         id,
+		Domain:     "test.example.com",
+		RootDomain: "example.com",
+		Status:     "Active",
+		Upstream:   "http://127.0.0.1:8080",
+	}, nil
+}
+
+func (m *mockDomainRepo) Update(ctx context.Context, id int64, cmd entity.UpdateDomainCommand) error {
+	return nil
+}
+
+func (m *mockDomainRepo) Delete(ctx context.Context, id int64) error {
+	return nil
+}
+
 func TestDomainService_ListDomains(t *testing.T) {
 	mockRepo := &mockDomainRepo{}
 	svc := service.NewDomainService(mockRepo)
@@ -48,6 +76,66 @@ func TestDomainService_ListDomains(t *testing.T) {
 		}
 		if len(res.Items) != 1 {
 			t.Errorf("expected 1 item, got %d", len(res.Items))
+		}
+	})
+
+	t.Run("Returns domain catalog directly from repository", func(t *testing.T) {
+		items, err := svc.DomainCatalog(ctx)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(items) != 1 || items[0].Domain != "test.example.com" {
+			t.Errorf("expected catalog item with test.example.com, got %+v", items)
+		}
+	})
+
+	t.Run("CreateDomain validates input and creates domain", func(t *testing.T) {
+		_, err := svc.CreateDomain(ctx, entity.CreateDomainCommand{
+			Domain:   "",
+			Upstream: "http://127.0.0.1:8080",
+		})
+		if err == nil {
+			t.Errorf("expected error for empty domain")
+		}
+
+		item, err := svc.CreateDomain(ctx, entity.CreateDomainCommand{
+			Domain:   "test.example.com",
+			Upstream: "http://127.0.0.1:8080",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if item.Domain != "test.example.com" {
+			t.Errorf("expected domain test.example.com, got %s", item.Domain)
+		}
+	})
+
+	t.Run("GetDomain returns domain by id", func(t *testing.T) {
+		item, err := svc.GetDomain(ctx, 1)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if item.ID != 1 {
+			t.Errorf("expected id 1, got %d", item.ID)
+		}
+	})
+
+	t.Run("UpdateDomain updates domain", func(t *testing.T) {
+		item, err := svc.UpdateDomain(ctx, 1, entity.UpdateDomainCommand{
+			Upstream: "http://127.0.0.1:9090",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if item == nil {
+			t.Errorf("expected updated item, got nil")
+		}
+	})
+
+	t.Run("DeleteDomain deletes domain", func(t *testing.T) {
+		err := svc.DeleteDomain(ctx, 1)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 }

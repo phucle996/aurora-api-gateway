@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
 import { EditRuleHeader } from './sections/EditRuleHeader';
 import { EditBasicInfoSection } from './sections/EditBasicInfoSection';
@@ -12,8 +12,7 @@ import { EditRuleActivationDialog } from './sections/EditRuleActivationDialog';
 import { DeleteRuleDialog } from './sections/DeleteRuleDialog';
 import type { Condition } from '../create-rule/sections/MatchConditionsSection';
 import { Save, AlertCircle, Loader2 } from 'lucide-react';
-import { policiesApi, type PolicyCatalogItem } from '../../lib/api/policies';
-import { rulesApi, type RuleDetailResponse } from '../../lib/api/rules';
+import { rulesApi, type RuleDetailResponse, type UpdateRuleDefinitionPayload } from '../../lib/api/rules';
 
 const fields: Record<string, string> = {
   'Request URI': 'uri_raw',
@@ -63,9 +62,14 @@ const dbActionsToUi: Record<string, string> = {
 
 export default function EditRulePage() {
   const navigate = useNavigate();
+  const saveAttempt = useRef<{payload:string;key:string}|null>(null);
+  const savingRef=useRef(false);
   const { id: routeId } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const ruleId = routeId || searchParams.get('id') || '';
+
+  const generation = useRef(0);
+  const deletingRef = useRef(false);
 
   // Loading & Error States
   const [isLoading, setIsLoading] = useState(true);
@@ -78,9 +82,6 @@ export default function EditRulePage() {
   // Form states
   const [ruleName, setRuleName] = useState('');
   const [description, setDescription] = useState('');
-  const [policy, setPolicy] = useState('');
-  const [policyCatalog, setPolicyCatalog] = useState<PolicyCatalogItem[]>([]);
-  const [isLoadingPolicies, setIsLoadingPolicies] = useState(false);
   const [enabled, setEnabled] = useState(true);
   const [priority, setPriority] = useState(100);
   const [group, setGroup] = useState('custom');
@@ -91,7 +92,7 @@ export default function EditRulePage() {
   const [logicMode, setLogicMode] = useState<'ALL' | 'ANY'>('ALL');
 
   const [actionType, setActionType] = useState('Block Request');
-  const [responseCode, setResponseCode] = useState('403 Forbidden');
+  const [responseCode, setResponseCode] = useState('403');
   const [customResponse, setCustomResponse] = useState('');
   const [logEvent, setLogEvent] = useState(true);
   const [addToReputation, setAddToReputation] = useState(false);
@@ -106,30 +107,14 @@ export default function EditRulePage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Load policy catalog
-  useEffect(() => {
-    let active = true;
-    setIsLoadingPolicies(true);
-    policiesApi
-      .catalog()
-      .then((data) => {
-        if (!active) return;
-        setPolicyCatalog(data || []);
-      })
-      .catch(() => {
-        if (!active) return;
-        setPolicyCatalog([]);
-      })
-      .finally(() => {
-        if (active) setIsLoadingPolicies(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
   // Fetch real rule detail from backend
   useEffect(() => {
+    ++generation.current;
+    setSaveError('');
+    setRuleDetail(null);
+    setIsActivationDialogOpen(false);
+    setIsDeleteDialogOpen(false);
+    saveAttempt.current = null;
     if (!ruleId) {
       setLoadError('No rule ID specified.');
       setIsLoading(false);
@@ -153,7 +138,7 @@ export default function EditRulePage() {
         setEnabled(data.enabled ?? true);
         setLogicMode(data.logic_mode?.toUpperCase() === 'ANY' ? 'ANY' : 'ALL');
         setActionType(dbActionsToUi[data.action] || 'Block Request');
-        setResponseCode(data.response_code ? `${data.response_code} ${data.response_code === 403 ? 'Forbidden' : 'Error'}` : '403 Forbidden');
+        setResponseCode(String(data.response_code ?? 403));
         setCustomResponse(data.custom_response || '');
         setLogEvent(data.log_event !== false);
         setAddToReputation(Boolean(data.add_to_reputation));
@@ -177,19 +162,12 @@ export default function EditRulePage() {
             {
               id: 'cond-1',
               field: 'Request Path',
-              operator: 'Starts With',
+              operator: 'Equals',
               value: data.path,
             },
           ]);
         } else {
-          setConditions([
-            {
-              id: 'cond-1',
-              field: 'Request URI',
-              operator: 'Contains (Pattern)',
-              value: '.*',
-            },
-          ]);
+          throw new Error('Saved rule has no conditions. Refusing to replace them with a default pattern.');
         }
       })
       .catch((err) => {
@@ -201,11 +179,39 @@ export default function EditRulePage() {
       });
     return () => {
       active = false;
+      ++generation.current;
     };
   }, [ruleId, retry]);
 
+  const draftDefinition: UpdateRuleDefinitionPayload = {
+        expected_version: currentVersion,
+        name: ruleName.trim(),
+        description,
+        group,
+        severity,
+        score,
+        enabled,
+        priority,
+        policy_id: null,
+        logic_mode: logicMode.toLowerCase() as 'all' | 'any',
+        conditions: conditions.map(c => ({
+          field: fields[c.field] || c.field, operator: operators[c.operator] || c.operator,
+          value: c.value, header_name: c.field === 'Request Header' ? (c.headerName || '') : '',
+        })),
+        action: (actions[actionType] || 'block') as 'allow' | 'log' | 'block',
+        response_code: actionType === 'Block Request' ? Number(responseCode) : null,
+        custom_response: actionType === 'Block Request' ? customResponse : '',
+        log_event: logEvent,
+        add_to_reputation: addToReputation,
+        source_ip: sourceIP.trim(),
+        host_domain: hostDomain.trim(),
+        path_prefix: pathPrefix.trim(),
+        http_method: httpMethod === 'All Methods' ? '' : httpMethod,
+      };
+
   const handleInitiateSave = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (savingRef.current || deletingRef.current) return;
     if (!ruleName.trim()) {
       setSaveError('Rule Name is required. Vui lòng nhập tên Rule.');
       return;
@@ -215,65 +221,50 @@ export default function EditRulePage() {
   };
 
   const handleConfirmSave = async (shouldEnable: boolean) => {
+    if(savingRef.current || deletingRef.current || !ruleDetail)return;
+    const seq = generation.current;
+    savingRef.current=true;
     setIsActivationDialogOpen(false);
     setIsSaving(true);
     setSaveError('');
 
     try {
-      const codeNum = actionType === 'Block Request' ? Number(responseCode.split(' ')[0]) || 403 : null;
-      const payloadConditions = conditions.map((c) => ({
-        field: fields[c.field] || c.field,
-        operator: operators[c.operator] || c.operator,
-        value: c.value,
-        header_name: c.field === 'Request Header' ? (c.headerName || '') : '',
-      }));
+      const payload = { ...draftDefinition, enabled: shouldEnable };
+      const serialized=JSON.stringify(payload);
+      if(saveAttempt.current?.payload!==serialized)saveAttempt.current={payload:serialized,key:crypto.randomUUID()};
+      await rulesApi.updateDefinition(ruleId,payload,saveAttempt.current.key);
 
-      await rulesApi.updateDefinition(ruleId, {
-        expected_version: currentVersion,
-        name: ruleName.trim(),
-        description: description.trim(),
-        group,
-        severity,
-        score,
-        enabled: shouldEnable,
-        priority,
-        policy_id: null,
-        logic_mode: logicMode.toLowerCase() as 'all' | 'any',
-        conditions: payloadConditions,
-        action: (actions[actionType] || 'block') as 'allow' | 'log' | 'block',
-        response_code: codeNum,
-        custom_response: customResponse.trim(),
-        log_event: logEvent,
-        add_to_reputation: addToReputation,
-        source_ip: sourceIP.trim(),
-        host_domain: hostDomain.trim(),
-        path_prefix: pathPrefix.trim(),
-        http_method: httpMethod === 'All Methods' ? '' : httpMethod,
-      });
-
+      if (seq !== generation.current) return;
       navigate(`/rules?selected=${encodeURIComponent(ruleId)}`, {
         state: { updatedId: ruleId },
       });
     } catch (err: any) {
-      setSaveError(err?.message || 'Failed to update rule. The rule might have been modified concurrently.');
+      if (seq === generation.current) setSaveError(err?.message || 'Failed to update rule. The rule might have been modified concurrently.');
     } finally {
+      savingRef.current=false;
       setIsSaving(false);
     }
   };
 
   const handleDelete = () => {
+    if (savingRef.current || deletingRef.current) return;
     setIsDeleteDialogOpen(true);
   };
 
   const handleConfirmDelete = async () => {
+    if (savingRef.current || deletingRef.current || !ruleDetail) return;
+    deletingRef.current = true;
+    const seq = generation.current;
     setIsDeleting(true);
     try {
       await rulesApi.delete(ruleId, currentVersion);
+      if (seq !== generation.current) return;
       setIsDeleteDialogOpen(false);
       navigate('/rules');
     } catch (err: any) {
-      alert(err?.message || 'Delete failed. If the rule is assigned to a policy, remove it from the policy first.');
+      if (seq === generation.current) alert(err?.message || 'Delete failed. If the rule is assigned to a policy, remove it from the policy first.');
     } finally {
+      deletingRef.current = false;
       setIsDeleting(false);
     }
   };
@@ -323,7 +314,7 @@ export default function EditRulePage() {
         ruleId={ruleId}
         onDelete={handleDelete}
         onSave={handleInitiateSave}
-        isSaving={isSaving}
+        isSaving={isSaving || isDeleting}
       />
 
       {saveError && (
@@ -340,8 +331,8 @@ export default function EditRulePage() {
       )}
 
       {/* Form Layout: 2 Columns on desktop */}
-      <form
-        onSubmit={handleInitiateSave}
+      <form onSubmit={handleInitiateSave}>
+      <fieldset disabled={isSaving || isDeleting}
         className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start"
       >
         {/* Left 7 cols: Form sections */}
@@ -353,12 +344,8 @@ export default function EditRulePage() {
             setName={setRuleName}
             description={description}
             setDescription={setDescription}
-            policy={policy}
-            setPolicy={setPolicy}
             priority={priority}
             setPriority={setPriority}
-            policyCatalog={policyCatalog}
-            isLoadingPolicies={isLoadingPolicies}
           />
 
           {/* Group, Severity, Score */}
@@ -462,16 +449,15 @@ export default function EditRulePage() {
         {/* Right 5 cols: Panels */}
         <div className="lg:col-span-5 space-y-5">
           {/* Rule Preview */}
-          <EditRulePreviewPanel
-            name={ruleName}
-            policy={policy}
-            priority={priority}
-            conditions={conditions}
-            responseCode={responseCode}
-          />
+          <EditRulePreviewPanel definition={draftDefinition} />
 
-          {/* Test Rule with live backend */}
-          <EditRuleTesterPanel conditions={conditions} logicMode={logicMode} ruleId={ruleId} />
+          <EditRuleTesterPanel
+            conditions={draftDefinition.conditions}
+            logicMode={draftDefinition.logic_mode}
+            action={draftDefinition.action}
+            responseCode={draftDefinition.response_code ?? 0}
+            ruleId={ruleId}
+          />
 
           {/* Rule Information with real database metadata */}
           <EditRuleInfoPanel
@@ -486,6 +472,7 @@ export default function EditRulePage() {
             severity={severity}
           />
         </div>
+      </fieldset>
       </form>
 
       {/* Save Confirmation Dialog */}
@@ -493,7 +480,7 @@ export default function EditRulePage() {
         open={isActivationDialogOpen}
         onOpenChange={setIsActivationDialogOpen}
         ruleName={ruleName}
-        isSaving={isSaving}
+        isSaving={isSaving || isDeleting}
         onConfirm={handleConfirmSave}
       />
 

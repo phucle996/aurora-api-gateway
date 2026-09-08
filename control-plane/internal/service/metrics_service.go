@@ -27,6 +27,7 @@ type metricsService struct {
 	currentConfig  entity.MetricsIntegrationConfig
 	activeProvider provider.MetricsProvider
 	closed         bool
+	listeners      []func(entity.MetricsIntegrationConfig)
 }
 
 // NewMetricsService khởi tạo service quản lý điều phối tích hợp Telemetry và Metrics theo mô hình Strategy.
@@ -103,9 +104,22 @@ func (s *metricsService) SaveConfig(ctx context.Context, cfg entity.MetricsInteg
 		s.activeProvider = provider.NewMetricsProvider(cfg, s.nodeRepo, s.httpClient)
 		_ = s.activeProvider.Start(context.Background())
 		s.currentConfig = cfg
+		for _, listener := range s.listeners {
+			listener(cfg)
+		}
 	}
 
 	return nil
+}
+
+// RegisterConfigListener đăng ký hàm nhận thông báo khi cấu hình metrics được cập nhật thành công.
+func (s *metricsService) RegisterConfigListener(listener func(entity.MetricsIntegrationConfig)) {
+	if listener == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.listeners = append(s.listeners, listener)
 }
 
 // TestPrometheus kiểm tra khả năng kết nối tới Prometheus URL và đo độ trễ mạng.

@@ -29,7 +29,7 @@ import type {
   InternalSslConfig,
   UpstreamTransportConfig,
 } from '../types';
-import { INITIAL_UPSTREAMS } from '../mockData';
+import { upstreamsApi } from '../../../lib/api/upstreams';
 
 interface CertUploadInputProps {
   id: string;
@@ -247,11 +247,10 @@ export default function CreateUpstreamPage() {
   const [type, setType] = useState<UpstreamType>('Load Balancer');
 
   // 2. Server Pool / Target
-  const [singleAddress, setSingleAddress] = useState('10.0.1.10:8080');
+  const [singleAddress, setSingleAddress] = useState('');
   const [algorithm, setAlgorithm] = useState<BalancingAlgorithm>('round_robin');
   const [lbServers, setLbServers] = useState<UpstreamNode[]>([
-    { id: 'node-1', address: '10.0.1.10:8080', weight: 1, maxFails: 3, failTimeout: '10s', backup: false, healthy: true },
-    { id: 'node-2', address: '10.0.1.11:8080', weight: 1, maxFails: 3, failTimeout: '10s', backup: false, healthy: true },
+    { id: 'node-1', address: '', weight: 1, maxFails: 3, failTimeout: '10s', backup: false, healthy: false },
   ]);
   const [externalFqdn, setExternalFqdn] = useState('');
   const [sniOverride, setSniOverride] = useState(true);
@@ -271,9 +270,7 @@ export default function CreateUpstreamPage() {
   const [clientKeyFileName, setClientKeyFileName] = useState('');
 
   // 4. Probes
-  const [probes, setProbes] = useState<ProbeCheckItem[]>([
-    { id: 'p-1', type: 'Readiness', path: '/health', expectedStatus: 200, intervalSec: 10, timeoutSec: 3 },
-  ]);
+  const [probes, setProbes] = useState<ProbeCheckItem[]>([]);
   const [newProbeType, setNewProbeType] = useState<'Readiness' | 'Liveness' | 'Health'>('Readiness');
   const [newProbePath, setNewProbePath] = useState('');
   const [newProbeStatus, setNewProbeStatus] = useState(200);
@@ -283,7 +280,12 @@ export default function CreateUpstreamPage() {
   const [enableWebSocket, setEnableWebSocket] = useState(false);
   const [enableSse, setEnableSse] = useState(false);
   const [enableGrpc, setEnableGrpc] = useState(false);
+  const [requestCompression, setRequestCompression] = useState<'none' | 'gzip' | 'deflate'>('none');
+  const [compressionMinBytes, setCompressionMinBytes] = useState(1024);
+  const [compressionLevel, setCompressionLevel] = useState(6);
   const [keepAliveConnections, setKeepAliveConnections] = useState(32);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   // Node pool management
   const handleAddNode = () => {
@@ -296,7 +298,7 @@ export default function CreateUpstreamPage() {
         maxFails: 3,
         failTimeout: '10s',
         backup: false,
-        healthy: true,
+        healthy: false,
       },
     ]);
   };
@@ -335,14 +337,14 @@ export default function CreateUpstreamPage() {
   };
 
   // Submit
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
 
     let finalServers: UpstreamNode[] = [];
     if (type === 'Single Server') {
       finalServers = [
-        { id: 'node-single', address: singleAddress.trim() || '127.0.0.1:8080', weight: 1, healthy: true },
+        { id: 'node-single', address: singleAddress.trim() || '127.0.0.1:8080', weight: 1, healthy: false },
       ];
     } else if (type === 'Load Balancer') {
       finalServers = lbServers.map((s) => ({
@@ -351,63 +353,52 @@ export default function CreateUpstreamPage() {
       }));
     } else {
       finalServers = [
-        { id: 'node-ext', address: externalFqdn.trim() || 'origin.internal', weight: 1, healthy: true },
+        { id: 'node-ext', address: externalFqdn.trim() || 'origin.internal', weight: 1, healthy: false },
       ];
     }
 
-    const newUpstream: UpstreamItem = {
-      id: `ups-${Date.now()}`,
+    const payload = {
       name: name.trim().toLowerCase().replace(/\s+/g, '-'),
       description: description.trim(),
-      type,
+      architecture_type: type,
       algorithm,
       servers: finalServers,
-      externalFqdn: type === 'External (FQDN)' ? externalFqdn.trim() : undefined,
-      sniOverride: type === 'External (FQDN)' ? sniOverride : undefined,
-      dynamicDns: type === 'External (FQDN)' ? dynamicDns : undefined,
-      internalSsl: {
+      external_fqdn: type === 'External (FQDN)' ? externalFqdn.trim() : undefined,
+      sni_override: type === 'External (FQDN)' ? sniOverride : undefined,
+      dynamic_dns: dynamicDns,
+      internal_ssl: {
         enabled: internalSslEnabled,
-        verifyCert,
-        sniHost: sniHost.trim() || undefined,
-        caCert: verifyCert && customCaEnabled && caCert.trim() ? caCert.trim() : undefined,
-        mTLS,
-        clientCertName: mTLS ? (clientCertFileName || 'aurora-internal-client.crt') : undefined,
-        clientCert: mTLS && clientCert.trim() ? clientCert.trim() : undefined,
-        clientKey: mTLS && clientKey.trim() ? clientKey.trim() : undefined,
+        verifyCert: internalSslEnabled && verifyCert,
+        sniHost: internalSslEnabled ? sniHost.trim() || undefined : undefined,
+        caCert: internalSslEnabled && verifyCert && customCaEnabled && caCert.trim() ? caCert.trim() : undefined,
+        mTLS: internalSslEnabled && mTLS,
+        clientCertName: internalSslEnabled && mTLS ? (clientCertFileName || 'aurora-internal-client.crt') : undefined,
+        clientCert: internalSslEnabled && mTLS && clientCert.trim() ? clientCert.trim() : undefined,
+        clientKey: internalSslEnabled && mTLS && clientKey.trim() ? clientKey.trim() : undefined,
       },
       probes,
       transport: {
         httpVersion,
         enableWebSocket,
         enableSse,
-        enableGrpc,
+        enableGrpc, requestCompression, compressionMinBytes, compressionLevel,
         keepAliveConnections,
       },
-      boundDomainsCount: 0,
-      createdAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
-      updatedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
     };
 
-    let currentList: UpstreamItem[] = [];
-    try {
-      const saved = localStorage.getItem('aurora_waf_upstreams');
-      if (saved) {
-        currentList = JSON.parse(saved);
-      } else {
-        currentList = INITIAL_UPSTREAMS;
-      }
-    } catch {
-      currentList = INITIAL_UPSTREAMS;
-    }
+    setSubmitting(true);
+    setErrorMsg('');
 
-    const updated = [newUpstream, ...currentList];
     try {
-      localStorage.setItem('aurora_waf_upstreams', JSON.stringify(updated));
-    } catch (err) {
-      console.error('Failed to save upstream:', err);
+      await upstreamsApi.create(payload);
+      navigate('/upstreams');
+    } catch (err: any) {
+      console.error('Failed to create upstream via API:', err);
+      const msg = err?.message || 'Không thể kết nối hoặc lưu Upstream tới máy chủ Control-Plane';
+      setErrorMsg(msg);
+    } finally {
+      setSubmitting(false);
     }
-
-    navigate('/upstreams');
   };
 
   return (
@@ -430,6 +421,13 @@ export default function CreateUpstreamPage() {
           </div>
         </div>
       </div>
+
+      {errorMsg && (
+        <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive rounded-lg flex items-center gap-2 text-xs">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
 
       <form onSubmit={handleCreate}>
         <div className="grid grid-cols-12 gap-6 items-start">
@@ -780,7 +778,7 @@ export default function CreateUpstreamPage() {
                       <input
                         type="checkbox"
                         checked={mTLS}
-                        onChange={(e) => setMTLS(e.target.checked)}
+                        onChange={(e) => { setMTLS(e.target.checked); if (e.target.checked) setVerifyCert(true); }}
                         className="h-4 w-4 rounded border-input text-primary focus:ring-ring bg-background cursor-pointer"
                       />
                     </label>
@@ -811,7 +809,7 @@ export default function CreateUpstreamPage() {
                         <CertUploadInput
                           id="mtls-client-key"
                           label="Client Private Key (PEM / KEY)"
-                          sublabel="Private cryptographic key matching the client certificate (kept securely in memory)."
+                          sublabel="Unencrypted PEM private key matching the client certificate. Stored on the controller and restricted node files; never returned by the read API."
                           placeholder="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
                           value={clientKey}
                           onChange={setClientKey}
@@ -840,7 +838,7 @@ export default function CreateUpstreamPage() {
 
               <div className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Configure health, readiness, or liveness probes to monitor backend availability and route around failures.
+                  Active probes are unavailable in this NGINX runtime. Remove existing probes to save; passive max_fails/fail_timeout remains available.
                 </p>
 
                 {/* Add probe inputs */}
@@ -883,7 +881,7 @@ export default function CreateUpstreamPage() {
 
                   <button
                     type="button"
-                    onClick={handleAddProbe}
+                    disabled title="Active probes unavailable in this NGINX runtime" onClick={handleAddProbe}
                     className="inline-flex items-center gap-1 px-3 py-2 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -914,6 +912,21 @@ export default function CreateUpstreamPage() {
               </div>
             </div>
 
+            <div className="p-5 bg-card border border-border rounded-xl space-y-4">
+              <h2 className="text-sm font-semibold">Request compression to upstream</h2>
+              <p className="text-xs text-muted-foreground">NGINX forwards already compressed requests unchanged. Creating gzip/deflate request bodies is unavailable; gzip response compression is a separate setting.</p>
+              <label className="block text-xs space-y-2">Request body encoding
+                {type !== 'External (FQDN)' && <label className="flex items-center gap-2 mb-3 text-xs"><input type="checkbox" checked={dynamicDns} onChange={e => setDynamicDns(e.target.checked)} />Refresh backend DNS every 5 seconds</label>}
+                <select aria-label="Request body encoding" value={requestCompression} onChange={e => setRequestCompression(e.target.value as 'none' | 'gzip' | 'deflate')} className="block w-full border border-input bg-background rounded p-2">
+                  <option value="none">Off — preserve request</option><option value="gzip" disabled>gzip — unavailable in NGINX</option><option value="deflate" disabled>deflate (zlib)</option>
+                </select>
+              </label>
+              {requestCompression !== 'none' && <div className="grid grid-cols-2 gap-4">
+                <label className="text-xs">Minimum body/message size (bytes)<input aria-label="Compression minimum bytes" type="number" min="0" max="1048576" value={compressionMinBytes} onChange={e=>setCompressionMinBytes(Number(e.target.value))} className="block w-full border border-input bg-background rounded p-2" /></label>
+                <label className="text-xs">Compression level (1–9)<input aria-label="Compression level" type="number" min="1" max="9" value={compressionLevel} onChange={e=>setCompressionLevel(Number(e.target.value))} className="block w-full border border-input bg-background rounded p-2" /></label>
+              </div>}
+            </div>
+
             {/* Section 5: Transport & Protocols */}
             <div className="p-5 bg-card border border-border rounded-xl space-y-4 shadow-sm">
               <div className="flex items-center gap-2 pb-3 border-b border-border">
@@ -930,6 +943,7 @@ export default function CreateUpstreamPage() {
                     {(['HTTP/1.1', 'HTTP/2', 'HTTP/3', 'HTTP/1.0'] as const).map((ver) => (
                       <button
                         key={ver}
+                        disabled={ver === 'HTTP/3'}
                         type="button"
                         onClick={() => setHttpVersion(ver)}
                         className={`px-3 py-2 rounded-lg border text-xs font-medium transition-all text-center cursor-pointer ${
@@ -954,7 +968,7 @@ export default function CreateUpstreamPage() {
                   {httpVersion === 'HTTP/3' && (
                     <div className="flex items-center gap-2 p-2.5 rounded-lg bg-primary/5 border border-primary/20 text-xs text-muted-foreground">
                       <span className="font-semibold text-primary">QUIC / HTTP/3:</span>
-                      <span>Requires UDP port pass-through and upstream QUIC/TLS 1.3 support on backend hosts.</span>
+                      <span>Unavailable for upstream proxying in this NGINX runtime. Select HTTP/2 or HTTP/1.1.</span>
                     </div>
                   )}
                 </div>
@@ -994,6 +1008,8 @@ export default function CreateUpstreamPage() {
                         setEnableGrpc(e.target.checked);
                         if (e.target.checked && httpVersion === 'HTTP/1.1') {
                           setHttpVersion('HTTP/2');
+                          setEnableWebSocket(false);
+                          if (requestCompression === 'deflate') setRequestCompression('gzip');
                         }
                       }}
                       className="mt-0.5 h-4 w-4 rounded border-input text-primary focus:ring-ring bg-background"
@@ -1034,10 +1050,17 @@ export default function CreateUpstreamPage() {
               </Link>
               <button
                 type="submit"
-                disabled={!name.trim()}
-                className="px-5 py-2 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors cursor-pointer"
+                disabled={!name.trim() || submitting}
+                className="px-5 py-2 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors cursor-pointer inline-flex items-center gap-2"
               >
-                Create Upstream Pool
+                {submitting ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                    <span>Creating Upstream Pool...</span>
+                  </>
+                ) : (
+                  <span>Create Upstream Pool</span>
+                )}
               </button>
             </div>
           </div>
@@ -1159,21 +1182,10 @@ export default function CreateUpstreamPage() {
               <div className="pt-3 border-t border-border">
                 <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground mb-1.5">
                   <Code className="w-3.5 h-3.5" />
-                  <span>NGINX Upstream & Egress Directive</span>
+                  <span>Backend transport configuration</span>
                 </div>
                 <pre className="p-2.5 bg-muted/60 rounded-lg text-[10px] font-mono text-muted-foreground overflow-x-auto leading-relaxed border border-border">
-{`upstream ${name.trim() ? name.trim().toLowerCase().replace(/\s+/g, '-') : 'backend_pool'} {
-  ${type === 'Load Balancer' && algorithm !== 'round_robin' ? `${algorithm};\n  ` : ''}${type === 'Load Balancer' 
-    ? lbServers.map((s) => `server ${s.address || '127.0.0.1:8080'} weight=${s.weight}${s.backup ? ' backup' : ''};`).join('\n  ') 
-    : type === 'External (FQDN)' 
-      ? `server ${externalFqdn || 'origin.internal'};` 
-      : `server ${singleAddress || '127.0.0.1:8080'};`}
-  keepalive ${keepAliveConnections};
-}
-
-# Proxy Egress Directives:
-${internalSslEnabled ? `proxy_ssl_server_name on;
-${sniHost ? `proxy_ssl_name ${sniHost};\n` : ''}${verifyCert ? `proxy_ssl_verify on;\n${caCert ? 'proxy_ssl_trusted_certificate /etc/nginx/ssl/internal_ca.crt;\n' : ''}` : 'proxy_ssl_verify off;\n'}${mTLS ? `proxy_ssl_certificate /etc/nginx/ssl/client.crt;\nproxy_ssl_certificate_key /etc/nginx/ssl/client.key;\n` : ''}` : '# plain HTTP connection'}proxy_http_version ${httpVersion === 'HTTP/3' ? '3.0' : httpVersion === 'HTTP/2' ? '2.0' : httpVersion === 'HTTP/1.0' ? '1.0' : '1.1'};${httpVersion === 'HTTP/3' ? '\n# HTTP/3 over QUIC transport enabled' : ''}`}
+{JSON.stringify({protocol: httpVersion, grpc: enableGrpc, requestCompression, compressionMinBytes, compressionLevel, dynamicDns, tls: internalSslEnabled, verifyOrigin: verifyCert, sni: sniHost, mtls: mTLS, keepAliveConnections}, null, 2)}
                 </pre>
               </div>
             </div>

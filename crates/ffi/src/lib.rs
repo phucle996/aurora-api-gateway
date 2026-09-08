@@ -16,6 +16,7 @@ use std::{
 
 pub mod access;
 pub mod telemetry;
+pub mod upstream;
 
 pub static DYNAMIC_POLICY_ENGINE: std::sync::RwLock<Option<std::sync::Arc<Engine>>> =
     std::sync::RwLock::new(None);

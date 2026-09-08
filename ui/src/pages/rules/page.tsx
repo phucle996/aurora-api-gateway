@@ -206,7 +206,9 @@ export default function RulesPage() {
         />
         {!loading && !error && selected && (
           <SavedRuleDetail
+            key={selected}
             id={selected}
+            onChanged={handleRefresh}
             onClose={() => setParams(p => { p.delete('selected'); return p; })}
           />
         )}

@@ -6,6 +6,9 @@ services:
     container_name: aurora-controller
     ports:
       - "8080:8080"
+      - "5140:5140/udp"
+    environment:
+      - AURORA_RATE_LIMIT_UDP=0.0.0.0:5140
     volumes:
       - controller-data:/data
     restart: unless-stopped
@@ -23,6 +26,7 @@ services:
         ipv4_address: 172.29.253.11
     volumes:
       - node-01-policy:/var/lib/aurora-policy
+      - node-01-routing:/var/lib/aurora-routing
     build:
       context: .
       dockerfile: deploy/docker/Dockerfile.node
@@ -46,6 +50,7 @@ services:
         ipv4_address: 172.29.253.12
     volumes:
       - node-02-policy:/var/lib/aurora-policy
+      - node-02-routing:/var/lib/aurora-routing
     build:
       context: .
       dockerfile: deploy/docker/Dockerfile.node
@@ -69,6 +74,7 @@ services:
         ipv4_address: 172.29.253.13
     volumes:
       - node-03-policy:/var/lib/aurora-policy
+      - node-03-routing:/var/lib/aurora-routing
     build:
       context: .
       dockerfile: deploy/docker/Dockerfile.node
@@ -104,8 +110,11 @@ services:
 volumes:
   controller-data:
   node-01-policy:
+  node-01-routing:
   node-02-policy:
+  node-02-routing:
   node-03-policy:
+  node-03-routing:
 
 # The ingress bridge gives the trusted LB a stable, exclusive source identity.
 networks:

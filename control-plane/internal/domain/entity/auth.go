@@ -8,13 +8,17 @@ package entity
 // - Role: Vai trò và quyền hạn (admin, operator, viewer...).
 // - CreatedAt / UpdatedAt: Thời điểm tạo và cập nhật tài khoản.
 type User struct {
-	ID           string
-	Username     string
-	PasswordHash string
-	Salt         string
-	Role         string
-	CreatedAt    string
-	UpdatedAt    string
+	ID                     string
+	Username               string
+	PasswordHash           string
+	Salt                   string
+	Role                   string
+	TwoFactorEnabled       bool
+	TwoFactorSecret        string
+	TwoFactorRecoveryCodes string
+	TwoFactorConfiguredAt  string
+	CreatedAt              string
+	UpdatedAt              string
 }
 
 // LoginInput là gói dữ liệu đầu vào khi thực hiện đăng nhập.

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Server,
@@ -12,52 +12,72 @@ import {
   ArrowRight,
   ExternalLink,
   Trash2,
+  Pencil,
   X,
   AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 import type { UpstreamItem, UpstreamType } from './types';
-import { INITIAL_UPSTREAMS } from './mockData';
+import { upstreamsApi } from '../../lib/api/upstreams';
 
 export default function UpstreamsPage() {
   const navigate = useNavigate();
 
-  const [upstreams, setUpstreams] = useState<UpstreamItem[]>(() => {
+  const [upstreams, setUpstreams] = useState<UpstreamItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const requestSequence = useRef(0);
+  const fetchUpstreams = async () => {
+    const sequence = ++requestSequence.current;
+    setLoading(true);
+    setError(null);
     try {
-      const saved = localStorage.getItem('aurora_waf_upstreams');
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // ignore
+      const items: UpstreamItem[] = [];
+      for (let page = 1; ; page++) {
+        const result = await upstreamsApi.list({page, limit: 100});
+        items.push(...result.items);
+        if (!result.items.length || items.length >= result.total) break;
+      }
+      if (sequence === requestSequence.current) { setUpstreams(items); }
+    } catch (err: any) {
+      console.error('Failed to fetch upstreams:', err);
+      if (sequence === requestSequence.current) { setError(err?.message || 'Failed to load upstreams from backend'); }
+    } finally {
+      if (sequence === requestSequence.current) setLoading(false);
     }
-    return INITIAL_UPSTREAMS;
-  });
+  };
+
+  useEffect(() => {
+    void fetchUpstreams();
+    const timer = setInterval(() => void fetchUpstreams(), 5000);
+    return () => { clearInterval(timer); requestSequence.current++; };
+  }, []);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
   const [deleteTarget, setDeleteTarget] = useState<UpstreamItem | null>(null);
 
-  const saveUpstreams = (updated: UpstreamItem[]) => {
-    setUpstreams(updated);
-    try {
-      localStorage.setItem('aurora_waf_upstreams', JSON.stringify(updated));
-    } catch {
-      // ignore
-    }
-  };
+  const [deleting, setDeleting] = useState(false);
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleteTarget) return;
-    const next = upstreams.filter((u) => u.id !== deleteTarget.id);
-    saveUpstreams(next);
-    setDeleteTarget(null);
+    setDeleting(true);
+    try {
+      await upstreamsApi.delete(deleteTarget.id);
+      await fetchUpstreams();
+    } catch (err: any) {
+      console.error('Failed to delete upstream:', err);
+      setError(err?.message || 'Failed to delete upstream');
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+    }
   };
 
   // Stats calculation
   const totalUpstreams = upstreams.length;
   const totalNodes = upstreams.reduce((acc, u) => acc + u.servers.length, 0);
-  const healthyNodes = upstreams.reduce(
-    (acc, u) => acc + u.servers.filter((s) => s.healthy).length,
-    0
-  );
   const sslProtectedCount = upstreams.filter((u) => u.internalSsl.enabled).length;
 
   const filtered = useMemo(() => {
@@ -88,7 +108,7 @@ export default function UpstreamsPage() {
             Upstreams
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Manage backend server pools, balancing algorithms, internal mTLS to BE, and active health check probes.
+            Manage backend pools and HTTP(S) routing. HTTPS and client mTLS are supported. NGINX connects directly to backends; passive failure detection is supported.
           </p>
         </div>
 
@@ -117,15 +137,17 @@ export default function UpstreamsPage() {
 
         <div className="bg-card border border-border rounded-lg p-4 space-y-2 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">HEALTHY NODES</span>
+            <span className="text-xs font-medium text-muted-foreground">CONFIGURED BACKENDS</span>
             <div className="w-7 h-7 rounded bg-primary/10 border border-primary/20 text-primary flex items-center justify-center">
               <CheckCircle2 className="w-3.5 h-3.5" />
             </div>
           </div>
           <div className="text-2xl font-bold text-foreground">
-            {healthyNodes} <span className="text-sm font-normal text-muted-foreground">/ {totalNodes}</span>
+            {totalNodes}
           </div>
-          <div className="text-[11px] text-primary font-medium">100% backend nodes healthy</div>
+          <div className="text-[11px] text-primary font-medium">
+            Passive failure detection · active probes unavailable
+          </div>
         </div>
 
         <div className="bg-card border border-border rounded-lg p-4 space-y-2 shadow-xs">
@@ -190,13 +212,53 @@ export default function UpstreamsPage() {
                 <th className="p-3.5">Architecture</th>
                 <th className="p-3.5">Backend Nodes Pool</th>
                 <th className="p-3.5">Internal SSL (to BE)</th>
-                <th className="p-3.5">Probe Checks</th>
+                <th className="p-3.5">Probe Metadata (not running)</th>
                 <th className="p-3.5 text-center">Bound Domains</th>
                 <th className="p-3.5 text-right pr-4">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filtered.map((item) => (
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                    <RefreshCw className="w-5 h-5 mx-auto mb-2 animate-spin text-primary" />
+                    <p className="text-xs">Loading upstream pools...</p>
+                  </td>
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-destructive">
+                    <AlertTriangle className="w-6 h-6 mx-auto mb-2" />
+                    <p className="text-xs font-semibold">{error}</p>
+                    <button
+                      type="button"
+                      onClick={fetchUpstreams}
+                      className="mt-2 text-xs text-primary hover:underline cursor-pointer"
+                    >
+                      Retry
+                    </button>
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                    <Server className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm font-medium text-foreground">No upstreams configured</p>
+                    <p className="text-xs mt-1 text-muted-foreground">
+                      Define your backend origin servers, load balancing pools, or external FQDNs.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/upstreams/create')}
+                      className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium cursor-pointer hover:bg-primary/90 transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Create Upstream Pool
+                    </button>
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((item) => (
                 <tr key={item.id} className="hover:bg-muted/20 transition-colors">
                   {/* Name & Desc */}
                   <td className="p-3.5">
@@ -258,7 +320,7 @@ export default function UpstreamsPage() {
                             }`}
                         >
                           <ShieldCheck className="w-3 h-3" />
-                          <span>{item.internalSsl.mTLS ? 'Internal mTLS' : 'HTTPS Verify'}</span>
+                          <span>{item.internalSsl.mTLS ? 'mTLS configured' : item.internalSsl.verifyCert ? 'HTTPS · verify enabled' : 'HTTPS · verify disabled'}</span>
                         </span>
                       </div>
                     ) : (
@@ -266,7 +328,7 @@ export default function UpstreamsPage() {
                     )}
                   </td>
 
-                  {/* Probe Checks */}
+                  {/* Configured probes and measured node observations */}
                   <td className="p-3.5">
                     <div className="flex flex-wrap gap-1">
                       {item.probes.map((pr) => (
@@ -292,6 +354,14 @@ export default function UpstreamsPage() {
                     <div className="flex items-center justify-end gap-1.5">
                       <button
                         type="button"
+                        onClick={() => navigate(`/upstreams/${item.id}/edit`)}
+                        className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded transition-colors cursor-pointer"
+                        title="Edit Upstream Pool"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setDeleteTarget(item)}
                         className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors cursor-pointer"
                         title="Delete Upstream"
@@ -301,7 +371,7 @@ export default function UpstreamsPage() {
                     </div>
                   </td>
                 </tr>
-              ))}
+              )))}
             </tbody>
           </table>
         </div>
@@ -332,7 +402,7 @@ export default function UpstreamsPage() {
               </p>
               {deleteTarget.boundDomainsCount > 0 && (
                 <div className="p-3 bg-destructive/10 border border-destructive/20 rounded text-destructive text-[11px]">
-                  Warning: There are currently {deleteTarget.boundDomainsCount} domain(s) routing to this upstream. Deleting it will disrupt ingress traffic routing.
+                  Warning: There are currently {deleteTarget.boundDomainsCount} domain(s) routing to this upstream. Reassign those domains before deleting this pool.
                 </div>
               )}
             </div>
@@ -348,9 +418,10 @@ export default function UpstreamsPage() {
               <button
                 type="button"
                 onClick={handleDelete}
-                className="px-3.5 py-1.5 text-xs font-semibold bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded"
+                disabled={deleting}
+                className="px-3.5 py-1.5 text-xs font-semibold bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded disabled:opacity-50 cursor-pointer"
               >
-                Delete Upstream
+                {deleting ? 'Deleting...' : 'Delete Upstream'}
               </button>
             </div>
           </div>

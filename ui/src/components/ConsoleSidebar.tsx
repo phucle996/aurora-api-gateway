@@ -14,17 +14,23 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  PanelLeftClose,
-  PanelLeftOpen,
 } from 'lucide-react';
 import { logout, getAuthUser } from '../lib/fetcher';
 
-export function ConsoleSidebar() {
+interface ConsoleSidebarProps {
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
+}
+
+export function ConsoleSidebar({
+  collapsed: controlledCollapsed,
+  onToggleCollapse,
+}: ConsoleSidebarProps = {}) {
   const user = getAuthUser();
   const location = useLocation();
   const currentPath = location.pathname;
 
-  const [collapsed, setCollapsed] = useState<boolean>(() => {
+  const [internalCollapsed, setInternalCollapsed] = useState<boolean>(() => {
     try {
       return localStorage.getItem('aurora_sidebar_collapsed') === 'true';
     } catch {
@@ -32,16 +38,22 @@ export function ConsoleSidebar() {
     }
   });
 
+  const collapsed = controlledCollapsed !== undefined ? controlledCollapsed : internalCollapsed;
+
   const toggleCollapsed = () => {
-    setCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem('aurora_sidebar_collapsed', String(next));
-      } catch {
-        // ignore storage quota errors
-      }
-      return next;
-    });
+    if (onToggleCollapse) {
+      onToggleCollapse();
+    } else {
+      setInternalCollapsed((prev) => {
+        const next = !prev;
+        try {
+          localStorage.setItem('aurora_sidebar_collapsed', String(next));
+        } catch {
+          // ignore storage quota errors
+        }
+        return next;
+      });
+    }
   };
 
   // Keyboard shortcut: Ctrl + B or Cmd + B to toggle sidebar
@@ -144,7 +156,7 @@ export function ConsoleSidebar() {
     >
       <div>
         {/* Brand Header */}
-        <div className="h-14 flex items-center px-3 border-b border-border justify-between overflow-hidden">
+        <div className="h-14 flex items-center px-3 border-b border-border overflow-hidden">
           <Link
             to="/dashboard"
             className={`flex items-center gap-2.5 transition-colors min-w-0 ${
@@ -164,17 +176,6 @@ export function ConsoleSidebar() {
               </div>
             )}
           </Link>
-
-          {!collapsed && (
-            <button
-              type="button"
-              onClick={toggleCollapsed}
-              title="Collapse sidebar (Ctrl+B)"
-              className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer shrink-0 rounded-xs"
-            >
-              <PanelLeftClose className="w-4 h-4" />
-            </button>
-          )}
         </div>
 
         {/* Navigation Items */}
@@ -201,18 +202,6 @@ export function ConsoleSidebar() {
               </Link>
             );
           })}
-
-          {/* Bottom Expand Toggle Button when collapsed */}
-          {collapsed && (
-            <button
-              type="button"
-              onClick={toggleCollapsed}
-              title="Expand sidebar (Ctrl+B)"
-              className="w-full flex items-center justify-center py-2.5 text-muted-foreground hover:text-primary hover:bg-muted/60 transition-colors cursor-pointer"
-            >
-              <PanelLeftOpen className="w-4 h-4" />
-            </button>
-          )}
         </nav>
       </div>
 

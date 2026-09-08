@@ -453,7 +453,7 @@ func (h *RuleHandler) Detail(c *gin.Context) {
 	// Bước 4: Phản hồi toàn bộ hồ sơ chi tiết inline
 	c.JSON(http.StatusOK, gin.H{
 		"schema_version":    out.SchemaVersion,
- "assigned_policies":out.AssignedPolicies,"created_at":out.CreatedAt,"created_by":out.CreatedBy,
+		"assigned_policies": out.AssignedPolicies, "created_at": out.CreatedAt, "created_by": out.CreatedBy,
 		"runtime_ready":     out.RuntimeReady,
 		"runtime_issues":    out.RuntimeIssues,
 		"logic_mode":        out.LogicMode,
@@ -531,8 +531,8 @@ func (h *RuleHandler) History(c *gin.Context) {
 	items := make([]gin.H, 0, len(out.Items))
 	for _, item := range out.Items {
 		items = append(items, gin.H{
-			"version":         item.Version,
- "score":item.Score,"schema_version":item.SchemaVersion,"source_ip":item.SourceIP,"host_domain":item.HostDomain,"path_prefix":item.PathPrefix,"http_method":item.HTTPMethod,"log_event":item.LogEvent,"add_to_reputation":item.AddToReputation,
+			"version": item.Version,
+			"score":   item.Score, "schema_version": item.SchemaVersion, "source_ip": item.SourceIP, "host_domain": item.HostDomain, "path_prefix": item.PathPrefix, "http_method": item.HTTPMethod, "log_event": item.LogEvent, "add_to_reputation": item.AddToReputation,
 			"name":            item.Name,
 			"description":     item.Description,
 			"group":           item.Group,
@@ -568,12 +568,32 @@ func (h *RuleHandler) Rollback(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		TargetVersion int64 `json:"target_version"`
- ExpectedVersion int64 `json:"expected_version"`
+	contentType := c.GetHeader("Content-Type")
+	if strings.Split(contentType, ";")[0] != "application/json" {
+		c.String(http.StatusUnsupportedMediaType, "application/json required")
+		return
 	}
-	if err := c.ShouldBindJSON(&req); err != nil || req.TargetVersion < 1 || req.ExpectedVersion < 1 {
-		c.String(http.StatusBadRequest, "invalid target_version")
+
+	reader := http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
+	var req struct {
+		TargetVersion   int64 `json:"target_version"`
+		ExpectedVersion int64 `json:"expected_version"`
+	}
+	decoder := json.NewDecoder(reader)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&req); err != nil || req.TargetVersion < 1 || req.ExpectedVersion < 1 {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			c.String(http.StatusRequestEntityTooLarge, "request body exceeds 64KB limit")
+			return
+		}
+		c.String(http.StatusBadRequest, "invalid target_version or JSON payload")
+		return
+	}
+
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		c.String(http.StatusBadRequest, "trailing JSON in request body")
 		return
 	}
 
@@ -583,17 +603,21 @@ func (h *RuleHandler) Rollback(c *gin.Context) {
 	}
 
 	out, err := h.service.Rollback(c.Request.Context(), entity.RollbackRuleCommand{
-		ID:            id,
-		TargetVersion: req.TargetVersion,
- ExpectedVersion:req.ExpectedVersion,
-		Actor:         actor,
+		ID:              id,
+		TargetVersion:   req.TargetVersion,
+		ExpectedVersion: req.ExpectedVersion,
+		Actor:           actor,
 	})
 	if err != nil {
 		if errors.Is(err, taxonomy.ErrRuleNotFound) {
 			c.String(http.StatusNotFound, err.Error())
 			return
 		}
-		if errors.Is(err,taxonomy.ErrRuleConflict){c.String(409,"Rule changed. Reload before restoring.")}else{c.String(http.StatusInternalServerError, "rollback failed")}
+		if errors.Is(err, taxonomy.ErrRuleConflict) {
+			c.String(409, "Rule changed. Reload before restoring.")
+		} else {
+			c.String(http.StatusInternalServerError, "rollback failed")
+		}
 		return
 	}
 
@@ -955,6 +979,7 @@ func (h *RuleHandler) CreateDefinition(c *gin.Context) {
 		}
 	}
 	cmd := entity.CreateRuleDefinitionCommand{
+		Actor:           c.GetString("username"),
 		RequestKey:      key,
 		Name:            req.Name,
 		Description:     req.Description,
@@ -1025,11 +1050,28 @@ func (h *RuleHandler) Test(c *gin.Context) {
 		return
 	}
 
+	if decoder.Decode(new(any)) != io.EOF {
+		c.String(http.StatusBadRequest, "exactly one JSON object required")
+		return
+	}
+
 	// Nếu gọi qua route /api/v1/rules/:id/test thì lấy id từ param
 	if paramID := c.Param("id"); paramID != "" {
-		if idVal, parseErr := strconv.ParseInt(paramID, 10, 64); parseErr == nil && idVal > 0 {
-			req.RuleID = &idVal
+		idVal, parseErr := strconv.ParseInt(paramID, 10, 64)
+		if parseErr != nil || idVal <= 0 {
+			c.String(http.StatusBadRequest, "invalid rule ID")
+			return
 		}
+		req.RuleID = &idVal
+	}
+
+	if req.RuleID != nil && *req.RuleID <= 0 {
+		c.String(http.StatusBadRequest, "invalid rule ID")
+		return
+	}
+	if req.RuleID == nil && len(req.Conditions) == 0 {
+		c.String(http.StatusUnprocessableEntity, "at least one test condition required")
+		return
 	}
 
 	// Map conditions
@@ -1043,18 +1085,13 @@ func (h *RuleHandler) Test(c *gin.Context) {
 		})
 	}
 
-	clientIP := req.ClientIP
-	if clientIP == "" {
-		clientIP = c.ClientIP()
-	}
-
 	cmd := entity.TestRuleCommand{
 		RuleID:       req.RuleID,
 		Method:       req.Method,
 		URL:          req.URL,
 		Headers:      req.Headers,
 		Body:         req.Body,
-		ClientIP:     clientIP,
+		ClientIP:     req.ClientIP,
 		Conditions:   domainConds,
 		LogicMode:    req.LogicMode,
 		Action:       req.Action,
@@ -1063,7 +1100,13 @@ func (h *RuleHandler) Test(c *gin.Context) {
 
 	res, err := h.service.Test(c.Request.Context(), cmd)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "test rule operation failed: "+err.Error())
+		if errors.Is(err, taxonomy.ErrRuleNotFound) {
+			c.String(404, "rule not found")
+		} else if errors.Is(err, taxonomy.ErrRuleInvalid) {
+			c.String(422, "invalid test conditions")
+		} else {
+			c.String(http.StatusInternalServerError, "test rule operation failed")
+		}
 		return
 	}
 
@@ -1095,8 +1138,11 @@ func (h *RuleHandler) Test(c *gin.Context) {
 }
 
 func (h *RuleHandler) UpdateDefinition(c *gin.Context) {
- id, parseErr := strconv.ParseInt(c.Param("id"),10,64)
- if parseErr != nil || id < 1 { c.String(400,"invalid rule ID"); return }
+	id, parseErr := strconv.ParseInt(c.Param("id"), 10, 64)
+	if parseErr != nil || id < 1 {
+		c.String(400, "invalid rule ID")
+		return
+	}
 
 	// Bước 1: Kiểm tra định dạng JSON
 	media, _, err := mime.ParseMediaType(c.GetHeader("Content-Type"))
@@ -1134,7 +1180,9 @@ func (h *RuleHandler) UpdateDefinition(c *gin.Context) {
 
 	// Bước 5: Bắt đầu xác thực chi tiết từng trường dữ liệu trực tiếp (Inline Validation)
 	invalid := map[string]string{}
- if req.ExpectedVersion < 1 { invalid["expected_version"]="Required positive version" }
+	if req.ExpectedVersion < 1 {
+		invalid["expected_version"] = "Required positive version"
+	}
 	if len(key) < 16 || len(key) > 128 {
 		invalid["idempotency_key"] = "Use a stable key of 16..128 characters for this submission"
 	}
@@ -1329,7 +1377,7 @@ func (h *RuleHandler) UpdateDefinition(c *gin.Context) {
 		}
 	}
 	cmd := entity.UpdateRuleDefinitionCommand{
- ID:id, ExpectedVersion:req.ExpectedVersion, Actor:c.GetString("username"),
+		ID: id, ExpectedVersion: req.ExpectedVersion, Actor: c.GetString("username"),
 		RequestKey:      key,
 		Name:            req.Name,
 		Description:     req.Description,
@@ -1375,10 +1423,22 @@ func (h *RuleHandler) UpdateDefinition(c *gin.Context) {
 }
 
 func (h *RuleHandler) Delete(c *gin.Context) {
- id,err:=strconv.ParseInt(c.Param("id"),10,64)
- var req struct { ExpectedVersion int64 `json:"expected_version"` }
- if err!=nil || id<1 || json.NewDecoder(http.MaxBytesReader(c.Writer,c.Request.Body,1024)).Decode(&req)!=nil || req.ExpectedVersion<1 { c.String(400,"invalid delete request");return }
- out,err:=h.service.Delete(c.Request.Context(),entity.DeleteRuleCommand{ID:id,ExpectedVersion:req.ExpectedVersion,Actor:c.GetString("username")})
- if err!=nil { if errors.Is(err,taxonomy.ErrRuleConflict){c.String(409,"Rule changed or is assigned to a policy. Refresh and remove policy assignments before deletion.")}else{c.String(500,"delete failed")};return }
- c.JSON(200,gin.H{"id":strconv.FormatInt(out.ID,10),"version":out.Version,"state":"deleted"})
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	var req struct {
+		ExpectedVersion int64 `json:"expected_version"`
+	}
+	if err != nil || id < 1 || json.NewDecoder(http.MaxBytesReader(c.Writer, c.Request.Body, 1024)).Decode(&req) != nil || req.ExpectedVersion < 1 {
+		c.String(400, "invalid delete request")
+		return
+	}
+	out, err := h.service.Delete(c.Request.Context(), entity.DeleteRuleCommand{ID: id, ExpectedVersion: req.ExpectedVersion, Actor: c.GetString("username")})
+	if err != nil {
+		if errors.Is(err, taxonomy.ErrRuleConflict) {
+			c.String(409, "Rule changed or is assigned to a policy. Refresh and remove policy assignments before deletion.")
+		} else {
+			c.String(500, "delete failed")
+		}
+		return
+	}
+	c.JSON(200, gin.H{"id": strconv.FormatInt(out.ID, 10), "version": out.Version, "state": "deleted"})
 }

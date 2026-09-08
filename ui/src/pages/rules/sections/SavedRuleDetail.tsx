@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   X,
   FileCode2,
@@ -8,10 +8,7 @@ import {
   Pencil,
   Ban,
   Power,
-  MoreHorizontal,
   ArrowRight,
-  Plus,
-  ShieldCheck,
   AlertTriangle,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -78,7 +75,7 @@ function formatDate(dateStr?: string): string {
   }
 }
 
-export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => void }) {
+export function SavedRuleDetail({ id, onClose, onChanged }: { id: string; onClose?: () => void; onChanged?: () => void }) {
   const [detail, setDetail] = useState<SavedDetail | null>(null);
   const [history, setHistory] = useState<SavedHistory[]>([]);
   const [error, setError] = useState('');
@@ -87,6 +84,10 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
   const [copiedExpression, setCopiedExpression] = useState(false);
   const [enabledOverride, setEnabledOverride] = useState<boolean | null>(null);
   const [isToggling, setIsToggling] = useState(false);
+  const toggling = useRef(false);
+  const attempt = useRef<{ version: number; id: string; key: string } | null>(null);
+  const activeId = useRef(id);
+  activeId.current = id;
 
   useEffect(() => {
     if (!id) {
@@ -125,14 +126,18 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
 
   const isEnabled = enabledOverride !== null ? enabledOverride : (detail?.enabled ?? true);
 
-  const handleCopyExpression = (text: string) => {
-    navigator.clipboard.writeText(text);
+  const handleCopyExpression = async (text: string) => {
+    try { await navigator.clipboard.writeText(text); } catch { alert('Copy failed.'); return; }
     setCopiedExpression(true);
     setTimeout(() => setCopiedExpression(false), 2000);
   };
 
   const handleToggleRule = async () => {
-    if (!detail || isToggling) return;
+    if (!detail || toggling.current) return;
+    toggling.current = true;
+    if (attempt.current?.version !== detail.version || attempt.current?.id !== detail.id) {
+      attempt.current = { version: detail.version, id: detail.id, key: crypto.randomUUID() };
+    }
     setIsToggling(true);
     const nextState = !isEnabled;
     const authToken = getAuthToken();
@@ -142,7 +147,7 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
         headers: {
           'Content-Type': 'application/json',
           ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-          'Idempotency-Key': crypto.randomUUID(),
+          'Idempotency-Key': attempt.current.key,
         },
         credentials: 'same-origin',
         body: JSON.stringify({
@@ -171,12 +176,15 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
       if (!res.ok) {
         throw new Error(`Failed to update rule status (${res.status})`);
       }
-      const updated = await res.json();
-      setDetail(prev => prev ? { ...prev, enabled: nextState, version: updated.version } : null);
-      setEnabledOverride(null);
+      await res.json();
+      if (activeId.current === detail.id) {
+        setRetry(value => value + 1);
+        onChanged?.();
+      }
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Toggle rule failed.');
     } finally {
+      toggling.current = false;
       setIsToggling(false);
     }
   };
@@ -189,9 +197,9 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
 
   // Audit history items formatting
   const changeItems = history.map((item) => ({
-    type: item.action === 'create' ? 'create' : 'update',
-    title: item.action === 'create' ? 'Rule created' : `Updated revision v${item.version}`,
-    user: item.actor || 'admin',
+    type: item.version === 1 ? 'create' : 'update',
+    title: `Saved revision v${item.version}`,
+    user: item.actor || 'Unknown',
     date: formatDate(item.updated_at),
   }));
 
@@ -255,18 +263,11 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
                       : 'bg-muted text-muted-foreground border border-border'
                       }`}
                   >
-                    {isEnabled ? 'Active' : 'Disabled'}
+                    {isEnabled ? 'Enabled' : 'Disabled'}
                   </span>
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    type="button"
-                    className="p-1 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors rounded-xs cursor-pointer"
-                    title="More actions"
-                  >
-                    <MoreHorizontal className="w-4 h-4" />
-                  </button>
                   {onClose && (
                     <button
                       type="button"
@@ -282,7 +283,7 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
 
               {/* Description */}
               <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                {detail.description || 'Detects UNION SELECT patterns commonly used in SQL injection attacks.'}
+                {detail.description || 'No description provided.'}
               </p>
 
               {/* Runtime Warning if not publishable */}
@@ -312,7 +313,7 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Category</span>
                   <span className="text-foreground font-medium font-sans text-[11px]">
-                    {groupLabels[detail.group] || detail.group || 'SQL Injection'}
+                    {groupLabels[detail.group] || detail.group || '—'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -335,7 +336,7 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
                     )}
                     {!['block', 'log', 'allow'].includes(detail.action?.toLowerCase() || '') && (
                       <span className="px-2 py-0.5 text-[10px] font-bold bg-muted text-muted-foreground border border-border rounded-xs uppercase">
-                        {detail.action || 'Block'}
+                        {detail.action || '—'}
                       </span>
                     )}
                   </span>
@@ -366,7 +367,7 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
                     )}
                     {!['critical', 'high', 'medium', 'low'].includes(detail.severity?.toLowerCase() || '') && (
                       <span className="px-2.5 py-0.5 text-[10px] font-bold bg-destructive/10 text-destructive border border-destructive/30 rounded-full uppercase">
-                        {detail.severity || 'Critical'}
+                        {detail.severity || '—'}
                       </span>
                     )}
                   </span>
@@ -375,11 +376,7 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Scope</span>
                   <span className="text-foreground font-sans text-[11px]">
-                    {detail.path_prefix ? (
-                      <>Path: <span className="font-mono">{detail.path_prefix}</span></>
-                    ) : (
-                      'Global Web Policy'
-                    )}
+                    {[detail.source_ip && `IP: ${detail.source_ip}`, detail.host_domain && `Host: ${detail.host_domain}`, detail.path_prefix && `Path: ${detail.path_prefix}`, detail.http_method && `Method: ${detail.http_method}`].filter(Boolean).join('; ') || 'No scope filters'}
                   </span>
                 </div>
 
@@ -391,7 +388,7 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Last Published</span>
+                  <span className="text-muted-foreground">Last Saved</span>
                   <span className="text-foreground font-mono text-[11px]">
                     {formatDate(detail.updated_at)}
                   </span>
@@ -415,7 +412,7 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Pattern Type</span>
                   <span className="text-foreground font-sans text-[11px]">
-                    {primaryCondition?.operator || 'Regex'}
+                    {primaryCondition?.operator || '—'}
                   </span>
                 </div>
 
@@ -449,7 +446,7 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Response Code</span>
                   <span className="text-foreground font-mono text-[11px]">
-                    {detail.response_code ?? 403}
+                    {detail.response_code ?? '—'}
                   </span>
                 </div>
 
@@ -491,13 +488,6 @@ export function SavedRuleDetail({ id, onClose }: { id: string; onClose?: () => v
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                <Link
-                  to={`/rules/create?clone=${detail.id}`}
-                  className="bg-muted hover:bg-accent border border-border text-foreground py-2 px-3 rounded-sm flex items-center justify-center gap-2 text-xs transition-colors cursor-pointer"
-                >
-                  <Copy className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span>Clone rule</span>
-                </Link>
 
                 <button
                   type="button"

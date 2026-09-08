@@ -15,4 +15,5 @@ type MetricsService interface {
 	GetNodeMetrics(ctx context.Context, nodeID string) ([]entity.NodeMetricPoint, error)
 	PushMetricPoint(nodeID string, pt entity.NodeMetricPoint)
 	GetLatestMetricPoint(nodeID string) *entity.NodeMetricPoint
+	RegisterConfigListener(listener func(cfg entity.MetricsIntegrationConfig))
 }

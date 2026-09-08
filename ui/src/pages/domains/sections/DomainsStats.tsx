@@ -48,7 +48,7 @@ export function DomainsStats({
     },
     {
       id: 'mtls',
-      label: 'mTLS Enabled',
+      label: 'mTLS Preference',
       value: mtls,
       icon: <ShieldCheck className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />,
       iconBg: 'bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900/40',

@@ -1,9 +1,13 @@
 package app
 
 import (
+	"context"
 	"database/sql"
+	"net/http"
+	"time"
 
 	"aurora-waf.local/control-plane/internal/config"
+	"aurora-waf.local/control-plane/internal/domain/entity"
 	port "aurora-waf.local/control-plane/internal/domain/service"
 	"aurora-waf.local/control-plane/internal/provider"
 	"aurora-waf.local/control-plane/internal/repository"
@@ -15,16 +19,26 @@ import (
 // Nó được khởi tạo một lần duy nhất khi ứng dụng khởi động,
 // sau đó RegisterRoutes gắn các handler vào đúng URL tương ứng.
 type Module struct {
-	AccessHandler      *handler.AccessHandler
-	PolicyHandler      *handler.PolicyHandler
-	HealthcheckHandler *handler.HealthcheckHandler
-	AuthHandler        *handler.AuthHandler
-	AuthService        port.AuthService // Xác thực JWT — cần tham chiếu trong middleware
-	RuleHandler        *handler.RuleHandler
-	NodeHandler        *handler.NodeHandler
-	MetricsHandler     *handler.MetricsHandler
-	MetricsService     port.MetricsService
-	DomainHandler      *handler.DomainHandler
+	DependenciesHandler  *handler.DependenciesHandler
+	AccessHandler        *handler.AccessHandler
+	PolicyHandler        *handler.PolicyHandler
+	HealthcheckHandler   *handler.HealthcheckHandler
+	AuthHandler          *handler.AuthHandler
+	AuthService          port.AuthService // Xác thực JWT — cần tham chiếu trong middleware
+	RuleHandler          *handler.RuleHandler
+	NodeHandler          *handler.NodeHandler
+	MetricsHandler       *handler.MetricsHandler
+	MetricsService       port.MetricsService
+	DomainHandler        *handler.DomainHandler
+	DomainRoutingHandler *handler.DomainRoutingHandler
+	UpstreamHandler      *handler.UpstreamHandler
+	RateLimitHandler     *handler.RateLimitHandler
+	RateLimitCollector   *provider.RateLimitCollector
+	SystemHandler        *handler.SystemHandler
+	SecurityHandler      *handler.SecurityHandler
+	NotificationHandler  *handler.NotificationHandler
+	BackupHandler        *handler.BackupHandler
+	BackupScheduler      *service.BackupScheduler
 }
 
 // NewModule khởi tạo toàn bộ chuỗi dependency của ứng dụng theo thứ tự:
@@ -60,24 +74,71 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	domainSvc := service.NewDomainService(domainRepo)
 	domainHdr := handler.NewDomainHandler(domainSvc)
 
-	nodeRepo := repository.NewNodeRepository(writerDB)
+	upstreamRepo := repository.NewUpstreamRepository(writerDB, readerDB)
+	upstreamSvc := service.NewUpstreamService(upstreamRepo)
+	upstreamHdr := handler.NewUpstreamHandler(upstreamSvc)
+
 	settingsRepo := repository.NewSettingsRepository(writerDB)
+	metricsCfg, _ := settingsRepo.GetMetricsConfig(context.Background())
+	if metricsCfg == nil {
+		metricsCfg = &entity.MetricsIntegrationConfig{Mode: "standalone"}
+	}
+	httpClient := &http.Client{Timeout: 4 * time.Second}
+
+	rateLimitRepo := repository.NewRateLimitRepository(writerDB, readerDB)
+	rateLimitMetricsProvider := provider.NewDynamicRateLimitMetricsProvider(settingsRepo, rateLimitRepo, httpClient)
+	rateLimitSvc := service.NewRateLimitService(rateLimitRepo, rateLimitMetricsProvider)
+	rateLimitCollector := provider.NewRateLimitCollector(rateLimitSvc, cfg.RateLimitUDPAddr)
+	rateLimitHdr := handler.NewRateLimitHandler(rateLimitSvc, rateLimitCollector)
+	if metricsCfg.Mode == "disabled" {
+		rateLimitCollector.SetEnabled(false)
+	}
+
+	nodeRepo := repository.NewNodeRepository(writerDB)
 	metricsSvc := service.NewMetricsService(settingsRepo, nodeRepo)
+	metricsSvc.RegisterConfigListener(func(mCfg entity.MetricsIntegrationConfig) {
+		rateLimitCollector.SetEnabled(mCfg.Mode != "disabled")
+	})
 	eventHub := provider.NewEventHub()
 	nodeSvc := service.NewNodeService(nodeRepo, metricsSvc, eventHub)
 	nodeHdr := handler.NewNodeHandler(nodeSvc)
 	metricsHdr := handler.NewMetricsHandler(metricsSvc)
+	systemHdr := handler.NewSystemHandler(readerDB, cfg.SQLitePath, "v2024.11.3", "2026-09-07")
 
+	securityRepo := repository.NewSecurityRepository(writerDB)
+	securitySvc := service.NewSecurityService(securityRepo)
+	securityHdr := handler.NewSecurityHandler(securitySvc)
+
+	notificationRepo := repository.NewNotificationRepository(writerDB)
+	notificationSvc := service.NewNotificationService(notificationRepo)
+	notificationHdr := handler.NewNotificationHandler(notificationSvc)
+
+	backupRepo := repository.NewBackupRepository(writerDB)
+	backupSvc := service.NewBackupService(writerDB, backupRepo, cfg.SQLitePath)
+	backupHdr := handler.NewBackupHandler(backupSvc)
+	backupScheduler := service.NewBackupScheduler(backupSvc, backupRepo)
+
+	depRepo := repository.NewDependenciesRepository(writerDB, readerDB)
 	return &Module{
-		AccessHandler:      accessHdr,
-		PolicyHandler:      policyHdr,
-		HealthcheckHandler: healthcheckHdr,
-		AuthHandler:        authHdr,
-		AuthService:        authSvc,
-		RuleHandler:        ruleHdr,
-		NodeHandler:        nodeHdr,
-		MetricsHandler:     metricsHdr,
-		MetricsService:     metricsSvc,
-		DomainHandler:      domainHdr,
+		DependenciesHandler:  handler.NewDependenciesHandler(service.NewListDependenciesService(depRepo), service.NewQueueDependencyService(depRepo), service.NewPollDependencyService(depRepo), service.NewReportDependencyService(depRepo)),
+		AccessHandler:        accessHdr,
+		PolicyHandler:        policyHdr,
+		HealthcheckHandler:   healthcheckHdr,
+		AuthHandler:          authHdr,
+		AuthService:          authSvc,
+		RuleHandler:          ruleHdr,
+		NodeHandler:          nodeHdr,
+		MetricsHandler:       metricsHdr,
+		MetricsService:       metricsSvc,
+		DomainHandler:        domainHdr,
+		DomainRoutingHandler: handler.NewDomainRoutingHandler(service.NewDomainRoutingService(repository.NewDomainRoutingRepository(readerDB))),
+		UpstreamHandler:      upstreamHdr,
+		RateLimitHandler:     rateLimitHdr,
+		RateLimitCollector:   rateLimitCollector,
+		SystemHandler:        systemHdr,
+		SecurityHandler:      securityHdr,
+		NotificationHandler:  notificationHdr,
+		BackupHandler:        backupHdr,
+		BackupScheduler:      backupScheduler,
 	}
 }

@@ -1,4 +1,5 @@
 load_module /opt/modules/ngx_http_aurora_waf_module.so;
+include /var/lib/aurora-routing/dependencies/current/modules.conf;
 env NODE_ROLE;
 env AURORA_METRICS_SCOPE;
 env NODE_VERSION;
@@ -13,7 +14,10 @@ events {
 }
 
 http {
+    include /var/lib/aurora-routing/dependencies/current/http.conf;
+    http2 on;
     include /etc/nginx/access-trusted-proxies.conf;
+
     real_ip_header X-Real-IP;
     real_ip_recursive off;
     access_log /var/log/nginx/access.log;
@@ -42,16 +46,9 @@ http {
 
         default_type text/plain;
 
-        location = /ok {
-            return 200 "Aurora demo backend: allowed.\n";
-        }
-
-        location = /__aurora_blocked {
-            return 200 "Aurora demo backend: this file must not be served in enforce mode.\n";
-        }
-
+        root /usr/share/aurora-demo;
         location / {
-            return 404 "Not Found\n";
+            try_files $uri =404;
         }
 
         location = /_aurora/config {
@@ -63,6 +60,7 @@ http {
             aurora_waf_metrics;
         }
     }
+    include /var/lib/aurora-routing/active-domain-routing.conf;
     # Keep workload server first for the existing telemetry config inheritance.
     server {
         listen 127.0.0.1:9081;

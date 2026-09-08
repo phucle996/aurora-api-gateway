@@ -1,12 +1,15 @@
 package handler
 
 import (
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"strings"
+
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	port "aurora-waf.local/control-plane/internal/domain/service"
 	"aurora-waf.local/control-plane/internal/domain/taxonomy"
-	"errors"
-	"net/http"
-
 	"github.com/gin-gonic/gin"
 )
 
@@ -42,14 +45,33 @@ func (h *MetricsHandler) GetConfig(c *gin.Context) {
 // UpdateConfig xử lý HTTP PUT /api/v1/settings/integrations/metrics:
 // Cập nhật chế độ hoạt động giữa Lab/Standalone và Production Prometheus.
 func (h *MetricsHandler) UpdateConfig(c *gin.Context) {
+	contentType := c.GetHeader("Content-Type")
+	if strings.Split(contentType, ";")[0] != "application/json" {
+		c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "application/json required"})
+		return
+	}
+
+	reader := http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
 	var req struct {
 		Mode          string `json:"mode"`
 		PrometheusURL string `json:"prometheus_url"`
 		PrometheusJob string `json:"prometheus_job"`
 	}
+	decoder := json.NewDecoder(reader)
+	decoder.DisallowUnknownFields()
 
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := decoder.Decode(&req); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body exceeds 64KB limit"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu JSON không hợp lệ: " + err.Error()})
+		return
+	}
+
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "trailing JSON in request body"})
 		return
 	}
 
@@ -76,12 +98,36 @@ func (h *MetricsHandler) UpdateConfig(c *gin.Context) {
 // TestConnection xử lý HTTP POST /api/v1/settings/integrations/metrics/test:
 // Kiểm tra khả năng kết nối tới Prometheus URL và đo độ trễ mạng.
 func (h *MetricsHandler) TestConnection(c *gin.Context) {
+	contentType := c.GetHeader("Content-Type")
+	if strings.Split(contentType, ";")[0] != "application/json" {
+		c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "application/json required"})
+		return
+	}
+
+	reader := http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
 	var req struct {
 		URL string `json:"url"`
 	}
+	decoder := json.NewDecoder(reader)
+	decoder.DisallowUnknownFields()
 
-	if err := c.ShouldBindJSON(&req); err != nil || req.URL == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Địa chỉ URL không hợp lệ hoặc để trống"})
+	if err := decoder.Decode(&req); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body exceeds 64KB limit"})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu JSON không hợp lệ: " + err.Error()})
+		return
+	}
+
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "trailing JSON in request body"})
+		return
+	}
+
+	if strings.TrimSpace(req.URL) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Địa chỉ URL không được để trống"})
 		return
 	}
 

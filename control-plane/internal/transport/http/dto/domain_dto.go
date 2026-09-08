@@ -53,3 +53,35 @@ type ListDomainsResponse struct {
 	Page          int             `json:"page"`
 	Limit         int             `json:"limit"`
 }
+
+// CreateDomainRequest đại diện cho body JSON khi tạo domain.
+type CreateDomainRequest struct {
+	Domain            string   `json:"domain" binding:"required"`
+	RootDomain        string   `json:"root_domain"`
+	Status            string   `json:"status"`
+	TLSType           string   `json:"tls_type"`
+	MinTLSVersion     string   `json:"min_tls_version"`
+	HSTSEnabled       bool     `json:"hsts_enabled"`
+	OCSPStapling      bool     `json:"ocsp_stapling"`
+	ClientCASubject   string   `json:"client_ca_subject"`
+	Upstream          string   `json:"upstream" binding:"required"`
+	UpstreamAlgorithm string   `json:"upstream_algorithm"`
+	HealthCheckPath   string   `json:"health_check_path"`
+	Tags              []string `json:"tags"`
+	Description       string   `json:"description"`
+}
+
+// UpdateDomainRequest đại diện cho body JSON khi cập nhật domain.
+type UpdateDomainRequest struct {
+	Status            string   `json:"status"`
+	TLSType           string   `json:"tls_type"`
+	MinTLSVersion     string   `json:"min_tls_version"`
+	HSTSEnabled       bool     `json:"hsts_enabled"`
+	OCSPStapling      bool     `json:"ocsp_stapling"`
+	ClientCASubject   string   `json:"client_ca_subject"`
+	Upstream          string   `json:"upstream" binding:"required"`
+	UpstreamAlgorithm string   `json:"upstream_algorithm"`
+	HealthCheckPath   string   `json:"health_check_path"`
+	Tags              []string `json:"tags"`
+	Description       string   `json:"description"`
+}

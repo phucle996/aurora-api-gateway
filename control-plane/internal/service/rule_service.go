@@ -19,7 +19,6 @@ import (
 	"time"
 )
 
-
 // ruleService là struct duy nhất tập trung xử lý toàn bộ logic nghiệp vụ (business logic)
 // của đối tượng Rule và Release:
 //   - Tầng service không lặp lại việc kiểm tra khuôn dạng dữ liệu thô (chuỗi, độ dài, UTF-8, regex)
@@ -312,19 +311,20 @@ func (s *ruleService) Test(ctx context.Context, cmd entity.TestRuleCommand) (ent
 	// Nếu truyền RuleID, đọc thêm cấu hình từ CSDL nếu conditions chưa được cung cấp
 	if cmd.RuleID != nil && *cmd.RuleID > 0 && len(conditions) == 0 {
 		detail, err := s.repo.Detail(ctx, entity.RuleDetailQuery{ID: *cmd.RuleID})
-		if err == nil {
-			if len(conditions) == 0 {
-				conditions = detail.Conditions
-			}
-			if logicMode == "" {
-				logicMode = strings.ToLower(detail.LogicMode)
-			}
-			if action == "" {
-				action = detail.Action
-			}
-			if responseCode == 0 && detail.ResponseCode != nil {
-				responseCode = *detail.ResponseCode
-			}
+		if err != nil {
+			return entity.TestRuleResult{}, err
+		}
+		if len(conditions) == 0 {
+			conditions = detail.Conditions
+		}
+		if logicMode == "" {
+			logicMode = strings.ToLower(detail.LogicMode)
+		}
+		if action == "" {
+			action = detail.Action
+		}
+		if responseCode == 0 && detail.ResponseCode != nil {
+			responseCode = *detail.ResponseCode
 		}
 	}
 
@@ -338,6 +338,13 @@ func (s *ruleService) Test(ctx context.Context, cmd entity.TestRuleCommand) (ent
 		responseCode = 403
 	}
 
+	if logicMode != "all" && logicMode != "any" {
+		return entity.TestRuleResult{}, taxonomy.ErrRuleInvalid
+	}
+	if action != "block" && action != "allow" && action != "log" {
+		return entity.TestRuleResult{}, taxonomy.ErrRuleInvalid
+	}
+
 	// Phân tách URL / URI
 	rawURL := cmd.URL
 	if rawURL == "" {
@@ -348,17 +355,15 @@ func (s *ruleService) Test(ctx context.Context, cmd entity.TestRuleCommand) (ent
 		parseTarget = "http://aurora.local" + parseTarget
 	}
 	u, err := url.Parse(parseTarget)
-	pathVal := "/"
-	queryVal := ""
-	uriRawVal := rawURL
-	if err == nil {
-		pathVal = u.Path
-		if pathVal == "" {
-			pathVal = "/"
-		}
-		queryVal = u.RawQuery
-		uriRawVal = u.RequestURI()
+	if err != nil {
+		return entity.TestRuleResult{}, taxonomy.ErrRuleInvalid
 	}
+	pathVal := u.Path
+	if pathVal == "" {
+		pathVal = "/"
+	}
+	queryVal := u.RawQuery
+	uriRawVal := u.RequestURI()
 
 	methodVal := strings.ToUpper(cmd.Method)
 	if methodVal == "" {
@@ -373,67 +378,67 @@ func (s *ruleService) Test(ctx context.Context, cmd entity.TestRuleCommand) (ent
 		extracted := ""
 		fieldKey := strings.ToLower(strings.TrimSpace(cond.Field))
 
-		switch {
-		case strings.Contains(fieldKey, "uri") || fieldKey == "uri_raw":
+		switch fieldKey {
+		case "uri_raw":
 			extracted = uriRawVal
-		case strings.Contains(fieldKey, "path"):
+		case "path":
 			extracted = pathVal
-		case strings.Contains(fieldKey, "query"):
+		case "query":
 			extracted = queryVal
-		case strings.Contains(fieldKey, "body"):
+		case "body":
 			extracted = cmd.Body
-		case strings.Contains(fieldKey, "header"):
-			if cmd.Headers != nil && cond.HeaderName != "" {
-				extracted = cmd.Headers[cond.HeaderName]
+		case "header":
+			if cond.HeaderName == "" {
+				return entity.TestRuleResult{}, taxonomy.ErrRuleInvalid
 			}
-		case strings.Contains(fieldKey, "client") || strings.Contains(fieldKey, "ip"):
+			found := false
+			for name, value := range cmd.Headers {
+				if strings.EqualFold(name, cond.HeaderName) {
+					if found {
+						return entity.TestRuleResult{}, taxonomy.ErrRuleInvalid
+					}
+					extracted, found = value, true
+				}
+			}
+		case "client_ip":
 			extracted = cmd.ClientIP
-		case strings.Contains(fieldKey, "method"):
+		case "method":
 			extracted = methodVal
 		default:
-			extracted = uriRawVal
+			return entity.TestRuleResult{}, taxonomy.ErrRuleInvalid
 		}
 
 		op := strings.ToLower(strings.TrimSpace(cond.Operator))
 		condMatched := false
-		decodedVal, _ := url.QueryUnescape(extracted)
-		if decodedVal == "" {
-			decodedVal = extracted
-		}
-
-		switch {
-		case op == "equals":
-			condMatched = (extracted == cond.Value || decodedVal == cond.Value)
-		case strings.Contains(op, "starts"):
-			condMatched = strings.HasPrefix(extracted, cond.Value) || strings.HasPrefix(decodedVal, cond.Value)
-		case strings.Contains(op, "ends"):
-			condMatched = strings.HasSuffix(extracted, cond.Value) || strings.HasSuffix(decodedVal, cond.Value)
-		case strings.Contains(op, "regex"):
-			if re, compileErr := regexp.Compile(cond.Value); compileErr == nil {
-				condMatched = re.MatchString(extracted) || re.MatchString(decodedVal)
+		switch op {
+		case "equals":
+			condMatched = extracted == cond.Value
+		case "starts_with":
+			condMatched = strings.HasPrefix(extracted, cond.Value)
+		case "ends_with":
+			condMatched = strings.HasSuffix(extracted, cond.Value)
+		case "contains":
+			condMatched = strings.Contains(extracted, cond.Value)
+		case "regex":
+			re, compileErr := regexp.Compile(cond.Value)
+			if compileErr != nil {
+				return entity.TestRuleResult{}, taxonomy.ErrRuleInvalid
 			}
-		case op == "cidr":
+			condMatched = re.MatchString(extracted)
+		case "cidr":
+			if fieldKey != "client_ip" {
+				return entity.TestRuleResult{}, taxonomy.ErrRuleInvalid
+			}
+			prefix, pfxErr := netip.ParsePrefix(cond.Value)
+			if pfxErr != nil {
+				return entity.TestRuleResult{}, taxonomy.ErrRuleInvalid
+			}
 			if addr, parseErr := netip.ParseAddr(extracted); parseErr == nil {
-				if prefix, pfxErr := netip.ParsePrefix(cond.Value); pfxErr == nil {
-					condMatched = prefix.Contains(addr)
-				}
+				condMatched = prefix.Contains(addr)
 			}
-		default: // contains / contains (pattern)
-			cleanVal := cond.Value
-			// Hỗ trợ cả regex pattern dạng (?i) hoặc substring
-			if strings.HasPrefix(cleanVal, "(?i)") || strings.ContainsAny(cleanVal, `()+*?[]|`) {
-				if re, compileErr := regexp.Compile(cleanVal); compileErr == nil {
-					condMatched = re.MatchString(extracted) || re.MatchString(decodedVal)
-				} else {
-					condMatched = strings.Contains(strings.ToLower(extracted), strings.ToLower(cleanVal)) ||
-						strings.Contains(strings.ToLower(decodedVal), strings.ToLower(cleanVal))
-				}
-			} else {
-				condMatched = strings.Contains(strings.ToLower(extracted), strings.ToLower(cleanVal)) ||
-					strings.Contains(strings.ToLower(decodedVal), strings.ToLower(cleanVal))
-			}
+		default:
+			return entity.TestRuleResult{}, taxonomy.ErrRuleInvalid
 		}
-
 
 		if condMatched {
 			matchedCount++
@@ -465,22 +470,20 @@ func (s *ruleService) Test(ctx context.Context, cmd entity.TestRuleCommand) (ent
 
 	elapsed := time.Since(start)
 	latencyMs := float64(elapsed.Nanoseconds()) / 1e6
-	if latencyMs < 0.05 {
-		latencyMs = 0.08
-	}
 
-	actionDispatched := "HTTP 200 Pass Through"
+	actionDispatched := "No matching condition; no request sent"
 	explanation := "No blocking conditions triggered"
 
 	if overallMatched {
-		if action == "block" {
-			actionDispatched = fmt.Sprintf("HTTP %d response", responseCode)
-			explanation = fmt.Sprintf("Matched condition: %s contains pattern", firstMatchedField)
-		} else if action == "log" {
-			actionDispatched = "Log Event Recorded (Pass Through)"
+		switch action {
+		case "block":
+			actionDispatched = fmt.Sprintf("Would block with HTTP %d; no response dispatched", responseCode)
+			explanation = fmt.Sprintf("Matched condition on %s", firstMatchedField)
+		case "log":
+			actionDispatched = "Would log; no event recorded"
 			explanation = fmt.Sprintf("Matched condition: %s (Audit Only)", firstMatchedField)
-		} else {
-			actionDispatched = "HTTP 200 Explicit Allow"
+		default:
+			actionDispatched = "Would allow; no request sent"
 			explanation = "Explicitly allowed by rule"
 		}
 	}
@@ -499,7 +502,6 @@ func (s *ruleService) Test(ctx context.Context, cmd entity.TestRuleCommand) (ent
 		Details:          details,
 	}, nil
 }
-
 
 func (s *ruleService) UpdateDefinition(ctx context.Context, c entity.UpdateRuleDefinitionCommand) (entity.UpdateRuleDefinitionResult, error) {
 	issues := []string{} // Danh sách chứa các lý do/cảnh báo nếu luật chưa tương thích với runtime hiện tại
@@ -570,4 +572,6 @@ func (s *ruleService) UpdateDefinition(ctx context.Context, c entity.UpdateRuleD
 	return s.repo.UpdateDefinition(ctx, c, issues, path)
 }
 
-func (s *ruleService) Delete(ctx context.Context,c entity.DeleteRuleCommand)(entity.DeleteRuleResult,error){return s.repo.Delete(ctx,c)}
+func (s *ruleService) Delete(ctx context.Context, c entity.DeleteRuleCommand) (entity.DeleteRuleResult, error) {
+	return s.repo.Delete(ctx, c)
+}

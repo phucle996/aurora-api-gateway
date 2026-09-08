@@ -243,3 +243,48 @@ func TestPolicyDraftWithoutPathPrefix(t *testing.T) {
 		t.Fatal(w.Code, w.Body)
 	}
 }
+
+func TestPolicyClusterFreshHeartbeatConfirmsStableRelease(t *testing.T) {
+	db, router := policyFixture(t)
+	_, err := db.Exec(`INSERT INTO policy_cluster_releases(id,digest,payload,membership,actor) VALUES(100,'digest','{}','[]','test');
+ INSERT INTO policy_cluster_head(singleton,release_id) VALUES(1,100);
+ INSERT INTO cluster_nodes(id,name,hostname,ip,observed_release_id,last_heartbeat) VALUES('fresh','fresh','fresh','127.0.0.1',100,strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+ INSERT INTO policy_node_reports(node_id,release_id,phase,message,updated_at) VALUES('fresh',100,'observed','applied',strftime('%Y-%m-%dT%H:%M:%fZ','now','-2 minutes'));`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ name, sql, want string }{
+		{"fresh same generation", "SELECT 1", "observed"},
+		{"fresh different generation", "UPDATE cluster_nodes SET observed_release_id=99 WHERE id='fresh'", "stale"},
+		{"old heartbeat", "UPDATE cluster_nodes SET observed_release_id=100,last_heartbeat=strftime('%Y-%m-%dT%H:%M:%fZ','now','-2 minutes') WHERE id='fresh'", "stale"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := db.Exec(tc.sql); err != nil {
+				t.Fatal(err)
+			}
+			q := httptest.NewRequest("GET", "/api/v1/policies/cluster", nil)
+			q.Header.Set("Authorization", "Bearer policy-test-token")
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, q)
+			if w.Code != 200 {
+				t.Fatal(w.Code, w.Body)
+			}
+			var got struct{ Nodes []struct{ ID, Phase string } }
+			if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+			found := false
+			for _, n := range got.Nodes {
+				if n.ID == "fresh" {
+					found = true
+					if n.Phase != tc.want {
+						t.Fatalf("got %s want %s", n.Phase, tc.want)
+					}
+				}
+			}
+			if !found {
+				t.Fatal("missing node")
+			}
+		})
+	}
+}

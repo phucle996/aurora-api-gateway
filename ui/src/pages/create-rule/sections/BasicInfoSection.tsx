@@ -74,25 +74,7 @@ export function BasicInfoSection({
           <label className="block text-muted-foreground mb-1 text-[11px]">
             Policy
           </label>
-          <select
-            aria-label="Policy"
-            value={policy}
-            onChange={(e) => setPolicy(e.target.value)}
-            className="w-full bg-background border border-input px-3 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary cursor-pointer disabled:opacity-60"
-          >
-            <option value="">Unassigned — publish separately</option>
-            {policyCatalog && policyCatalog.length > 0 ? (
-              policyCatalog.map((p) => (
-                <option key={p.id} value={p.name}>
-                  {p.name}
-                </option>
-              ))
-            ) : (
-              <option value="" disabled>
-                {isLoadingPolicies ? 'Loading policies...' : 'No policies available'}
-              </option>
-            )}
-          </select>
+          <p className="text-muted-foreground">Manage rule assignments in <a className="text-primary underline" href="/policies">Policies</a>. Saving this definition does not change assignments.</p>
         </div>
       </div>
 

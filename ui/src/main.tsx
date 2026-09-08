@@ -20,8 +20,10 @@ import NodesPage from './pages/nodes/page';
 import SettingsPage from './pages/settings/page';
 import DomainsPage from './pages/domains/page';
 import CreateDomainPage from './pages/create-domain/page';
+import EditDomainPage from './pages/domains/edit/page';
 import UpstreamsPage from './pages/upstreams/page';
 import CreateUpstreamPage from './pages/upstreams/create/page';
+import EditUpstreamPage from './pages/upstreams/edit/page';
 import ConsoleLayout from './layouts/ConsoleLayout';
 import { ThemeProvider } from './components/theme-provider';
 import './style.css';
@@ -42,9 +44,13 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/domains/create" element={<CreateDomainPage />} />
           <Route path="/domains/add" element={<CreateDomainPage />} />
           <Route path="/create-domain" element={<CreateDomainPage />} />
+          <Route path="/domains/:id/edit" element={<EditDomainPage />} />
+          <Route path="/domains/edit/:id" element={<EditDomainPage />} />
           <Route path="/upstreams" element={<UpstreamsPage />} />
           <Route path="/upstreams/create" element={<CreateUpstreamPage />} />
           <Route path="/upstreams/add" element={<CreateUpstreamPage />} />
+          <Route path="/upstreams/:id/edit" element={<EditUpstreamPage />} />
+          <Route path="/upstreams/edit/:id" element={<EditUpstreamPage />} />
           <Route path="/events" element={<SecurityEventsPage />} />
 
           {/* Rules Management */}

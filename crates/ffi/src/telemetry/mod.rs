@@ -27,6 +27,15 @@ struct DesiredSnapshot<'a> {
     payload: &'a serde_json::value::RawValue,
 }
 
+#[derive(serde::Deserialize)]
+struct DesiredUpstreamSnapshot<'a> {
+    release_id: i64,
+    digest: String,
+    config_content: String,
+    #[serde(borrow)]
+    upstreams: &'a serde_json::value::RawValue,
+}
+
 fn atomic_write_file(path: &str, data: &[u8]) -> std::io::Result<()> {
     if path.is_empty() {
         return Ok(());
@@ -117,6 +126,7 @@ pub fn start_runtime(
 
             let mut current_access_release = 0i64;
             let mut current_policy_release = active_release_id;
+            let mut current_upstream_release = 0i64;
 
             let mut last_match_flush = Instant::now();
             let mut last_sync_pull = Instant::now() - Duration::from_secs(10);
@@ -230,6 +240,35 @@ pub fn start_runtime(
                                             let _ = client::post_json(&url, &policy_endpoint, &tok, &report);
                                         }
                                     }
+                                }
+                            }
+                        }
+                    }
+
+                    // 2c. Sync Upstream Pools
+                    let upstream_endpoint = format!("/api/v1/upstream-sync/{nid}");
+                    if let Ok(resp_str) = client::get_json(&url, &upstream_endpoint, &tok)
+                        && let Ok(target) = serde_json::from_str::<DesiredUpstreamSnapshot>(&resp_str)
+                    {
+                        if target.release_id > 0 && target.release_id != current_upstream_release {
+                            let calc_digest = client::sha256_hex(target.config_content.as_bytes());
+                            if calc_digest == target.digest {
+                                let raw_upstreams = target.upstreams.get().as_bytes();
+                                let swap_res = unsafe {
+                                    crate::upstream::aurora_upstream_swap(raw_upstreams.as_ptr(), raw_upstreams.len())
+                                };
+
+                                if swap_res == 0 {
+                                    // Registry validation is not proof of NGINX routing activation.
+                                    // The privileged routing reconciler validates and reloads the full domain snapshot.
+                                    if is_leader {
+                                        let report = format!(
+                                            r#"{{"release_id":{},"phase":"validated","message":"Registry validated; routing activation is owned by the domain reconciler"}}"#,
+                                            target.release_id
+                                        );
+                                        let _ = client::post_json(&url, &upstream_endpoint, &tok, &report);
+                                    }
+                                    current_upstream_release = target.release_id;
                                 }
                             }
                         }

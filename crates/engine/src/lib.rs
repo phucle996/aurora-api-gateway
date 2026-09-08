@@ -65,6 +65,36 @@ struct ScopeEngine {
     engine: Engine,
 }
 
+pub(crate) fn host_specificity(host: &str) -> u8 {
+    if host == "*" {
+        2
+    } else if host.starts_with("*.") {
+        1
+    } else {
+        0
+    }
+}
+
+pub(crate) fn host_matches(scope_host: &[u8], req_host: &[u8]) -> bool {
+    if scope_host == b"*" {
+        return true;
+    }
+    if let Some(rest) = scope_host.strip_prefix(b"*.") {
+        if req_host.eq_ignore_ascii_case(rest) {
+            return true;
+        }
+        let dot_suffix = &scope_host[1..];
+        if req_host.len() > dot_suffix.len() {
+            let suffix = &req_host[req_host.len() - dot_suffix.len()..];
+            if suffix.eq_ignore_ascii_case(dot_suffix) {
+                return true;
+            }
+        }
+        return false;
+    }
+    scope_host.eq_ignore_ascii_case(req_host)
+}
+
 /// Định nghĩa một luật bảo vệ WAF trong Schema v2
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -147,25 +177,41 @@ impl Engine {
             if policies.len() > 64 || policies.iter().map(|p| p.rules.len()).sum::<usize>() > 1024 {
                 return Err(Error::InvalidPolicy);
             }
-            policies.sort_by_key(|p| (p.priority, p.id));
+            policies.sort_by_key(|p| (p.priority, host_specificity(&p.host), p.id));
             let mut ids = HashSet::new();
             let mut scopes = Vec::new();
             for p in policies {
+                let host_valid = if p.host == "*" {
+                    true
+                } else if let Some(sub) = p.host.strip_prefix("*.") {
+                    !sub.is_empty()
+                        && sub.split('.').all(|label| {
+                            !label.is_empty()
+                                && label.len() <= 63
+                                && !label.starts_with('-')
+                                && !label.ends_with('-')
+                                && label.bytes().all(|b| {
+                                    b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-'
+                                })
+                        })
+                } else {
+                    p.host.split('.').all(|label| {
+                        !label.is_empty()
+                            && label.len() <= 63
+                            && !label.starts_with('-')
+                            && !label.ends_with('-')
+                            && label.bytes().all(|b| {
+                                b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-'
+                            })
+                    })
+                };
+
                 if p.id == 0
                     || !ids.insert(p.id)
                     || p.priority > 1_000_000
                     || p.host.is_empty()
                     || p.host.len() > 253
-                    || (p.host != "*"
-                        && p.host.split('.').any(|label| {
-                            label.is_empty()
-                                || label.len() > 63
-                                || label.starts_with('-')
-                                || label.ends_with('-')
-                                || !label.bytes().all(|b| {
-                                    b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-'
-                                })
-                        }))
+                    || !host_valid
                     || !p.path_prefix.starts_with('/')
                     || p.path_prefix.len() > MAX_PATH_BYTES
                     || p.path_prefix
@@ -335,7 +381,7 @@ impl Engine {
                 && (prefix.ends_with(b"/")
                     || path.len() == prefix.len()
                     || path.get(prefix.len()) == Some(&b'/'));
-            if (scope.host == b"*" || scope.host.eq_ignore_ascii_case(host)) && in_path {
+            if host_matches(&scope.host, host) && in_path {
                 return scope.engine.evaluate(path);
             }
         }
@@ -498,5 +544,38 @@ mod tests {
         }
         // Vượt quá kích thước tối đa 64KB
         assert!(Engine::from_policy(&vec![b' '; MAX_POLICY_BYTES + 1]).is_err());
+    }
+
+    #[test]
+    fn wildcard_host_matching_and_precedence() {
+        let bytes = br#"{"schema_version":3,"generation":1,"policies":[
+          {"id":1,"host":"*","path_prefix":"/","priority":0,"rules":[{"id":10,"path":"/test","action":"allow","score":0,"priority":0}]},
+          {"id":2,"host":"*.example.com","path_prefix":"/","priority":0,"rules":[{"id":20,"path":"/test","action":"log","score":5,"priority":0}]},
+          {"id":3,"host":"api.example.com","path_prefix":"/","priority":0,"rules":[{"id":30,"path":"/test","action":"block","score":0,"priority":0}]}
+        ]}"#;
+        let e = Engine::from_policy(bytes).unwrap();
+
+        // 1. Exact host api.example.com should match policy id 3 (Block)
+        let dec_exact = e.evaluate_request(b"api.example.com", b"/test").unwrap();
+        assert_eq!(dec_exact.rule_id, 30);
+        assert_eq!(dec_exact.action, 1);
+
+        // 2. Subdomain foo.example.com should match wildcard policy id 2 (Log, action 0)
+        let dec_wildcard = e.evaluate_request(b"foo.example.com", b"/test").unwrap();
+        assert_eq!(dec_wildcard.rule_id, 20);
+        assert_eq!(dec_wildcard.action, 0);
+
+        // 3. Apex domain example.com should match wildcard policy id 2
+        let dec_apex = e.evaluate_request(b"example.com", b"/test").unwrap();
+        assert_eq!(dec_apex.rule_id, 20);
+
+        // 4. Nested subdomain bar.sub.example.com should match wildcard policy id 2
+        let dec_nested = e.evaluate_request(b"bar.sub.example.com", b"/test").unwrap();
+        assert_eq!(dec_nested.rule_id, 20);
+
+        // 5. Unrelated host other.com should match catch-all policy id 1 (Allow)
+        let dec_other = e.evaluate_request(b"other.com", b"/test").unwrap();
+        assert_eq!(dec_other.rule_id, 10);
+        assert_eq!(dec_other.action, 0);
     }
 }

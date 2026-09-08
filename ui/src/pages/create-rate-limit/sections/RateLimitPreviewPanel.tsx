@@ -1,14 +1,19 @@
 import React, { useState } from 'react';
 import { Copy, Check } from 'lucide-react';
-import { LimitDimension } from './RateLimitConfigSection';
-import { RateLimitCondition } from './RateLimitConditionsSection';
+import type {
+  DimensionType,
+  IpConfig,
+  HeaderMatchConfig,
+  PathScopeConfig,
+} from './RateLimitConfigSection';
 
 interface RateLimitPreviewProps {
   name: string;
-  policy: string;
-  priority: number;
-  enabled: boolean;
-  dimension: LimitDimension;
+  enabledDimensions: DimensionType[];
+  dimensionOrder: DimensionType[];
+  ipConfig: IpConfig;
+  headerConfig: HeaderMatchConfig;
+  pathConfig: PathScopeConfig;
   rateLimit: number;
   rateUnit: string;
   burst: number;
@@ -16,18 +21,24 @@ interface RateLimitPreviewProps {
   customResponse: boolean;
   responseCode: string;
   responseBody: string;
-  conditions: RateLimitCondition[];
 }
 
 export function RateLimitPreviewPanel(props: RateLimitPreviewProps) {
   const [tab, setTab] = useState<'nginx' | 'lua' | 'json'>('nginx');
   const [copied, setCopied] = useState(false);
 
-  // Derive variable key based on dimension
-  let keyVar = '$binary_remote_addr';
-  if (props.dimension === 'api_key') keyVar = '$http_x_api_key';
-  if (props.dimension === 'user') keyVar = '$http_authorization';
-  if (props.dimension === 'path') keyVar = '$uri';
+  // Derive variable key based on active dimensions in configured evaluation order
+  const keysList: string[] = [];
+  props.dimensionOrder.forEach((dim) => {
+    if (dim === 'ip') keysList.push(`$${props.ipConfig.source || 'binary_remote_addr'}`);
+    if (dim === 'header') {
+      const hName = props.headerConfig.headerName ? props.headerConfig.headerName.toLowerCase().replace(/-/g, '_') : 'custom_header';
+      keysList.push(`$http_${hName}`);
+    }
+    if (dim === 'path') keysList.push('$uri');
+  });
+
+  const keyVar = keysList.length > 0 ? keysList.join('~') : '$binary_remote_addr';
 
   // Zone rate string
   let rateSuffix = 'r/m';
@@ -35,39 +46,41 @@ export function RateLimitPreviewPanel(props: RateLimitPreviewProps) {
   if (props.rateUnit === '1 hour') rateSuffix = 'r/h';
 
   const zoneName = `limit_${props.name ? props.name.replace(/[^a-zA-Z0-9_]/g, '_') : 'zone'}`;
-  const firstPath = props.conditions.find((c) => c.field === 'Request Path')?.value || '/login';
+  const targetPath = props.enabledDimensions.includes('path') ? (props.pathConfig.path || '/') : '/';
 
   const nginxContent = `# Rate limit: ${props.name || 'unnamed-limit'}
+# Evaluated dimensions: ${props.dimensionOrder.join(' -> ')}
 limit_req_zone ${keyVar} zone=${zoneName}:10m
                rate=${props.rateLimit}${rateSuffix};
 
 server {
-    location ${firstPath} {
+    location ${targetPath} {
         limit_req zone=${zoneName}${props.burst > 0 ? ` burst=${props.burst}` : ''} nodelay;
         limit_req_status ${props.responseCode || '429'};
 
-        add_header Content-Type "application/json";
-        return ${props.responseCode || '429'} '${props.responseBody.replace(/\n\s*/g, '')}';
+        ${props.customResponse ? `add_header Content-Type "application/json";
+        return ${props.responseCode || '429'} '${props.responseBody.replace(/\n\s*/g, '')}';` : '# default rate limit behavior'}
     }
 }`;
 
-  const luaContent = `-- Generated Lua evaluation handler for ${props.name || 'rate_limit'}
+  const luaContent = `-- Generated OpenResty Lua evaluation handler for ${props.name || 'rate_limit'}
 local limit_req = require "resty.limit.req"
 local lim, err = limit_req.new("${zoneName}", ${props.rateLimit}, ${props.burst})
 if not lim then
-    ngx.log(ngx.ERR, "failed to instantiate a resty.limit.req object: ", err)
+    ngx.log(ngx.ERR, "failed to instantiate resty.limit.req: ", err)
     return ngx.exit(500)
 end
 
-local key = ${
-    props.dimension === 'ip'
-      ? 'ngx.var.binary_remote_addr'
-      : props.dimension === 'api_key'
-      ? 'ngx.req.get_headers()["x-api-key"]'
-      : props.dimension === 'user'
-      ? 'ngx.req.get_headers()["authorization"]'
-      : 'ngx.var.uri'
-  }
+-- Compound key evaluation (Order: ${props.dimensionOrder.join(' -> ')})
+local keys = {}
+${props.dimensionOrder.map((d) => {
+  if (d === 'ip') return 'table.insert(keys, ngx.var.binary_remote_addr)';
+  if (d === 'header') return `table.insert(keys, ngx.req.get_headers()["${(props.headerConfig.headerName || 'x-api-key').toLowerCase()}"] or "-")`;
+  if (d === 'path') return 'table.insert(keys, ngx.var.uri)';
+  return '';
+}).filter(Boolean).join('\n')}
+local key = table.concat(keys, "~")
+
 local delay, err = lim:incoming(key, true)
 if not delay then
     if err == "rejected" then
@@ -82,10 +95,13 @@ end`;
   const jsonContent = JSON.stringify(
     {
       name: props.name || 'unnamed-rate-limit',
-      policy: props.policy,
-      priority: props.priority,
-      enabled: props.enabled,
-      dimension: props.dimension,
+      dimensions: {
+        enabled: props.enabledDimensions,
+        evaluation_order: props.dimensionOrder,
+        ip: props.enabledDimensions.includes('ip') ? props.ipConfig : undefined,
+        header: props.enabledDimensions.includes('header') ? props.headerConfig : undefined,
+        path: props.enabledDimensions.includes('path') ? props.pathConfig : undefined,
+      },
       rate: {
         limit: props.rateLimit,
         unit: props.rateUnit,
@@ -98,11 +114,6 @@ end`;
             body: props.responseBody,
           }
         : null,
-      match_conditions: props.conditions.map((c) => ({
-        field: c.field,
-        operator: c.operator,
-        value: c.value,
-      })),
     },
     null,
     2

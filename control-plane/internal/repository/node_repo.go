@@ -105,11 +105,12 @@ func (r *sqliteNodeRepository) ListNodes(ctx context.Context) ([]entity.ClusterN
 		); err != nil {
 			return nil, fmt.Errorf("quét bản ghi node thất bại: %w", err)
 		}
-		if item.SyncStatus == "Drift" {
+		switch item.SyncStatus {
+		case "Drift":
 			item.PolicySync = "Drift Detected"
-		} else if item.SyncStatus == "Syncing" {
+		case "Syncing":
 			item.PolicySync = "Syncing"
-		} else {
+		default:
 			item.PolicySync = "Synchronized"
 		}
 		nodes = append(nodes, item)
@@ -201,11 +202,12 @@ func (r *sqliteNodeRepository) GetNodeByID(ctx context.Context, id string) (*ent
 		}
 		return nil, fmt.Errorf("truy vấn node %s thất bại: %w", id, err)
 	}
-	if item.SyncStatus == "Drift" {
+	switch item.SyncStatus {
+	case "Drift":
 		item.PolicySync = "Drift Detected"
-	} else if item.SyncStatus == "Syncing" {
+	case "Syncing":
 		item.PolicySync = "Syncing"
-	} else {
+	default:
 		item.PolicySync = "Synchronized"
 	}
 	return &item, nil
@@ -215,9 +217,10 @@ func (r *sqliteNodeRepository) GetNodeByID(ctx context.Context, id string) (*ent
 // Tự động ghi danh (auto-register) node mới vào cluster nếu node chưa từng tồn tại.
 func (r *sqliteNodeRepository) UpdateHeartbeat(ctx context.Context, payload entity.NodeHeartbeatPayload) error {
 	deployment := "Unknown"
-	if payload.MetricsScope == "container" {
+	switch payload.MetricsScope {
+	case "container":
 		deployment = "Docker Container"
-	} else if payload.MetricsScope == "host" {
+	case "host":
 		deployment = "Systemd Service"
 	}
 	auth := payload.Authentication

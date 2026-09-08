@@ -1,5 +1,9 @@
 import React from 'react';
-import { RateLimitCondition } from './RateLimitConditionsSection';
+import type {
+  DimensionType,
+  PathScopeConfig,
+  HeaderMatchConfig,
+} from './RateLimitConfigSection';
 
 interface RateLimitSummaryProps {
   name: string;
@@ -7,8 +11,10 @@ interface RateLimitSummaryProps {
   rateLimit: number;
   rateUnit: string;
   burst: number;
-  conditions: RateLimitCondition[];
-  policy: string;
+  enabledDimensions: DimensionType[];
+  dimensionOrder: DimensionType[];
+  pathConfig: PathScopeConfig;
+  headerConfig: HeaderMatchConfig;
   logEvents: boolean;
   enableAlert: boolean;
 }
@@ -27,20 +33,23 @@ export function RateLimitSummaryPanel(props: RateLimitSummaryProps) {
     }
   };
 
-  const firstCondition = props.conditions[0];
-  const scopeString = firstCondition
-    ? `${firstCondition.field} ${firstCondition.operator.toLowerCase()} ${firstCondition.value}`
-    : 'Global (All Paths)';
+  const dimensionLabels: Record<DimensionType, string> = {
+    ip: 'Client IP',
+    header: 'Header Match',
+    path: 'Path Scope',
+  };
+
+  const orderString = props.dimensionOrder.map((d) => dimensionLabels[d]).join(' ➔ ');
 
   return (
-    <div className="bg-card border border-border p-4 space-y-3 font-sans text-xs">
+    <div className="bg-card border border-border p-4 space-y-3 font-sans text-xs shadow-xs rounded-sm">
       <div className="text-sm font-semibold text-foreground">Summary</div>
 
       <div className="divide-y divide-border text-xs">
         {/* Name */}
         <div className="flex items-center justify-between py-2">
           <span className="text-muted-foreground">Name</span>
-          <span className="text-foreground font-semibold">{props.name || '—'}</span>
+          <span className="text-foreground font-semibold font-mono">{props.name || '—'}</span>
         </div>
 
         {/* Action */}
@@ -52,30 +61,44 @@ export function RateLimitSummaryPanel(props: RateLimitSummaryProps) {
         {/* Rate Limit */}
         <div className="flex items-center justify-between py-2">
           <span className="text-muted-foreground">Rate Limit</span>
-          <span className="text-foreground">
-            {props.rateLimit} requests / {props.rateUnit}
+          <span className="text-foreground font-mono">
+            {props.rateLimit} req / {props.rateUnit}
           </span>
         </div>
 
         {/* Burst */}
         <div className="flex items-center justify-between py-2">
           <span className="text-muted-foreground">Burst</span>
-          <span className="text-foreground">{props.burst || '0'}</span>
+          <span className="text-foreground font-mono">{props.burst || '0'}</span>
         </div>
 
-        {/* Scope */}
+        {/* Evaluation Order */}
         <div className="flex items-center justify-between py-2">
-          <span className="text-muted-foreground">Scope</span>
-          <span className="text-foreground truncate max-w-[200px]" title={scopeString}>
-            {scopeString}
+          <span className="text-muted-foreground">Evaluation Order</span>
+          <span className="text-foreground font-mono text-[11px] truncate max-w-[200px]" title={orderString}>
+            {orderString || 'Default'}
           </span>
         </div>
 
-        {/* Policy */}
-        <div className="flex items-center justify-between py-2">
-          <span className="text-muted-foreground">Policy</span>
-          <span className="text-foreground">{props.policy}</span>
-        </div>
+        {/* Target Path */}
+        {props.enabledDimensions.includes('path') && (
+          <div className="flex items-center justify-between py-2">
+            <span className="text-muted-foreground">Path Scope</span>
+            <span className="text-primary font-mono text-[11px] truncate max-w-[180px]">
+              {props.pathConfig.path || '/'}
+            </span>
+          </div>
+        )}
+
+        {/* Header Match */}
+        {props.enabledDimensions.includes('header') && (
+          <div className="flex items-center justify-between py-2">
+            <span className="text-muted-foreground">Header Match</span>
+            <span className="text-foreground font-mono text-[11px] truncate max-w-[180px]">
+              {props.headerConfig.headerName || 'Header'}: {props.headerConfig.operator}
+            </span>
+          </div>
+        )}
 
         {/* Log Event */}
         <div className="flex items-center justify-between py-2">
@@ -96,3 +119,4 @@ export function RateLimitSummaryPanel(props: RateLimitSummaryProps) {
     </div>
   );
 }
+

@@ -22,9 +22,17 @@ export function AddDomainModal({ isOpen, onClose, onAdd }: AddDomainModalProps) 
   // Auto-fill root domain when domain changes
   const handleDomainChange = (val: string) => {
     setDomain(val);
-    const parts = val.trim().split('.');
+    const trimmed = val.trim();
+    if (trimmed === '*') {
+      setRootDomain('*');
+      return;
+    }
+    const clean = trimmed.startsWith('*.') ? trimmed.slice(2) : trimmed;
+    const parts = clean.split('.');
     if (parts.length >= 2) {
       setRootDomain(parts.slice(-2).join('.'));
+    } else {
+      setRootDomain(clean);
     }
   };
 
@@ -99,7 +107,7 @@ export function AddDomainModal({ isOpen, onClose, onAdd }: AddDomainModalProps) 
               <input
                 type="text"
                 required
-                placeholder="e.g. api.example.com"
+                placeholder="e.g. api.example.com, *.example.com, or *"
                 value={domain}
                 onChange={(e) => handleDomainChange(e.target.value)}
                 className="w-full bg-background border border-input text-foreground px-3 py-2 rounded-md focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
@@ -119,6 +127,19 @@ export function AddDomainModal({ isOpen, onClose, onAdd }: AddDomainModalProps) 
               />
             </div>
           </div>
+
+          {domain.trim().startsWith('*.') && (
+            <div className="p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-xs flex items-center gap-2">
+              <Info className="w-4 h-4 shrink-0" />
+              <span>Wildcard Subdomain: Protects all subdomains under <strong>{rootDomain}</strong> and the apex domain.</span>
+            </div>
+          )}
+          {domain.trim() === '*' && (
+            <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs flex items-center gap-2">
+              <Info className="w-4 h-4 shrink-0" />
+              <span>Global Catch-All (*): Matches all unmatched incoming HTTP host requests.</span>
+            </div>
+          )}
 
           {/* Upstream URL */}
           <div>

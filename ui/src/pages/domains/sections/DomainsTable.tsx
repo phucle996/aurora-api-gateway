@@ -151,7 +151,7 @@ export function DomainsTable({
               </th>
               <th className="px-4 py-3 font-semibold text-foreground">Domain</th>
               <th className="px-4 py-3 font-semibold text-foreground">Status</th>
-              <th className="px-4 py-3 font-semibold text-foreground">TLS / Security</th>
+              <th className="px-4 py-3 font-semibold text-foreground">TLS Preference</th>
               <th className="px-4 py-3 font-semibold text-foreground">Upstream</th>
               <th className="px-3 py-3 text-center font-semibold text-foreground">Rules</th>
               <th className="px-4 py-3 font-semibold text-foreground">Tags</th>
@@ -200,6 +200,16 @@ export function DomainsTable({
                       <div className="flex flex-col">
                         <span className="font-semibold text-[13px] text-foreground group-hover:text-primary transition-colors flex items-center gap-1.5">
                           {item.domain}
+                          {item.domain === '*' && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                              Catch-All
+                            </span>
+                          )}
+                          {item.domain.startsWith('*.') && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30">
+                              Wildcard
+                            </span>
+                          )}
                         </span>
                         <span className="text-[11px] text-muted-foreground">
                           {item.rootDomain}
@@ -240,7 +250,7 @@ export function DomainsTable({
                     {/* Rules count */}
                     <td className="px-3 py-2.5 text-center">
                       <span className="inline-flex items-center justify-center min-w-[22px] px-1.5 py-0.5 rounded text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
-                        {item.rulesCount}
+                        <span title="Rule counts are not provided by the domain routing workflow">—</span>
                       </span>
                     </td>
 

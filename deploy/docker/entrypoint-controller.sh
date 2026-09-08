@@ -7,6 +7,5 @@ if [ ! -f /data/admin.token ]; then
   chmod 600 /data/admin.token
 fi
 
-(sleep 2 && sqlite3 /data/aurora.db "DELETE FROM cluster_nodes WHERE id = 'node-local-01';" 2>/dev/null || true) &
 
 exec /app/aurora-controller

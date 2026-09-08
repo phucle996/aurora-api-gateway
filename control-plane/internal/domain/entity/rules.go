@@ -55,29 +55,29 @@ type RuleHistoryQuery struct {
 
 // RuleHistoryRecord biểu diễn một bản ghi lịch sử thay đổi của luật tại một phiên bản cụ thể.
 type RuleHistoryRecord struct {
- Score int
- SchemaVersion int
- SourceIP string
- HostDomain string
- PathPrefix string
- HTTPMethod string
- LogEvent bool
- AddToReputation bool
-	Version        int64  // Số thứ tự phiên bản sửa đổi
-	Name           string // Tên của luật tại thời điểm phiên bản này được lưu
-	Description    string // Mô tả chi tiết của luật
-	Group          string // Phân loại nhóm luật
-	Action         string // Hành vi xử lý của luật tại phiên bản này ('allow', 'log', 'block')
-	Severity       string // Mức độ nghiêm trọng: low, medium, high, critical
-	Priority       int    // Độ ưu tiên thực thi
-	Path           string // Đường dẫn URL quy định
-	Enabled        bool   // Trạng thái bật hoặc tắt của luật tại phiên bản này
-	Actor          string // Định danh người hoặc token đã thực hiện thay đổi
-	UpdatedAt      string // Thời điểm bản ghi được cập nhật
-	LogicMode      string // Logic kết hợp điều kiện: 'all' hoặc 'any'
-	ConditionsJSON string // Danh sách điều kiện dạng chuỗi JSON
-	ResponseCode   *int    // Mã HTTP phản hồi khi chặn
-	CustomResponse string // Nội dung phản hồi tùy biến
+	Score           int
+	SchemaVersion   int
+	SourceIP        string
+	HostDomain      string
+	PathPrefix      string
+	HTTPMethod      string
+	LogEvent        bool
+	AddToReputation bool
+	Version         int64  // Số thứ tự phiên bản sửa đổi
+	Name            string // Tên của luật tại thời điểm phiên bản này được lưu
+	Description     string // Mô tả chi tiết của luật
+	Group           string // Phân loại nhóm luật
+	Action          string // Hành vi xử lý của luật tại phiên bản này ('allow', 'log', 'block')
+	Severity        string // Mức độ nghiêm trọng: low, medium, high, critical
+	Priority        int    // Độ ưu tiên thực thi
+	Path            string // Đường dẫn URL quy định
+	Enabled         bool   // Trạng thái bật hoặc tắt của luật tại phiên bản này
+	Actor           string // Định danh người hoặc token đã thực hiện thay đổi
+	UpdatedAt       string // Thời điểm bản ghi được cập nhật
+	LogicMode       string // Logic kết hợp điều kiện: 'all' hoặc 'any'
+	ConditionsJSON  string // Danh sách điều kiện dạng chuỗi JSON
+	ResponseCode    *int   // Mã HTTP phản hồi khi chặn
+	CustomResponse  string // Nội dung phản hồi tùy biến
 }
 
 // RuleHistoryResult chứa danh sách kết quả lịch sử phiên bản trả về cho client.
@@ -88,10 +88,10 @@ type RuleHistoryResult struct {
 
 // RollbackRuleCommand là lệnh yêu cầu khôi phục cấu hình của một rule về phiên bản cũ.
 type RollbackRuleCommand struct {
- ExpectedVersion int64
-	ID            int64  // ID của luật cần rollback
-	TargetVersion int64  // Phiên bản muốn khôi phục
-	Actor         string // Người hoặc token thực hiện thao tác
+	ExpectedVersion int64
+	ID              int64  // ID của luật cần rollback
+	TargetVersion   int64  // Phiên bản muốn khôi phục
+	Actor           string // Người hoặc token thực hiện thao tác
 }
 
 // RollbackRuleResult chứa kết quả sau khi thực hiện khôi phục phiên bản.
@@ -203,34 +203,34 @@ type RuleDetailCondition struct {
 
 // RuleDetailResult chứa toàn bộ thông tin chi tiết và cấu hình vận hành của một luật bảo vệ.
 type RuleDetailResult struct {
- AssignedPolicies int
- CreatedAt string
- CreatedBy string
-	SchemaVersion   int                   // Phiên bản schema (1: luật cơ bản v1, 2: luật nâng cao v2)
-	RuntimeReady    bool                  // Luật đã đủ tiêu chuẩn để nạp vào bộ máy WAF biên chưa
-	RuntimeIssues   []string              // Danh sách các vấn đề/cảnh báo vận hành nếu có (ví dụ biểu thức regex chưa tối ưu)
-	LogicMode       string                // Chế độ kết hợp điều kiện ('all': thỏa mãn tất cả, 'any': thỏa mãn một trong số)
-	Conditions      []RuleDetailCondition // Danh sách các điều kiện kiểm tra chi tiết
-	SourceIP        string                // Danh sách IP hoặc dải mạng CIDR nguồn áp dụng luật
-	HostDomain      string                // Tên miền máy chủ áp dụng luật
-	PathPrefix      string                // Tiền tố đường dẫn áp dụng luật
-	HTTPMethod      string                // Phương thức HTTP áp dụng (GET, POST, PUT, DELETE...)
-	ResponseCode    *int                  // Mã phản hồi HTTP khi bị chặn (400, 403, 429, 500), nil nếu không phải hành vi block
-	CustomResponse  string                // Nội dung phản hồi tùy biến trả về cho người dùng khi bị chặn
-	LogEvent        bool                  // Có ghi sự kiện vào log bảo mật khi khớp luật hay không
-	AddToReputation bool                  // Có tính điểm vi phạm vào danh tiếng IP hay không
-	ID              int64                 // Mã định danh của luật
-	Version         int64                 // Phiên bản hiện tại
-	Name            string                // Tên luật
-	Description     string                // Mô tả luật
-	Group           string                // Nhóm quy tắc
-	Action          string                // Hành vi ('allow', 'log', 'block')
-	Severity        string                // Mức độ nghiêm trọng
-	Score           int                   // Điểm rủi ro
-	Priority        int                   // Độ ưu tiên
-	Path            string                // Đường dẫn URL
-	Enabled         bool                  // Trạng thái bật/tắt
-	UpdatedAt       string                // Thời điểm cập nhật gần nhất
+	AssignedPolicies int
+	CreatedAt        string
+	CreatedBy        string
+	SchemaVersion    int                   // Phiên bản schema (1: luật cơ bản v1, 2: luật nâng cao v2)
+	RuntimeReady     bool                  // Luật đã đủ tiêu chuẩn để nạp vào bộ máy WAF biên chưa
+	RuntimeIssues    []string              // Danh sách các vấn đề/cảnh báo vận hành nếu có (ví dụ biểu thức regex chưa tối ưu)
+	LogicMode        string                // Chế độ kết hợp điều kiện ('all': thỏa mãn tất cả, 'any': thỏa mãn một trong số)
+	Conditions       []RuleDetailCondition // Danh sách các điều kiện kiểm tra chi tiết
+	SourceIP         string                // Danh sách IP hoặc dải mạng CIDR nguồn áp dụng luật
+	HostDomain       string                // Tên miền máy chủ áp dụng luật
+	PathPrefix       string                // Tiền tố đường dẫn áp dụng luật
+	HTTPMethod       string                // Phương thức HTTP áp dụng (GET, POST, PUT, DELETE...)
+	ResponseCode     *int                  // Mã phản hồi HTTP khi bị chặn (400, 403, 429, 500), nil nếu không phải hành vi block
+	CustomResponse   string                // Nội dung phản hồi tùy biến trả về cho người dùng khi bị chặn
+	LogEvent         bool                  // Có ghi sự kiện vào log bảo mật khi khớp luật hay không
+	AddToReputation  bool                  // Có tính điểm vi phạm vào danh tiếng IP hay không
+	ID               int64                 // Mã định danh của luật
+	Version          int64                 // Phiên bản hiện tại
+	Name             string                // Tên luật
+	Description      string                // Mô tả luật
+	Group            string                // Nhóm quy tắc
+	Action           string                // Hành vi ('allow', 'log', 'block')
+	Severity         string                // Mức độ nghiêm trọng
+	Score            int                   // Điểm rủi ro
+	Priority         int                   // Độ ưu tiên
+	Path             string                // Đường dẫn URL
+	Enabled          bool                  // Trạng thái bật/tắt
+	UpdatedAt        string                // Thời điểm cập nhật gần nhất
 }
 
 // ─── 8. Workflow: Rule Stats (Thống kê & Đo lường tổng quan số lượng luật) ─────
@@ -267,6 +267,7 @@ type CreateRuleCondition struct {
 
 // CreateRuleDefinitionCommand là lệnh gửi từ Handler vào Service để tạo mới luật đa điều kiện v2.
 type CreateRuleDefinitionCommand struct {
+	Actor           string
 	RequestKey      string                // Khóa Idempotency chống gửi lặp lại yêu cầu
 	Name            string                // Tên luật (tối đa 120 ký tự UTF-8)
 	Description     string                // Mô tả chi tiết (tối đa 2000 ký tự UTF-8)
@@ -339,7 +340,6 @@ type TestRuleResult struct {
 	Details          []TestConditionDetail // Chi tiết từng điều kiện trong tập rule
 }
 
-
 type UpdateRuleCondition struct {
 	Field      string // Trường thông tin gói tin cần kiểm tra (uri_raw, path, query, header, body, client_ip, method)
 	Operator   string // Toán tử so khớp (equals, contains, starts_with, ends_with, regex, cidr)
@@ -349,9 +349,9 @@ type UpdateRuleCondition struct {
 
 // UpdateRuleDefinitionCommand là lệnh gửi từ Handler vào Service để tạo mới luật đa điều kiện v2.
 type UpdateRuleDefinitionCommand struct {
- ID int64
- ExpectedVersion int64
- Actor string
+	ID              int64
+	ExpectedVersion int64
+	Actor           string
 	RequestKey      string                // Khóa Idempotency chống gửi lặp lại yêu cầu
 	Name            string                // Tên luật (tối đa 120 ký tự UTF-8)
 	Description     string                // Mô tả chi tiết (tối đa 2000 ký tự UTF-8)
@@ -383,6 +383,12 @@ type UpdateRuleDefinitionResult struct {
 	RuntimeIssues []string // Danh sách các cảnh báo vận hành phát hiện trong quá trình tạo (nếu có)
 }
 
-
-type DeleteRuleCommand struct { ID int64; ExpectedVersion int64; Actor string }
-type DeleteRuleResult struct { ID int64; Version int64 }
+type DeleteRuleCommand struct {
+	ID              int64
+	ExpectedVersion int64
+	Actor           string
+}
+type DeleteRuleResult struct {
+	ID      int64
+	Version int64
+}

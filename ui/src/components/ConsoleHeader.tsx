@@ -1,13 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Moon, Sun, Laptop } from 'lucide-react';
+import { Search, Moon, Sun, Laptop, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useTheme } from './theme-provider';
 
 interface ConsoleHeaderProps {
   onSearch?: (query: string) => void;
   title?: string;
+  sidebarCollapsed?: boolean;
+  onToggleSidebar?: () => void;
 }
 
-export function ConsoleHeader({ onSearch }: ConsoleHeaderProps) {
+export function ConsoleHeader({
+  onSearch,
+  sidebarCollapsed = false,
+  onToggleSidebar,
+}: ConsoleHeaderProps) {
   const { theme, resolvedTheme, setTheme } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -42,8 +48,24 @@ export function ConsoleHeader({ onSearch }: ConsoleHeaderProps) {
 
   return (
     <header className="h-14 px-4 sm:px-6 bg-card border-b border-border flex items-center justify-between sticky top-0 z-20 font-sans">
-      {/* Left: Global Search Only */}
-      <div className="flex items-center flex-1 max-w-md">
+      {/* Left: Sidebar Collapse Toggle + Global Search */}
+      <div className="flex items-center flex-1 max-w-md gap-2.5">
+        {onToggleSidebar && (
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            aria-label={sidebarCollapsed ? 'Expand sidebar (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)'}
+            title={sidebarCollapsed ? 'Expand sidebar (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)'}
+            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer rounded-sm border border-transparent hover:border-border shrink-0"
+          >
+            {sidebarCollapsed ? (
+              <PanelLeftOpen className="w-4 h-4" />
+            ) : (
+              <PanelLeftClose className="w-4 h-4" />
+            )}
+          </button>
+        )}
+
         <div className="relative w-full">
           <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input

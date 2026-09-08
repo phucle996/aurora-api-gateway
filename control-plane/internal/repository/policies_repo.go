@@ -94,7 +94,7 @@ func (r *PolicyRepository) SavePolicy(ctx context.Context, c entity.SavePolicyCo
 		RuleIDs:         c.RuleIDs,
 	}
 	input, _ := json.Marshal(inputPayload)
-	hash := fmt.Sprintf("%x", sha256.Sum256(append([]byte(fmt.Sprint(c.ID)), input...)))
+	hash := fmt.Sprintf("%x", sha256.Sum256(append(fmt.Append(nil, c.ID), input...)))
 	var oldHash, result string
 	err = tx.QueryRowContext(ctx, `SELECT request_hash,result FROM policy_receipts WHERE actor=? AND request_key=?`, c.Actor, c.RequestKey).Scan(&oldHash, &result)
 	if err == nil {
@@ -303,7 +303,7 @@ func (r *PolicyRepository) PublishPolicy(ctx context.Context, c entity.PublishPo
 		Disable:         c.Disable,
 	}
 	input, _ := json.Marshal(inputPayload)
-	hash := fmt.Sprintf("publish:%x", sha256.Sum256(append([]byte(fmt.Sprint(c.ID)), input...)))
+	hash := fmt.Sprintf("publish:%x", sha256.Sum256(append(fmt.Append(nil, c.ID), input...)))
 	if !c.Preview {
 		var h, result string
 		e := tx.QueryRowContext(ctx, `SELECT request_hash,result FROM policy_receipts WHERE actor=? AND request_key=?`, c.Actor, c.RequestKey).Scan(&h, &result)
@@ -497,7 +497,10 @@ func (r *PolicyRepository) PolicyCluster(ctx context.Context) (entity.PolicyClus
 			CASE
 				WHEN p.release_id = head.id THEN
 					CASE
-						WHEN p.phase = 'observed' AND unixepoch('now') - unixepoch(p.updated_at) > 45 THEN 'stale'
+						WHEN p.phase = 'observed' AND unixepoch('now') - unixepoch(p.updated_at) > 45
+                            AND NOT (coalesce(n.observed_release_id, 0) = head.id
+                                AND coalesce(unixepoch(n.last_heartbeat), 0) >= unixepoch('now') - 45)
+                            THEN 'stale'
 						ELSE p.phase
 					END
 				ELSE 'pending'

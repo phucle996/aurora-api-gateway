@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { policiesApi, type PolicyDraft, type PolicyRule } from '../../lib/api/policies';
+import { domainsApi, type DomainCatalogItem } from '../../lib/api/domains';
 import { CreatePolicyHeader } from './sections/CreatePolicyHeader';
 import { BasicInfoSection, type PolicyMode } from './sections/BasicInfoSection';
 import { ScopeSection } from './sections/ScopeSection';
@@ -57,25 +58,29 @@ export default function CreatePolicyPage() {
   const [rules, setRules] = useState<PolicyRuleItem[]>([]);
   const [catalog, setCatalog] = useState<PolicyRule[]>([]);
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(true);
+  const [domains, setDomains] = useState<DomainCatalogItem[]>([]);
+  const [isLoadingDomains, setIsLoadingDomains] = useState(false);
 
   const [expectedVersion, setExpectedVersion] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
   const retryRef = useRef<{ body: string; key: string } | null>(null);
 
-  // Load catalog and source policy if editing/cloning
+  // Load catalog, domains and source policy if editing/cloning
   useEffect(() => {
     let active = true;
     setIsLoadingCatalog(true);
+    setIsLoadingDomains(true);
 
     Promise.all([
       policiesApi.ruleCatalog().catch(() => [] as PolicyRule[]),
+      domainsApi.catalog().catch(() => [] as DomainCatalogItem[]),
       source ? policiesApi.detail(Number(source)).catch(() => []) : Promise.resolve([]),
     ])
-      .then(([catalogData, rows]) => {
+      .then(([catalogData, domainsData, rows]) => {
         if (!active) return;
-        const fetchedCatalog = catalogData || [];
-        setCatalog(fetchedCatalog);
+        setCatalog(catalogData || []);
+        setDomains(domainsData || []);
 
         if (source && rows && rows.length > 0) {
           const policy = rows[0];
@@ -97,7 +102,10 @@ export default function CreatePolicyPage() {
         if (active) setError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
-        if (active) setIsLoadingCatalog(false);
+        if (active) {
+          setIsLoadingCatalog(false);
+          setIsLoadingDomains(false);
+        }
       });
 
     return () => {
@@ -183,6 +191,8 @@ export default function CreatePolicyPage() {
             <ScopeSection
               target={target}
               setTarget={setTarget}
+              domains={domains}
+              isLoadingDomains={isLoadingDomains}
             />
 
             {/* 3. Policy Rules */}

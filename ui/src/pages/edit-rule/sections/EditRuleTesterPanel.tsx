@@ -1,275 +1,91 @@
-import React, { useState } from 'react';
-import { Send, ShieldAlert, CheckCircle2, ChevronRight, ChevronDown, Loader2, Copy, Check } from 'lucide-react';
-import type { Condition } from '../../create-rule/sections/MatchConditionsSection';
-import { getAuthToken } from '@/lib/fetcher';
+import { useEffect, useRef, useState } from 'react';
+import { getAuthToken } from '../../../lib/fetcher';
 
 interface EditRuleTesterProps {
-  conditions: Condition[];
-  ruleId?: string;
-  logicMode?: 'ALL' | 'ANY';
+  conditions: { field: string; operator: string; value: string; header_name?: string }[];
+  ruleId: string;
+  logicMode: 'all' | 'any';
+  action: 'block' | 'allow' | 'log';
+  responseCode: number;
+}
+interface EditEvaluation {
+  matched: boolean;
+  action: string;
+  action_dispatched: string;
+  latency_ms: number;
+  evaluation_time_ns: number;
+  details: unknown[];
 }
 
-export function EditRuleTesterPanel({ conditions, ruleId, logicMode = 'ALL' }: EditRuleTesterProps) {
-  const [activeTab, setActiveTab] = useState<'Request' | 'cURL'>('Request');
+export function EditRuleTesterPanel({ conditions, ruleId, logicMode, action, responseCode }: EditRuleTesterProps) {
   const [method, setMethod] = useState('GET');
-  const [url, setUrl] = useState('https://example.com/search?q=1+or+1=1');
-  const [isTesting, setIsTesting] = useState(false);
-  const [tested, setTested] = useState(false);
-  const [matched, setMatched] = useState(false);
-  const [matchedField, setMatchedField] = useState('');
-  const [matchedPattern, setMatchedPattern] = useState('');
-  const [latency, setLatency] = useState('0.14ms');
-  const [actionDispatched, setActionDispatched] = useState('HTTP 403 response');
-  const [explanation, setExplanation] = useState('');
-  const [showDetails, setShowDetails] = useState(false);
-  const [copiedCurl, setCopiedCurl] = useState(false);
+  const [url, setUrl] = useState('/');
+  const [headers, setHeaders] = useState('{}');
+  const [body, setBody] = useState('');
+  const [clientIP, setClientIP] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState<{ input: string; value: EditEvaluation } | null>(null);
+  const request = useRef<AbortController | null>(null);
+  const input = JSON.stringify({ conditions, logic_mode: logicMode, action, response_code: responseCode, method, url, body, headers, client_ip: clientIP });
+  useEffect(() => {
+    request.current?.abort();
+    setResult(null);
+    setError('');
+    setBusy(false);
+    return () => request.current?.abort();
+  }, [input, ruleId]);
 
-  const handleCopyCurl = () => {
-    const curlCommand = `curl -i -X ${method} "${url}"`;
-    navigator.clipboard.writeText(curlCommand);
-    setCopiedCurl(true);
-    setTimeout(() => setCopiedCurl(false), 2000);
-  };
-
-  const handleSend = async () => {
-    setIsTesting(true);
-    const start = performance.now();
+  const send = async () => {
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
+    setBusy(true); setError(''); setResult(null);
     try {
+      const parsed: unknown = JSON.parse(headers);
+      if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object' || Object.values(parsed).some(value => typeof value !== 'string')) {
+        throw new Error('Headers must be a JSON object of strings.');
+      }
+      if (!conditions.length) throw new Error('Add at least one condition before testing.');
       const token = getAuthToken();
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const payload = {
-        rule_id: ruleId ? parseInt(ruleId, 10) : undefined,
-        method,
-        url,
-        conditions: conditions.map((c) => ({
-          field: c.field,
-          operator: c.operator,
-          value: c.value,
-          header_name: c.headerName || '',
-        })),
-        logic_mode: logicMode.toLowerCase(),
-        action: 'block',
-        response_code: 403,
-      };
-
       const response = await fetch('/api/v1/rules/test', {
-        method: 'POST',
-        headers,
-        credentials: 'same-origin',
-        body: JSON.stringify(payload),
+        method: 'POST', credentials: 'same-origin', signal: controller.signal,
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ ...JSON.parse(input), headers: parsed }),
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        setMatched(data.matched);
-        setLatency(`${data.latency_ms?.toFixed(2) ?? '0.10'}ms`);
-        setMatchedField(data.matched_field || (conditions[0]?.field ?? 'Request URI'));
-        setMatchedPattern(data.matched_pattern || (conditions[0]?.value ?? ''));
-        setActionDispatched(data.action_dispatched || (data.matched ? 'HTTP 403 response' : 'HTTP 200 Pass Through'));
-        setExplanation(data.explanation || (data.matched ? 'Matched condition: Request URI contains pattern' : 'No blocking conditions triggered'));
-        setTested(true);
-      } else {
-        throw new Error(`Server returned ${response.status}`);
+      if (!response.ok) throw new Error(`Evaluation failed (${response.status}): ${await response.text()}`);
+      const data = await response.json();
+      if (typeof data.matched !== 'boolean' || data.action !== action || !Number.isFinite(data.latency_ms) || !Number.isFinite(data.evaluation_time_ns) || !Array.isArray(data.details)) {
+        throw new Error('Invalid evaluator response.');
       }
-    } catch {
-      // Fallback local evaluation in case of offline/network failure
-      let hit = false;
-      let hitField = '';
-      let hitPattern = '';
-
-      for (const c of conditions) {
-        if (!c.value) continue;
-        try {
-          const cleanPattern = c.value.replace('(?i)', '');
-          const regex = new RegExp(cleanPattern, 'i');
-          if (regex.test(url)) {
-            hit = true;
-            hitField = c.field;
-            hitPattern = c.value;
-            break;
-          }
-        } catch {
-          if (url.toLowerCase().includes(c.value.toLowerCase())) {
-            hit = true;
-            hitField = c.field;
-            hitPattern = c.value;
-            break;
-          }
-        }
-      }
-
-      const elapsed = Math.max(0.08, performance.now() - start).toFixed(2);
-      setLatency(`${elapsed}ms`);
-      setMatched(hit);
-      setMatchedField(hitField || (conditions[0]?.field ?? 'Request URI'));
-      setMatchedPattern(hitPattern || (conditions[0]?.value ?? ''));
-      setActionDispatched(hit ? 'HTTP 403 response' : 'HTTP 200 Pass Through');
-      setExplanation(hit ? `Matched condition: ${hitField || 'Request URI'} contains pattern` : 'No blocking conditions triggered');
-      setTested(true);
+      if (!controller.signal.aborted) setResult({ input, value: data });
+    } catch (e) {
+      if (!controller.signal.aborted) setError(e instanceof Error ? e.message : 'Evaluation failed.');
     } finally {
-      setIsTesting(false);
+      if (!controller.signal.aborted) setBusy(false);
     }
   };
 
   return (
-    <div className="bg-card border border-border p-4 flex flex-col font-sans text-xs text-foreground">
-      <div className="pb-2 border-b border-border">
-        <div className="text-sm font-semibold text-foreground">Test Rule</div>
-        <div className="text-[11px] text-muted-foreground font-sans mt-0.5">
-          Test your rule against a sample request via live backend evaluation.
-        </div>
+    <section className="bg-card border border-border p-4 space-y-3 text-xs text-foreground" aria-label="Test draft rule">
+      <h2 className="text-sm font-semibold">Test draft rule</h2>
+      <p className="text-muted-foreground">Evaluates these unsaved conditions on the controller. Scope filters and node enforcement are not tested. No upstream request or security event is produced.</p>
+      <div className="flex gap-2">
+        <select aria-label="Draft test method" value={method} onChange={e => setMethod(e.target.value)} className="bg-background border p-2">
+          {['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].map(m => <option key={m}>{m}</option>)}
+        </select>
+        <input aria-label="Draft test URL" value={url} onChange={e => setUrl(e.target.value)} className="bg-background border p-2 min-w-0 flex-1" />
       </div>
-
-      {/* Tabs */}
-      <div className="flex border-b border-border bg-muted/40 mt-3">
-        {(['Request', 'cURL'] as const).map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-1.5 transition-colors cursor-pointer text-xs ${
-              activeTab === tab
-                ? 'text-primary border-b-2 border-primary font-semibold bg-card'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
-
-      {/* Test Form */}
-      {activeTab === 'Request' ? (
-        <div className="space-y-3 mt-3">
-          <div className="flex items-center gap-2">
-            <select
-              value={method}
-              onChange={(e) => setMethod(e.target.value)}
-              className="bg-background border border-input px-2.5 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-            >
-              <option value="GET">GET</option>
-              <option value="POST">POST</option>
-              <option value="PUT">PUT</option>
-              <option value="DELETE">DELETE</option>
-            </select>
-
-            <input
-              type="text"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://example.com/search?q=1+or+1=1"
-              className="flex-1 bg-background border border-input px-3 py-1.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono text-xs"
-            />
-
-            <button
-              type="button"
-              disabled={isTesting}
-              onClick={handleSend}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-70 text-primary-foreground font-semibold transition-colors cursor-pointer shadow-xs"
-            >
-              {isTesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-              <span>{isTesting ? 'Testing...' : 'Send'}</span>
-            </button>
-          </div>
-
-          {/* Test Result Box - Only shown after user clicks Send */}
-          {tested && (
-            <div
-              className={`p-3 border space-y-2 rounded-xs ${
-                matched
-                  ? 'bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400'
-                  : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
-              }`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-2.5">
-                  {matched ? (
-                    <ShieldAlert className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                  ) : (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                  )}
-                  <div>
-                    <div className="font-bold text-foreground">
-                      {matched ? 'Request would be blocked' : 'Request would be allowed'}
-                    </div>
-                    <div className="text-[11px] text-muted-foreground font-sans mt-0.5">
-                      {explanation || (matched ? `Matched condition: ${matchedField} contains pattern` : 'No blocking conditions triggered')}
-                    </div>
-                  </div>
-                </div>
-
-                {matched && (
-                  <span className="inline-flex items-center px-2 py-0.5 bg-rose-500/20 border border-rose-500/40 text-rose-600 dark:text-rose-400 text-[10px] shrink-0 font-bold">
-                    403 Forbidden
-                  </span>
-                )}
-              </div>
-
-              {/* View Details Toggle */}
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setShowDetails(!showDetails)}
-                  className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer pt-1"
-                >
-                  {showDetails ? (
-                    <ChevronDown className="w-3 h-3" />
-                  ) : (
-                    <ChevronRight className="w-3 h-3" />
-                  )}
-                  <span>View Details</span>
-                </button>
-
-                {showDetails && (
-                  <div className="p-2.5 bg-muted/60 border border-border mt-2 space-y-1 text-[11px] text-foreground">
-                    <div>
-                      <span className="text-muted-foreground">Evaluation latency:</span> {latency}
-                    </div>
-                    {matchedPattern && (
-                      <div>
-                        <span className="text-muted-foreground">Matched regex:</span>{' '}
-                        <code className="bg-background px-1 py-0.5 rounded border border-border text-foreground font-mono">{matchedPattern}</code>
-                      </div>
-                    )}
-                    <div>
-                      <span className="text-muted-foreground">Action dispatched:</span> {actionDispatched}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="p-3 bg-muted/60 border border-border text-[11px] text-foreground mt-3 font-mono flex items-center justify-between gap-3">
-          <pre className="whitespace-pre-wrap select-all break-all flex-1">{`curl -i -X ${method} "${url}"`}</pre>
-          <button
-            type="button"
-            onClick={handleCopyCurl}
-            className="px-2 py-1 bg-background hover:bg-muted text-muted-foreground hover:text-foreground border border-border rounded-xs transition-colors shrink-0 cursor-pointer flex items-center gap-1.5 text-[11px] font-sans"
-            title={copiedCurl ? "Copied!" : "Copy command"}
-            aria-label="Copy cURL command"
-          >
-            {copiedCurl ? (
-              <>
-                <Check className="w-3.5 h-3.5 text-emerald-500" />
-                <span className="text-emerald-500 font-medium">Copied</span>
-              </>
-            ) : (
-              <>
-                <Copy className="w-3.5 h-3.5" />
-                <span>Copy</span>
-              </>
-            )}
-          </button>
-        </div>
-      )}
-    </div>
+      <label className="block">Headers (JSON)<textarea aria-label="Draft test headers" value={headers} onChange={e => setHeaders(e.target.value)} className="block w-full bg-background border p-2" /></label>
+      <label className="block">Body<textarea aria-label="Draft test body" value={body} onChange={e => setBody(e.target.value)} className="block w-full bg-background border p-2" /></label>
+      <label className="block">Client IP<input aria-label="Draft test client IP" value={clientIP} onChange={e => setClientIP(e.target.value)} className="block w-full bg-background border p-2" /></label>
+      <button type="button" disabled={busy} onClick={send} className="bg-primary text-primary-foreground px-3 py-2 disabled:opacity-50">{busy ? 'Testing…' : 'Test draft'}</button>
+      {error && <p role="alert" className="text-destructive">{error}</p>}
+      {result?.input === input && <section aria-label="Draft evaluation result" className="space-y-2">
+        <p>{result.value.matched ? 'Conditions matched' : 'Conditions did not match'} · configured action: {result.value.action}</p>
+        <p>Measured evaluation: {result.value.evaluation_time_ns} ns</p>
+        <pre className="overflow-auto bg-background p-3">{JSON.stringify(result.value, null, 2)}</pre>
+      </section>}
+    </section>
   );
 }

@@ -1,6 +1,5 @@
 import React from 'react';
 import { HelpCircle } from 'lucide-react';
-import type { PolicyCatalogItem } from '../../../lib/api/policies';
 
 interface EditBasicInfoProps {
   ruleId: string;
@@ -8,12 +7,8 @@ interface EditBasicInfoProps {
   setName: (v: string) => void;
   description: string;
   setDescription: (v: string) => void;
-  policy: string;
-  setPolicy: (v: string) => void;
   priority: number;
   setPriority: (v: number) => void;
-  policyCatalog?: PolicyCatalogItem[];
-  isLoadingPolicies?: boolean;
 }
 
 export function EditBasicInfoSection({
@@ -22,12 +17,8 @@ export function EditBasicInfoSection({
   setName,
   description,
   setDescription,
-  policy,
-  setPolicy,
   priority,
   setPriority,
-  policyCatalog = [],
-  isLoadingPolicies = false,
 }: EditBasicInfoProps) {
   return (
     <div className="bg-card border border-border p-4 space-y-4 font-sans text-xs text-foreground">
@@ -49,6 +40,8 @@ export function EditBasicInfoSection({
           </label>
           <input
             type="text"
+            aria-label="Rule name"
+            maxLength={120}
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="block-sql-injection"
@@ -64,6 +57,9 @@ export function EditBasicInfoSection({
           </div>
           <input
             type="number"
+            aria-label="Priority"
+            min={0}
+            max={1000000}
             value={priority}
             onChange={(e) => setPriority(parseInt(e.target.value) || 0)}
             className="w-full bg-background border border-input px-3 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
@@ -75,25 +71,7 @@ export function EditBasicInfoSection({
           <label className="block text-muted-foreground mb-1 text-[11px]">
             Policy
           </label>
-          <select
-            aria-label="Policy"
-            value={policy}
-            onChange={(e) => setPolicy(e.target.value)}
-            className="w-full bg-background border border-input px-3 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary cursor-pointer"
-          >
-            <option value="">Unassigned</option>
-            {policyCatalog && policyCatalog.length > 0 ? (
-              policyCatalog.map((p) => (
-                <option key={p.id} value={p.name}>
-                  {p.name}
-                </option>
-              ))
-            ) : (
-              <option value="" disabled>
-                {isLoadingPolicies ? 'Loading policies...' : 'No policies available'}
-              </option>
-            )}
-          </select>
+          <p className="text-muted-foreground">Manage assignments in <a href="/policies" className="text-primary underline">Policies</a>. Saving this definition does not change assignments.</p>
         </div>
       </div>
 
@@ -104,6 +82,8 @@ export function EditBasicInfoSection({
         </label>
         <input
           type="text"
+          aria-label="Description"
+          maxLength={2000}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Block common SQL injection patterns in URI and query parameters."
