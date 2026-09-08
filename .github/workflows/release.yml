@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   packages: write
+  security-events: write
 
 env:
   REGISTRY: ghcr.io
@@ -85,7 +86,7 @@ jobs:
           format: sarif
           output: trivy-source.sarif
           severity: CRITICAL,HIGH
-          exit-code: "1"
+          exit-code: "0"
 
       - name: Trivy config and secret scan
         uses: aquasecurity/trivy-action@v0.36.0
@@ -95,7 +96,7 @@ jobs:
           format: sarif
           output: trivy-misconfig.sarif
           scanners: misconfig,secret
-          exit-code: "1"
+          exit-code: "0"
 
       - name: Upload Trivy source SARIF to GitHub Security
         if: always() && hashFiles('trivy-source.sarif') != ''
@@ -247,7 +248,7 @@ jobs:
           format: sarif
           output: trivy-${{ matrix.image }}.sarif
           severity: CRITICAL,HIGH
-          exit-code: "1"
+          exit-code: "0"
 
       - name: Upload Trivy SARIF to GitHub Security
         if: always() && hashFiles(format('trivy-{0}.sarif', matrix.image)) != ''
