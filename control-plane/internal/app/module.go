@@ -76,6 +76,10 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	domainSvc := service.NewDomainService(domainRepo)
 	domainHdr := handler.NewDomainHandler(domainSvc)
 
+	domainRoutingRepo := repository.NewDomainRoutingRepository(readerDB)
+	domainRoutingSvc := service.NewDomainRoutingService(domainRoutingRepo)
+	domainRoutingHdr := handler.NewDomainRoutingHandler(domainRoutingSvc)
+
 	upstreamRepo := repository.NewUpstreamRepository(writerDB, readerDB)
 	upstreamSvc := service.NewUpstreamService(upstreamRepo)
 	upstreamHdr := handler.NewUpstreamHandler(upstreamSvc)
@@ -125,8 +129,15 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	backupScheduler := service.NewBackupScheduler(backupSvc, backupRepo)
 
 	depRepo := repository.NewDependenciesRepository(writerDB, readerDB)
+	dependenciesHdr := handler.NewDependenciesHandler(
+		service.NewListDependenciesService(depRepo),
+		service.NewQueueDependencyService(depRepo),
+		service.NewPollDependencyService(depRepo),
+		service.NewReportDependencyService(depRepo),
+	)
+
 	return &Module{
-		DependenciesHandler:  handler.NewDependenciesHandler(service.NewListDependenciesService(depRepo), service.NewQueueDependencyService(depRepo), service.NewPollDependencyService(depRepo), service.NewReportDependencyService(depRepo)),
+		DependenciesHandler:  dependenciesHdr,
 		AccessHandler:        accessHdr,
 		PolicyHandler:        policyHdr,
 		HealthcheckHandler:   healthcheckHdr,
@@ -137,7 +148,7 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 		MetricsHandler:       metricsHdr,
 		MetricsService:       metricsSvc,
 		DomainHandler:        domainHdr,
-		DomainRoutingHandler: handler.NewDomainRoutingHandler(service.NewDomainRoutingService(repository.NewDomainRoutingRepository(readerDB))),
+		DomainRoutingHandler: domainRoutingHdr,
 		UpstreamHandler:      upstreamHdr,
 		RateLimitHandler:     rateLimitHdr,
 		RateLimitCollector:   rateLimitCollector,
