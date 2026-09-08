@@ -19,7 +19,6 @@ import (
 	"aurora-waf.local/control-plane/infra"
 	"aurora-waf.local/control-plane/internal/app"
 	"aurora-waf.local/control-plane/internal/config"
-	"aurora-waf.local/control-plane/internal/domain/entity"
 	"aurora-waf.local/control-plane/internal/transport/http/dto"
 	"github.com/gin-gonic/gin"
 )
@@ -82,7 +81,15 @@ func TestSecurityWorkflow_EndToEnd(t *testing.T) {
 		t.Fatalf("expected 200 OK for GetOverview, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var overview entity.SecurityOverview
+	var overview struct {
+		AuthProviders []struct {
+			ID      string `json:"id"`
+			Enabled bool   `json:"enabled"`
+		} `json:"auth_providers"`
+		TwoFactor struct {
+			Enabled bool `json:"enabled"`
+		} `json:"two_factor"`
+	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &overview); err != nil {
 		t.Fatalf("failed to decode overview JSON: %v", err)
 	}
@@ -139,7 +146,10 @@ func TestSecurityWorkflow_EndToEnd(t *testing.T) {
 		t.Fatalf("expected 200 OK for Init2FA, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var initOut entity.Init2FAOutput
+	var initOut struct {
+		Secret     string `json:"secret"`
+		OtpAuthURL string `json:"otpauth_url"`
+	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &initOut); err != nil {
 		t.Fatalf("failed to parse Init2FA output: %v", err)
 	}
@@ -181,7 +191,10 @@ func TestSecurityWorkflow_EndToEnd(t *testing.T) {
 		t.Fatalf("expected 200 OK for valid 2FA verify, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var verifyOut entity.Verify2FAOutput
+	var verifyOut struct {
+		Enabled       bool     `json:"enabled"`
+		RecoveryCodes []string `json:"recovery_codes"`
+	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &verifyOut); err != nil {
 		t.Fatalf("failed to decode verify output: %v", err)
 	}

@@ -1,11 +1,12 @@
 package app
 
 import (
-	"aurora-waf.local/control-plane/internal/transport/http/middleware"
 	"crypto/sha256"
 	"crypto/subtle"
 	"net/http"
+	"time"
 
+	"aurora-waf.local/control-plane/internal/transport/http/middleware"
 	"github.com/gin-gonic/gin"
 )
 
@@ -24,9 +25,12 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	r.GET("/readyz", m.HealthcheckHandler.Ready)         // Kiểm tra DB sẵn sàng
 	r.GET("/api/v1/status", m.HealthcheckHandler.Status) // Thông tin phiên bản & trạng thái
 
+	// Rate limiter chống brute-force đăng nhập (tối đa 5 lần thử/phút cho mỗi client IP)
+	loginLimiter := middleware.NewLoginRateLimiter(5, time.Minute)
+
 	// Route auth public — gọi để lấy token rồi mới gọi các route protected
-	r.POST("/api/v1/auth/login", m.AuthHandler.Login)   // Đăng nhập, trả về JWT
-	r.POST("/api/v1/auth/logout", m.AuthHandler.Logout) // Xoá cookie JWT
+	r.POST("/api/v1/auth/login", loginLimiter.Handler(), m.AuthHandler.Login) // Đăng nhập, trả về JWT
+	r.POST("/api/v1/auth/logout", m.AuthHandler.Logout)                       // Xoá cookie JWT
 
 	// authMidd kiểm tra JWT từ cả cookie HttpOnly lẫn Authorization header.
 	// Nếu thiếu hoặc sai token, middleware trả về 401 và dừng request luôn.

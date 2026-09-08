@@ -1,12 +1,6 @@
 package app
 
 import (
-	"aurora-waf.local/control-plane/infra"
-	"aurora-waf.local/control-plane/internal/config"
-	"aurora-waf.local/control-plane/internal/console"
-	port "aurora-waf.local/control-plane/internal/domain/service"
-	"aurora-waf.local/control-plane/internal/provider"
-	"aurora-waf.local/control-plane/internal/service"
 	"context"
 	"errors"
 	"fmt"
@@ -14,6 +8,14 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"aurora-waf.local/control-plane/infra"
+	"aurora-waf.local/control-plane/internal/config"
+	"aurora-waf.local/control-plane/internal/console"
+	port "aurora-waf.local/control-plane/internal/domain/service"
+	"aurora-waf.local/control-plane/internal/provider"
+	"aurora-waf.local/control-plane/internal/service"
+	"aurora-waf.local/control-plane/internal/transport/http/middleware"
 
 	"github.com/gin-gonic/gin"
 )
@@ -27,6 +29,7 @@ type App struct {
 	metrics         port.MetricsService
 	collector       *provider.RateLimitCollector
 	backupScheduler *service.BackupScheduler
+	checkpointDone  chan struct{}
 }
 
 func init() {
@@ -34,6 +37,7 @@ func init() {
 }
 
 // NewApp khởi động ứng dụng theo trình tự:
+//  0. Kiểm tra an toàn bảo mật môi trường Production (Fail-fast)
 //  1. Mở SQLite Pool (Writer + Reader)
 //  2. Chạy migration — đảm bảo schema luôn ở phiên bản mới nhất
 //  3. Đọc admin token từ file nếu có cấu hình
@@ -42,6 +46,13 @@ func init() {
 //  6. Khởi tạo UI tĩnh (embedded console)
 //  7. Trả về App sẵn sàng chạy
 func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
+	// Kiểm tra điều kiện bảo mật tối thiểu trên production
+	if cfg.Env == "production" {
+		if cfg.JWTSecret == config.DefaultJWTSecret || len(cfg.JWTSecret) < 32 {
+			return nil, fmt.Errorf("production mode (AURORA_ENV=production) requires a custom AURORA_JWT_SECRET of at least 32 characters; default secret is prohibited")
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	pools, err := infra.OpenSQLitePool(ctx, cfg.SQLitePath)
@@ -54,7 +65,19 @@ func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
 	}
 
 	router := gin.New()
-	router.Use(gin.Recovery())
+
+	// Cấu hình danh sách Reverse Proxies đáng tin cậy
+	if len(cfg.TrustedProxies) > 0 {
+		_ = router.SetTrustedProxies(cfg.TrustedProxies)
+	} else {
+		_ = router.SetTrustedProxies(nil)
+	}
+
+	router.Use(
+		middleware.RequestID(),
+		middleware.AccessLogger(),
+		gin.Recovery(),
+	)
 
 	// Admin token là một chuỗi ngẫu nhiên dài ≥ 32 ký tự lưu trong file riêng.
 	// File phải là file thường, quyền không rộng hơn 0600 (đọc/ghi chỉ owner).
@@ -94,11 +117,27 @@ func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
 	module.RateLimitCollector.Start(context.Background())
 	module.BackupScheduler.Start(context.Background())
 
+	// Khởi chạy goroutine duy trì WAL checkpoint định kỳ (mỗi 30 phút)
+	checkpointDone := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(30 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				_ = pools.Checkpoint(context.Background(), "PASSIVE")
+			case <-checkpointDone:
+				return
+			}
+		}
+	}()
+
 	return &App{
 		db:              pools,
 		metrics:         module.MetricsService,
 		collector:       module.RateLimitCollector,
 		backupScheduler: module.BackupScheduler,
+		checkpointDone:  checkpointDone,
 		server: &http.Server{
 			Addr:              cfg.HTTPAddr,
 			Handler:           router,
@@ -131,12 +170,23 @@ func (a *App) Run(ctx context.Context) error {
 
 // Close is called after Run has drained HTTP requests.
 func (a *App) Close() error {
+	if a.checkpointDone != nil {
+		close(a.checkpointDone)
+	}
 	if a.backupScheduler != nil {
 		a.backupScheduler.Stop()
 	}
 	if a.collector != nil {
 		a.collector.Stop()
 	}
+
+	// Thực hiện TRUNCATE checkpoint để thu hồi toàn bộ dung lượng file WAL trước khi ngắt kết nối
+	if a.db != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		_ = a.db.Checkpoint(ctx, "TRUNCATE")
+		cancel()
+	}
+
 	return errors.Join(a.metrics.Close(), a.db.Close())
 }
 

@@ -40,22 +40,22 @@ func (r *UpstreamRepository) Create(
 	}
 	defer tx.Rollback()
 
-	serversBytes, err := json.Marshal(cmd.Servers)
+	serversBytes, err := json.Marshal(toRepoNodes(cmd.Servers))
 	if err != nil {
 		return nil, fmt.Errorf("marshal servers: %w", err)
 	}
 
-	sslBytes, err := json.Marshal(cmd.InternalSSL)
+	sslBytes, err := json.Marshal(toRepoInternalSSL(cmd.InternalSSL))
 	if err != nil {
 		return nil, fmt.Errorf("marshal internal ssl: %w", err)
 	}
 
-	probesBytes, err := json.Marshal(cmd.Probes)
+	probesBytes, err := json.Marshal(toRepoProbes(cmd.Probes))
 	if err != nil {
 		return nil, fmt.Errorf("marshal probes: %w", err)
 	}
 
-	transportBytes, err := json.Marshal(cmd.Transport)
+	transportBytes, err := json.Marshal(toRepoTransport(cmd.Transport))
 	if err != nil {
 		return nil, fmt.Errorf("marshal transport: %w", err)
 	}
@@ -166,19 +166,19 @@ func (r *UpstreamRepository) Update(
 	if cmd.ExpectedVersion > 0 && oldVersion != cmd.ExpectedVersion {
 		return nil, fmt.Errorf("upstream changed concurrently; reload before saving")
 	}
-	serversBytes, err := json.Marshal(cmd.Servers)
+	serversBytes, err := json.Marshal(toRepoNodes(cmd.Servers))
 	if err != nil {
 		return nil, fmt.Errorf("serialize servers: %w", err)
 	}
-	sslBytes, err := json.Marshal(cmd.InternalSSL)
+	sslBytes, err := json.Marshal(toRepoInternalSSL(cmd.InternalSSL))
 	if err != nil {
 		return nil, fmt.Errorf("serialize internal ssl: %w", err)
 	}
-	probesBytes, err := json.Marshal(cmd.Probes)
+	probesBytes, err := json.Marshal(toRepoProbes(cmd.Probes))
 	if err != nil {
 		return nil, fmt.Errorf("serialize probes: %w", err)
 	}
-	transportBytes, err := json.Marshal(cmd.Transport)
+	transportBytes, err := json.Marshal(toRepoTransport(cmd.Transport))
 	if err != nil {
 		return nil, fmt.Errorf("serialize transport: %w", err)
 	}
@@ -444,10 +444,20 @@ func (r *UpstreamRepository) List(ctx context.Context, query entity.ListUpstream
 		item.DynamicDNS = (dynamicDNSInt == 1)
 		total = itemTotal
 
-		_ = json.Unmarshal([]byte(serversJSON), &item.Servers)
-		_ = json.Unmarshal([]byte(sslJSON), &item.InternalSSL)
-		_ = json.Unmarshal([]byte(probesJSON), &item.Probes)
-		_ = json.Unmarshal([]byte(transportJSON), &item.Transport)
+		var repoServers []repoUpstreamNode
+		var repoSSL repoUpstreamInternalSSL
+		var repoProbes []repoUpstreamProbe
+		var repoTransport repoUpstreamTransport
+
+		_ = json.Unmarshal([]byte(serversJSON), &repoServers)
+		_ = json.Unmarshal([]byte(sslJSON), &repoSSL)
+		_ = json.Unmarshal([]byte(probesJSON), &repoProbes)
+		_ = json.Unmarshal([]byte(transportJSON), &repoTransport)
+
+		item.Servers = fromRepoNodes(repoServers)
+		item.InternalSSL = fromRepoInternalSSL(repoSSL)
+		item.Probes = fromRepoProbes(repoProbes)
+		item.Transport = fromRepoTransport(repoTransport)
 
 		items = append(items, item)
 	}
@@ -606,10 +616,20 @@ func scanUpstreamItem(scanner interface{ Scan(dest ...any) error }) (*entity.Ups
 	item.SNIOverride = (sniOverrideInt == 1)
 	item.DynamicDNS = (dynamicDNSInt == 1)
 
-	_ = json.Unmarshal([]byte(serversJSON), &item.Servers)
-	_ = json.Unmarshal([]byte(sslJSON), &item.InternalSSL)
-	_ = json.Unmarshal([]byte(probesJSON), &item.Probes)
-	_ = json.Unmarshal([]byte(transportJSON), &item.Transport)
+	var repoServers []repoUpstreamNode
+	var repoSSL repoUpstreamInternalSSL
+	var repoProbes []repoUpstreamProbe
+	var repoTransport repoUpstreamTransport
+
+	_ = json.Unmarshal([]byte(serversJSON), &repoServers)
+	_ = json.Unmarshal([]byte(sslJSON), &repoSSL)
+	_ = json.Unmarshal([]byte(probesJSON), &repoProbes)
+	_ = json.Unmarshal([]byte(transportJSON), &repoTransport)
+
+	item.Servers = fromRepoNodes(repoServers)
+	item.InternalSSL = fromRepoInternalSSL(repoSSL)
+	item.Probes = fromRepoProbes(repoProbes)
+	item.Transport = fromRepoTransport(repoTransport)
 
 	return &item, nil
 }
@@ -618,4 +638,180 @@ func scanUpstreamItem(scanner interface{ Scan(dest ...any) error }) (*entity.Ups
 func CalculateSHA256(data []byte) string {
 	h := sha256.Sum256(data)
 	return hex.EncodeToString(h[:])
+}
+
+// Các struct nội bộ đại diện cho dữ liệu lưu trữ JSON trong SQLite tables:
+// servers_json, transport_json, internal_ssl_json, probes_json.
+// Giúp cô lập hoàn toàn tầng domain entity khỏi định dạng lưu trữ persistence.
+type repoUpstreamNode struct {
+	ID          string `json:"id"`
+	Address     string `json:"address"`
+	Weight      int    `json:"weight"`
+	MaxFails    int    `json:"maxFails,omitempty"`
+	FailTimeout string `json:"failTimeout,omitempty"`
+	Backup      bool   `json:"backup,omitempty"`
+	Healthy     bool   `json:"healthy"`
+}
+
+type repoUpstreamProbe struct {
+	ID             string `json:"id"`
+	Type           string `json:"type"`
+	Path           string `json:"path"`
+	ExpectedStatus int    `json:"expectedStatus"`
+	IntervalSec    int    `json:"intervalSec,omitempty"`
+	TimeoutSec     int    `json:"timeoutSec,omitempty"`
+}
+
+type repoUpstreamInternalSSL struct {
+	Enabled             bool   `json:"enabled"`
+	VerifyCert          bool   `json:"verifyCert"`
+	SNIHost             string `json:"sniHost,omitempty"`
+	CACert              string `json:"caCert,omitempty"`
+	MTLS                bool   `json:"mTLS"`
+	ClientCertName      string `json:"clientCertName,omitempty"`
+	ClientCert          string `json:"clientCert,omitempty"`
+	ClientKey           string `json:"clientKey,omitempty"`
+	ClientKeyConfigured bool   `json:"clientKeyConfigured,omitempty"`
+}
+
+type repoUpstreamTransport struct {
+	RequestCompression   string `json:"requestCompression"`
+	CompressionMinBytes  int    `json:"compressionMinBytes"`
+	CompressionLevel     int    `json:"compressionLevel"`
+	HTTPVersion          string `json:"httpVersion"`
+	EnableWebSocket      bool   `json:"enableWebSocket"`
+	EnableSSE            bool   `json:"enableSse"`
+	EnableGRPC           bool   `json:"enableGrpc"`
+	KeepAliveConnections int    `json:"keepAliveConnections,omitempty"`
+	KeepAliveTimeout     int    `json:"keepAliveTimeout,omitempty"`
+}
+
+func toRepoNodes(nodes []entity.UpstreamNode) []repoUpstreamNode {
+	if nodes == nil {
+		return []repoUpstreamNode{}
+	}
+	res := make([]repoUpstreamNode, len(nodes))
+	for i, n := range nodes {
+		res[i] = repoUpstreamNode{
+			ID:          n.ID,
+			Address:     n.Address,
+			Weight:      n.Weight,
+			MaxFails:    n.MaxFails,
+			FailTimeout: n.FailTimeout,
+			Backup:      n.Backup,
+			Healthy:     n.Healthy,
+		}
+	}
+	return res
+}
+
+func fromRepoNodes(nodes []repoUpstreamNode) []entity.UpstreamNode {
+	if nodes == nil {
+		return []entity.UpstreamNode{}
+	}
+	res := make([]entity.UpstreamNode, len(nodes))
+	for i, n := range nodes {
+		res[i] = entity.UpstreamNode{
+			ID:          n.ID,
+			Address:     n.Address,
+			Weight:      n.Weight,
+			MaxFails:    n.MaxFails,
+			FailTimeout: n.FailTimeout,
+			Backup:      n.Backup,
+			Healthy:     n.Healthy,
+		}
+	}
+	return res
+}
+
+func toRepoProbes(probes []entity.UpstreamProbe) []repoUpstreamProbe {
+	if probes == nil {
+		return []repoUpstreamProbe{}
+	}
+	res := make([]repoUpstreamProbe, len(probes))
+	for i, p := range probes {
+		res[i] = repoUpstreamProbe{
+			ID:             p.ID,
+			Type:           p.Type,
+			Path:           p.Path,
+			ExpectedStatus: p.ExpectedStatus,
+			IntervalSec:    p.IntervalSec,
+			TimeoutSec:     p.TimeoutSec,
+		}
+	}
+	return res
+}
+
+func fromRepoProbes(probes []repoUpstreamProbe) []entity.UpstreamProbe {
+	if probes == nil {
+		return []entity.UpstreamProbe{}
+	}
+	res := make([]entity.UpstreamProbe, len(probes))
+	for i, p := range probes {
+		res[i] = entity.UpstreamProbe{
+			ID:             p.ID,
+			Type:           p.Type,
+			Path:           p.Path,
+			ExpectedStatus: p.ExpectedStatus,
+			IntervalSec:    p.IntervalSec,
+			TimeoutSec:     p.TimeoutSec,
+		}
+	}
+	return res
+}
+
+func toRepoInternalSSL(ssl entity.UpstreamInternalSSL) repoUpstreamInternalSSL {
+	return repoUpstreamInternalSSL{
+		Enabled:             ssl.Enabled,
+		VerifyCert:          ssl.VerifyCert,
+		SNIHost:             ssl.SNIHost,
+		CACert:              ssl.CACert,
+		MTLS:                ssl.MTLS,
+		ClientCertName:      ssl.ClientCertName,
+		ClientCert:          ssl.ClientCert,
+		ClientKey:           ssl.ClientKey,
+		ClientKeyConfigured: ssl.ClientKeyConfigured,
+	}
+}
+
+func fromRepoInternalSSL(ssl repoUpstreamInternalSSL) entity.UpstreamInternalSSL {
+	return entity.UpstreamInternalSSL{
+		Enabled:             ssl.Enabled,
+		VerifyCert:          ssl.VerifyCert,
+		SNIHost:             ssl.SNIHost,
+		CACert:              ssl.CACert,
+		MTLS:                ssl.MTLS,
+		ClientCertName:      ssl.ClientCertName,
+		ClientCert:          ssl.ClientCert,
+		ClientKey:           ssl.ClientKey,
+		ClientKeyConfigured: ssl.ClientKeyConfigured,
+	}
+}
+
+func toRepoTransport(t entity.UpstreamTransport) repoUpstreamTransport {
+	return repoUpstreamTransport{
+		RequestCompression:   t.RequestCompression,
+		CompressionMinBytes:  t.CompressionMinBytes,
+		CompressionLevel:     t.CompressionLevel,
+		HTTPVersion:          t.HTTPVersion,
+		EnableWebSocket:      t.EnableWebSocket,
+		EnableSSE:            t.EnableSSE,
+		EnableGRPC:           t.EnableGRPC,
+		KeepAliveConnections: t.KeepAliveConnections,
+		KeepAliveTimeout:     t.KeepAliveTimeout,
+	}
+}
+
+func fromRepoTransport(t repoUpstreamTransport) entity.UpstreamTransport {
+	return entity.UpstreamTransport{
+		RequestCompression:   t.RequestCompression,
+		CompressionMinBytes:  t.CompressionMinBytes,
+		CompressionLevel:     t.CompressionLevel,
+		HTTPVersion:          t.HTTPVersion,
+		EnableWebSocket:      t.EnableWebSocket,
+		EnableSSE:            t.EnableSSE,
+		EnableGRPC:           t.EnableGRPC,
+		KeepAliveConnections: t.KeepAliveConnections,
+		KeepAliveTimeout:     t.KeepAliveTimeout,
+	}
 }

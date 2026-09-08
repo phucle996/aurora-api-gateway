@@ -283,11 +283,11 @@ func (r *RateLimitRepository) GetByID(ctx context.Context, id int64) (*entity.Ra
 	`
 
 	var (
-		item                                entity.RateLimitRuleItem
-		enabledDimsStr, dimOrderStr         string
+		item                                        entity.RateLimitRuleItem
+		enabledDimsStr, dimOrderStr                 string
 		ipConfigStr, headerConfigStr, pathConfigStr string
-		customResponseInt, logEventsInt     int
-		addReputationInt, enableAlertInt    int
+		customResponseInt, logEventsInt             int
+		addReputationInt, enableAlertInt            int
 	)
 
 	err := r.reader.QueryRowContext(ctx, query, id).Scan(
@@ -451,12 +451,12 @@ func (r *RateLimitRepository) List(ctx context.Context, q entity.ListRateLimitRu
 
 	for rows.Next() {
 		var (
-			item                                entity.RateLimitRuleItem
-			enabledDimsStr, dimOrderStr         string
+			item                                        entity.RateLimitRuleItem
+			enabledDimsStr, dimOrderStr                 string
 			ipConfigStr, headerConfigStr, pathConfigStr string
-			customResponseInt, logEventsInt     int
-			addReputationInt, enableAlertInt    int
-			totalFiltered                       int
+			customResponseInt, logEventsInt             int
+			addReputationInt, enableAlertInt            int
+			totalFiltered                               int
 		)
 
 		err := rows.Scan(

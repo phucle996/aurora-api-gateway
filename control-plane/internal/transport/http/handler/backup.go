@@ -21,7 +21,7 @@ func NewBackupHandler(service port.BackupService) *BackupHandler {
 	return &BackupHandler{service: service}
 }
 
-// GetOverview trả về toàn bộ thông số cấu hình sao lưu và lịch sử các lần backup.
+// GetOverview trả về toàn bộ thông số cấu hình sao lưu và lịch sử các lần backup dưới dạng gin.H inline.
 func (h *BackupHandler) GetOverview(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 
@@ -31,7 +31,38 @@ func (h *BackupHandler) GetOverview(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, overview)
+	historyList := make([]gin.H, len(overview.History))
+	for i, hItem := range overview.History {
+		historyList[i] = gin.H{
+			"id":            hItem.ID,
+			"filename":      hItem.Filename,
+			"destination":   hItem.Destination,
+			"size_bytes":    hItem.SizeBytes,
+			"status":        hItem.Status,
+			"error_message": hItem.ErrorMessage,
+			"created_at":    hItem.CreatedAt,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"config": gin.H{
+			"auto_backup_enabled":     overview.Config.AutoBackupEnabled,
+			"cron_expression":         overview.Config.CronExpression,
+			"s3_enabled":              overview.Config.S3Enabled,
+			"s3_endpoint":             overview.Config.S3Endpoint,
+			"s3_bucket":               overview.Config.S3Bucket,
+			"s3_region":               overview.Config.S3Region,
+			"s3_access_key":           overview.Config.S3AccessKey,
+			"s3_secret_key":           overview.Config.S3SecretKey,
+			"s3_prefix":               overview.Config.S3Prefix,
+			"s3_retention_days":       overview.Config.S3RetentionDays,
+			"last_backup_at":          overview.Config.LastBackupAt,
+			"last_backup_status":      overview.Config.LastBackupStatus,
+			"last_backup_destination": overview.Config.LastBackupDestination,
+			"updated_at":              overview.Config.UpdatedAt,
+		},
+		"history": historyList,
+	})
 }
 
 // UpdateConfig cập nhật cấu hình Cron Job, bật/tắt S3 và số ngày retention.
@@ -91,7 +122,15 @@ func (h *BackupHandler) TriggerS3Backup(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, item)
+	c.JSON(http.StatusOK, gin.H{
+		"id":            item.ID,
+		"filename":      item.Filename,
+		"destination":   item.Destination,
+		"size_bytes":    item.SizeBytes,
+		"status":        item.Status,
+		"error_message": item.ErrorMessage,
+		"created_at":    item.CreatedAt,
+	})
 }
 
 // RestoreSnapshot nhận file upload từ kéo thả (Drag & Drop) hoặc browse file để phục hồi database.
@@ -123,5 +162,9 @@ func (h *BackupHandler) RestoreSnapshot(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, result)
+	c.JSON(http.StatusOK, gin.H{
+		"success":         result.Success,
+		"message":         result.Message,
+		"restored_tables": result.RestoredTables,
+	})
 }

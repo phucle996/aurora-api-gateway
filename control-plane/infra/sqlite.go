@@ -42,6 +42,20 @@ func (p *DBPool) Close() error {
 	return errReader
 }
 
+// Checkpoint thực thi PRAGMA wal_checkpoint để duy trì kích thước file WAL ổn định.
+// mode chấp nhận: PASSIVE (mặc định), FULL, RESTART, hoặc TRUNCATE.
+func (p *DBPool) Checkpoint(ctx context.Context, mode string) error {
+	if p.Writer == nil {
+		return nil
+	}
+	if mode == "" {
+		mode = "PASSIVE"
+	}
+	query := fmt.Sprintf("PRAGMA wal_checkpoint(%s);", mode)
+	var busy, logSize, checkpointed int
+	return p.Writer.QueryRowContext(ctx, query).Scan(&busy, &logSize, &checkpointed)
+}
+
 // OpenSQLitePool mở SQLite theo mô hình 2 pool:
 //
 //   - Writer pool (MaxOpenConns=1): dùng cho tất cả thao tác ghi —

@@ -68,7 +68,6 @@ type UpdateRateLimitRuleCommand struct {
 	Status            string
 }
 
-
 // RateLimitRuleItem là flat projection của một bản ghi Rate Limit Rule trong tầng Domain.
 type RateLimitRuleItem struct {
 	ID                int64

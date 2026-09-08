@@ -64,7 +64,6 @@ type UpdateRateLimitRuleRequest struct {
 	Status            string                       `json:"status"`
 }
 
-
 // ListRateLimitRulesQueryRequest định nghĩa query params lọc và phân trang.
 type ListRateLimitRulesQueryRequest struct {
 	Search string `form:"search"`

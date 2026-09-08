@@ -29,8 +29,18 @@ func (r *DependenciesRepository) ListDependencies(ctx context.Context, q entity.
 		if e = rows.Scan(&v.NodeID, &v.CheckedAt, &v.NginxVersion, &v.Architecture, &modules, &v.Installable, &v.Error, &v.JobID, &v.JobAction, &v.JobState, &v.JobMessage); e != nil {
 			return nil, e
 		}
-		if e = json.Unmarshal([]byte(modules), &v.Modules); e != nil {
+		var rawMods []repoDependencyModule
+		if e = json.Unmarshal([]byte(modules), &rawMods); e != nil {
 			return nil, e
+		}
+		v.Modules = make([]entity.DependencyNodeModule, len(rawMods))
+		for i, m := range rawMods {
+			v.Modules[i] = entity.DependencyNodeModule{
+				Name:      m.Name,
+				Available: m.Available,
+				Loaded:    m.Loaded,
+				Source:    m.Source,
+			}
 		}
 		out = append(out, v)
 	}
@@ -60,8 +70,18 @@ func (r *DependenciesRepository) PollDependency(ctx context.Context, q entity.Po
 	}
 	return out, e
 }
+
 func (r *DependenciesRepository) ReportDependency(ctx context.Context, c entity.ReportDependencyCommand) error {
-	modules, e := json.Marshal(c.Modules)
+	rawMods := make([]repoDependencyModule, len(c.Modules))
+	for i, m := range c.Modules {
+		rawMods[i] = repoDependencyModule{
+			Name:      m.Name,
+			Available: m.Available,
+			Loaded:    m.Loaded,
+			Source:    m.Source,
+		}
+	}
+	modules, e := json.Marshal(rawMods)
 	if e != nil {
 		return e
 	}
@@ -114,4 +134,11 @@ func (r *DependenciesRepository) ReportDependency(ctx context.Context, c entity.
 		}
 	}
 	return tx.Commit()
+}
+
+type repoDependencyModule struct {
+	Name      string `json:"name"`
+	Available bool   `json:"available"`
+	Loaded    bool   `json:"loaded"`
+	Source    string `json:"source"`
 }

@@ -183,4 +183,3 @@ func TestDisabledRateLimitMetricsProvider(t *testing.T) {
 		t.Fatalf("expected empty series and endpoints when disabled")
 	}
 }
-

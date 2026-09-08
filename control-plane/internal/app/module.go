@@ -103,7 +103,9 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	nodeSvc := service.NewNodeService(nodeRepo, metricsSvc, eventHub)
 	nodeHdr := handler.NewNodeHandler(nodeSvc)
 	metricsHdr := handler.NewMetricsHandler(metricsSvc)
-	systemHdr := handler.NewSystemHandler(readerDB, cfg.SQLitePath, "v2024.11.3", "2026-09-07")
+	systemRepo := repository.NewSystemRepository(readerDB)
+	systemSvc := service.NewSystemService(systemRepo, cfg)
+	systemHdr := handler.NewSystemHandler(systemSvc)
 
 	securityRepo := repository.NewSecurityRepository(writerDB)
 	securitySvc := service.NewSecurityService(securityRepo)

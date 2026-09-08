@@ -1,56 +1,66 @@
 package entity
 
+// Tuân thủ Flat Entity: không chứa json tags.
+
 type ListDependenciesQuery struct{}
+
 type DependencyNode struct {
-	NodeID       string                 `json:"node_id"`
-	CheckedAt    int64                  `json:"checked_at"`
-	NginxVersion string                 `json:"nginx_version"`
-	Architecture string                 `json:"architecture"`
-	Modules      []DependencyNodeModule `json:"modules"`
-	Installable  bool                   `json:"installable"`
-	Error        string                 `json:"error"`
-	Fresh        bool                   `json:"fresh"`
-	JobID        int64                  `json:"job_id"`
-	JobAction    string                 `json:"job_action"`
-	JobState     string                 `json:"job_state"`
-	JobMessage   string                 `json:"job_message"`
+	NodeID       string
+	CheckedAt    int64
+	NginxVersion string
+	Architecture string
+	Modules      []DependencyNodeModule
+	Installable  bool
+	Error        string
+	Fresh        bool
+	JobID        int64
+	JobAction    string
+	JobState     string
+	JobMessage   string
 }
+
 type DependencyNodeModule struct {
-	Name      string `json:"name"`
-	Available bool   `json:"available"`
-	Loaded    bool   `json:"loaded"`
-	Source    string `json:"source"`
+	Name      string
+	Available bool
+	Loaded    bool
+	Source    string
 }
+
 type QueueDependencyCommand struct {
 	NodeID string
 	Action string
 	Actor  string
 }
+
 type QueueDependencyResult struct {
-	ID     int64  `json:"id"`
-	Action string `json:"action"`
-	State  string `json:"state"`
+	ID     int64
+	Action string
+	State  string
 }
+
 type PollDependencyQuery struct{ NodeID string }
+
 type PollDependencyResult struct {
-	ID     int64  `json:"id"`
-	Action string `json:"action"`
+	ID     int64
+	Action string
 }
+
 type ReportDependencyCommand struct {
-	NodeID       string                   `json:"-"`
-	CheckedAt    int64                    `json:"checked_at"`
-	NginxVersion string                   `json:"nginx_version"`
-	Architecture string                   `json:"architecture"`
-	Modules      []ReportDependencyModule `json:"modules"`
-	Installable  bool                     `json:"installable"`
-	Error        string                   `json:"error"`
-	JobID        int64                    `json:"job_id"`
-	JobState     string                   `json:"job_state"`
-	JobMessage   string                   `json:"job_message"`
+	NodeID       string
+	CheckedAt    int64
+	NginxVersion string
+	Architecture string
+	Modules      []ReportDependencyModule
+	Installable  bool
+	Error        string
+	JobID        int64
+	JobState     string
+	JobMessage   string
 }
+
 type ReportDependencyModule struct {
-	Name      string `json:"name"`
-	Available bool   `json:"available"`
-	Loaded    bool   `json:"loaded"`
-	Source    string `json:"source"`
+	Name      string
+	Available bool
+	Loaded    bool
+	Source    string
 }

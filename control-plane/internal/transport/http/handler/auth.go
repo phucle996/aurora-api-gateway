@@ -92,8 +92,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	// Bước 7: Cài đặt Cookie phiên đăng nhập (aurora_token) vào trình duyệt của người dùng:
 	// - HttpOnly = true: Ngăn không cho mã JavaScript trên trang đọc Cookie này (chống đánh cắp token qua XSS).
 	// - SameSite = Lax: Trình duyệt không gửi kèm Cookie khi người dùng bị chuyển hướng từ trang thứ ba (chống tấn công CSRF).
-	// - Secure: Tự động bật cờ Secure nếu kết nối hiện tại sử dụng HTTPS.
-	secure := c.Request.TLS != nil
+	// - Secure: Tự động bật cờ Secure nếu kết nối hiện tại sử dụng HTTPS (hoặc qua HTTPS reverse proxy).
+	secure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie(
 		"aurora_token",

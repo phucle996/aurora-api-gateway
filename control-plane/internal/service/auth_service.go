@@ -90,11 +90,11 @@ func (s *authService) Login(ctx context.Context, input entity.LoginInput) (*enti
 	expiresIn := int64(86400) // Thời hạn hiệu lực của phiên: 86400 giây = 24 giờ
 	now := time.Now()
 	claims := entity.Claims{
-		Subject:   user.ID,                      // Mã định danh người dùng
-		Username:  user.Username,                // Tên tài khoản
-		Role:      user.Role,                    // Quyền hạn (ví dụ: admin)
-		Issuer:    "aurora-control-plane",       // Nơi phát hành token
-		IssuedAt:  now.Unix(),                   // Thời điểm phát hành
+		Subject:   user.ID,                        // Mã định danh người dùng
+		Username:  user.Username,                  // Tên tài khoản
+		Role:      user.Role,                      // Quyền hạn (ví dụ: admin)
+		Issuer:    "aurora-control-plane",         // Nơi phát hành token
+		IssuedAt:  now.Unix(),                     // Thời điểm phát hành
 		ExpiresAt: now.Add(24 * time.Hour).Unix(), // Thời điểm hết hạn
 	}
 

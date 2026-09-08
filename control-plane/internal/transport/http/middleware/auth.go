@@ -89,7 +89,7 @@ func Auth(authService port.AuthService, staticToken string) gin.HandlerFunc {
 
 		// 3. Origin & CSRF checks
 		scheme := "http"
-		if c.Request.TLS != nil {
+		if c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https" {
 			scheme = "https"
 		}
 		if origin := c.GetHeader("Origin"); origin != "" && origin != scheme+"://"+c.Request.Host {

@@ -20,7 +20,7 @@ type RuleRepository interface {
 	Create(context.Context, entity.CreateRuleCommand) (entity.CreateRuleResult, error)
 	CreateDefinition(context.Context, entity.CreateRuleDefinitionCommand, []string, string) (entity.CreateRuleDefinitionResult, error)
 	UpdateDefinition(context.Context, entity.UpdateRuleDefinitionCommand, []string, string) (entity.UpdateRuleDefinitionResult, error)
- Delete(context.Context, entity.DeleteRuleCommand) (entity.DeleteRuleResult,error)
+	Delete(context.Context, entity.DeleteRuleCommand) (entity.DeleteRuleResult, error)
 	Update(context.Context, entity.UpdateRuleCommand) (entity.UpdateRuleResult, error)
 	Rollback(context.Context, entity.RollbackRuleCommand) (entity.RollbackRuleResult, error)
 

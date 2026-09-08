@@ -43,8 +43,8 @@ func TestRateLimitRuleLifecycle(t *testing.T) {
 
 	// 1. Create a Rate Limit Rule with multi-dimension configuration
 	createPayload := map[string]any{
-		"name":        "api-login-throttle",
-		"description": "Rate limit /api/login endpoint by IP and Header",
+		"name":               "api-login-throttle",
+		"description":        "Rate limit /api/login endpoint by IP and Header",
 		"enabled_dimensions": []string{"ip", "header", "path"},
 		"dimension_order":    []string{"ip", "header", "path"},
 		"ip_config": map[string]any{

@@ -27,16 +27,16 @@ func TestValidateCron(t *testing.T) {
 
 	invalidExpressions := []string{
 		"",
-		"* * * *",       // 4 fields
-		"* * * * * *",   // 6 fields
-		"60 * * * *",    // minute > 59
-		"* 24 * * *",    // hour > 23
-		"* * 32 * *",    // day > 31
-		"* * * 13 *",    // month > 12
-		"* * * * 8",     // weekday > 7
-		"*/0 * * * *",   // step 0
-		"10-5 * * * *",  // start > end
-		"abc * * * *",   // non-numeric
+		"* * * *",      // 4 fields
+		"* * * * * *",  // 6 fields
+		"60 * * * *",   // minute > 59
+		"* 24 * * *",   // hour > 23
+		"* * 32 * *",   // day > 31
+		"* * * 13 *",   // month > 12
+		"* * * * 8",    // weekday > 7
+		"*/0 * * * *",  // step 0
+		"10-5 * * * *", // start > end
+		"abc * * * *",  // non-numeric
 	}
 
 	for _, expr := range invalidExpressions {
@@ -55,8 +55,8 @@ func TestMatchCron(t *testing.T) {
 		expected bool
 	}{
 		{"0 2 * * *", true},
-		{"0 2 * * 1", true}, // Monday = 1
-		{"0 2 * * 0", false}, // Sunday = 0
+		{"0 2 * * 1", true},    // Monday = 1
+		{"0 2 * * 0", false},   // Sunday = 0
 		{"*/30 * * * *", true}, // 0 % 30 == 0
 		{"0 */2 * * *", true},  // 2 % 2 == 0
 		{"0 3 * * *", false},

@@ -12,7 +12,6 @@ import (
 	"aurora-waf.local/control-plane/infra"
 	"aurora-waf.local/control-plane/internal/app"
 	"aurora-waf.local/control-plane/internal/config"
-	"aurora-waf.local/control-plane/internal/domain/entity"
 	"github.com/gin-gonic/gin"
 )
 
@@ -60,7 +59,16 @@ func TestNotificationChannelsAndRulesWorkflow(t *testing.T) {
 		t.Fatalf("expected 200 OK, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var overview entity.NotificationOverview
+	var overview struct {
+		Channels []struct {
+			ID      string `json:"id"`
+			Enabled bool   `json:"enabled"`
+		} `json:"channels"`
+		Rules []struct {
+			ID      string `json:"id"`
+			Enabled bool   `json:"enabled"`
+		} `json:"rules"`
+	}
 	if err := json.Unmarshal(w.Body.Bytes(), &overview); err != nil {
 		t.Fatalf("unmarshal error: %v", err)
 	}
@@ -109,7 +117,12 @@ func TestNotificationChannelsAndRulesWorkflow(t *testing.T) {
 	w = httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
-	var updated entity.NotificationOverview
+	var updated struct {
+		Channels []struct {
+			ID      string `json:"id"`
+			Enabled bool   `json:"enabled"`
+		} `json:"channels"`
+	}
 	_ = json.Unmarshal(w.Body.Bytes(), &updated)
 
 	var telegramFound bool
@@ -135,7 +148,10 @@ func TestNotificationChannelsAndRulesWorkflow(t *testing.T) {
 		t.Fatalf("expected 200 OK for test, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var testRes entity.TestNotificationResult
+	var testRes struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+	}
 	if err := json.Unmarshal(w.Body.Bytes(), &testRes); err != nil {
 		t.Fatalf("failed to unmarshal test result: %v", err)
 	}

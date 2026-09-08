@@ -1,5 +1,7 @@
 package entity
 
+// Tuân thủ Flat Entity: không chứa json tags.
+
 // DomainRoutingRecord is the routing workflow's flat database authority projection.
 type DomainRoutingRecord struct {
 	ID                                                                   int64
@@ -7,14 +9,16 @@ type DomainRoutingRecord struct {
 	ProbesJSON                                                           string
 	DynamicDNS                                                           bool
 }
+
 type DomainRoutingQuery struct{ NodeID string }
+
 type DomainRoutingResult struct {
-	Config string              `json:"config"`
-	Digest string              `json:"digest"`
-	Files  []DomainRoutingFile `json:"files"`
+	Config string
+	Digest string
+	Files  []DomainRoutingFile
 }
 
 type DomainRoutingFile struct {
-	Name    string `json:"name"`
-	Content []byte `json:"content"`
+	Name    string
+	Content []byte
 }

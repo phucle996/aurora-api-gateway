@@ -19,7 +19,7 @@ func NewNotificationHandler(service port.NotificationService) *NotificationHandl
 	return &NotificationHandler{service: service}
 }
 
-// GetOverview trả về danh sách các kênh thông báo và các quy tắc kích hoạt cảnh báo.
+// GetOverview trả về danh sách các kênh thông báo và các quy tắc kích hoạt cảnh báo dưới dạng gin.H inline.
 func (h *NotificationHandler) GetOverview(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 
@@ -29,7 +29,37 @@ func (h *NotificationHandler) GetOverview(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, overview)
+	channelsList := make([]gin.H, len(overview.Channels))
+	for i, ch := range overview.Channels {
+		channelsList[i] = gin.H{
+			"id":                ch.ID,
+			"name":              ch.Name,
+			"description":       ch.Description,
+			"enabled":           ch.Enabled,
+			"config_json":       ch.ConfigJSON,
+			"last_tested_at":    ch.LastTestedAt,
+			"last_test_status":  ch.LastTestStatus,
+			"last_test_message": ch.LastTestMessage,
+			"updated_at":        ch.UpdatedAt,
+		}
+	}
+
+	rulesList := make([]gin.H, len(overview.Rules))
+	for i, r := range overview.Rules {
+		rulesList[i] = gin.H{
+			"id":          r.ID,
+			"name":        r.Name,
+			"description": r.Description,
+			"severity":    r.Severity,
+			"enabled":     r.Enabled,
+			"updated_at":  r.UpdatedAt,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"channels": channelsList,
+		"rules":    rulesList,
+	})
 }
 
 // UpdateChannel cập nhật trạng thái bật/tắt và cấu hình của một kênh thông báo.
@@ -89,5 +119,9 @@ func (h *NotificationHandler) TestChannel(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, result)
+	c.JSON(http.StatusOK, gin.H{
+		"success":    result.Success,
+		"message":    result.Message,
+		"latency_ms": result.LatencyMs,
+	})
 }

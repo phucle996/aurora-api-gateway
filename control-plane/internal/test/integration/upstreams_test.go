@@ -15,7 +15,6 @@ import (
 	"aurora-waf.local/control-plane/infra"
 	"aurora-waf.local/control-plane/internal/app"
 	"aurora-waf.local/control-plane/internal/config"
-	"aurora-waf.local/control-plane/internal/domain/entity"
 	"aurora-waf.local/control-plane/internal/transport/http/dto"
 	"github.com/gin-gonic/gin"
 )
@@ -51,7 +50,7 @@ func TestUpstreamsWorkflow_CreateAndSync(t *testing.T) {
 		Description:      "Core payment microservice backend cluster",
 		ArchitectureType: "Load Balancer",
 		Algorithm:        "least_conn",
-		Servers: []entity.UpstreamNode{
+		Servers: []dto.UpstreamNodeRequest{
 			{
 				ID:      "srv-1",
 				Address: "10.0.10.20:8443",
@@ -65,12 +64,12 @@ func TestUpstreamsWorkflow_CreateAndSync(t *testing.T) {
 				Healthy: true,
 			},
 		},
-		InternalSSL: entity.UpstreamInternalSSL{
+		InternalSSL: dto.UpstreamInternalSSLRequest{
 			Enabled:    true,
 			VerifyCert: true,
 			SNIHost:    "payment.internal",
 		},
-		Transport: entity.UpstreamTransport{
+		Transport: dto.UpstreamTransportRequest{
 			HTTPVersion:          "HTTP/1.1",
 			EnableWebSocket:      true,
 			KeepAliveConnections: 64,
@@ -89,7 +88,11 @@ func TestUpstreamsWorkflow_CreateAndSync(t *testing.T) {
 		t.Fatalf("expected 201 Created, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var created entity.UpstreamItem
+	var created struct {
+		ID      int64  `json:"id"`
+		Name    string `json:"name"`
+		Servers []any  `json:"servers"`
+	}
 	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
 		t.Fatalf("failed to decode created upstream: %v", err)
 	}
@@ -123,8 +126,10 @@ func TestUpstreamsWorkflow_CreateAndSync(t *testing.T) {
 	}
 
 	var listResp struct {
-		Items []entity.UpstreamItem `json:"items"`
-		Total int                   `json:"total"`
+		Items []struct {
+			ID int64 `json:"id"`
+		} `json:"items"`
+		Total int `json:"total"`
 	}
 	if err := json.Unmarshal(wList.Body.Bytes(), &listResp); err != nil {
 		t.Fatalf("failed to decode list response: %v", err)
@@ -144,7 +149,11 @@ func TestUpstreamsWorkflow_CreateAndSync(t *testing.T) {
 		t.Fatalf("expected 200 OK on sync, got %d: %s", wSync.Code, wSync.Body.String())
 	}
 
-	var snapshot entity.UpstreamSnapshot
+	var snapshot struct {
+		ReleaseID     int64  `json:"release_id"`
+		Digest        string `json:"digest"`
+		ConfigContent string `json:"config_content"`
+	}
 	if err := json.Unmarshal(wSync.Body.Bytes(), &snapshot); err != nil {
 		t.Fatalf("failed to decode snapshot: %v", err)
 	}
@@ -183,7 +192,7 @@ func TestUpstreamsWorkflow_CreateAndSync(t *testing.T) {
 		Description:      "Updated payment cluster",
 		ArchitectureType: "Load Balancer",
 		Algorithm:        "least_conn",
-		Servers: []entity.UpstreamNode{
+		Servers: []dto.UpstreamNodeRequest{
 			{
 				ID:      "srv-1",
 				Address: "192.168.10.1:8080",
@@ -197,12 +206,12 @@ func TestUpstreamsWorkflow_CreateAndSync(t *testing.T) {
 				Healthy: true,
 			},
 		},
-		InternalSSL: entity.UpstreamInternalSSL{
+		InternalSSL: dto.UpstreamInternalSSLRequest{
 			Enabled:    true,
 			VerifyCert: false,
 			SNIHost:    "internal.payment.io",
 		},
-		Transport: entity.UpstreamTransport{
+		Transport: dto.UpstreamTransportRequest{
 			HTTPVersion:          "HTTP/1.1",
 			KeepAliveConnections: 64,
 		},
@@ -219,7 +228,11 @@ func TestUpstreamsWorkflow_CreateAndSync(t *testing.T) {
 		t.Fatalf("expected 200 OK on update, got %d: %s", wUpdate.Code, wUpdate.Body.String())
 	}
 
-	var updated entity.UpstreamItem
+	var updated struct {
+		Name      string `json:"name"`
+		Version   int    `json:"version"`
+		Algorithm string `json:"algorithm"`
+	}
 	if err := json.Unmarshal(wUpdate.Body.Bytes(), &updated); err != nil {
 		t.Fatalf("failed to decode updated upstream: %v", err)
 	}
@@ -244,7 +257,10 @@ func TestUpstreamsWorkflow_CreateAndSync(t *testing.T) {
 		t.Fatalf("expected 200 OK on sync2, got %d", wSync2.Code)
 	}
 
-	var snapshot2 entity.UpstreamSnapshot
+	var snapshot2 struct {
+		ReleaseID     int64  `json:"release_id"`
+		ConfigContent string `json:"config_content"`
+	}
 	if err := json.Unmarshal(wSync2.Body.Bytes(), &snapshot2); err != nil {
 		t.Fatalf("failed to decode snapshot2: %v", err)
 	}
@@ -284,7 +300,10 @@ func TestUpstreamsWorkflow_CreateAndSync(t *testing.T) {
 	wSync3 := httptest.NewRecorder()
 	handler.ServeHTTP(wSync3, reqSync3)
 
-	var snapshot3 entity.UpstreamSnapshot
+	var snapshot3 struct {
+		ReleaseID int64 `json:"release_id"`
+		Upstreams []any `json:"upstreams"`
+	}
 	_ = json.Unmarshal(wSync3.Body.Bytes(), &snapshot3)
 	if snapshot3.ReleaseID != 3 {
 		t.Errorf("expected release_id 3 after deletion, got %d", snapshot3.ReleaseID)

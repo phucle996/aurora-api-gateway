@@ -63,13 +63,13 @@ func (h *UpstreamHandler) Create(c *gin.Context) {
 		Description:      req.Description,
 		ArchitectureType: req.ArchitectureType,
 		Algorithm:        req.Algorithm,
-		Servers:          req.Servers,
+		Servers:          toEntityServers(req.Servers),
 		ExternalFQDN:     req.ExternalFQDN,
 		SNIOverride:      req.SNIOverride,
 		DynamicDNS:       req.DynamicDNS,
-		InternalSSL:      req.InternalSSL,
-		Probes:           req.Probes,
-		Transport:        req.Transport,
+		InternalSSL:      toEntityInternalSSL(req.InternalSSL),
+		Probes:           toEntityProbes(req.Probes),
+		Transport:        toEntityTransport(req.Transport),
 	}
 
 	item, err := h.service.CreateUpstream(c.Request.Context(), cmd)
@@ -78,9 +78,7 @@ func (h *UpstreamHandler) Create(c *gin.Context) {
 		return
 	}
 
-	item.InternalSSL.ClientKeyConfigured = item.InternalSSL.ClientKey != ""
-	item.InternalSSL.ClientKey = ""
-	c.JSON(http.StatusCreated, item)
+	c.JSON(http.StatusCreated, upstreamToGinH(item))
 }
 
 // Update xử lý HTTP PUT /api/v1/upstreams/:id: Cập nhật Upstream Pool đã có.
@@ -124,13 +122,13 @@ func (h *UpstreamHandler) Update(c *gin.Context) {
 		Description:      req.Description,
 		ArchitectureType: req.ArchitectureType,
 		Algorithm:        req.Algorithm,
-		Servers:          req.Servers,
+		Servers:          toEntityServers(req.Servers),
 		ExternalFQDN:     req.ExternalFQDN,
 		SNIOverride:      req.SNIOverride,
 		DynamicDNS:       req.DynamicDNS,
-		InternalSSL:      req.InternalSSL,
-		Probes:           req.Probes,
-		Transport:        req.Transport,
+		InternalSSL:      toEntityInternalSSL(req.InternalSSL),
+		Probes:           toEntityProbes(req.Probes),
+		Transport:        toEntityTransport(req.Transport),
 	}
 
 	item, err := h.service.UpdateUpstream(c.Request.Context(), cmd)
@@ -139,12 +137,10 @@ func (h *UpstreamHandler) Update(c *gin.Context) {
 		return
 	}
 
-	item.InternalSSL.ClientKeyConfigured = item.InternalSSL.ClientKey != ""
-	item.InternalSSL.ClientKey = ""
-	c.JSON(http.StatusOK, item)
+	c.JSON(http.StatusOK, upstreamToGinH(item))
 }
 
-// List xử lý HTTP GET /api/v1/upstreams: Lấy danh sách upstream pools.
+// List xử lý HTTP GET /api/v1/upstreams: Lấy danh sách upstream pools dưới dạng gin.H inline.
 func (h *UpstreamHandler) List(c *gin.Context) {
 	search := c.Query("search")
 	archType := c.Query("type")
@@ -175,12 +171,13 @@ func (h *UpstreamHandler) List(c *gin.Context) {
 		return
 	}
 
+	listItems := make([]gin.H, len(items))
 	for i := range items {
-		items[i].InternalSSL.ClientKeyConfigured = items[i].InternalSSL.ClientKey != ""
-		items[i].InternalSSL.ClientKey = ""
+		listItems[i] = upstreamToGinH(&items[i])
 	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"items": items,
+		"items": listItems,
 		"total": total,
 		"page":  page,
 		"limit": limit,
@@ -206,9 +203,7 @@ func (h *UpstreamHandler) GetByID(c *gin.Context) {
 		return
 	}
 
-	item.InternalSSL.ClientKeyConfigured = item.InternalSSL.ClientKey != ""
-	item.InternalSSL.ClientKey = ""
-	c.JSON(http.StatusOK, item)
+	c.JSON(http.StatusOK, upstreamToGinH(item))
 }
 
 // Delete xử lý HTTP DELETE /api/v1/upstreams/:id: Xóa một Upstream Pool.
@@ -251,11 +246,17 @@ func (h *UpstreamHandler) Desired(c *gin.Context) {
 		return
 	}
 
+	upstreams := make([]gin.H, len(snapshot.Upstreams))
 	for i := range snapshot.Upstreams {
-		snapshot.Upstreams[i].InternalSSL.ClientKeyConfigured = snapshot.Upstreams[i].InternalSSL.ClientKey != ""
-		snapshot.Upstreams[i].InternalSSL.ClientKey = ""
+		upstreams[i] = upstreamToGinH(&snapshot.Upstreams[i])
 	}
-	c.JSON(http.StatusOK, snapshot)
+
+	c.JSON(http.StatusOK, gin.H{
+		"release_id":     snapshot.ReleaseID,
+		"digest":         snapshot.Digest,
+		"upstreams":      upstreams,
+		"config_content": snapshot.ConfigContent,
+	})
 }
 
 // Report xử lý HTTP POST /api/v1/upstream-sync/:node:
@@ -300,4 +301,171 @@ func (h *UpstreamHandler) Report(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+// --- Mapping helpers chuyển đổi từ request DTO sang entity và từ entity sang gin.H ---
+
+func toEntityServers(dtos []dto.UpstreamNodeRequest) []entity.UpstreamNode {
+	if dtos == nil {
+		return []entity.UpstreamNode{}
+	}
+	res := make([]entity.UpstreamNode, len(dtos))
+	for i, d := range dtos {
+		res[i] = entity.UpstreamNode{
+			ID:          d.ID,
+			Address:     d.Address,
+			Weight:      d.Weight,
+			MaxFails:    d.MaxFails,
+			FailTimeout: d.FailTimeout,
+			Backup:      d.Backup,
+			Healthy:     d.Healthy,
+		}
+	}
+	return res
+}
+
+func toEntityInternalSSL(d dto.UpstreamInternalSSLRequest) entity.UpstreamInternalSSL {
+	return entity.UpstreamInternalSSL{
+		Enabled:             d.Enabled,
+		VerifyCert:          d.VerifyCert,
+		SNIHost:             d.SNIHost,
+		CACert:              d.CACert,
+		MTLS:                d.MTLS,
+		ClientCertName:      d.ClientCertName,
+		ClientCert:          d.ClientCert,
+		ClientKey:           d.ClientKey,
+		ClientKeyConfigured: d.ClientKeyConfigured,
+	}
+}
+
+func toEntityProbes(dtos []dto.UpstreamProbeRequest) []entity.UpstreamProbe {
+	if dtos == nil {
+		return []entity.UpstreamProbe{}
+	}
+	res := make([]entity.UpstreamProbe, len(dtos))
+	for i, d := range dtos {
+		res[i] = entity.UpstreamProbe{
+			ID:             d.ID,
+			Type:           d.Type,
+			Path:           d.Path,
+			ExpectedStatus: d.ExpectedStatus,
+			IntervalSec:    d.IntervalSec,
+			TimeoutSec:     d.TimeoutSec,
+		}
+	}
+	return res
+}
+
+func toEntityTransport(d dto.UpstreamTransportRequest) entity.UpstreamTransport {
+	return entity.UpstreamTransport{
+		RequestCompression:   d.RequestCompression,
+		CompressionMinBytes:  d.CompressionMinBytes,
+		CompressionLevel:     d.CompressionLevel,
+		HTTPVersion:          d.HTTPVersion,
+		EnableWebSocket:      d.EnableWebSocket,
+		EnableSSE:            d.EnableSSE,
+		EnableGRPC:           d.EnableGRPC,
+		KeepAliveConnections: d.KeepAliveConnections,
+		KeepAliveTimeout:     d.KeepAliveTimeout,
+	}
+}
+
+func upstreamToGinH(item *entity.UpstreamItem) gin.H {
+	if item == nil {
+		return gin.H{}
+	}
+
+	servers := make([]gin.H, len(item.Servers))
+	for i, s := range item.Servers {
+		srv := gin.H{
+			"id":      s.ID,
+			"address": s.Address,
+			"weight":  s.Weight,
+			"healthy": s.Healthy,
+		}
+		if s.MaxFails > 0 {
+			srv["maxFails"] = s.MaxFails
+		}
+		if s.FailTimeout != "" {
+			srv["failTimeout"] = s.FailTimeout
+		}
+		if s.Backup {
+			srv["backup"] = s.Backup
+		}
+		servers[i] = srv
+	}
+
+	probes := make([]gin.H, len(item.Probes))
+	for i, p := range item.Probes {
+		pr := gin.H{
+			"id":             p.ID,
+			"type":           p.Type,
+			"path":           p.Path,
+			"expectedStatus": p.ExpectedStatus,
+		}
+		if p.IntervalSec > 0 {
+			pr["intervalSec"] = p.IntervalSec
+		}
+		if p.TimeoutSec > 0 {
+			pr["timeoutSec"] = p.TimeoutSec
+		}
+		probes[i] = pr
+	}
+
+	ssl := gin.H{
+		"enabled":             item.InternalSSL.Enabled,
+		"verifyCert":          item.InternalSSL.VerifyCert,
+		"mTLS":                item.InternalSSL.MTLS,
+		"clientKeyConfigured": item.InternalSSL.ClientKey != "" || item.InternalSSL.ClientKeyConfigured,
+	}
+	if item.InternalSSL.SNIHost != "" {
+		ssl["sniHost"] = item.InternalSSL.SNIHost
+	}
+	if item.InternalSSL.CACert != "" {
+		ssl["caCert"] = item.InternalSSL.CACert
+	}
+	if item.InternalSSL.ClientCertName != "" {
+		ssl["clientCertName"] = item.InternalSSL.ClientCertName
+	}
+	if item.InternalSSL.ClientCert != "" {
+		ssl["clientCert"] = item.InternalSSL.ClientCert
+	}
+
+	transport := gin.H{
+		"requestCompression":  item.Transport.RequestCompression,
+		"compressionMinBytes": item.Transport.CompressionMinBytes,
+		"compressionLevel":    item.Transport.CompressionLevel,
+		"httpVersion":         item.Transport.HTTPVersion,
+		"enableWebSocket":     item.Transport.EnableWebSocket,
+		"enableSse":           item.Transport.EnableSSE,
+		"enableGrpc":          item.Transport.EnableGRPC,
+	}
+	if item.Transport.KeepAliveConnections > 0 {
+		transport["keepAliveConnections"] = item.Transport.KeepAliveConnections
+	}
+	if item.Transport.KeepAliveTimeout > 0 {
+		transport["keepAliveTimeout"] = item.Transport.KeepAliveTimeout
+	}
+
+	res := gin.H{
+		"id":                  item.ID,
+		"name":                item.Name,
+		"description":         item.Description,
+		"architecture_type":   item.ArchitectureType,
+		"algorithm":           item.Algorithm,
+		"servers":             servers,
+		"sni_override":        item.SNIOverride,
+		"dynamic_dns":         item.DynamicDNS,
+		"internal_ssl":        ssl,
+		"probes":              probes,
+		"transport":           transport,
+		"version":             item.Version,
+		"bound_domains_count": item.BoundDomainsCount,
+		"created_at":          item.CreatedAt,
+		"updated_at":          item.UpdatedAt,
+	}
+	if item.ExternalFQDN != "" {
+		res["external_fqdn"] = item.ExternalFQDN
+	}
+	return res
 }

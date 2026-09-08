@@ -15,7 +15,6 @@ import (
 	"aurora-waf.local/control-plane/infra"
 	"aurora-waf.local/control-plane/internal/app"
 	"aurora-waf.local/control-plane/internal/config"
-	"aurora-waf.local/control-plane/internal/domain/entity"
 	"github.com/gin-gonic/gin"
 )
 
@@ -63,7 +62,12 @@ func TestBackupWorkflow_EndToEnd(t *testing.T) {
 		t.Fatalf("expected 200 OK, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var overview entity.BackupOverview
+	var overview struct {
+		Config struct {
+			CronExpression  string `json:"cron_expression"`
+			S3RetentionDays int    `json:"s3_retention_days"`
+		} `json:"config"`
+	}
 	if err := json.Unmarshal(w.Body.Bytes(), &overview); err != nil {
 		t.Fatalf("failed to unmarshal overview: %v", err)
 	}
@@ -128,7 +132,12 @@ func TestBackupWorkflow_EndToEnd(t *testing.T) {
 	handler.ServeHTTP(w, req)
 
 	t.Log("Step 3: Verify updated config")
-	var updatedOverview entity.BackupOverview
+	var updatedOverview struct {
+		Config struct {
+			CronExpression  string `json:"cron_expression"`
+			S3RetentionDays int    `json:"s3_retention_days"`
+		} `json:"config"`
+	}
 	_ = json.Unmarshal(w.Body.Bytes(), &updatedOverview)
 	if updatedOverview.Config.CronExpression != "0 */6 * * *" {
 		t.Fatalf("expected cron '0 */6 * * *', got '%s'", updatedOverview.Config.CronExpression)
@@ -190,7 +199,10 @@ func TestBackupWorkflow_EndToEnd(t *testing.T) {
 		t.Fatalf("expected 200 OK on restore, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var restoreRes entity.RestoreResult
+	var restoreRes struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+	}
 	if err := json.Unmarshal(w.Body.Bytes(), &restoreRes); err != nil {
 		t.Fatalf("failed to unmarshal restore response: %v", err)
 	}

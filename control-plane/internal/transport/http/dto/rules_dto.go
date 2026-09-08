@@ -90,9 +90,8 @@ type TestRuleResponse struct {
 	Details          []TestConditionDetailResponse `json:"details"`
 }
 
-
 type UpdateRuleDefinitionRequest struct {
- ExpectedVersion int64 `json:"expected_version"`
+	ExpectedVersion int64                        `json:"expected_version"`
 	Name            string                       `json:"name"`
 	Description     string                       `json:"description"`
 	Group           string                       `json:"group"`

@@ -36,7 +36,7 @@ func getUserIDAndName(c *gin.Context) (string, string) {
 	return userID, username
 }
 
-// GetOverview trả về danh sách toàn bộ auth providers, trạng thái 2FA và mật khẩu.
+// GetOverview trả về danh sách toàn bộ auth providers, trạng thái 2FA và mật khẩu dưới dạng gin.H inline.
 func (h *SecurityHandler) GetOverview(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	userID, _ := getUserIDAndName(c)
@@ -47,7 +47,28 @@ func (h *SecurityHandler) GetOverview(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, overview)
+	providersList := make([]gin.H, len(overview.AuthProviders))
+	for i, p := range overview.AuthProviders {
+		providersList[i] = gin.H{
+			"id":          p.ID,
+			"name":        p.Name,
+			"description": p.Description,
+			"enabled":     p.Enabled,
+			"config_json": p.ConfigJSON,
+			"updated_at":  p.UpdatedAt,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"auth_providers": providersList,
+		"two_factor": gin.H{
+			"enabled":       overview.TwoFactor.Enabled,
+			"configured":    overview.TwoFactor.Configured,
+			"configured_at": overview.TwoFactor.ConfiguredAt,
+		},
+		"admin_username":        overview.AdminUsername,
+		"password_last_updated": overview.PasswordLastUpdated,
+	})
 }
 
 // UpdateProvider cập nhật trạng thái bật/tắt và cấu hình của một provider.
@@ -84,7 +105,11 @@ func (h *SecurityHandler) Init2FA(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, out)
+	c.JSON(http.StatusOK, gin.H{
+		"secret":      out.Secret,
+		"otpauth_url": out.OtpAuthURL,
+		"qr_svg":      out.QrSVG,
+	})
 }
 
 // Verify2FA xác thực mã 6 số và kích hoạt 2FA.
@@ -107,7 +132,10 @@ func (h *SecurityHandler) Verify2FA(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, out)
+	c.JSON(http.StatusOK, gin.H{
+		"enabled":        out.Enabled,
+		"recovery_codes": out.RecoveryCodes,
+	})
 }
 
 // Disable2FA tắt 2FA.

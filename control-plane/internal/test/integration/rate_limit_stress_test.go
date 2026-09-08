@@ -25,8 +25,8 @@ func TestRateLimit_UpdateRuleLifecycle(t *testing.T) {
 
 	// 1. Tạo một rule ban đầu
 	createPayload := map[string]any{
-		"name":        "rule-to-update",
-		"description": "Rule ban đầu",
+		"name":               "rule-to-update",
+		"description":        "Rule ban đầu",
 		"enabled_dimensions": []string{"ip"},
 		"dimension_order":    []string{"ip"},
 		"ip_config": map[string]any{
@@ -62,8 +62,8 @@ func TestRateLimit_UpdateRuleLifecycle(t *testing.T) {
 
 	// 2. Cập nhật (Update / Sửa) rule vừa tạo
 	updatePayload := map[string]any{
-		"name":        "rule-updated-name",
-		"description": "Mô tả đã được sửa",
+		"name":               "rule-updated-name",
+		"description":        "Mô tả đã được sửa",
 		"enabled_dimensions": []string{"ip", "header"},
 		"dimension_order":    []string{"ip", "header"},
 		"ip_config": map[string]any{
@@ -215,8 +215,8 @@ func TestRateLimit_20MillionRequestsStressAndCRUDUnderLoad(t *testing.T) {
 			}
 			idx++
 			body, _ := json.Marshal(map[string]any{
-				"name":        fmt.Sprintf("stress-rule-%d", idx),
-				"description": "Rule tạo trong lúc hệ thống đang tải 20M requests",
+				"name":               fmt.Sprintf("stress-rule-%d", idx),
+				"description":        "Rule tạo trong lúc hệ thống đang tải 20M requests",
 				"enabled_dimensions": []string{"ip"},
 				"dimension_order":    []string{"ip"},
 				"ip_config": map[string]any{
@@ -286,8 +286,8 @@ func TestRateLimit_20MillionRequestsStressAndCRUDUnderLoad(t *testing.T) {
 			if targetID > 0 {
 				updateIdx++
 				body, _ := json.Marshal(map[string]any{
-					"name":        fmt.Sprintf("rule-updated-%d", targetID),
-					"description": "Cập nhật dưới áp lực nạp 20M reqs",
+					"name":               fmt.Sprintf("rule-updated-%d", targetID),
+					"description":        "Cập nhật dưới áp lực nạp 20M reqs",
 					"enabled_dimensions": []string{"ip"},
 					"dimension_order":    []string{"ip"},
 					"ip_config": map[string]any{

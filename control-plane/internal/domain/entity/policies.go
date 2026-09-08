@@ -100,4 +100,3 @@ type PolicyReportCommand struct {
 	Phase     string
 	Message   string
 }
-
