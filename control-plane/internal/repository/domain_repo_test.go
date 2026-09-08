@@ -17,9 +17,9 @@ func setupTestDB(t *testing.T) *sql.DB {
 		t.Fatalf("failed to open sqlite in-memory: %v", err)
 	}
 
-	// Run migration 5 (domains schema)
-	if _, err := db.Exec(migrations.Domains); err != nil {
-		t.Fatalf("failed to execute migrations.Domains: %v", err)
+	// Run migration 1 (tables schema)
+	if _, err := db.Exec(migrations.Tables); err != nil {
+		t.Fatalf("failed to execute migrations.Tables: %v", err)
 	}
 
 	// Seed test fixtures

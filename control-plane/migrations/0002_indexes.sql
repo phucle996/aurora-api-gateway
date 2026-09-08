@@ -6,3 +6,24 @@ CREATE INDEX IF NOT EXISTS idx_metrics_history_time ON node_metrics_history (tim
 CREATE INDEX IF NOT EXISTS idx_cluster_nodes_reload ON cluster_nodes(reload_status, pending_command);
 CREATE INDEX IF NOT EXISTS idx_node_sync_logs_node_id ON node_sync_logs(node_id, id DESC);
 CREATE INDEX IF NOT EXISTS access_events_recent ON access_events(created_at DESC);
+
+-- Domains indexes
+CREATE INDEX IF NOT EXISTS idx_domains_domain ON domains(domain);
+CREATE INDEX IF NOT EXISTS idx_domains_status ON domains(status);
+CREATE INDEX IF NOT EXISTS idx_domains_tls_type ON domains(tls_type);
+
+-- Upstreams indexes
+CREATE INDEX IF NOT EXISTS idx_upstreams_name ON upstreams(name);
+CREATE INDEX IF NOT EXISTS idx_upstreams_type ON upstreams(architecture_type);
+CREATE INDEX IF NOT EXISTS idx_upstreams_version ON upstreams(version);
+
+-- Rate limits and metrics indexes
+CREATE INDEX IF NOT EXISTS idx_rate_limit_rules_name ON rate_limit_rules(name);
+CREATE INDEX IF NOT EXISTS idx_rate_limit_rules_status ON rate_limit_rules(status);
+CREATE INDEX IF NOT EXISTS idx_rl_hourly_bucket ON rate_limit_hourly_metrics(hour_bucket);
+CREATE INDEX IF NOT EXISTS idx_rl_endpoints_bucket ON rate_limit_endpoint_metrics(hour_bucket);
+CREATE INDEX IF NOT EXISTS idx_rl_endpoints_blocked ON rate_limit_endpoint_metrics(blocked_count DESC);
+
+-- Node dependencies indexes
+CREATE UNIQUE INDEX IF NOT EXISTS dependency_job_active ON dependency_jobs(node_id) WHERE state IN ('pending','running');
+CREATE INDEX IF NOT EXISTS dependency_job_latest ON dependency_jobs(node_id,id DESC);
