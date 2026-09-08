@@ -1,13 +1,22 @@
 package handler
 
 import (
+	"context"
+	"errors"
+	"net/http"
+	"strings"
+	"time"
+
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	port "aurora-waf.local/control-plane/internal/domain/service"
 	"aurora-waf.local/control-plane/internal/transport/http/dto"
-	"net/http"
-	"strings"
-
 	"github.com/gin-gonic/gin"
+)
+
+// Thời gian chờ tối đa cho các tác vụ Security & 2FA
+const (
+	securityQueryTimeout  = 5 * time.Second  // Dành cho GetOverview truy vấn cấu hình bảo mật
+	securityActionTimeout = 10 * time.Second // Dành cho UpdateProvider, Init2FA, Verify2FA, Disable2FA, ChangePassword
 )
 
 // SecurityHandler xử lý các yêu cầu HTTP liên quan đến cấu hình bảo mật hệ thống, 2FA và đổi mật khẩu.
@@ -15,6 +24,7 @@ type SecurityHandler struct {
 	service port.SecurityService
 }
 
+// NewSecurityHandler khởi tạo SecurityHandler với SecurityService.
 func NewSecurityHandler(service port.SecurityService) *SecurityHandler {
 	return &SecurityHandler{service: service}
 }
@@ -41,8 +51,15 @@ func (h *SecurityHandler) GetOverview(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	userID, _ := getUserIDAndName(c)
 
-	overview, err := h.service.GetOverview(c.Request.Context(), userID)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), securityQueryTimeout)
+	defer cancel()
+
+	overview, err := h.service.GetOverview(ctx, userID)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn thông tin bảo mật đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -82,7 +99,14 @@ func (h *SecurityHandler) UpdateProvider(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.UpdateProvider(c.Request.Context(), id, req.Enabled, req.ConfigJSON); err != nil {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), securityActionTimeout)
+	defer cancel()
+
+	if err := h.service.UpdateProvider(ctx, id, req.Enabled, req.ConfigJSON); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Cập nhật phương thức xác thực đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -99,8 +123,15 @@ func (h *SecurityHandler) Init2FA(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	userID, username := getUserIDAndName(c)
 
-	out, err := h.service.Init2FA(c.Request.Context(), userID, username)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), securityActionTimeout)
+	defer cancel()
+
+	out, err := h.service.Init2FA(ctx, userID, username)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Khởi tạo 2FA đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -123,11 +154,18 @@ func (h *SecurityHandler) Verify2FA(c *gin.Context) {
 		return
 	}
 
-	out, err := h.service.Verify2FA(c.Request.Context(), userID, entity.Verify2FACommand{
+	ctx, cancel := context.WithTimeout(c.Request.Context(), securityActionTimeout)
+	defer cancel()
+
+	out, err := h.service.Verify2FA(ctx, userID, entity.Verify2FACommand{
 		Secret: req.Secret,
 		Code:   req.Code,
 	})
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Xác thực 2FA đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -143,7 +181,14 @@ func (h *SecurityHandler) Disable2FA(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	userID, _ := getUserIDAndName(c)
 
-	if err := h.service.Disable2FA(c.Request.Context(), userID); err != nil {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), securityActionTimeout)
+	defer cancel()
+
+	if err := h.service.Disable2FA(ctx, userID); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Tắt xác thực 2FA đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -162,11 +207,18 @@ func (h *SecurityHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 
-	err := h.service.ChangePassword(c.Request.Context(), userID, entity.ChangePasswordCommand{
+	ctx, cancel := context.WithTimeout(c.Request.Context(), securityActionTimeout)
+	defer cancel()
+
+	err := h.service.ChangePassword(ctx, userID, entity.ChangePasswordCommand{
 		CurrentPassword: req.CurrentPassword,
 		NewPassword:     req.NewPassword,
 	})
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Đổi mật khẩu đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

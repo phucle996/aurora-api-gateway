@@ -1,17 +1,24 @@
 package handler
 
 import (
-	"aurora-waf.local/control-plane/internal/domain/entity"
-	port "aurora-waf.local/control-plane/internal/domain/service"
-	"aurora-waf.local/control-plane/internal/domain/taxonomy"
-	"aurora-waf.local/control-plane/internal/transport/http/dto"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
+	"aurora-waf.local/control-plane/internal/domain/entity"
+	port "aurora-waf.local/control-plane/internal/domain/service"
+	"aurora-waf.local/control-plane/internal/domain/taxonomy"
+	"aurora-waf.local/control-plane/internal/transport/http/dto"
 	"github.com/gin-gonic/gin"
+)
+
+// Thời gian chờ tối đa cho các thao tác xác thực
+const (
+	authLoginTimeout = 5 * time.Second // Dành cho xác thực đăng nhập qua Argon2id và truy vấn DB
 )
 
 // AuthHandler xử lý các yêu cầu HTTP liên quan đến xác thực người dùng (đăng nhập, lấy thông tin phiên làm việc, đăng xuất).
@@ -74,11 +81,18 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	// Bước 6: Gọi tầng Service để xác thực tài khoản và mật khẩu
 	// Service sẽ tìm người dùng trong CSDL và kiểm tra mật khẩu qua thuật toán băm Argon2id
-	result, err := h.service.Login(c.Request.Context(), entity.LoginInput{
+	ctx, cancel := context.WithTimeout(c.Request.Context(), authLoginTimeout)
+	defer cancel()
+
+	result, err := h.service.Login(ctx, entity.LoginInput{
 		Username: req.Username,
 		Password: req.Password,
 	})
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Xác thực tài khoản đã hết thời gian chờ"})
+			return
+		}
 		// Nếu tên đăng nhập không tồn tại hoặc sai mật khẩu, trả về HTTP 401 Unauthorized
 		if errors.Is(err, taxonomy.ErrInvalidCredentials) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})

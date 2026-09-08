@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"context"
+	"errors"
 	"io"
 	"net/http"
 	"time"
@@ -9,6 +11,13 @@ import (
 	port "aurora-waf.local/control-plane/internal/domain/service"
 	"aurora-waf.local/control-plane/internal/transport/http/dto"
 	"github.com/gin-gonic/gin"
+)
+
+// Thời gian chờ tối đa cho các tác vụ quản lý NGINX Node
+const (
+	nodeQueryTimeout     = 5 * time.Second  // Dành cho List, GetByID, GetRollingStatus, GetSyncLogs, GetConfig
+	nodeHeartbeatTimeout = 5 * time.Second  // Dành cho Heartbeat xử lý telemetry và trả về chỉ thị
+	nodeReloadTimeout    = 15 * time.Second // Dành cho ReloadNode và RollingReloadCluster điều phối cụm
 )
 
 // NodeHandler bao đóng các HTTP endpoint xử lý cho NGINX Data Plane Nodes.
@@ -24,12 +33,17 @@ func NewNodeHandler(s port.NodeService) *NodeHandler {
 // List xử lý HTTP GET /api/v1/nodes:
 // Trả về danh sách tất cả các NGINX Data Plane nodes đã đăng ký trong cluster.
 func (h *NodeHandler) List(c *gin.Context) {
-	// Bước 1: Tiếp nhận context từ HTTP request
-	ctx := c.Request.Context()
+	// Bước 1: Tiếp nhận context từ HTTP request kèm timeout 5s
+	ctx, cancel := context.WithTimeout(c.Request.Context(), nodeQueryTimeout)
+	defer cancel()
 
 	// Bước 2: Gọi service để lấy danh sách nodes cùng trạng thái runtime
 	nodes, err := h.service.ListNodes(ctx)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn danh sách nodes đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi truy vấn danh sách nodes: " + err.Error()})
 		return
 	}
@@ -80,10 +94,16 @@ func (h *NodeHandler) GetByID(c *gin.Context) {
 		return
 	}
 
-	// Bước 2: Gọi service lấy thông tin chi tiết
-	ctx := c.Request.Context()
+	// Bước 2: Gọi service lấy thông tin chi tiết kèm timeout 5s
+	ctx, cancel := context.WithTimeout(c.Request.Context(), nodeQueryTimeout)
+	defer cancel()
+
 	node, err := h.service.GetNodeByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn node đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi truy vấn node: " + err.Error()})
 		return
 	}
@@ -170,9 +190,15 @@ func (h *NodeHandler) Heartbeat(c *gin.Context) {
 		}
 	}
 
-	ctx := c.Request.Context()
+	ctx, cancel := context.WithTimeout(c.Request.Context(), nodeHeartbeatTimeout)
+	defer cancel()
+
 	directive, err := h.service.RecordHeartbeat(ctx, *payload)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Xử lý heartbeat đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ghi nhận heartbeat thất bại: " + err.Error()})
 		return
 	}
@@ -192,8 +218,14 @@ func (h *NodeHandler) ReloadNode(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
+	ctx, cancel := context.WithTimeout(c.Request.Context(), nodeReloadTimeout)
+	defer cancel()
+
 	if err := h.service.TriggerNodeReload(ctx, nodeID); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Reload node đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
@@ -206,9 +238,15 @@ func (h *NodeHandler) ReloadNode(c *gin.Context) {
 
 // RollingReloadCluster tiếp nhận yêu cầu POST /api/v1/nodes/rolling-reload để khởi động rolling reload tuần tự cả cụm.
 func (h *NodeHandler) RollingReloadCluster(c *gin.Context) {
-	ctx := c.Request.Context()
+	ctx, cancel := context.WithTimeout(c.Request.Context(), nodeReloadTimeout)
+	defer cancel()
+
 	status, err := h.service.TriggerClusterRollingReload(ctx)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Khởi động rolling reload cluster đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 		return
 	}
@@ -224,9 +262,15 @@ func (h *NodeHandler) RollingReloadCluster(c *gin.Context) {
 
 // GetRollingStatus tiếp nhận yêu cầu GET /api/v1/nodes/rolling-status để kiểm tra tiến trình rolling cluster.
 func (h *NodeHandler) GetRollingStatus(c *gin.Context) {
-	ctx := c.Request.Context()
+	ctx, cancel := context.WithTimeout(c.Request.Context(), nodeQueryTimeout)
+	defer cancel()
+
 	status, err := h.service.GetClusterRollingStatus(ctx)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Lấy trạng thái rolling reload đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -241,6 +285,7 @@ func (h *NodeHandler) GetRollingStatus(c *gin.Context) {
 }
 
 // EventsStream mở luồng HTTP Server-Sent Events (SSE) để truyền dữ liệu thời gian thực tới UI.
+// Endpoint này duy trì kết nối stream liên tục cho đến khi client ngắt kết nối (không đặt timeout cứng).
 func (h *NodeHandler) EventsStream(c *gin.Context) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
@@ -309,8 +354,15 @@ func (h *NodeHandler) GetSyncLogs(c *gin.Context) {
 		return
 	}
 
-	logs, err := h.service.ListNodeSyncLogs(c.Request.Context(), nodeID, 30)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), nodeQueryTimeout)
+	defer cancel()
+
+	logs, err := h.service.ListNodeSyncLogs(ctx, nodeID, 30)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Lấy lịch sử đồng bộ đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi truy vấn lịch sử sync: " + err.Error()})
 		return
 	}
@@ -338,8 +390,15 @@ func (h *NodeHandler) GetConfig(c *gin.Context) {
 		return
 	}
 
-	config, err := h.service.GetNodeConfig(c.Request.Context(), nodeID)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), nodeQueryTimeout)
+	defer cancel()
+
+	config, err := h.service.GetNodeConfig(ctx, nodeID)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Lấy cấu hình node đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
 	}

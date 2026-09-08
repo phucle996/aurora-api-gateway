@@ -1,12 +1,14 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	port "aurora-waf.local/control-plane/internal/domain/service"
@@ -14,7 +16,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Thời gian chờ tối đa cho các tác vụ Domain Management
+const (
+	domainQueryTimeout  = 5 * time.Second  // Dành cho List, Catalog, GetByID truy vấn SQLite
+	domainChangeTimeout = 10 * time.Second // Dành cho Create, Update, Delete domain (OCC & reload routing)
+)
+
 // DomainHandler bao đóng các HTTP endpoint cho Domain management workflow.
+// Quản lý định tuyến máy chủ ảo (Virtual Hosts), chứng chỉ TLS/mTLS, liên kết Upstream Pool và thống kê an ninh.
 type DomainHandler struct {
 	service port.DomainService
 }
@@ -54,8 +63,15 @@ func (h *DomainHandler) List(c *gin.Context) {
 		Offset:  offset,
 	}
 
-	result, err := h.service.ListDomains(c.Request.Context(), query)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), domainQueryTimeout)
+	defer cancel()
+
+	result, err := h.service.ListDomains(ctx, query)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn danh sách domain đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to query domains: " + err.Error()})
 		return
 	}
@@ -107,8 +123,15 @@ func (h *DomainHandler) List(c *gin.Context) {
 // Catalog xử lý HTTP GET /api/v1/domains/catalog:
 // Trả về danh mục domain tinh gọn phục vụ dropdown selection cho Target Scope (Host / Domain) và Scope.
 func (h *DomainHandler) Catalog(c *gin.Context) {
-	result, err := h.service.DomainCatalog(c.Request.Context())
+	ctx, cancel := context.WithTimeout(c.Request.Context(), domainQueryTimeout)
+	defer cancel()
+
+	result, err := h.service.DomainCatalog(ctx)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn danh mục domain đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to query domain catalog: " + err.Error()})
 		return
 	}
@@ -182,8 +205,15 @@ func (h *DomainHandler) Create(c *gin.Context) {
 		CreatedBy:         c.GetString("username"),
 	}
 
-	item, err := h.service.CreateDomain(c.Request.Context(), cmd)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), domainChangeTimeout)
+	defer cancel()
+
+	item, err := h.service.CreateDomain(ctx, cmd)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Thao tác tạo domain đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to create domain: " + err.Error()})
 		return
 	}
@@ -199,8 +229,15 @@ func (h *DomainHandler) GetByID(c *gin.Context) {
 		return
 	}
 
-	item, err := h.service.GetDomain(c.Request.Context(), id)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), domainQueryTimeout)
+	defer cancel()
+
+	item, err := h.service.GetDomain(ctx, id)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn domain đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
@@ -256,8 +293,15 @@ func (h *DomainHandler) Update(c *gin.Context) {
 		Description:       req.Description,
 	}
 
-	item, err := h.service.UpdateDomain(c.Request.Context(), id, cmd)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), domainChangeTimeout)
+	defer cancel()
+
+	item, err := h.service.UpdateDomain(ctx, id, cmd)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Thao tác cập nhật domain đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to update domain: " + err.Error()})
 		return
 	}
@@ -273,7 +317,14 @@ func (h *DomainHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.DeleteDomain(c.Request.Context(), id); err != nil {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), domainChangeTimeout)
+	defer cancel()
+
+	if err := h.service.DeleteDomain(ctx, id); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Thao tác xóa domain đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to delete domain: " + err.Error()})
 		return
 	}

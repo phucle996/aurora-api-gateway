@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"aurora-waf.local/control-plane/internal/domain/entity"
@@ -18,10 +20,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Thời gian chờ tối đa cho các tác vụ Security Policy
+const (
+	policyQueryTimeout   = 5 * time.Second  // Dành cho List, Catalog, RuleCatalog, Cluster, Desired, Report
+	policyDraftTimeout   = 10 * time.Second // Dành cho SaveDraft lưu bản nháp policy
+	policyPublishTimeout = 15 * time.Second // Dành cho PublishDraft biên dịch và phát hành release
+)
+
+// PolicyHandler xử lý các API endpoint quản lý bộ chính sách bảo mật (Security Policies) và phát hành snapshot tới cluster.
 type PolicyHandler struct {
 	Service port.PolicyService
 }
 
+// NewPolicyHandler khởi tạo handler với PolicyService.
 func NewPolicyHandler(svc port.PolicyService) *PolicyHandler {
 	return &PolicyHandler{
 		Service: svc,
@@ -39,11 +50,18 @@ func (h *PolicyHandler) List(c *gin.Context) {
 		q.ID = id
 	}
 	q.History = c.Query("history") == "true"
-	out, err := h.Service.ReadPolicies(c.Request.Context(), q)
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), policyQueryTimeout)
+	defer cancel()
+
+	out, err := h.Service.ReadPolicies(ctx, q)
 	if err != nil {
 		status := http.StatusInternalServerError
 		message := "policy storage unavailable"
 		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			status = http.StatusGatewayTimeout
+			message = "policy query timed out"
 		case errors.Is(err, taxonomy.ErrPolicyInvalid), errors.Is(err, taxonomy.ErrPolicyUnsupported):
 			status = http.StatusUnprocessableEntity
 			message = err.Error()
@@ -81,12 +99,19 @@ func (h *PolicyHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, items)
 }
 
+// Catalog xử lý HTTP GET /api/v1/policies/catalog: Lấy danh mục policy cho dropdown UI.
 func (h *PolicyHandler) Catalog(c *gin.Context) {
-	out, err := h.Service.PolicyCatalog(c.Request.Context())
+	ctx, cancel := context.WithTimeout(c.Request.Context(), policyQueryTimeout)
+	defer cancel()
+
+	out, err := h.Service.PolicyCatalog(ctx)
 	if err != nil {
 		status := http.StatusInternalServerError
 		message := "policy storage unavailable"
 		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			status = http.StatusGatewayTimeout
+			message = "policy catalog query timed out"
 		case errors.Is(err, taxonomy.ErrPolicyInvalid), errors.Is(err, taxonomy.ErrPolicyUnsupported):
 			status = http.StatusUnprocessableEntity
 			message = err.Error()
@@ -113,12 +138,19 @@ func (h *PolicyHandler) Catalog(c *gin.Context) {
 	c.JSON(http.StatusOK, items)
 }
 
+// RuleCatalog xử lý HTTP GET /api/v1/policies/rules: Danh mục rule phục vụ gán vào policy.
 func (h *PolicyHandler) RuleCatalog(c *gin.Context) {
-	out, err := h.Service.PolicyRuleCatalog(c.Request.Context())
+	ctx, cancel := context.WithTimeout(c.Request.Context(), policyQueryTimeout)
+	defer cancel()
+
+	out, err := h.Service.PolicyRuleCatalog(ctx)
 	if err != nil {
 		status := http.StatusInternalServerError
 		message := "policy storage unavailable"
 		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			status = http.StatusGatewayTimeout
+			message = "policy rule catalog query timed out"
 		case errors.Is(err, taxonomy.ErrPolicyInvalid), errors.Is(err, taxonomy.ErrPolicyUnsupported):
 			status = http.StatusUnprocessableEntity
 			message = err.Error()
@@ -150,12 +182,19 @@ func (h *PolicyHandler) RuleCatalog(c *gin.Context) {
 	c.JSON(http.StatusOK, items)
 }
 
+// Cluster xử lý HTTP GET /api/v1/policies/cluster: Báo cáo trạng thái đồng bộ policy của toàn cụm.
 func (h *PolicyHandler) Cluster(c *gin.Context) {
-	out, err := h.Service.PolicyCluster(c.Request.Context())
+	ctx, cancel := context.WithTimeout(c.Request.Context(), policyQueryTimeout)
+	defer cancel()
+
+	out, err := h.Service.PolicyCluster(ctx)
 	if err != nil {
 		status := http.StatusInternalServerError
 		message := "policy storage unavailable"
 		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			status = http.StatusGatewayTimeout
+			message = "policy cluster query timed out"
 		case errors.Is(err, taxonomy.ErrPolicyInvalid), errors.Is(err, taxonomy.ErrPolicyUnsupported):
 			status = http.StatusUnprocessableEntity
 			message = err.Error()
@@ -284,11 +323,17 @@ func (h *PolicyHandler) SaveDraft(c *gin.Context) {
 		}
 	}
 
-	out, err := h.Service.Save(c.Request.Context(), cmd)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), policyDraftTimeout)
+	defer cancel()
+
+	out, err := h.Service.Save(ctx, cmd)
 	if err != nil {
 		status := http.StatusInternalServerError
 		message := "policy storage unavailable"
 		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			status = http.StatusGatewayTimeout
+			message = "policy save draft timed out"
 		case errors.Is(err, taxonomy.ErrPolicyInvalid), errors.Is(err, taxonomy.ErrPolicyUnsupported):
 			status = http.StatusUnprocessableEntity
 			message = err.Error()
@@ -344,11 +389,17 @@ func (h *PolicyHandler) PublishDraft(c *gin.Context) {
 		RequestKey:      requestKey,
 	}
 
-	out, err := h.Service.Publish(c.Request.Context(), cmd)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), policyPublishTimeout)
+	defer cancel()
+
+	out, err := h.Service.Publish(ctx, cmd)
 	if err != nil {
 		status := http.StatusInternalServerError
 		message := "policy storage unavailable"
 		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			status = http.StatusGatewayTimeout
+			message = "policy publish timed out"
 		case errors.Is(err, taxonomy.ErrPolicyInvalid), errors.Is(err, taxonomy.ErrPolicyUnsupported):
 			status = http.StatusUnprocessableEntity
 			message = err.Error()
@@ -374,12 +425,19 @@ func (h *PolicyHandler) PublishDraft(c *gin.Context) {
 	})
 }
 
+// Desired xử lý HTTP GET /api/v1/policies/:node/desired: Cung cấp snapshot policy mong muốn cho worker node.
 func (h *PolicyHandler) Desired(c *gin.Context) {
-	out, err := h.Service.PolicySync(c.Request.Context(), entity.PolicySyncQuery{NodeID: c.Param("node")})
+	ctx, cancel := context.WithTimeout(c.Request.Context(), policyQueryTimeout)
+	defer cancel()
+
+	out, err := h.Service.PolicySync(ctx, entity.PolicySyncQuery{NodeID: c.Param("node")})
 	if err != nil {
 		status := http.StatusInternalServerError
 		message := "policy storage unavailable"
 		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			status = http.StatusGatewayTimeout
+			message = "policy desired sync timed out"
 		case errors.Is(err, taxonomy.ErrPolicyInvalid), errors.Is(err, taxonomy.ErrPolicyUnsupported):
 			status = http.StatusUnprocessableEntity
 			message = err.Error()
@@ -423,10 +481,16 @@ func (h *PolicyHandler) Report(c *gin.Context) {
 		Phase:     req.Phase,
 		Message:   req.Message,
 	}
-	if err := h.Service.PolicyReport(c.Request.Context(), cmd); err != nil {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), policyQueryTimeout)
+	defer cancel()
+
+	if err := h.Service.PolicyReport(ctx, cmd); err != nil {
 		status := http.StatusInternalServerError
 		message := "policy storage unavailable"
 		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			status = http.StatusGatewayTimeout
+			message = "policy report timed out"
 		case errors.Is(err, taxonomy.ErrPolicyInvalid), errors.Is(err, taxonomy.ErrPolicyUnsupported):
 			status = http.StatusUnprocessableEntity
 			message = err.Error()

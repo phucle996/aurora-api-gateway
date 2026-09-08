@@ -1,12 +1,14 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	port "aurora-waf.local/control-plane/internal/domain/service"
@@ -14,7 +16,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Thời gian chờ tối đa cho các tác vụ trên Upstream Pool
+const (
+	upstreamChangeTimeout = 10 * time.Second // Dành cho Create, Update, Delete upstream pool (OCC & reload)
+	upstreamQueryTimeout  = 5 * time.Second  // Dành cho List, GetByID truy vấn SQLite
+	upstreamSyncTimeout   = 5 * time.Second  // Dành cho node sync Desired snapshot và Report
+)
+
 // UpstreamHandler bao đóng các HTTP endpoint cho Upstream workflow.
+// Quản lý cấu hình cụm máy chủ backend (Upstream Nodes), thuật toán cân bằng tải (Load Balancing),
+// kiểm tra sức khỏe (Health Probes), giao vận (Transport / HTTP Version) và bảo mật nội bộ (Internal mTLS).
 type UpstreamHandler struct {
 	service port.UpstreamService
 }
@@ -117,8 +128,15 @@ func (h *UpstreamHandler) Create(c *gin.Context) {
 		},
 	}
 
-	item, err := h.service.CreateUpstream(c.Request.Context(), cmd)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), upstreamChangeTimeout)
+	defer cancel()
+
+	item, err := h.service.CreateUpstream(ctx, cmd)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Thao tác tạo upstream pool đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -314,8 +332,15 @@ func (h *UpstreamHandler) Update(c *gin.Context) {
 		},
 	}
 
-	item, err := h.service.UpdateUpstream(c.Request.Context(), cmd)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), upstreamChangeTimeout)
+	defer cancel()
+
+	item, err := h.service.UpdateUpstream(ctx, cmd)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Thao tác cập nhật upstream pool đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -441,8 +466,15 @@ func (h *UpstreamHandler) List(c *gin.Context) {
 		Offset:           offset,
 	}
 
-	items, total, err := h.service.ListUpstreams(c.Request.Context(), query)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), upstreamQueryTimeout)
+	defer cancel()
+
+	items, total, err := h.service.ListUpstreams(ctx, query)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn danh sách upstream đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi truy vấn danh sách upstream: " + err.Error()})
 		return
 	}
@@ -562,8 +594,15 @@ func (h *UpstreamHandler) GetByID(c *gin.Context) {
 		return
 	}
 
-	item, err := h.service.GetUpstream(c.Request.Context(), id)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), upstreamQueryTimeout)
+	defer cancel()
+
+	item, err := h.service.GetUpstream(ctx, id)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn chi tiết upstream đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi truy vấn upstream: " + err.Error()})
 		return
 	}
@@ -677,7 +716,14 @@ func (h *UpstreamHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.DeleteUpstream(c.Request.Context(), id); err != nil {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), upstreamChangeTimeout)
+	defer cancel()
+
+	if err := h.service.DeleteUpstream(ctx, id); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Thao tác xóa upstream đã hết thời gian chờ"})
+			return
+		}
 		if strings.Contains(err.Error(), "still referenced by domains") {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -702,8 +748,15 @@ func (h *UpstreamHandler) Desired(c *gin.Context) {
 		return
 	}
 
-	snapshot, err := h.service.GetDesiredSnapshot(c.Request.Context(), nodeID)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), upstreamSyncTimeout)
+	defer cancel()
+
+	snapshot, err := h.service.GetDesiredSnapshot(ctx, nodeID)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Lấy cấu hình upstream mong muốn đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi lấy cấu hình upstream mong muốn: " + err.Error()})
 		return
 	}
@@ -849,8 +902,15 @@ func (h *UpstreamHandler) Report(c *gin.Context) {
 		return
 	}
 
-	err := h.service.ReportSyncStatus(c.Request.Context(), nodeID, req.ReleaseID, req.Phase, req.Message)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), upstreamSyncTimeout)
+	defer cancel()
+
+	err := h.service.ReportSyncStatus(ctx, nodeID, req.ReleaseID, req.Phase, req.Message)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Ghi nhận báo cáo đồng bộ đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi ghi nhận báo cáo đồng bộ: " + err.Error()})
 		return
 	}

@@ -1,15 +1,24 @@
 package handler
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	port "aurora-waf.local/control-plane/internal/domain/service"
 	"aurora-waf.local/control-plane/internal/transport/http/dto"
 	"github.com/gin-gonic/gin"
 )
 
-// NotificationHandler xử lý các yêu cầu HTTP liên quan đến cấu hình kênh thông báo và kiểm thử gửi tin.
+// Thời gian chờ tối đa cho các tác vụ Notification
+const (
+	notificationQueryTimeout  = 5 * time.Second  // Dành cho GetOverview truy vấn SQLite
+	notificationActionTimeout = 10 * time.Second // Dành cho UpdateChannel, UpdateRule, TestChannel
+)
+
+// NotificationHandler xử lý các yêu cầu HTTP liên quan đến cấu hình kênh thông báo (Telegram, Discord, Slack, Webhook) và kiểm thử gửi tin.
 type NotificationHandler struct {
 	service port.NotificationService
 }
@@ -23,8 +32,15 @@ func NewNotificationHandler(service port.NotificationService) *NotificationHandl
 func (h *NotificationHandler) GetOverview(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 
-	overview, err := h.service.GetOverview(c.Request.Context())
+	ctx, cancel := context.WithTimeout(c.Request.Context(), notificationQueryTimeout)
+	defer cancel()
+
+	overview, err := h.service.GetOverview(ctx)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn danh sách thông báo đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -73,7 +89,14 @@ func (h *NotificationHandler) UpdateChannel(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.UpdateChannel(c.Request.Context(), id, req.Enabled, req.ConfigJSON); err != nil {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), notificationActionTimeout)
+	defer cancel()
+
+	if err := h.service.UpdateChannel(ctx, id, req.Enabled, req.ConfigJSON); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Cập nhật kênh thông báo đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -96,7 +119,14 @@ func (h *NotificationHandler) UpdateRule(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.UpdateRule(c.Request.Context(), id, req.Enabled); err != nil {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), notificationActionTimeout)
+	defer cancel()
+
+	if err := h.service.UpdateRule(ctx, id, req.Enabled); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Cập nhật quy tắc cảnh báo đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -113,8 +143,15 @@ func (h *NotificationHandler) TestChannel(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	id := strings.ToLower(c.Param("id"))
 
-	result, err := h.service.TestChannel(c.Request.Context(), id)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), notificationActionTimeout)
+	defer cancel()
+
+	result, err := h.service.TestChannel(ctx, id)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Kiểm thử kênh thông báo đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

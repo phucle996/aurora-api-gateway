@@ -1,16 +1,25 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	port "aurora-waf.local/control-plane/internal/domain/service"
 	"aurora-waf.local/control-plane/internal/domain/taxonomy"
 	"github.com/gin-gonic/gin"
+)
+
+// Thời gian chờ tối đa cho các tác vụ Metrics & Telemetry
+const (
+	metricsQueryTimeout  = 5 * time.Second  // Dành cho GetConfig và GetNodeMetrics
+	metricsConfigTimeout = 5 * time.Second  // Dành cho UpdateConfig lưu cấu hình vào DB
+	metricsTestTimeout   = 10 * time.Second // Dành cho TestConnection kiểm tra kết nối Prometheus từ xa
 )
 
 // MetricsHandler bao đóng các HTTP endpoint xử lý cho Settings & Telemetry Integrations.
@@ -26,9 +35,15 @@ func NewMetricsHandler(s port.MetricsService) *MetricsHandler {
 // GetConfig xử lý HTTP GET /api/v1/settings/integrations/metrics:
 // Lấy cấu hình tích hợp metrics hiện tại (Standalone vs External Prometheus).
 func (h *MetricsHandler) GetConfig(c *gin.Context) {
-	ctx := c.Request.Context()
+	ctx, cancel := context.WithTimeout(c.Request.Context(), metricsQueryTimeout)
+	defer cancel()
+
 	cfg, err := h.service.GetConfig(ctx)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn cấu hình metrics đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi truy vấn cấu hình metrics: " + err.Error()})
 		return
 	}
@@ -81,8 +96,14 @@ func (h *MetricsHandler) UpdateConfig(c *gin.Context) {
 		PrometheusJob: req.PrometheusJob,
 	}
 
-	ctx := c.Request.Context()
+	ctx, cancel := context.WithTimeout(c.Request.Context(), metricsConfigTimeout)
+	defer cancel()
+
 	if err := h.service.SaveConfig(ctx, cfg); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Lưu cấu hình metrics đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 		return
 	}
@@ -131,9 +152,15 @@ func (h *MetricsHandler) TestConnection(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
+	ctx, cancel := context.WithTimeout(c.Request.Context(), metricsTestTimeout)
+	defer cancel()
+
 	res, err := h.service.TestPrometheus(ctx, req.URL)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Kiểm tra kết nối Prometheus đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -157,9 +184,15 @@ func (h *MetricsHandler) GetNodeMetrics(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
+	ctx, cancel := context.WithTimeout(c.Request.Context(), metricsQueryTimeout)
+	defer cancel()
+
 	points, err := h.service.GetNodeMetrics(ctx, nodeID)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn metrics node đã hết thời gian chờ"})
+			return
+		}
 		if errors.Is(err, taxonomy.ErrMetricsDisabled) {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"error":   "METRICS_DISABLED",

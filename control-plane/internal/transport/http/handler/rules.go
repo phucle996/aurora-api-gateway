@@ -1,11 +1,8 @@
 package handler
 
 import (
-	"aurora-waf.local/control-plane/internal/domain/entity"
-	port "aurora-waf.local/control-plane/internal/domain/service"
-	"aurora-waf.local/control-plane/internal/domain/taxonomy"
-	"aurora-waf.local/control-plane/internal/transport/http/dto"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,9 +13,21 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
+	"aurora-waf.local/control-plane/internal/domain/entity"
+	port "aurora-waf.local/control-plane/internal/domain/service"
+	"aurora-waf.local/control-plane/internal/domain/taxonomy"
+	"aurora-waf.local/control-plane/internal/transport/http/dto"
 	"github.com/gin-gonic/gin"
+)
+
+// Thời gian chờ tối đa cho các tác vụ Rule Management
+const (
+	ruleQueryTimeout    = 5 * time.Second  // Dành cho List, Detail, History, Stats, ReleaseDetail
+	ruleMutationTimeout = 10 * time.Second // Dành cho Create, Update, Delete, CreateDefinition, UpdateDefinition, Test
+	rulePublishTimeout  = 15 * time.Second // Dành cho Publish và Rollback (biên dịch compiler và release)
 )
 
 // RuleHandler bao đóng các HTTP endpoint xử lý cho WAF Rules và Releases.
@@ -144,9 +153,14 @@ func (h *RuleHandler) Create(c *gin.Context) {
 	}
 
 	// Bước 6: Gọi dịch vụ nghiệp vụ để ghi nhận vào hệ thống
-	out, err := h.service.Create(c.Request.Context(), cmd)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), ruleMutationTimeout)
+	defer cancel()
+
+	out, err := h.service.Create(ctx, cmd)
 	if err != nil {
 		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			c.String(http.StatusGatewayTimeout, "create rule timed out")
 		case errors.Is(err, taxonomy.ErrRuleInvalid):
 			c.String(http.StatusUnprocessableEntity, err.Error())
 		case errors.Is(err, taxonomy.ErrRuleConflict):
@@ -272,9 +286,14 @@ func (h *RuleHandler) Update(c *gin.Context) {
 	}
 
 	// Bước 6: Thực thi điều chỉnh tại tầng Service
-	out, err := h.service.Update(c.Request.Context(), cmd)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), ruleMutationTimeout)
+	defer cancel()
+
+	out, err := h.service.Update(ctx, cmd)
 	if err != nil {
 		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			c.String(http.StatusGatewayTimeout, "update rule timed out")
 		case errors.Is(err, taxonomy.ErrRuleNotFound):
 			c.String(http.StatusNotFound, err.Error())
 		case errors.Is(err, taxonomy.ErrRuleInvalid):
@@ -367,7 +386,10 @@ func (h *RuleHandler) List(c *gin.Context) {
 	}
 
 	// Bước 3: Đóng gói truy vấn và gọi tầng Service
-	out, err := h.service.List(c.Request.Context(), entity.ListRulesQuery{
+	ctx, cancel := context.WithTimeout(c.Request.Context(), ruleQueryTimeout)
+	defer cancel()
+
+	out, err := h.service.List(ctx, entity.ListRulesQuery{
 		Limit:    limit,
 		After:    after,
 		Search:   search,
@@ -377,6 +399,10 @@ func (h *RuleHandler) List(c *gin.Context) {
 		Enabled:  enabled,
 	})
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.String(http.StatusGatewayTimeout, "list rules timed out")
+			return
+		}
 		c.String(http.StatusInternalServerError, "rules operation failed")
 		return
 	}
@@ -429,8 +455,15 @@ func (h *RuleHandler) Detail(c *gin.Context) {
 	}
 
 	// Bước 2: Đọc dữ liệu chi tiết từ tầng Service
-	out, err := h.service.Detail(c.Request.Context(), entity.RuleDetailQuery{ID: id})
+	ctx, cancel := context.WithTimeout(c.Request.Context(), ruleQueryTimeout)
+	defer cancel()
+
+	out, err := h.service.Detail(ctx, entity.RuleDetailQuery{ID: id})
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.String(http.StatusGatewayTimeout, "get rule detail timed out")
+			return
+		}
 		if errors.Is(err, taxonomy.ErrRuleNotFound) {
 			c.String(http.StatusNotFound, err.Error())
 			return
@@ -517,8 +550,15 @@ func (h *RuleHandler) History(c *gin.Context) {
 	}
 
 	// Bước 3: Đọc lịch sử từ tầng Service
-	out, err := h.service.History(c.Request.Context(), entity.RuleHistoryQuery{ID: id, Before: before, Limit: limit})
+	ctx, cancel := context.WithTimeout(c.Request.Context(), ruleQueryTimeout)
+	defer cancel()
+
+	out, err := h.service.History(ctx, entity.RuleHistoryQuery{ID: id, Before: before, Limit: limit})
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.String(http.StatusGatewayTimeout, "get rule history timed out")
+			return
+		}
 		if errors.Is(err, taxonomy.ErrRuleNotFound) {
 			c.String(http.StatusNotFound, err.Error())
 			return
@@ -602,13 +642,20 @@ func (h *RuleHandler) Rollback(c *gin.Context) {
 		actor = "unknown"
 	}
 
-	out, err := h.service.Rollback(c.Request.Context(), entity.RollbackRuleCommand{
+	ctx, cancel := context.WithTimeout(c.Request.Context(), rulePublishTimeout)
+	defer cancel()
+
+	out, err := h.service.Rollback(ctx, entity.RollbackRuleCommand{
 		ID:              id,
 		TargetVersion:   req.TargetVersion,
 		ExpectedVersion: req.ExpectedVersion,
 		Actor:           actor,
 	})
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.String(http.StatusGatewayTimeout, "rollback rule timed out")
+			return
+		}
 		if errors.Is(err, taxonomy.ErrRuleNotFound) {
 			c.String(http.StatusNotFound, err.Error())
 			return
@@ -640,8 +687,15 @@ func (h *RuleHandler) Rollback(c *gin.Context) {
 // - Thống kê tổng số lượng luật, số luật đang Bật (Enabled), số luật ở chế độ Ghi log (Log), số luật đang Chặn (Block).
 // - So sánh mức độ tăng/giảm (Delta) so với mốc thời gian đầu tháng hiện tại để theo dõi biến động số lượng quy tắc bảo mật.
 func (h *RuleHandler) Stats(c *gin.Context) {
-	out, err := h.service.Stats(c.Request.Context(), entity.RuleStatsQuery{})
+	ctx, cancel := context.WithTimeout(c.Request.Context(), ruleQueryTimeout)
+	defer cancel()
+
+	out, err := h.service.Stats(ctx, entity.RuleStatsQuery{})
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.String(http.StatusGatewayTimeout, "get rule stats timed out")
+			return
+		}
 		c.String(http.StatusInternalServerError, "rules operation failed")
 		return
 	}
@@ -685,9 +739,14 @@ func (h *RuleHandler) Publish(c *gin.Context) {
 	}
 
 	// Bước 3: Tiến hành đặt trước lô phát hành và chạy quy trình biên dịch
-	out, err := h.service.Publish(c.Request.Context(), entity.PublishRulesCommand{RequestKey: key})
+	ctx, cancel := context.WithTimeout(c.Request.Context(), rulePublishTimeout)
+	defer cancel()
+
+	out, err := h.service.Publish(ctx, entity.PublishRulesCommand{RequestKey: key})
 	if err != nil {
 		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			c.String(http.StatusGatewayTimeout, "publish rules timed out")
 		case errors.Is(err, taxonomy.ErrRuleInvalid):
 			c.String(http.StatusUnprocessableEntity, err.Error())
 		case errors.Is(err, taxonomy.ErrPublishUnavailable):
@@ -717,9 +776,14 @@ func (h *RuleHandler) ReleaseDetail(c *gin.Context) {
 		c.String(http.StatusBadRequest, "invalid release ID")
 		return
 	}
-	out, err := h.service.Release(c.Request.Context(), entity.ReleaseDetailQuery{ID: id})
+	ctx, cancel := context.WithTimeout(c.Request.Context(), ruleQueryTimeout)
+	defer cancel()
+
+	out, err := h.service.Release(ctx, entity.ReleaseDetailQuery{ID: id})
 	if err != nil {
 		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			c.String(http.StatusGatewayTimeout, "get release detail timed out")
 		case errors.Is(err, taxonomy.ErrRuleNotFound):
 			c.String(http.StatusNotFound, err.Error())
 		default:
@@ -1003,8 +1067,15 @@ func (h *RuleHandler) CreateDefinition(c *gin.Context) {
 	}
 
 	// Bước 10: Thực thi tạo luật đa điều kiện trong Service
-	out, err := h.service.CreateDefinition(c.Request.Context(), cmd)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), ruleMutationTimeout)
+	defer cancel()
+
+	out, err := h.service.CreateDefinition(ctx, cmd)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.String(http.StatusGatewayTimeout, "create rule definition timed out")
+			return
+		}
 		if errors.Is(err, taxonomy.ErrRuleConflict) {
 			c.String(http.StatusConflict, err.Error())
 			return
@@ -1098,8 +1169,15 @@ func (h *RuleHandler) Test(c *gin.Context) {
 		ResponseCode: req.ResponseCode,
 	}
 
-	res, err := h.service.Test(c.Request.Context(), cmd)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), ruleMutationTimeout)
+	defer cancel()
+
+	res, err := h.service.Test(ctx, cmd)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.String(http.StatusGatewayTimeout, "test rule timed out")
+			return
+		}
 		if errors.Is(err, taxonomy.ErrRuleNotFound) {
 			c.String(404, "rule not found")
 		} else if errors.Is(err, taxonomy.ErrRuleInvalid) {
@@ -1401,8 +1479,15 @@ func (h *RuleHandler) UpdateDefinition(c *gin.Context) {
 	}
 
 	// Bước 10: Thực thi tạo luật đa điều kiện trong Service
-	out, err := h.service.UpdateDefinition(c.Request.Context(), cmd)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), ruleMutationTimeout)
+	defer cancel()
+
+	out, err := h.service.UpdateDefinition(ctx, cmd)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.String(http.StatusGatewayTimeout, "update rule definition timed out")
+			return
+		}
 		if errors.Is(err, taxonomy.ErrRuleConflict) {
 			c.String(http.StatusConflict, err.Error())
 			return
@@ -1431,8 +1516,15 @@ func (h *RuleHandler) Delete(c *gin.Context) {
 		c.String(400, "invalid delete request")
 		return
 	}
-	out, err := h.service.Delete(c.Request.Context(), entity.DeleteRuleCommand{ID: id, ExpectedVersion: req.ExpectedVersion, Actor: c.GetString("username")})
+	ctx, cancel := context.WithTimeout(c.Request.Context(), ruleMutationTimeout)
+	defer cancel()
+
+	out, err := h.service.Delete(ctx, entity.DeleteRuleCommand{ID: id, ExpectedVersion: req.ExpectedVersion, Actor: c.GetString("username")})
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.String(http.StatusGatewayTimeout, "delete rule timed out")
+			return
+		}
 		if errors.Is(err, taxonomy.ErrRuleConflict) {
 			c.String(409, "Rule changed or is assigned to a policy. Refresh and remove policy assignments before deletion.")
 		} else {

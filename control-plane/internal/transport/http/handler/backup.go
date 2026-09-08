@@ -1,14 +1,24 @@
 package handler
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	port "aurora-waf.local/control-plane/internal/domain/service"
 	"aurora-waf.local/control-plane/internal/transport/http/dto"
 	"github.com/gin-gonic/gin"
+)
+
+// Thời gian chờ tối đa cho các tác vụ Backup & Restore
+const (
+	backupQueryTimeout  = 5 * time.Second  // Dành cho GetOverview truy vấn cấu hình và lịch sử
+	backupConfigTimeout = 10 * time.Second // Dành cho UpdateConfig cập nhật cấu hình backup
+	backupActionTimeout = 30 * time.Second // Dành cho tạo snapshot, tải file, upload S3 hoặc phục hồi
 )
 
 // BackupHandler xử lý các API endpoint sao lưu dữ liệu, xuất file download, đẩy S3 và phục hồi snapshot.
@@ -25,8 +35,15 @@ func NewBackupHandler(service port.BackupService) *BackupHandler {
 func (h *BackupHandler) GetOverview(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 
-	overview, err := h.service.GetOverview(c.Request.Context())
+	ctx, cancel := context.WithTimeout(c.Request.Context(), backupQueryTimeout)
+	defer cancel()
+
+	overview, err := h.service.GetOverview(ctx)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn thông tin sao lưu đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -88,7 +105,14 @@ func (h *BackupHandler) UpdateConfig(c *gin.Context) {
 		S3RetentionDays:   req.S3RetentionDays,
 	}
 
-	if err := h.service.UpdateConfig(c.Request.Context(), cfg); err != nil {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), backupConfigTimeout)
+	defer cancel()
+
+	if err := h.service.UpdateConfig(ctx, cfg); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Cập nhật cấu hình sao lưu đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -100,8 +124,15 @@ func (h *BackupHandler) UpdateConfig(c *gin.Context) {
 func (h *BackupHandler) DownloadLocalBackup(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 
-	data, filename, err := h.service.CreateLocalSnapshot(c.Request.Context())
+	ctx, cancel := context.WithTimeout(c.Request.Context(), backupActionTimeout)
+	defer cancel()
+
+	data, filename, err := h.service.CreateLocalSnapshot(ctx)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Tạo bản sao lưu đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể tạo bản sao lưu: " + err.Error()})
 		return
 	}
@@ -116,8 +147,15 @@ func (h *BackupHandler) DownloadLocalBackup(c *gin.Context) {
 func (h *BackupHandler) TriggerS3Backup(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 
-	item, err := h.service.TriggerS3Backup(c.Request.Context())
+	ctx, cancel := context.WithTimeout(c.Request.Context(), backupActionTimeout)
+	defer cancel()
+
+	item, err := h.service.TriggerS3Backup(ctx)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Đẩy bản sao lưu lên S3 đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -156,8 +194,15 @@ func (h *BackupHandler) RestoreSnapshot(c *gin.Context) {
 		return
 	}
 
-	result, err := h.service.RestoreSnapshot(c.Request.Context(), fileBytes)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), backupActionTimeout)
+	defer cancel()
+
+	result, err := h.service.RestoreSnapshot(ctx, fileBytes)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Phục hồi bản sao lưu đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

@@ -1,7 +1,10 @@
 package handler
 
 import (
+	"context"
+	"errors"
 	"net/http"
+	"time"
 
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	port "aurora-waf.local/control-plane/internal/domain/service"
@@ -10,17 +13,34 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Thời gian chờ tối đa cho các tác vụ quản lý phụ thuộc (NGINX Dependencies)
+const (
+	dependenciesQueryTimeout    = 5 * time.Second  // Dành cho List và Poll truy vấn SQLite
+	dependenciesMutationTimeout = 10 * time.Second // Dành cho Queue công việc và Report kết quả
+)
+
+// DependenciesHandler xử lý các API kiểm tra module NGINX phụ thuộc (Brotli, GeoIP2...) và điều phối cài đặt trên worker nodes.
 type DependenciesHandler struct {
 	service port.DependenciesService
 }
 
+// NewDependenciesHandler khởi tạo handler với DependenciesService.
 func NewDependenciesHandler(s port.DependenciesService) *DependenciesHandler {
 	return &DependenciesHandler{service: s}
 }
 
+// List xử lý HTTP GET /api/v1/settings/dependencies:
+// Trả về danh sách trạng thái các module NGINX đã nạp hoặc có sẵn trên từng node trong cluster.
 func (h *DependenciesHandler) List(c *gin.Context) {
-	out, e := h.service.List(c.Request.Context(), entity.ListDependenciesQuery{})
+	ctx, cancel := context.WithTimeout(c.Request.Context(), dependenciesQueryTimeout)
+	defer cancel()
+
+	out, e := h.service.List(ctx, entity.ListDependenciesQuery{})
 	if e != nil {
+		if errors.Is(e, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Truy vấn danh sách phụ thuộc đã hết thời gian chờ"})
+			return
+		}
 		c.AbortWithStatus(500)
 		return
 	}
@@ -55,6 +75,8 @@ func (h *DependenciesHandler) List(c *gin.Context) {
 	c.JSON(200, res)
 }
 
+// Queue xử lý HTTP POST /api/v1/settings/dependencies/:node/jobs:
+// Yêu cầu quyền admin để đưa lệnh cài đặt/gỡ bỏ module NGINX vào hàng đợi thực thi của node.
 func (h *DependenciesHandler) Queue(c *gin.Context) {
 	if c.GetString(middleware.CtxUserRoleKey) != "admin" {
 		c.AbortWithStatus(403)
@@ -66,8 +88,20 @@ func (h *DependenciesHandler) Queue(c *gin.Context) {
 		c.AbortWithStatus(400)
 		return
 	}
-	out, e := h.service.Queue(c.Request.Context(), entity.QueueDependencyCommand{NodeID: c.Param("node"), Action: req.Action, Actor: c.GetString(middleware.CtxUserIDKey)})
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), dependenciesMutationTimeout)
+	defer cancel()
+
+	out, e := h.service.Queue(ctx, entity.QueueDependencyCommand{
+		NodeID: c.Param("node"),
+		Action: req.Action,
+		Actor:  c.GetString(middleware.CtxUserIDKey),
+	})
 	if e != nil {
+		if errors.Is(e, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Tạo tác vụ cài đặt phụ thuộc đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(422, gin.H{"error": e.Error()})
 		return
 	}
@@ -78,9 +112,18 @@ func (h *DependenciesHandler) Queue(c *gin.Context) {
 	})
 }
 
+// Poll xử lý HTTP GET /api/v1/settings/dependencies/:node/poll:
+// Endpoint cho node định kỳ thăm dò (poll) công việc cài đặt module đang chờ xử lý.
 func (h *DependenciesHandler) Poll(c *gin.Context) {
-	out, e := h.service.Poll(c.Request.Context(), entity.PollDependencyQuery{NodeID: c.Param("node")})
+	ctx, cancel := context.WithTimeout(c.Request.Context(), dependenciesQueryTimeout)
+	defer cancel()
+
+	out, e := h.service.Poll(ctx, entity.PollDependencyQuery{NodeID: c.Param("node")})
 	if e != nil {
+		if errors.Is(e, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Thăm dò công việc phụ thuộc đã hết thời gian chờ"})
+			return
+		}
 		c.AbortWithStatus(500)
 		return
 	}
@@ -90,6 +133,8 @@ func (h *DependenciesHandler) Poll(c *gin.Context) {
 	})
 }
 
+// Report xử lý HTTP POST /api/v1/settings/dependencies/:node/report:
+// Node báo cáo kết quả kiểm tra module hoặc trạng thái hoàn thành của job cài đặt.
 func (h *DependenciesHandler) Report(c *gin.Context) {
 	var req dto.ReportDependencyRequest
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
@@ -121,7 +166,14 @@ func (h *DependenciesHandler) Report(c *gin.Context) {
 		JobMessage:   req.JobMessage,
 	}
 
-	if e := h.service.Report(c.Request.Context(), cmd); e != nil {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), dependenciesMutationTimeout)
+	defer cancel()
+
+	if e := h.service.Report(ctx, cmd); e != nil {
+		if errors.Is(e, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Báo cáo phụ thuộc đã hết thời gian chờ"})
+			return
+		}
 		c.JSON(422, gin.H{"error": e.Error()})
 		return
 	}
