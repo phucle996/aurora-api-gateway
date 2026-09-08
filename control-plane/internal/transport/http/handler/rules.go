@@ -23,45 +23,32 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Thời gian chờ tối đa cho các tác vụ Rule Management
 const (
 	ruleQueryTimeout    = 5 * time.Second  // Dành cho List, Detail, History, Stats, ReleaseDetail
 	ruleMutationTimeout = 10 * time.Second // Dành cho Create, Update, Delete, CreateDefinition, UpdateDefinition, Test
 	rulePublishTimeout  = 15 * time.Second // Dành cho Publish và Rollback (biên dịch compiler và release)
 )
 
-// RuleHandler bao đóng các HTTP endpoint xử lý cho WAF Rules và Releases.
+// RuleHandler handles HTTP endpoints for WAF rules and compiled releases.
 type RuleHandler struct {
 	service port.RuleService
 }
 
-// NewRuleHandler khởi tạo RuleHandler với service tương ứng.
+// NewRuleHandler creates a new RuleHandler instance.
 func NewRuleHandler(s port.RuleService) *RuleHandler {
 	return &RuleHandler{service: s}
 }
 
-// ─── 1. Create Rule (POST /api/v1/rules — Đăng ký luật bảo vệ cơ bản) ──────────
 
-// CreateRule tiếp nhận yêu cầu tạo mới một luật bảo vệ WAF thế hệ 1 (theo đường dẫn tĩnh).
-//
-// Quy trình xử lý:
-// - Kiểm tra tiêu đề Content-Type bắt buộc là application/json.
-// - Giới hạn kích thước gói dữ liệu tối đa 64KB để bảo vệ bộ nhớ và chống tấn công làm quá tải máy chủ (DoS).
-// - Kiểm tra khóa chống trùng lặp Idempotency-Key (độ dài 16 đến 128 ký tự).
-// - Xác thực và chuẩn hóa dữ liệu trực tiếp (Inline Validation): tên, mô tả, điểm số, độ ưu tiên, đường dẫn, hành vi, mức độ nghiêm trọng, nhóm luật.
-// - Đóng gói dữ liệu sang entity.CreateRuleCommand phẳng và chuyển cho tầng Service xử lý.
-// - Phản hồi mã HTTP 201 Created cùng ID và phiên bản khởi tạo (Version = 1) dưới dạng JSON inline.
+// Create handles POST /api/v1/rules to create a basic WAF rule.
 func (h *RuleHandler) Create(c *gin.Context) {
-	// Bước 1: Kiểm tra tiêu đề Content-Type — bắt buộc là application/json
 	if strings.Split(c.GetHeader("Content-Type"), ";")[0] != "application/json" {
 		c.String(http.StatusUnsupportedMediaType, "application/json required")
 		return
 	}
-
-	// Bước 2: Khống chế dung lượng tối đa 64KB để bảo vệ bộ nhớ máy chủ
 	reader := http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
 	d := json.NewDecoder(reader)
-	d.DisallowUnknownFields() // Nghiêm cấm gửi thừa trường dữ liệu không nằm trong biểu mẫu
+	d.DisallowUnknownFields()
 
 	var req dto.CreateRuleRequest
 	if err := d.Decode(&req); err != nil {
@@ -73,26 +60,15 @@ func (h *RuleHandler) Create(c *gin.Context) {
 		c.String(http.StatusBadRequest, "invalid JSON")
 		return
 	}
-
-	// Đảm bảo request body không có dữ liệu lạ bám theo đuôi
 	if err := d.Decode(new(any)); err != io.EOF {
 		c.String(http.StatusBadRequest, "trailing JSON")
 		return
 	}
-
-	// Bước 3: Kiểm tra khóa chống trùng lặp Idempotency (độ dài hợp lệ từ 16 đến 128 ký tự)
 	key := c.GetHeader("Idempotency-Key")
 	if len(key) < 16 || len(key) > 128 {
 		c.String(http.StatusUnprocessableEntity, "invalid idempotency key")
 		return
 	}
-
-	// Bước 4: Xác thực và chuẩn hóa dữ liệu đầu vào trực tiếp (Inline Validation):
-	// - Tên luật: Bắt buộc, tối đa 120 ký tự UTF-8, không để khoảng trắng vô nghĩa.
-	// - Mô tả: Tối đa 2000 ký tự UTF-8.
-	// - Điểm rủi ro (Score): Thang điểm từ 0 đến 1000.
-	// - Thứ tự ưu tiên (Priority): Từ 0 đến 1.000.000.
-	// - Đường dẫn (Path): Bắt buộc bắt đầu bằng '/', tối đa 8192 ký tự, không chứa ký tự điều khiển hay đường dẫn tương đối (./..).
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" || len(req.Name) > 120 || !utf8.ValidString(req.Name) ||
 		len(req.Description) > 2000 || !utf8.ValidString(req.Description) ||
@@ -113,32 +89,24 @@ func (h *RuleHandler) Create(c *gin.Context) {
 			return
 		}
 	}
-
-	// Kiểm tra hành vi tác động: Chỉ cho phép 'allow' (cho qua), 'log' (ghi nhận theo dõi), 'block' (chặn đứng)
 	switch req.Action {
 	case "allow", "log", "block":
 	default:
 		c.String(http.StatusUnprocessableEntity, "invalid rule")
 		return
 	}
-
-	// Kiểm tra phân loại mức độ nghiêm trọng
 	switch req.Severity {
 	case "low", "medium", "high", "critical":
 	default:
 		c.String(http.StatusUnprocessableEntity, "invalid rule")
 		return
 	}
-
-	// Kiểm tra nhóm danh mục quy tắc bảo vệ
 	switch req.Group {
 	case "custom", "sqli", "xss", "traversal", "bot", "endpoint", "authentication":
 	default:
 		c.String(http.StatusUnprocessableEntity, "invalid rule")
 		return
 	}
-
-	// Bước 5: Đóng gói dữ liệu sạch từ DTO thành lệnh Command phẳng (Flat Entity) gửi vào tầng Service
 	cmd := entity.CreateRuleCommand{
 		RequestKey:  key,
 		Name:        req.Name,
@@ -151,8 +119,6 @@ func (h *RuleHandler) Create(c *gin.Context) {
 		Path:        req.Path,
 		Enabled:     req.Enabled,
 	}
-
-	// Bước 6: Gọi dịch vụ nghiệp vụ để ghi nhận vào hệ thống
 	ctx, cancel := context.WithTimeout(c.Request.Context(), ruleMutationTimeout)
 	defer cancel()
 
@@ -164,40 +130,25 @@ func (h *RuleHandler) Create(c *gin.Context) {
 		case errors.Is(err, taxonomy.ErrRuleInvalid):
 			c.String(http.StatusUnprocessableEntity, err.Error())
 		case errors.Is(err, taxonomy.ErrRuleConflict):
-			c.String(http.StatusConflict, err.Error()) // Trùng lặp khóa yêu cầu nhưng sai khác nội dung
+			c.String(http.StatusConflict, err.Error())
 		default:
 			c.String(http.StatusInternalServerError, "rules operation failed")
 		}
 		return
 	}
-
-	// Bước 7: Trả về kết quả thành công HTTP 201 Created bằng cấu trúc gin.H inline
 	c.JSON(http.StatusCreated, gin.H{
 		"id":      strconv.FormatInt(out.ID, 10),
 		"version": out.Version,
 	})
 }
 
-// ─── 2. Update Rule (PUT /api/v1/rules/:id — Điều chỉnh nội dung luật) ─────────
 
-// UpdateRule xử lý cập nhật toàn bộ nội dung của một luật WAF đang tồn tại.
-//
-// Quy trình xử lý:
-//   - Kiểm tra định dạng JSON và khống chế kích thước tối đa 64KB.
-//   - Kiểm tra tính hợp lệ của mã định danh (ID) trên URL.
-//   - Áp dụng cơ chế khóa lạc quan (Optimistic Concurrency Control) thông qua trường 'ExpectedVersion':
-//     Yêu cầu bên gọi phải gửi kèm phiên bản hiện tại mà họ muốn cập nhật. Nếu phiên bản trong CSDL đã bị
-//     thay đổi bởi một request khác trước đó, hệ thống sẽ trả về lỗi HTTP 409 Conflict để chống ghi đè mất dữ liệu.
-//   - Xác thực tính hợp lệ của tất cả các trường dữ liệu mới trước khi lưu.
-//   - Phản hồi mã HTTP 200 OK kèm phiên bản mới (Version + 1) dưới dạng JSON inline.
+// Update handles PUT /api/v1/rules/:id to update an existing WAF rule with optimistic concurrency control.
 func (h *RuleHandler) Update(c *gin.Context) {
-	// Bước 1: Kiểm tra định dạng payload gửi lên
 	if strings.Split(c.GetHeader("Content-Type"), ";")[0] != "application/json" {
 		c.String(http.StatusUnsupportedMediaType, "application/json required")
 		return
 	}
-
-	// Giới hạn 64KB kích thước gói dữ liệu
 	reader := http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
 	d := json.NewDecoder(reader)
 	d.DisallowUnknownFields()
@@ -216,21 +167,15 @@ func (h *RuleHandler) Update(c *gin.Context) {
 		c.String(http.StatusBadRequest, "trailing JSON")
 		return
 	}
-
-	// Bước 2: Kiểm tra tính hợp lệ của mã định danh luật cần sửa
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id < 1 {
 		c.String(http.StatusBadRequest, "invalid rule ID")
 		return
 	}
-
-	// Bước 3: Kiểm tra phiên bản kỳ vọng (Optimistic Lock)
 	if req.ExpectedVersion < 1 {
 		c.String(http.StatusUnprocessableEntity, "invalid expected version")
 		return
 	}
-
-	// Bước 4: Xác thực và chuẩn hóa các trường dữ liệu điều chỉnh
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" || len(req.Name) > 120 || !utf8.ValidString(req.Name) ||
 		len(req.Description) > 2000 || !utf8.ValidString(req.Description) ||
@@ -269,8 +214,6 @@ func (h *RuleHandler) Update(c *gin.Context) {
 		c.String(http.StatusUnprocessableEntity, "invalid rule")
 		return
 	}
-
-	// Bước 5: Ánh xạ dữ liệu sang entity UpdateRuleCommand
 	cmd := entity.UpdateRuleCommand{
 		ID:              id,
 		ExpectedVersion: req.ExpectedVersion,
@@ -284,8 +227,6 @@ func (h *RuleHandler) Update(c *gin.Context) {
 		Path:            req.Path,
 		Enabled:         req.Enabled,
 	}
-
-	// Bước 6: Thực thi điều chỉnh tại tầng Service
 	ctx, cancel := context.WithTimeout(c.Request.Context(), ruleMutationTimeout)
 	defer cancel()
 
@@ -299,31 +240,21 @@ func (h *RuleHandler) Update(c *gin.Context) {
 		case errors.Is(err, taxonomy.ErrRuleInvalid):
 			c.String(http.StatusUnprocessableEntity, err.Error())
 		case errors.Is(err, taxonomy.ErrRuleConflict):
-			c.String(http.StatusConflict, err.Error()) // Xung đột phiên bản (Đã có người sửa trước)
+			c.String(http.StatusConflict, err.Error())
 		default:
 			c.String(http.StatusInternalServerError, "rules operation failed")
 		}
 		return
 	}
-
-	// Bước 7: Trả về kết quả phiên bản mới được cập nhật
 	c.JSON(http.StatusOK, gin.H{
 		"id":      strconv.FormatInt(out.ID, 10),
 		"version": out.Version,
 	})
 }
 
-// ─── 3. List Rules (GET /api/v1/rules — Danh mục luật & Phân trang) ───────────
 
-// ListRules tiếp nhận các bộ lọc tra cứu và trả về danh sách luật đã được phân trang.
-//
-// Quy trình xử lý:
-// - Tiếp nhận và kiểm tra các tiêu chí lọc: từ khóa tìm kiếm (search), nhóm luật (group), hành vi (action), mức độ nghiêm trọng (severity), trạng thái bật/tắt (enabled).
-// - Áp dụng phân trang theo con trỏ ID (Cursor-based pagination) với tham số 'limit' (1 đến 100, mặc định 50) và 'after' (mốc ID bắt đầu).
-// - Đóng gói truy vấn vào entity.ListRulesQuery và gọi tầng Service để xử lý tối ưu qua CTE trong database.
-// - Phản hồi tổng số lượng bản ghi (Total), danh sách luật và mốc con trỏ trang kế tiếp (NextAfter).
+// List handles GET /api/v1/rules with pagination and search filters.
 func (h *RuleHandler) List(c *gin.Context) {
-	// Bước 1: Thẩm định tham số phân trang Limit (tối thiểu 1, tối đa 100)
 	limit := 50
 	var after int64
 	var err error
@@ -334,8 +265,6 @@ func (h *RuleHandler) List(c *gin.Context) {
 			return
 		}
 	}
-
-	// Thẩm định mốc con trỏ After
 	if afterStr := c.Query("after"); afterStr != "" {
 		after, err = strconv.ParseInt(afterStr, 10, 64)
 		if err != nil || after < 0 {
@@ -343,15 +272,11 @@ func (h *RuleHandler) List(c *gin.Context) {
 			return
 		}
 	}
-
-	// Bước 2: Thẩm định từ khóa tìm kiếm tên luật (tối đa 120 ký tự)
 	search := strings.TrimSpace(c.Query("search"))
 	if len(search) > 120 {
 		c.String(http.StatusUnprocessableEntity, "search keyword too long")
 		return
 	}
-
-	// Thẩm định tiêu chí lọc theo nhóm quy tắc
 	group := c.Query("group")
 	switch group {
 	case "", "custom", "sqli", "xss", "traversal", "bot", "endpoint", "authentication":
@@ -359,8 +284,6 @@ func (h *RuleHandler) List(c *gin.Context) {
 		c.String(http.StatusUnprocessableEntity, "unknown rule group")
 		return
 	}
-
-	// Thẩm định tiêu chí lọc theo hành vi xử lý
 	action := c.Query("action")
 	switch action {
 	case "", "allow", "block", "log":
@@ -368,8 +291,6 @@ func (h *RuleHandler) List(c *gin.Context) {
 		c.String(http.StatusUnprocessableEntity, "unknown action")
 		return
 	}
-
-	// Thẩm định tiêu chí lọc theo mức độ nghiêm trọng
 	severity := c.Query("severity")
 	switch severity {
 	case "", "low", "medium", "high", "critical":
@@ -377,15 +298,11 @@ func (h *RuleHandler) List(c *gin.Context) {
 		c.String(http.StatusUnprocessableEntity, "unknown severity")
 		return
 	}
-
-	// Thẩm định tiêu chí lọc theo trạng thái hoạt động (bật/tắt)
 	enabled := c.Query("enabled")
 	if enabled != "" && enabled != "true" && enabled != "false" {
 		c.String(http.StatusUnprocessableEntity, "enabled filter must be true or false")
 		return
 	}
-
-	// Bước 3: Đóng gói truy vấn và gọi tầng Service
 	ctx, cancel := context.WithTimeout(c.Request.Context(), ruleQueryTimeout)
 	defer cancel()
 
@@ -406,8 +323,6 @@ func (h *RuleHandler) List(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "rules operation failed")
 		return
 	}
-
-	// Bước 4: Chuyển đổi danh sách kết quả sang định dạng JSON inline bằng gin.H
 	items := make([]gin.H, 0, len(out.Items))
 	for _, item := range out.Items {
 		items = append(items, gin.H{
@@ -437,24 +352,14 @@ func (h *RuleHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// ─── 4. Rule Detail (GET /api/v1/rules/:id — Hồ sơ chi tiết của 1 luật) ────────
 
-// RuleDetail trả về toàn bộ thông số kỹ thuật và các điều kiện lọc của một luật cụ thể theo ID.
-//
-// Quy trình xử lý:
-// - Kiểm tra tính hợp lệ của ID luật trên URL.
-// - Gọi tầng Service để lấy thông tin chi tiết từ bảng chính và bảng mở rộng.
-// - Chuyển đổi danh sách điều kiện lọc (Conditions) sang định dạng gin.H inline.
-// - Phản hồi toàn bộ thông tin chi tiết của luật dưới dạng JSON.
+// Detail handles GET /api/v1/rules/:id.
 func (h *RuleHandler) Detail(c *gin.Context) {
-	// Bước 1: Đọc và kiểm tra ID luật
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id < 1 {
 		c.String(http.StatusBadRequest, "invalid rule ID")
 		return
 	}
-
-	// Bước 2: Đọc dữ liệu chi tiết từ tầng Service
 	ctx, cancel := context.WithTimeout(c.Request.Context(), ruleQueryTimeout)
 	defer cancel()
 
@@ -471,8 +376,6 @@ func (h *RuleHandler) Detail(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "rules operation failed")
 		return
 	}
-
-	// Bước 3: Định dạng danh sách các điều kiện kiểm tra (Conditions) thành danh sách gin.H
 	conditions := make([]gin.H, 0, len(out.Conditions))
 	for _, cond := range out.Conditions {
 		conditions = append(conditions, gin.H{
@@ -482,8 +385,6 @@ func (h *RuleHandler) Detail(c *gin.Context) {
 			"header_name": cond.HeaderName,
 		})
 	}
-
-	// Bước 4: Phản hồi toàn bộ hồ sơ chi tiết inline
 	c.JSON(http.StatusOK, gin.H{
 		"schema_version":    out.SchemaVersion,
 		"assigned_policies": out.AssignedPolicies, "created_at": out.CreatedAt, "created_by": out.CreatedBy,
@@ -514,24 +415,14 @@ func (h *RuleHandler) Detail(c *gin.Context) {
 	})
 }
 
-// ─── 5. Rule History (GET /api/v1/rules/:id/history — Lịch sử các phiên bản thay đổi) ─
 
-// RuleHistory tra cứu toàn bộ lịch sử các phiên bản sửa đổi của một luật cụ thể (Audit Trail).
-//
-// Quy trình xử lý:
-// - Kiểm tra tính hợp lệ của ID luật trên URL.
-// - Kiểm tra các tham số phân trang lùi thời gian: 'limit' (1 đến 100, mặc định 50) và con trỏ 'before' (phiên bản mốc).
-// - Gọi tầng Service để truy vấn danh sách lịch sử sắp xếp từ phiên bản mới nhất lùi về trước.
-// - Phản hồi danh sách các phiên bản đã lưu và mốc 'next_before' cho trang tiếp theo.
+// History handles GET /api/v1/rules/:id/history.
 func (h *RuleHandler) History(c *gin.Context) {
-	// Bước 1: Thẩm định mã ID luật
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id < 1 {
 		c.String(http.StatusBadRequest, "invalid rule ID")
 		return
 	}
-
-	// Bước 2: Thẩm định tham số phân trang Limit (1..100) và con trỏ mốc thời gian Before
 	limit := 50
 	var before int64
 	if limitStr := c.Query("limit"); limitStr != "" {
@@ -548,8 +439,6 @@ func (h *RuleHandler) History(c *gin.Context) {
 			return
 		}
 	}
-
-	// Bước 3: Đọc lịch sử từ tầng Service
 	ctx, cancel := context.WithTimeout(c.Request.Context(), ruleQueryTimeout)
 	defer cancel()
 
@@ -566,8 +455,6 @@ func (h *RuleHandler) History(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "rules operation failed")
 		return
 	}
-
-	// Bước 4: Chuyển đổi danh sách nhật ký thay đổi sang cấu trúc JSON inline
 	items := make([]gin.H, 0, len(out.Items))
 	for _, item := range out.Items {
 		items = append(items, gin.H{
@@ -598,9 +485,8 @@ func (h *RuleHandler) History(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// ─── 5b. Rollback Rule (POST /api/v1/rules/:id/rollback — Khôi phục về phiên bản cũ) ───
 
-// RollbackRule khôi phục cấu hình của một rule về phiên bản đã lưu trong lịch sử (rule_revisions).
+// Rollback handles POST /api/v1/rules/:id/rollback.
 func (h *RuleHandler) Rollback(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id < 1 {
@@ -679,13 +565,8 @@ func (h *RuleHandler) Rollback(c *gin.Context) {
 	})
 }
 
-// ─── 6. Rule Stats (GET /api/v1/rules/stats — Thống kê & Báo cáo tổng quan) ───
 
-// RuleStats cung cấp các số liệu đo lường và thống kê tổng thể về danh mục luật bảo vệ WAF.
-//
-// Quy trình xử lý:
-// - Thống kê tổng số lượng luật, số luật đang Bật (Enabled), số luật ở chế độ Ghi log (Log), số luật đang Chặn (Block).
-// - So sánh mức độ tăng/giảm (Delta) so với mốc thời gian đầu tháng hiện tại để theo dõi biến động số lượng quy tắc bảo mật.
+// Stats handles GET /api/v1/rules/stats.
 func (h *RuleHandler) Stats(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), ruleQueryTimeout)
 	defer cancel()
@@ -714,31 +595,19 @@ func (h *RuleHandler) Stats(c *gin.Context) {
 	})
 }
 
-// ─── 7. Publish Rules (POST /api/v1/rule-releases — Đóng gói & Phát hành) ─────
 
-// PublishRules phát lệnh đóng gói toàn bộ các luật đang Bật thành một "Bản phát hành" (Release) sẵn sàng nạp vào module WAF của Nginx.
-//
-// Quy trình xử lý:
-// - Kiểm tra thân yêu cầu (Request Body) phải rỗng vì đây là lệnh kích hoạt hành động.
-// - Kiểm tra tiêu đề Idempotency-Key để đảm bảo mỗi thao tác phát hành chỉ tạo đúng một đợt phát hành duy nhất.
-// - Gọi tầng Service để gom các luật đang Bật, kiểm tra trạng thái sẵn sàng và gửi sang trình biên dịch (Compiler).
-// - Phản hồi thông tin bản phát hành vừa tạo kèm mã băm kiểm tra toàn vẹn (Digest).
+// Publish handles POST /api/v1/rule-releases.
 func (h *RuleHandler) Publish(c *gin.Context) {
-	// Bước 1: Đảm bảo thân yêu cầu phải rỗng (chỉ là lệnh trigger)
 	body, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, 1))
 	if err != nil || len(body) != 0 {
 		c.String(http.StatusBadRequest, "publish body must be empty")
 		return
 	}
-
-	// Bước 2: Kiểm tra khóa chống trùng lặp Idempotency
 	key := c.GetHeader("Idempotency-Key")
 	if len(key) < 16 || len(key) > 128 {
 		c.String(http.StatusUnprocessableEntity, "invalid idempotency key")
 		return
 	}
-
-	// Bước 3: Tiến hành đặt trước lô phát hành và chạy quy trình biên dịch
 	ctx, cancel := context.WithTimeout(c.Request.Context(), rulePublishTimeout)
 	defer cancel()
 
@@ -750,16 +619,14 @@ func (h *RuleHandler) Publish(c *gin.Context) {
 		case errors.Is(err, taxonomy.ErrRuleInvalid):
 			c.String(http.StatusUnprocessableEntity, err.Error())
 		case errors.Is(err, taxonomy.ErrPublishUnavailable):
-			c.String(http.StatusServiceUnavailable, err.Error()) // Máy biên dịch không sẵn sàng hoặc từ chối
+			c.String(http.StatusServiceUnavailable, err.Error())
 		case errors.Is(err, taxonomy.ErrRuleConflict):
-			c.String(http.StatusConflict, err.Error()) // Xung đột khóa Idempotency
+			c.String(http.StatusConflict, err.Error())
 		default:
 			c.String(http.StatusInternalServerError, "rules operation failed")
 		}
 		return
 	}
-
-	// Bước 4: Trả về thông tin bản phát hành vừa tạo kèm mã băm kiểm tra toàn vẹn Digest
 	c.JSON(http.StatusCreated, gin.H{
 		"id":     strconv.FormatInt(out.ID, 10),
 		"state":  out.State,
@@ -767,9 +634,8 @@ func (h *RuleHandler) Publish(c *gin.Context) {
 	})
 }
 
-// ─── 8. Release Detail (GET /api/v1/rule-releases/:id — Tiến độ phân phối bản phát hành) ──
 
-// ReleaseDetail tra cứu trạng thái và giai đoạn kích hoạt của một bản phát hành WAF trên các node máy chủ biên.
+// ReleaseDetail handles GET /api/v1/rule-releases/:id.
 func (h *RuleHandler) ReleaseDetail(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id < 1 {
@@ -800,27 +666,14 @@ func (h *RuleHandler) ReleaseDetail(c *gin.Context) {
 	})
 }
 
-// ─── 9. Create Rule Definition (POST /api/v2/rules — Tạo luật đa điều kiện v2) ──
 
-// CreateRuleDefinition tiếp nhận và xác thực yêu cầu tạo luật WAF thế hệ 2 với nhiều điều kiện kiểm tra chi tiết (đa điều kiện).
-//
-// Quy trình xử lý:
-// - Kiểm tra tiêu đề Content-Type application/json và giới hạn kích thước tối đa 64KB.
-// - Kiểm tra tiêu đề Idempotency-Key chống trùng lặp yêu cầu mạng.
-// - Giới hạn số lượng điều kiện từ 1 đến 16 điều kiện để đảm bảo tốc độ lọc gói tin (giữ độ trễ Latency thấp).
-// - Kiểm soát giới hạn biểu thức chính quy (Regex Budget): Mỗi điều kiện regex tối đa 1024 bytes và tổng độ dài regex của toàn bộ luật không vượt quá 4096 bytes nhằm bảo vệ tài nguyên CPU máy chủ.
-// - Xác thực địa chỉ IP / dải mạng CIDR, Hostname Domain, HTTP Method, tiền tố Path, và mã lỗi phản hồi HTTP khi Chặn (400, 403, 429, 500).
-// - Đóng gói sang entity.CreateRuleDefinitionCommand phẳng và gọi tầng Service để lưu trữ vào CSDL.
-// - Thiết lập tiêu đề Location và phản hồi kết quả khởi tạo dưới dạng JSON inline.
+// CreateDefinition handles POST /api/v2/rules to create a multi-condition rule definition.
 func (h *RuleHandler) CreateDefinition(c *gin.Context) {
-	// Bước 1: Kiểm tra định dạng JSON
 	media, _, err := mime.ParseMediaType(c.GetHeader("Content-Type"))
 	if err != nil || media != "application/json" {
 		c.String(http.StatusUnsupportedMediaType, "application/json required")
 		return
 	}
-
-	// Bước 2: Giới hạn kích thước gói dữ liệu dưới 64KB
 	body, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, 65536))
 	if err != nil {
 		c.String(http.StatusRequestEntityTooLarge, "request body too large")
@@ -830,8 +683,6 @@ func (h *RuleHandler) CreateDefinition(c *gin.Context) {
 		c.String(http.StatusBadRequest, "JSON object required")
 		return
 	}
-
-	// Bước 3: Giải mã nội dung vào DTO CreateRuleDefinitionRequest
 	var req dto.CreateRuleDefinitionRequest
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
@@ -843,11 +694,7 @@ func (h *RuleHandler) CreateDefinition(c *gin.Context) {
 		c.String(http.StatusBadRequest, "trailing JSON")
 		return
 	}
-
-	// Bước 4: Kiểm tra khóa chống trùng lặp Idempotency-Key
 	key := c.GetHeader("Idempotency-Key")
-
-	// Bước 5: Bắt đầu xác thực chi tiết từng trường dữ liệu trực tiếp (Inline Validation)
 	invalid := map[string]string{}
 	if len(key) < 16 || len(key) > 128 {
 		invalid["idempotency_key"] = "Use a stable key of 16..128 characters for this submission"
@@ -879,12 +726,12 @@ func (h *RuleHandler) CreateDefinition(c *gin.Context) {
 		invalid["policy_id"] = "Create unassigned; policy binding is a separate workflow"
 	}
 
-	// Chế độ kết hợp điều kiện: 'all' (thỏa mãn tất cả) hoặc 'any' (thỏa mãn bất kỳ)
+	// Condition combine mode: all or any
 	if req.LogicMode != "all" && req.LogicMode != "any" {
 		invalid["logic_mode"] = "Use all or any"
 	}
 
-	// Giới hạn số lượng điều kiện từ 1 đến 16
+	// Enforce 1..16 condition limit
 	if len(req.Conditions) < 1 || len(req.Conditions) > 16 {
 		invalid["conditions"] = "Supply 1..16 ordered conditions"
 		c.JSON(http.StatusUnprocessableEntity, gin.H{
@@ -893,8 +740,6 @@ func (h *RuleHandler) CreateDefinition(c *gin.Context) {
 		})
 		return
 	}
-
-	// Bước 6: Kiểm tra từng điều kiện cụ thể và kiểm soát giới hạn độ dài biểu thức chính quy (Regex Budget)
 	totalPatternBytes := 0
 	for i, condition := range req.Conditions {
 		prefix := fmt.Sprintf("conditions[%d]", i)
@@ -948,12 +793,10 @@ func (h *RuleHandler) CreateDefinition(c *gin.Context) {
 		}
 	}
 
-	// Kiểm soát tổng độ dài biểu thức chính quy không vượt quá 4096 bytes để bảo vệ hiệu năng CPU
+	// Enforce 4096-byte aggregate regex budget limit
 	if totalPatternBytes > 4096 {
 		invalid["conditions"] = "Combined regex budget is 4096 bytes"
 	}
-
-	// Bước 7: Kiểm tra cấu hình hành vi và phản hồi tùy biến khi Chặn
 	switch req.Action {
 	case "allow", "log":
 		if req.ResponseCode != nil {
@@ -978,8 +821,6 @@ func (h *RuleHandler) CreateDefinition(c *gin.Context) {
 	if utf8.RuneCountInString(req.CustomResponse) > 512 || !utf8.ValidString(req.CustomResponse) || strings.ContainsRune(req.CustomResponse, 0) {
 		invalid["custom_response"] = "At most 512 characters, no NUL"
 	}
-
-	// Bước 8: Thẩm định địa chỉ IP nguồn (Source IP), Tên miền máy chủ (Host Domain), Tiền tố đường dẫn và Phương thức HTTP
 	if req.SourceIP != "" {
 		entries := strings.Split(req.SourceIP, ",")
 		if len(entries) > 32 || len(req.SourceIP) > 2048 {
@@ -1022,8 +863,6 @@ func (h *RuleHandler) CreateDefinition(c *gin.Context) {
 	default:
 		invalid["http_method"] = "Unknown HTTP method"
 	}
-
-	// Nếu phát hiện bất kỳ lỗi thẩm định nào, trả về danh sách chi tiết mã lỗi 422 Unprocessable Entity
 	if len(invalid) > 0 {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{
 			"code":   "invalid_rule_definition",
@@ -1031,8 +870,6 @@ func (h *RuleHandler) CreateDefinition(c *gin.Context) {
 		})
 		return
 	}
-
-	// Bước 9: Ánh xạ từ DTO sang Flat Command Entity chuẩn bị chuyển sang tầng Service
 	conditions := make([]entity.CreateRuleCondition, len(req.Conditions))
 	for i, cond := range req.Conditions {
 		conditions[i] = entity.CreateRuleCondition{
@@ -1065,8 +902,6 @@ func (h *RuleHandler) CreateDefinition(c *gin.Context) {
 		PathPrefix:      req.PathPrefix,
 		HTTPMethod:      req.HTTPMethod,
 	}
-
-	// Bước 10: Thực thi tạo luật đa điều kiện trong Service
 	ctx, cancel := context.WithTimeout(c.Request.Context(), ruleMutationTimeout)
 	defer cancel()
 
@@ -1083,8 +918,6 @@ func (h *RuleHandler) CreateDefinition(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "rules operation failed")
 		return
 	}
-
-	// Bước 11: Đính kèm Header Location chỉ đường đến tài nguyên vừa tạo và trả về JSON inline
 	c.Header("Location", "/api/v1/rules/"+strconv.FormatInt(out.ID, 10))
 	c.JSON(http.StatusCreated, gin.H{
 		"id":             strconv.FormatInt(out.ID, 10),
@@ -1095,18 +928,14 @@ func (h *RuleHandler) CreateDefinition(c *gin.Context) {
 	})
 }
 
-// ─── 10. Test Rule (POST /api/v1/rules/test — Kiểm thử và mô phỏng đánh giá rule) ─
 
-// TestRule tiếp nhận yêu cầu kiểm thử và đánh giá request mẫu với các điều kiện của luật.
+// Test handles POST /api/v1/rules/test to simulate and evaluate a request against rule conditions.
 func (h *RuleHandler) Test(c *gin.Context) {
-	// Kiểm tra Content-Type
 	media, _, err := mime.ParseMediaType(c.GetHeader("Content-Type"))
 	if err != nil || media != "application/json" {
 		c.String(http.StatusUnsupportedMediaType, "application/json required")
 		return
 	}
-
-	// Đọc tối đa 64KB
 	body, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, 65536))
 	if err != nil {
 		c.String(http.StatusRequestEntityTooLarge, "request body too large")
@@ -1126,7 +955,7 @@ func (h *RuleHandler) Test(c *gin.Context) {
 		return
 	}
 
-	// Nếu gọi qua route /api/v1/rules/:id/test thì lấy id từ param
+	// Extract rule ID if invoked via /api/v1/rules/:id/test
 	if paramID := c.Param("id"); paramID != "" {
 		idVal, parseErr := strconv.ParseInt(paramID, 10, 64)
 		if parseErr != nil || idVal <= 0 {
@@ -1144,8 +973,6 @@ func (h *RuleHandler) Test(c *gin.Context) {
 		c.String(http.StatusUnprocessableEntity, "at least one test condition required")
 		return
 	}
-
-	// Map conditions
 	domainConds := make([]entity.RuleDetailCondition, 0, len(req.Conditions))
 	for _, cond := range req.Conditions {
 		domainConds = append(domainConds, entity.RuleDetailCondition{
@@ -1221,15 +1048,11 @@ func (h *RuleHandler) UpdateDefinition(c *gin.Context) {
 		c.String(400, "invalid rule ID")
 		return
 	}
-
-	// Bước 1: Kiểm tra định dạng JSON
 	media, _, err := mime.ParseMediaType(c.GetHeader("Content-Type"))
 	if err != nil || media != "application/json" {
 		c.String(http.StatusUnsupportedMediaType, "application/json required")
 		return
 	}
-
-	// Bước 2: Giới hạn kích thước gói dữ liệu dưới 64KB
 	body, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, 65536))
 	if err != nil {
 		c.String(http.StatusRequestEntityTooLarge, "request body too large")
@@ -1239,8 +1062,6 @@ func (h *RuleHandler) UpdateDefinition(c *gin.Context) {
 		c.String(http.StatusBadRequest, "JSON object required")
 		return
 	}
-
-	// Bước 3: Giải mã nội dung vào DTO UpdateRuleDefinitionRequest
 	var req dto.UpdateRuleDefinitionRequest
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
@@ -1252,11 +1073,7 @@ func (h *RuleHandler) UpdateDefinition(c *gin.Context) {
 		c.String(http.StatusBadRequest, "trailing JSON")
 		return
 	}
-
-	// Bước 4: Kiểm tra khóa chống trùng lặp Idempotency-Key
 	key := c.GetHeader("Idempotency-Key")
-
-	// Bước 5: Bắt đầu xác thực chi tiết từng trường dữ liệu trực tiếp (Inline Validation)
 	invalid := map[string]string{}
 	if req.ExpectedVersion < 1 {
 		invalid["expected_version"] = "Required positive version"
@@ -1291,12 +1108,12 @@ func (h *RuleHandler) UpdateDefinition(c *gin.Context) {
 		invalid["policy_id"] = "Create unassigned; policy binding is a separate workflow"
 	}
 
-	// Chế độ kết hợp điều kiện: 'all' (thỏa mãn tất cả) hoặc 'any' (thỏa mãn bất kỳ)
+	// Condition combine mode: all or any
 	if req.LogicMode != "all" && req.LogicMode != "any" {
 		invalid["logic_mode"] = "Use all or any"
 	}
 
-	// Giới hạn số lượng điều kiện từ 1 đến 16
+	// Enforce 1..16 condition limit
 	if len(req.Conditions) < 1 || len(req.Conditions) > 16 {
 		invalid["conditions"] = "Supply 1..16 ordered conditions"
 		c.JSON(http.StatusUnprocessableEntity, gin.H{
@@ -1305,8 +1122,6 @@ func (h *RuleHandler) UpdateDefinition(c *gin.Context) {
 		})
 		return
 	}
-
-	// Bước 6: Kiểm tra từng điều kiện cụ thể và kiểm soát giới hạn độ dài biểu thức chính quy (Regex Budget)
 	totalPatternBytes := 0
 	for i, condition := range req.Conditions {
 		prefix := fmt.Sprintf("conditions[%d]", i)
@@ -1360,12 +1175,10 @@ func (h *RuleHandler) UpdateDefinition(c *gin.Context) {
 		}
 	}
 
-	// Kiểm soát tổng độ dài biểu thức chính quy không vượt quá 4096 bytes để bảo vệ hiệu năng CPU
+	// Enforce 4096-byte aggregate regex budget limit
 	if totalPatternBytes > 4096 {
 		invalid["conditions"] = "Combined regex budget is 4096 bytes"
 	}
-
-	// Bước 7: Kiểm tra cấu hình hành vi và phản hồi tùy biến khi Chặn
 	switch req.Action {
 	case "allow", "log":
 		if req.ResponseCode != nil {
@@ -1390,8 +1203,6 @@ func (h *RuleHandler) UpdateDefinition(c *gin.Context) {
 	if utf8.RuneCountInString(req.CustomResponse) > 512 || !utf8.ValidString(req.CustomResponse) || strings.ContainsRune(req.CustomResponse, 0) {
 		invalid["custom_response"] = "At most 512 characters, no NUL"
 	}
-
-	// Bước 8: Thẩm định địa chỉ IP nguồn (Source IP), Tên miền máy chủ (Host Domain), Tiền tố đường dẫn và Phương thức HTTP
 	if req.SourceIP != "" {
 		entries := strings.Split(req.SourceIP, ",")
 		if len(entries) > 32 || len(req.SourceIP) > 2048 {
@@ -1434,8 +1245,6 @@ func (h *RuleHandler) UpdateDefinition(c *gin.Context) {
 	default:
 		invalid["http_method"] = "Unknown HTTP method"
 	}
-
-	// Nếu phát hiện bất kỳ lỗi thẩm định nào, trả về danh sách chi tiết mã lỗi 422 Unprocessable Entity
 	if len(invalid) > 0 {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{
 			"code":   "invalid_rule_definition",
@@ -1443,8 +1252,6 @@ func (h *RuleHandler) UpdateDefinition(c *gin.Context) {
 		})
 		return
 	}
-
-	// Bước 9: Ánh xạ từ DTO sang Flat Command Entity chuẩn bị chuyển sang tầng Service
 	conditions := make([]entity.UpdateRuleCondition, len(req.Conditions))
 	for i, cond := range req.Conditions {
 		conditions[i] = entity.UpdateRuleCondition{
@@ -1477,8 +1284,6 @@ func (h *RuleHandler) UpdateDefinition(c *gin.Context) {
 		PathPrefix:      req.PathPrefix,
 		HTTPMethod:      req.HTTPMethod,
 	}
-
-	// Bước 10: Thực thi tạo luật đa điều kiện trong Service
 	ctx, cancel := context.WithTimeout(c.Request.Context(), ruleMutationTimeout)
 	defer cancel()
 
@@ -1495,8 +1300,6 @@ func (h *RuleHandler) UpdateDefinition(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "rules operation failed")
 		return
 	}
-
-	// Bước 11: Đính kèm Header Location chỉ đường đến tài nguyên vừa tạo và trả về JSON inline
 	c.Header("Location", "/api/v1/rules/"+strconv.FormatInt(out.ID, 10))
 	c.JSON(http.StatusOK, gin.H{
 		"id":             strconv.FormatInt(out.ID, 10),

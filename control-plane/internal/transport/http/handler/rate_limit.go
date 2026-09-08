@@ -16,39 +16,35 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Thời gian chờ tối đa cho các tác vụ Rate Limiting
 const (
 	rateLimitQueryTimeout  = 5 * time.Second  // Dành cho List, GetByID, GetStats, GetMetrics, Flush
 	rateLimitChangeTimeout = 10 * time.Second // Dành cho Create, Update, Delete rule
 )
 
-// RateLimitCollectorPort định nghĩa các thao tác flush và toggle collector cho HTTP handler.
+// RateLimitCollectorPort defines flush and toggle operations for the rate limit metrics collector.
 type RateLimitCollectorPort interface {
 	Flush(ctx context.Context)
 	SetEnabled(enabled bool)
 }
 
-// RateLimitHandler bao đóng các HTTP endpoint cho Rate Limit Rules workflow.
+// RateLimitHandler handles rate limiting configuration and metrics endpoints.
 type RateLimitHandler struct {
 	service   port.RateLimitService
 	collector RateLimitCollectorPort
 }
 
-// NewRateLimitHandler khởi tạo handler với RateLimitService và RateLimitCollectorPort.
+// NewRateLimitHandler creates a new RateLimitHandler instance.
 func NewRateLimitHandler(s port.RateLimitService, c RateLimitCollectorPort) *RateLimitHandler {
 	return &RateLimitHandler{service: s, collector: c}
 }
 
-// Create xử lý HTTP POST /api/v1/rate-limits: Tạo mới một Rate Limit Rule.
+// Create creates a new rate limit rule.
 func (h *RateLimitHandler) Create(c *gin.Context) {
-	// Kiểm tra tiêu đề Content-Type — bắt buộc phải là application/json
 	contentType := c.GetHeader("Content-Type")
 	if strings.Split(contentType, ";")[0] != "application/json" {
 		c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "application/json required"})
 		return
 	}
-
-	// Giới hạn kích thước tối đa của request body là 64KB (65536 bytes) chống DoS
 	reader := http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
 	var req dto.CreateRateLimitRuleRequest
 	decoder := json.NewDecoder(reader)
@@ -63,8 +59,6 @@ func (h *RateLimitHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON or unknown field in request body: " + err.Error()})
 		return
 	}
-
-	// Đảm bảo không có dữ liệu lạ bám theo sau đối tượng JSON chính
 	if err := decoder.Decode(new(any)); err != io.EOF {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "trailing JSON in request body"})
 		return
@@ -129,8 +123,6 @@ func (h *RateLimitHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	// Tự map bằng gin.H theo đúng quy tắc, không qua helper mapping func
 	c.JSON(http.StatusCreated, gin.H{
 		"id":                 item.ID,
 		"name":               item.Name,
@@ -168,7 +160,7 @@ func (h *RateLimitHandler) Create(c *gin.Context) {
 	})
 }
 
-// List xử lý HTTP GET /api/v1/rate-limits: Danh sách Rate Limit Rules.
+// List returns rate limit rules with filtering and pagination.
 func (h *RateLimitHandler) List(c *gin.Context) {
 	search := c.Query("search")
 	status := c.Query("status")
@@ -253,7 +245,7 @@ func (h *RateLimitHandler) List(c *gin.Context) {
 	})
 }
 
-// GetByID xử lý HTTP GET /api/v1/rate-limits/:id: Lấy chi tiết rule.
+// GetByID returns a rate limit rule by ID.
 func (h *RateLimitHandler) GetByID(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -312,7 +304,7 @@ func (h *RateLimitHandler) GetByID(c *gin.Context) {
 	})
 }
 
-// Update xử lý HTTP PUT /api/v1/rate-limits/:id: Cập nhật một Rate Limit Rule.
+// Update updates an existing rate limit rule.
 func (h *RateLimitHandler) Update(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -444,7 +436,7 @@ func (h *RateLimitHandler) Update(c *gin.Context) {
 	})
 }
 
-// Delete xử lý HTTP DELETE /api/v1/rate-limits/:id: Xóa rule.
+// Delete removes a rate limit rule by ID.
 func (h *RateLimitHandler) Delete(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -468,7 +460,7 @@ func (h *RateLimitHandler) Delete(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "rate limit rule deleted successfully", "id": id})
 }
 
-// GetStats xử lý HTTP GET /api/v1/rate-limits/stats: Lấy tổng hợp số liệu thống kê thực tế.
+// GetStats returns aggregated rate limit statistics.
 func (h *RateLimitHandler) GetStats(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), rateLimitQueryTimeout)
 	defer cancel()
@@ -497,7 +489,7 @@ func (h *RateLimitHandler) GetStats(c *gin.Context) {
 	})
 }
 
-// GetMetrics xử lý HTTP GET /api/v1/rate-limits/metrics: Lấy chuỗi thời gian biểu đồ và top endpoints.
+// GetMetrics returns time-series velocity and endpoint breakdown metrics.
 func (h *RateLimitHandler) GetMetrics(c *gin.Context) {
 	timeRange := c.Query("range")
 	if timeRange == "" {
@@ -553,7 +545,7 @@ func (h *RateLimitHandler) GetMetrics(c *gin.Context) {
 	})
 }
 
-// Flush xử lý HTTP POST /api/v1/rate-limits/flush: Flush dữ liệu metrics từ RAM buffer xuống CSDL SQLite.
+// Flush flushes memory-buffered rate limit metrics to SQLite.
 func (h *RateLimitHandler) Flush(c *gin.Context) {
 	if h.collector != nil {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), rateLimitQueryTimeout)
@@ -563,7 +555,7 @@ func (h *RateLimitHandler) Flush(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Rate limit metrics flushed"})
 }
 
-// EnableCollector xử lý HTTP POST /api/v1/rate-limits/enable: Bật tính năng thu thập metrics của collector.
+// EnableCollector enables rate limit metric collection.
 func (h *RateLimitHandler) EnableCollector(c *gin.Context) {
 	if h.collector != nil {
 		h.collector.SetEnabled(true)
@@ -571,7 +563,7 @@ func (h *RateLimitHandler) EnableCollector(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"enabled": true})
 }
 
-// DisableCollector xử lý HTTP POST /api/v1/rate-limits/disable: Tắt tính năng thu thập metrics của collector.
+// DisableCollector disables rate limit metric collection.
 func (h *RateLimitHandler) DisableCollector(c *gin.Context) {
 	if h.collector != nil {
 		h.collector.SetEnabled(false)

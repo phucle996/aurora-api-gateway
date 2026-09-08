@@ -12,23 +12,22 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Thời gian chờ tối đa cho các tác vụ Notification
 const (
 	notificationQueryTimeout  = 5 * time.Second  // Dành cho GetOverview truy vấn SQLite
 	notificationActionTimeout = 10 * time.Second // Dành cho UpdateChannel, UpdateRule, TestChannel
 )
 
-// NotificationHandler xử lý các yêu cầu HTTP liên quan đến cấu hình kênh thông báo (Telegram, Discord, Slack, Webhook) và kiểm thử gửi tin.
+// NotificationHandler manages notification channels and alert routing rules.
 type NotificationHandler struct {
 	service port.NotificationService
 }
 
-// NewNotificationHandler khởi tạo handler cho thông báo.
+// NewNotificationHandler creates a new NotificationHandler instance.
 func NewNotificationHandler(service port.NotificationService) *NotificationHandler {
 	return &NotificationHandler{service: service}
 }
 
-// GetOverview trả về danh sách các kênh thông báo và các quy tắc kích hoạt cảnh báo dưới dạng gin.H inline.
+// GetOverview returns all notification channels and alert rules.
 func (h *NotificationHandler) GetOverview(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 
@@ -78,7 +77,7 @@ func (h *NotificationHandler) GetOverview(c *gin.Context) {
 	})
 }
 
-// UpdateChannel cập nhật trạng thái bật/tắt và cấu hình của một kênh thông báo.
+// UpdateChannel updates the status and configuration for a notification channel.
 func (h *NotificationHandler) UpdateChannel(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	id := strings.ToLower(c.Param("id"))
@@ -108,7 +107,7 @@ func (h *NotificationHandler) UpdateChannel(c *gin.Context) {
 	})
 }
 
-// UpdateRule cập nhật trạng thái bật/tắt của một quy tắc cảnh báo.
+// UpdateRule toggles an alert trigger rule.
 func (h *NotificationHandler) UpdateRule(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	id := strings.TrimSpace(c.Param("id"))
@@ -138,7 +137,7 @@ func (h *NotificationHandler) UpdateRule(c *gin.Context) {
 	})
 }
 
-// TestChannel thực hiện kiểm thử gửi thông báo tới kênh cụ thể.
+// TestChannel sends a test notification through the specified channel.
 func (h *NotificationHandler) TestChannel(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	id := strings.ToLower(c.Param("id"))

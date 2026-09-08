@@ -20,19 +20,18 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Thời gian chờ tối đa cho các tác vụ Security Policy
 const (
 	policyQueryTimeout   = 5 * time.Second  // Dành cho List, Catalog, RuleCatalog, Cluster, Desired, Report
 	policyDraftTimeout   = 10 * time.Second // Dành cho SaveDraft lưu bản nháp policy
 	policyPublishTimeout = 15 * time.Second // Dành cho PublishDraft biên dịch và phát hành release
 )
 
-// PolicyHandler xử lý các API endpoint quản lý bộ chính sách bảo mật (Security Policies) và phát hành snapshot tới cluster.
+// PolicyHandler manages security policies and compiled policy releases.
 type PolicyHandler struct {
 	Service port.PolicyService
 }
 
-// NewPolicyHandler khởi tạo handler với PolicyService.
+// NewPolicyHandler creates a new PolicyHandler instance.
 func NewPolicyHandler(svc port.PolicyService) *PolicyHandler {
 	return &PolicyHandler{
 		Service: svc,
@@ -99,7 +98,7 @@ func (h *PolicyHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, items)
 }
 
-// Catalog xử lý HTTP GET /api/v1/policies/catalog: Lấy danh mục policy cho dropdown UI.
+// Catalog returns a lightweight policy list for UI dropdowns.
 func (h *PolicyHandler) Catalog(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), policyQueryTimeout)
 	defer cancel()
@@ -138,7 +137,7 @@ func (h *PolicyHandler) Catalog(c *gin.Context) {
 	c.JSON(http.StatusOK, items)
 }
 
-// RuleCatalog xử lý HTTP GET /api/v1/policies/rules: Danh mục rule phục vụ gán vào policy.
+// RuleCatalog returns rule catalog items for policy rule assignment.
 func (h *PolicyHandler) RuleCatalog(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), policyQueryTimeout)
 	defer cancel()
@@ -182,7 +181,7 @@ func (h *PolicyHandler) RuleCatalog(c *gin.Context) {
 	c.JSON(http.StatusOK, items)
 }
 
-// Cluster xử lý HTTP GET /api/v1/policies/cluster: Báo cáo trạng thái đồng bộ policy của toàn cụm.
+// Cluster returns the policy synchronization status across all cluster nodes.
 func (h *PolicyHandler) Cluster(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), policyQueryTimeout)
 	defer cancel()
@@ -425,7 +424,7 @@ func (h *PolicyHandler) PublishDraft(c *gin.Context) {
 	})
 }
 
-// Desired xử lý HTTP GET /api/v1/policies/:node/desired: Cung cấp snapshot policy mong muốn cho worker node.
+// Desired provides the active compiled policy release snapshot to worker nodes.
 func (h *PolicyHandler) Desired(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), policyQueryTimeout)
 	defer cancel()

@@ -13,31 +13,25 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Thời gian chờ tối đa cho các tác vụ quản lý NGINX Node
 const (
-	nodeQueryTimeout     = 5 * time.Second  // Dành cho List, GetByID, GetRollingStatus, GetSyncLogs, GetConfig
-	nodeHeartbeatTimeout = 5 * time.Second  // Dành cho Heartbeat xử lý telemetry và trả về chỉ thị
-	nodeReloadTimeout    = 15 * time.Second // Dành cho ReloadNode và RollingReloadCluster điều phối cụm
+	nodeQueryTimeout     = 5 * time.Second
+	nodeHeartbeatTimeout = 5 * time.Second
+	nodeReloadTimeout    = 15 * time.Second
 )
 
-// NodeHandler bao đóng các HTTP endpoint xử lý cho NGINX Data Plane Nodes.
 type NodeHandler struct {
 	service port.NodeService
 }
 
-// NewNodeHandler khởi tạo NodeHandler với service tương ứng.
 func NewNodeHandler(s port.NodeService) *NodeHandler {
 	return &NodeHandler{service: s}
 }
 
-// List xử lý HTTP GET /api/v1/nodes:
-// Trả về danh sách tất cả các NGINX Data Plane nodes đã đăng ký trong cluster.
+// List returns all registered data plane nodes and their runtime status.
 func (h *NodeHandler) List(c *gin.Context) {
-	// Bước 1: Tiếp nhận context từ HTTP request kèm timeout 5s
 	ctx, cancel := context.WithTimeout(c.Request.Context(), nodeQueryTimeout)
 	defer cancel()
 
-	// Bước 2: Gọi service để lấy danh sách nodes cùng trạng thái runtime
 	nodes, err := h.service.ListNodes(ctx)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -48,7 +42,6 @@ func (h *NodeHandler) List(c *gin.Context) {
 		return
 	}
 
-	// Bước 3: Map tường minh từng entity sang gin.H để cố định schema JSON
 	response := make([]gin.H, 0, len(nodes))
 	for i := range nodes {
 		node := &nodes[i]
@@ -80,21 +73,17 @@ func (h *NodeHandler) List(c *gin.Context) {
 		})
 	}
 
-	// Bước 4: Trả về kết quả HTTP 200 OK định dạng JSON
 	c.JSON(http.StatusOK, response)
 }
 
-// GetByID xử lý HTTP GET /api/v1/nodes/:id:
-// Trả về chi tiết của một node cụ thể trong cluster.
+// GetByID returns detailed information for a specific cluster node.
 func (h *NodeHandler) GetByID(c *gin.Context) {
-	// Bước 1: Lấy và thẩm định tham số ID từ URL path
 	id := c.Param("id")
 	if id == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "node ID cannot be empty"})
 		return
 	}
 
-	// Bước 2: Gọi service lấy thông tin chi tiết kèm timeout 5s
 	ctx, cancel := context.WithTimeout(c.Request.Context(), nodeQueryTimeout)
 	defer cancel()
 
@@ -108,13 +97,11 @@ func (h *NodeHandler) GetByID(c *gin.Context) {
 		return
 	}
 
-	// Bước 3: Kiểm tra sự tồn tại của node
 	if node == nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "node not found"})
 		return
 	}
 
-	// Bước 4: Map tường minh sang gin.H và trả về HTTP 200 OK
 	c.JSON(http.StatusOK, gin.H{
 		"id":                     node.ID,
 		"name":                   node.Name,
@@ -143,7 +130,7 @@ func (h *NodeHandler) GetByID(c *gin.Context) {
 	})
 }
 
-// Heartbeat tiếp nhận gói tin Push Heartbeat Telemetry (bắt buộc 100% Protobuf binary wire format).
+// Heartbeat processes Protobuf-encoded telemetry from data plane nodes.
 func (h *NodeHandler) Heartbeat(c *gin.Context) {
 	nodeID := c.Param("id")
 	if nodeID == "" {
@@ -151,7 +138,6 @@ func (h *NodeHandler) Heartbeat(c *gin.Context) {
 		return
 	}
 
-	// Bắt buộc 100% định dạng application/x-protobuf, loại bỏ hoàn toàn fallback JSON
 	contentType := c.GetHeader("Content-Type")
 	if contentType != "application/x-protobuf" {
 		c.JSON(http.StatusUnsupportedMediaType, gin.H{
@@ -160,7 +146,6 @@ func (h *NodeHandler) Heartbeat(c *gin.Context) {
 		return
 	}
 
-	// Đọc dữ liệu nhị phân (giới hạn tối đa 4KB)
 	body, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, 4096))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "unable to read binary payload or payload exceeds 4KB"})
@@ -173,7 +158,6 @@ func (h *NodeHandler) Heartbeat(c *gin.Context) {
 		return
 	}
 
-	// Đảm bảo node_id trong path khớp với payload
 	if payload.NodeID == "" {
 		payload.NodeID = nodeID
 	} else if payload.NodeID != nodeID {
@@ -203,14 +187,13 @@ func (h *NodeHandler) Heartbeat(c *gin.Context) {
 		return
 	}
 
-	// Trả về HTTP 200 OK kèm chỉ thị lệnh (Directive) cho Data Plane Node
 	c.JSON(http.StatusOK, gin.H{
 		"action":             directive.Action,
 		"desired_release_id": directive.DesiredReleaseID,
 	})
 }
 
-// ReloadNode tiếp nhận yêu cầu POST /api/v1/nodes/:id/reload để kích hoạt reload một node cụ thể.
+// ReloadNode triggers a reload directive for a specific node.
 func (h *NodeHandler) ReloadNode(c *gin.Context) {
 	nodeID := c.Param("id")
 	if nodeID == "" {
@@ -236,7 +219,7 @@ func (h *NodeHandler) ReloadNode(c *gin.Context) {
 	})
 }
 
-// RollingReloadCluster tiếp nhận yêu cầu POST /api/v1/nodes/rolling-reload để khởi động rolling reload tuần tự cả cụm.
+// RollingReloadCluster starts a sequential rolling reload across the node cluster.
 func (h *NodeHandler) RollingReloadCluster(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), nodeReloadTimeout)
 	defer cancel()
@@ -260,7 +243,7 @@ func (h *NodeHandler) RollingReloadCluster(c *gin.Context) {
 	})
 }
 
-// GetRollingStatus tiếp nhận yêu cầu GET /api/v1/nodes/rolling-status để kiểm tra tiến trình rolling cluster.
+// GetRollingStatus retrieves the current progress of cluster rolling reload.
 func (h *NodeHandler) GetRollingStatus(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), nodeQueryTimeout)
 	defer cancel()
@@ -284,8 +267,7 @@ func (h *NodeHandler) GetRollingStatus(c *gin.Context) {
 	})
 }
 
-// EventsStream mở luồng HTTP Server-Sent Events (SSE) để truyền dữ liệu thời gian thực tới UI.
-// Endpoint này duy trì kết nối stream liên tục cho đến khi client ngắt kết nối (không đặt timeout cứng).
+// EventsStream establishes a long-lived Server-Sent Events (SSE) stream to push real-time node telemetry to clients.
 func (h *NodeHandler) EventsStream(c *gin.Context) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
@@ -295,11 +277,9 @@ func (h *NodeHandler) EventsStream(c *gin.Context) {
 	eventChan, unsubscribe := h.service.SubscribeEvents()
 	defer unsubscribe()
 
-	// Gửi một gói tin ping ban đầu để xác lập kết nối
 	c.SSEvent("ping", gin.H{"status": "connected"})
 	c.Writer.Flush()
 
-	// Ticker ping định kỳ 15s giữ luồng SSE luôn thông suốt qua mọi proxy
 	keepAliveTicker := time.NewTicker(15 * time.Second)
 	defer keepAliveTicker.Stop()
 
@@ -308,7 +288,6 @@ func (h *NodeHandler) EventsStream(c *gin.Context) {
 	for {
 		select {
 		case <-clientDone:
-			// Client đóng tab, chuyển trang, hoặc ngắt mạng
 			return
 		case <-keepAliveTicker.C:
 			c.SSEvent("ping", gin.H{"status": "keepalive"})
@@ -345,8 +324,7 @@ func (h *NodeHandler) EventsStream(c *gin.Context) {
 	}
 }
 
-// GetSyncLogs xử lý HTTP GET /api/v1/nodes/:id/sync-history:
-// Trả về danh sách các bản ghi lịch sử đồng bộ thực tế của node.
+// GetSyncLogs returns recent synchronization logs for a specific node.
 func (h *NodeHandler) GetSyncLogs(c *gin.Context) {
 	nodeID := c.Param("id")
 	if nodeID == "" {
@@ -381,8 +359,7 @@ func (h *NodeHandler) GetSyncLogs(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// GetConfig xử lý HTTP GET /api/v1/nodes/:id/config:
-// Kéo trực tiếp nội dung file cấu hình NGINX (/etc/nginx/nginx.conf) từ node container.
+// GetConfig proxies the active NGINX configuration directly from the node container.
 func (h *NodeHandler) GetConfig(c *gin.Context) {
 	nodeID := c.Param("id")
 	if nodeID == "" {

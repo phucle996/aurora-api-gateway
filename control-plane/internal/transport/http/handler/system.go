@@ -10,23 +10,21 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Thời gian chờ tối đa cho các tác vụ tra cứu thông tin hệ thống
 const (
 	systemQueryTimeout = 5 * time.Second // Dành cho Info truy vấn phần cứng, SQLite và cluster state
 )
 
-// SystemHandler cung cấp thông tin runtime hệ thống, trạng thái persistence và tài nguyên máy chủ cho Settings > General.
+// SystemHandler provides system runtime, persistence, and host resource information.
 type SystemHandler struct {
 	service port.SystemService
 }
 
-// NewSystemHandler khởi tạo SystemHandler với SystemService.
+// NewSystemHandler creates a new SystemHandler instance.
 func NewSystemHandler(service port.SystemService) *SystemHandler {
 	return &SystemHandler{service: service}
 }
 
-// Info xử lý GET /api/v1/system/info:
-// Trả về thông tin phiên bản, uptime, dung lượng CSDL SQLite, số lượng nodes và lượng RAM đang cấp phát.
+// Info returns system version, uptime, database size, and node counts.
 func (h *SystemHandler) Info(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 

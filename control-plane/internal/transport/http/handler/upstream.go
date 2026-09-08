@@ -16,26 +16,23 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Thời gian chờ tối đa cho các tác vụ trên Upstream Pool
 const (
 	upstreamChangeTimeout = 10 * time.Second // Dành cho Create, Update, Delete upstream pool (OCC & reload)
 	upstreamQueryTimeout  = 5 * time.Second  // Dành cho List, GetByID truy vấn SQLite
 	upstreamSyncTimeout   = 5 * time.Second  // Dành cho node sync Desired snapshot và Report
 )
 
-// UpstreamHandler bao đóng các HTTP endpoint cho Upstream workflow.
-// Quản lý cấu hình cụm máy chủ backend (Upstream Nodes), thuật toán cân bằng tải (Load Balancing),
-// kiểm tra sức khỏe (Health Probes), giao vận (Transport / HTTP Version) và bảo mật nội bộ (Internal mTLS).
+// UpstreamHandler manages backend upstream pools, health probes, transport settings, and mTLS.
 type UpstreamHandler struct {
 	service port.UpstreamService
 }
 
-// NewUpstreamHandler khởi tạo handler với UpstreamService.
+// NewUpstreamHandler creates a new UpstreamHandler instance.
 func NewUpstreamHandler(s port.UpstreamService) *UpstreamHandler {
 	return &UpstreamHandler{service: s}
 }
 
-// Create xử lý HTTP POST /api/v1/upstreams: Tạo mới một Upstream Pool.
+// Create creates a new upstream pool.
 func (h *UpstreamHandler) Create(c *gin.Context) {
 	contentType := c.GetHeader("Content-Type")
 	if strings.Split(contentType, ";")[0] != "application/json" {
@@ -237,7 +234,7 @@ func (h *UpstreamHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, resp)
 }
 
-// Update xử lý HTTP PUT /api/v1/upstreams/:id: Cập nhật Upstream Pool đã có.
+// Update modifies an existing upstream pool.
 func (h *UpstreamHandler) Update(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -441,7 +438,7 @@ func (h *UpstreamHandler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// List xử lý HTTP GET /api/v1/upstreams: Lấy danh sách upstream pools dưới dạng gin.H inline.
+// List returns all upstream pools.
 func (h *UpstreamHandler) List(c *gin.Context) {
 	search := c.Query("search")
 	archType := c.Query("type")
@@ -585,7 +582,7 @@ func (h *UpstreamHandler) List(c *gin.Context) {
 	})
 }
 
-// GetByID xử lý HTTP GET /api/v1/upstreams/:id: Lấy chi tiết upstream theo ID.
+// GetByID returns an upstream pool by ID.
 func (h *UpstreamHandler) GetByID(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -707,7 +704,7 @@ func (h *UpstreamHandler) GetByID(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// Delete xử lý HTTP DELETE /api/v1/upstreams/:id: Xóa một Upstream Pool.
+// Delete removes an upstream pool by ID.
 func (h *UpstreamHandler) Delete(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -739,8 +736,7 @@ func (h *UpstreamHandler) Delete(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "deleted", "id": id})
 }
 
-// Desired xử lý HTTP GET /api/v1/upstream-sync/:node:
-// Trả về cấu hình snapshot upstreams mới nhất kèm SHA-256 digest và nội dung NGINX config cho node.
+// Desired returns the active compiled upstream snapshot configuration for worker nodes.
 func (h *UpstreamHandler) Desired(c *gin.Context) {
 	nodeID := c.Param("node")
 	if nodeID == "" {
@@ -867,8 +863,7 @@ func (h *UpstreamHandler) Desired(c *gin.Context) {
 	})
 }
 
-// Report xử lý HTTP POST /api/v1/upstream-sync/:node:
-// Tiếp nhận phản hồi từ NGINX node sau khi hot-swap và reload thành công hoặc thất bại.
+// Report receives upstream reload results from worker nodes.
 func (h *UpstreamHandler) Report(c *gin.Context) {
 	nodeID := c.Param("node")
 	if nodeID == "" {

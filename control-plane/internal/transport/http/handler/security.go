@@ -13,23 +13,21 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Thời gian chờ tối đa cho các tác vụ Security & 2FA
 const (
 	securityQueryTimeout  = 5 * time.Second  // Dành cho GetOverview truy vấn cấu hình bảo mật
 	securityActionTimeout = 10 * time.Second // Dành cho UpdateProvider, Init2FA, Verify2FA, Disable2FA, ChangePassword
 )
 
-// SecurityHandler xử lý các yêu cầu HTTP liên quan đến cấu hình bảo mật hệ thống, 2FA và đổi mật khẩu.
+// SecurityHandler handles system security settings, 2FA, and password management.
 type SecurityHandler struct {
 	service port.SecurityService
 }
 
-// NewSecurityHandler khởi tạo SecurityHandler với SecurityService.
+// NewSecurityHandler creates a new SecurityHandler instance.
 func NewSecurityHandler(service port.SecurityService) *SecurityHandler {
 	return &SecurityHandler{service: service}
 }
 
-// helper lấy user_id từ gin context (hoặc fallback admin)
 func getUserIDAndName(c *gin.Context) (string, string) {
 	userID := "usr_admin_01"
 	username := "admin"
@@ -46,7 +44,7 @@ func getUserIDAndName(c *gin.Context) (string, string) {
 	return userID, username
 }
 
-// GetOverview trả về danh sách toàn bộ auth providers, trạng thái 2FA và mật khẩu dưới dạng gin.H inline.
+// GetOverview returns authentication providers, 2FA status, and admin account info.
 func (h *SecurityHandler) GetOverview(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	userID, _ := getUserIDAndName(c)
@@ -88,7 +86,7 @@ func (h *SecurityHandler) GetOverview(c *gin.Context) {
 	})
 }
 
-// UpdateProvider cập nhật trạng thái bật/tắt và cấu hình của một provider.
+// UpdateProvider toggles or updates an authentication provider configuration.
 func (h *SecurityHandler) UpdateProvider(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	id := strings.ToLower(c.Param("id"))
@@ -118,7 +116,7 @@ func (h *SecurityHandler) UpdateProvider(c *gin.Context) {
 	})
 }
 
-// Init2FA khởi tạo thiết lập 2FA, trả về secret base32 và URL otpauth.
+// Init2FA generates a 2FA secret and OTP auth URL.
 func (h *SecurityHandler) Init2FA(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	userID, username := getUserIDAndName(c)
@@ -143,7 +141,7 @@ func (h *SecurityHandler) Init2FA(c *gin.Context) {
 	})
 }
 
-// Verify2FA xác thực mã 6 số và kích hoạt 2FA.
+// Verify2FA validates a 6-digit code and enables 2FA.
 func (h *SecurityHandler) Verify2FA(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	userID, _ := getUserIDAndName(c)
@@ -176,7 +174,7 @@ func (h *SecurityHandler) Verify2FA(c *gin.Context) {
 	})
 }
 
-// Disable2FA tắt 2FA.
+// Disable2FA disables two-factor authentication.
 func (h *SecurityHandler) Disable2FA(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	userID, _ := getUserIDAndName(c)
@@ -196,7 +194,7 @@ func (h *SecurityHandler) Disable2FA(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "two-factor authentication (2FA) disabled"})
 }
 
-// ChangePassword cập nhật mật khẩu đăng nhập của người dùng.
+// ChangePassword changes the authenticated user password.
 func (h *SecurityHandler) ChangePassword(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	userID, _ := getUserIDAndName(c)

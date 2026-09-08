@@ -14,24 +14,23 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Thời gian chờ tối đa cho các tác vụ Backup & Restore
 const (
 	backupQueryTimeout  = 5 * time.Second  // Dành cho GetOverview truy vấn cấu hình và lịch sử
 	backupConfigTimeout = 10 * time.Second // Dành cho UpdateConfig cập nhật cấu hình backup
 	backupActionTimeout = 30 * time.Second // Dành cho tạo snapshot, tải file, upload S3 hoặc phục hồi
 )
 
-// BackupHandler xử lý các API endpoint sao lưu dữ liệu, xuất file download, đẩy S3 và phục hồi snapshot.
+// BackupHandler handles backup configuration, local downloads, S3 uploads, and database restores.
 type BackupHandler struct {
 	service port.BackupService
 }
 
-// NewBackupHandler khởi tạo handler cho module Backup & Restore.
+// NewBackupHandler creates a new BackupHandler instance.
 func NewBackupHandler(service port.BackupService) *BackupHandler {
 	return &BackupHandler{service: service}
 }
 
-// GetOverview trả về toàn bộ thông số cấu hình sao lưu và lịch sử các lần backup dưới dạng gin.H inline.
+// GetOverview returns backup configuration and history.
 func (h *BackupHandler) GetOverview(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 
@@ -82,7 +81,7 @@ func (h *BackupHandler) GetOverview(c *gin.Context) {
 	})
 }
 
-// UpdateConfig cập nhật cấu hình Cron Job, bật/tắt S3 và số ngày retention.
+// UpdateConfig updates backup scheduling, retention, and S3 credentials.
 func (h *BackupHandler) UpdateConfig(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 
@@ -120,7 +119,7 @@ func (h *BackupHandler) UpdateConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "backup configuration updated successfully"})
 }
 
-// DownloadLocalBackup xuất file cơ sở dữ liệu SQLite và truyền về máy người dùng dưới dạng binary attachment.
+// DownloadLocalBackup exports a SQLite database snapshot as a binary download.
 func (h *BackupHandler) DownloadLocalBackup(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 
@@ -143,7 +142,7 @@ func (h *BackupHandler) DownloadLocalBackup(c *gin.Context) {
 	c.Data(http.StatusOK, "application/x-sqlite3", data)
 }
 
-// TriggerS3Backup xuất snapshot và đẩy trực tiếp lên S3 storage.
+// TriggerS3Backup triggers an immediate database snapshot upload to S3.
 func (h *BackupHandler) TriggerS3Backup(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 
@@ -171,7 +170,7 @@ func (h *BackupHandler) TriggerS3Backup(c *gin.Context) {
 	})
 }
 
-// RestoreSnapshot nhận file upload từ kéo thả (Drag & Drop) hoặc browse file để phục hồi database.
+// RestoreSnapshot restores the database from an uploaded backup snapshot.
 func (h *BackupHandler) RestoreSnapshot(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 

@@ -16,25 +16,22 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Thời gian chờ tối đa cho các tác vụ Domain Management
 const (
 	domainQueryTimeout  = 5 * time.Second  // Dành cho List, Catalog, GetByID truy vấn SQLite
 	domainChangeTimeout = 10 * time.Second // Dành cho Create, Update, Delete domain (OCC & reload routing)
 )
 
-// DomainHandler bao đóng các HTTP endpoint cho Domain management workflow.
-// Quản lý định tuyến máy chủ ảo (Virtual Hosts), chứng chỉ TLS/mTLS, liên kết Upstream Pool và thống kê an ninh.
+// DomainHandler manages virtual hosts, TLS/mTLS configurations, and upstream bindings.
 type DomainHandler struct {
 	service port.DomainService
 }
 
-// NewDomainHandler khởi tạo handler với DomainService.
+// NewDomainHandler creates a new DomainHandler instance.
 func NewDomainHandler(s port.DomainService) *DomainHandler {
 	return &DomainHandler{service: s}
 }
 
-// List xử lý HTTP GET /api/v1/domains:
-// Nhận các tiêu chí tìm kiếm, lọc theo status, tls_type, tag, và phân trang.
+// List returns domains with search, filter, and pagination support.
 func (h *DomainHandler) List(c *gin.Context) {
 	search := c.Query("search")
 	status := c.Query("status")
@@ -120,8 +117,7 @@ func (h *DomainHandler) List(c *gin.Context) {
 	})
 }
 
-// Catalog xử lý HTTP GET /api/v1/domains/catalog:
-// Trả về danh mục domain tinh gọn phục vụ dropdown selection cho Target Scope (Host / Domain) và Scope.
+// Catalog returns a lightweight list of domains for UI dropdowns.
 func (h *DomainHandler) Catalog(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), domainQueryTimeout)
 	defer cancel()
@@ -150,7 +146,7 @@ func (h *DomainHandler) Catalog(c *gin.Context) {
 	c.JSON(http.StatusOK, items)
 }
 
-// Create xử lý HTTP POST /api/v1/domains:
+// Create registers a new virtual host domain.
 func (h *DomainHandler) Create(c *gin.Context) {
 	contentType := c.GetHeader("Content-Type")
 	if strings.Split(contentType, ";")[0] != "application/json" {
@@ -221,7 +217,7 @@ func (h *DomainHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, domainItemToJSON(item))
 }
 
-// GetByID xử lý HTTP GET /api/v1/domains/:id:
+// GetByID returns detailed information for a specific domain.
 func (h *DomainHandler) GetByID(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id <= 0 {
@@ -245,7 +241,7 @@ func (h *DomainHandler) GetByID(c *gin.Context) {
 	c.JSON(http.StatusOK, domainItemToJSON(item))
 }
 
-// Update xử lý HTTP PUT /api/v1/domains/:id:
+// Update modifies an existing domain configuration.
 func (h *DomainHandler) Update(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id <= 0 {
@@ -309,7 +305,7 @@ func (h *DomainHandler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, domainItemToJSON(item))
 }
 
-// Delete xử lý HTTP DELETE /api/v1/domains/:id:
+// Delete removes a domain by ID.
 func (h *DomainHandler) Delete(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id <= 0 {

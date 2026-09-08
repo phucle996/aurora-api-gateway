@@ -15,25 +15,23 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Thời gian chờ tối đa cho các tác vụ Metrics & Telemetry
 const (
 	metricsQueryTimeout  = 5 * time.Second  // Dành cho GetConfig và GetNodeMetrics
 	metricsConfigTimeout = 5 * time.Second  // Dành cho UpdateConfig lưu cấu hình vào DB
 	metricsTestTimeout   = 10 * time.Second // Dành cho TestConnection kiểm tra kết nối Prometheus từ xa
 )
 
-// MetricsHandler bao đóng các HTTP endpoint xử lý cho Settings & Telemetry Integrations.
+// MetricsHandler handles metrics integration settings and Prometheus connectivity.
 type MetricsHandler struct {
 	service port.MetricsService
 }
 
-// NewMetricsHandler khởi tạo MetricsHandler với service tương ứng.
+// NewMetricsHandler creates a new MetricsHandler instance.
 func NewMetricsHandler(s port.MetricsService) *MetricsHandler {
 	return &MetricsHandler{service: s}
 }
 
-// GetConfig xử lý HTTP GET /api/v1/settings/integrations/metrics:
-// Lấy cấu hình tích hợp metrics hiện tại (Standalone vs External Prometheus).
+// GetConfig returns the current metrics integration configuration.
 func (h *MetricsHandler) GetConfig(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), metricsQueryTimeout)
 	defer cancel()
@@ -47,8 +45,6 @@ func (h *MetricsHandler) GetConfig(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to query metrics config: " + err.Error()})
 		return
 	}
-
-	// Map tường minh sang gin.H để đảm bảo hợp đồng schema JSON cố định
 	c.JSON(http.StatusOK, gin.H{
 		"mode":           cfg.Mode,
 		"prometheus_url": cfg.PrometheusURL,
@@ -57,8 +53,7 @@ func (h *MetricsHandler) GetConfig(c *gin.Context) {
 	})
 }
 
-// UpdateConfig xử lý HTTP PUT /api/v1/settings/integrations/metrics:
-// Cập nhật chế độ hoạt động giữa Lab/Standalone và Production Prometheus.
+// UpdateConfig updates the metrics integration mode and Prometheus connection details.
 func (h *MetricsHandler) UpdateConfig(c *gin.Context) {
 	contentType := c.GetHeader("Content-Type")
 	if strings.Split(contentType, ";")[0] != "application/json" {
@@ -116,8 +111,7 @@ func (h *MetricsHandler) UpdateConfig(c *gin.Context) {
 	})
 }
 
-// TestConnection xử lý HTTP POST /api/v1/settings/integrations/metrics/test:
-// Kiểm tra khả năng kết nối tới Prometheus URL và đo độ trễ mạng.
+// TestConnection tests connectivity to a remote Prometheus server.
 func (h *MetricsHandler) TestConnection(c *gin.Context) {
 	contentType := c.GetHeader("Content-Type")
 	if strings.Split(contentType, ";")[0] != "application/json" {
@@ -172,11 +166,7 @@ func (h *MetricsHandler) TestConnection(c *gin.Context) {
 	})
 }
 
-// GetNodeMetrics xử lý HTTP GET /api/v1/nodes/:id/metrics:
-// Trả về chuỗi điểm đo Timeline cho node:
-// - Nếu chế độ bị tắt: Trả về HTTP 503 kèm mã METRICS_DISABLED.
-// - Nếu Prometheus sập: Trả về HTTP 503 kèm mã PROMETHEUS_UNAVAILABLE.
-// - Nếu hợp lệ: Trả về HTTP 200 kèm danh sách điểm đo đã map tường minh sang gin.H.
+// GetNodeMetrics returns timeline metrics for a specific node.
 func (h *MetricsHandler) GetNodeMetrics(c *gin.Context) {
 	nodeID := c.Param("id")
 	if nodeID == "" {
@@ -210,8 +200,6 @@ func (h *MetricsHandler) GetNodeMetrics(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve metrics: " + err.Error()})
 		return
 	}
-
-	// Map tường minh từng điểm đo sang gin.H
 	response := make([]gin.H, 0, len(points))
 	for _, pt := range points {
 		response = append(response, gin.H{

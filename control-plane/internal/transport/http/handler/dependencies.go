@@ -13,24 +13,22 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Thời gian chờ tối đa cho các tác vụ quản lý phụ thuộc (NGINX Dependencies)
 const (
 	dependenciesQueryTimeout    = 5 * time.Second  // Dành cho List và Poll truy vấn SQLite
 	dependenciesMutationTimeout = 10 * time.Second // Dành cho Queue công việc và Report kết quả
 )
 
-// DependenciesHandler xử lý các API kiểm tra module NGINX phụ thuộc (Brotli, GeoIP2...) và điều phối cài đặt trên worker nodes.
+// DependenciesHandler manages NGINX module dependencies and installation jobs on cluster nodes.
 type DependenciesHandler struct {
 	service port.DependenciesService
 }
 
-// NewDependenciesHandler khởi tạo handler với DependenciesService.
+// NewDependenciesHandler creates a new DependenciesHandler instance.
 func NewDependenciesHandler(s port.DependenciesService) *DependenciesHandler {
 	return &DependenciesHandler{service: s}
 }
 
-// List xử lý HTTP GET /api/v1/settings/dependencies:
-// Trả về danh sách trạng thái các module NGINX đã nạp hoặc có sẵn trên từng node trong cluster.
+// List returns module availability and loaded status across cluster nodes.
 func (h *DependenciesHandler) List(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), dependenciesQueryTimeout)
 	defer cancel()
@@ -75,8 +73,7 @@ func (h *DependenciesHandler) List(c *gin.Context) {
 	c.JSON(200, res)
 }
 
-// Queue xử lý HTTP POST /api/v1/settings/dependencies/:node/jobs:
-// Yêu cầu quyền admin để đưa lệnh cài đặt/gỡ bỏ module NGINX vào hàng đợi thực thi của node.
+// Queue enqueues a module installation or removal job for a specific node (admin only).
 func (h *DependenciesHandler) Queue(c *gin.Context) {
 	if c.GetString(middleware.CtxUserRoleKey) != "admin" {
 		c.AbortWithStatus(403)
@@ -112,8 +109,7 @@ func (h *DependenciesHandler) Queue(c *gin.Context) {
 	})
 }
 
-// Poll xử lý HTTP GET /api/v1/settings/dependencies/:node/poll:
-// Endpoint cho node định kỳ thăm dò (poll) công việc cài đặt module đang chờ xử lý.
+// Poll allows a node to poll for pending module installation jobs.
 func (h *DependenciesHandler) Poll(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), dependenciesQueryTimeout)
 	defer cancel()
@@ -133,8 +129,7 @@ func (h *DependenciesHandler) Poll(c *gin.Context) {
 	})
 }
 
-// Report xử lý HTTP POST /api/v1/settings/dependencies/:node/report:
-// Node báo cáo kết quả kiểm tra module hoặc trạng thái hoàn thành của job cài đặt.
+// Report receives node module status and installation job results.
 func (h *DependenciesHandler) Report(c *gin.Context) {
 	var req dto.ReportDependencyRequest
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
