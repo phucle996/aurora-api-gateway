@@ -1,0 +1,315 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/aurora-waf
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Build all artifacts once on Linux amd64 and upload as job outputs.
+  # ─────────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build Artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.98.1"
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: control-plane/go.mod
+          cache-dependency-path: control-plane/go.sum
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpcre2-dev
+
+      # ── Rust binaries ──────────────────────────────────────────────────────
+      - name: Build aurora-compile (Rust compiler binary)
+        run: cargo build --locked --release -p aurora-engine --bin aurora-compile
+
+      # ── NGINX dynamic modules (all supported versions) ─────────────────────
+      - name: Build NGINX WAF modules for all supported versions
+        run: bash scripts/build-nginx-module.sh
+
+      - name: Build NGINX 1.30.4 runtime for Docker bundling
+        run: |
+          cd build/nginx-source/nginx-1.30.4
+          make -j$(nproc)
+          make DESTDIR="$GITHUB_WORKSPACE/build/nginx-runtime" install
+
+      # ── UI ─────────────────────────────────────────────────────────────────
+      - name: Build UI assets
+        working-directory: ui
+        run: |
+          npm ci
+          npm run build
+
+      # ── Control Plane binary ───────────────────────────────────────────────
+      - name: Build aurora-controller (Go binary)
+        working-directory: control-plane
+        env:
+          CGO_ENABLED: "0"
+        run: go build -buildvcs=false -trimpath -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o ../build/aurora-controller ./cmd
+
+      # ── Brotli offline package ─────────────────────────────────────────────
+      - name: Build brotli dependency package
+        run: |
+          if [ -f deploy/docker/Dockerfile.brotli ]; then
+            docker build -f deploy/docker/Dockerfile.brotli -t aurora-brotli-build .
+            docker create --name brotli-extract aurora-brotli-build true
+            mkdir -p build/brotli-package
+            docker cp brotli-extract:/opt/brotli-package/. build/brotli-package/
+            docker rm brotli-extract
+          fi
+
+      # ── Trivy source code scan ────────────────────────────────────────────
+      - name: Trivy filesystem vulnerability scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-source.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+
+      - name: Trivy config and secret scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-misconfig.sarif
+          scanners: misconfig,secret
+          exit-code: "1"
+
+      - name: Upload Trivy source SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-source.sarif
+          category: trivy-source
+
+      - name: Upload Trivy misconfig SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-misconfig.sarif
+          category: trivy-misconfig
+
+      # ── Package systemd tarball ────────────────────────────────────────────
+      - name: Package Linux systemd release tarball
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          DIST="aurora-waf-${VERSION}-linux-amd64"
+          mkdir -p "dist/${DIST}/bin" "dist/${DIST}/modules" "dist/${DIST}/deploy"
+
+          # Binaries
+          cp build/aurora-controller             "dist/${DIST}/bin/"
+          cp target/release/aurora-compile       "dist/${DIST}/bin/"
+
+          # NGINX dynamic modules (one per supported version)
+          cp build/modules/ngx_http_aurora_waf_module-*.so "dist/${DIST}/modules/"
+          cp scripts/nginx-versions.txt "dist/${DIST}/modules/supported-versions.txt"
+
+          # Node deploy scripts (for bare-metal agent setup)
+          cp deploy/docker/domain-routing-agent.sh  "dist/${DIST}/deploy/"
+          cp deploy/docker/node-dependencies.sh     "dist/${DIST}/deploy/"
+          cp deploy/docker/nginx-node.conf.template "dist/${DIST}/deploy/"
+
+          # Self-contained installer (generates systemd units and starts services)
+          install -m 755 deploy/systemd/install.sh "dist/${DIST}/install.sh"
+          cp deploy/systemd/RELEASE_README.md "dist/${DIST}/README.md"
+
+          tar -czf "dist/aurora-waf-${VERSION}-linux-amd64.tar.gz" -C dist "${DIST}"
+          sha256sum "dist/aurora-waf-${VERSION}-linux-amd64.tar.gz" > "dist/aurora-waf-${VERSION}-linux-amd64.tar.gz.sha256"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist/aurora-waf-*.tar.gz*
+          retention-days: 1
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Push Docker images to GHCR.
+  # ─────────────────────────────────────────────────────────────────────────────
+  docker:
+    name: Docker Images → GHCR
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - image: controller
+            dockerfile: deploy/docker/Dockerfile.controller
+          - image: node
+            dockerfile: deploy/docker/Dockerfile.node
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.98.1"
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: control-plane/go.mod
+          cache-dependency-path: control-plane/go.sum
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpcre2-dev
+
+      - name: Build all required artifacts
+        run: |
+          # Rust compiler
+          cargo build --locked --release -p aurora-engine --bin aurora-compile
+
+          # NGINX module
+          make module
+
+          # NGINX runtime (for node image)
+          cd build/nginx-source/nginx-1.30.4
+          make -j$(nproc)
+          make DESTDIR="$GITHUB_WORKSPACE/build/nginx-runtime" install
+          cd "$GITHUB_WORKSPACE"
+
+          # UI + Controller binary
+          cd ui && npm ci && npm run build && cd ..
+          cd control-plane && CGO_ENABLED=0 go build -buildvcs=false -trimpath \
+            -ldflags="-s -w -X main.version=${{ github.ref_name }}" \
+            -o ../build/aurora-controller ./cmd && cd ..
+
+          # Brotli package
+          if [ -f deploy/docker/Dockerfile.brotli ]; then
+            docker build -f deploy/docker/Dockerfile.brotli -t aurora-brotli-build .
+            docker create --name brotli-extract aurora-brotli-build true
+            mkdir -p build/brotli-package
+            docker cp brotli-extract:/opt/brotli-package/. build/brotli-package/
+            docker rm brotli-extract
+          fi
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}-${{ matrix.image }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      # ── Trivy vulnerability scan ─────────────────────────────────────────
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMAGE_PREFIX }}-${{ matrix.image }}:${{ steps.meta.outputs.version }}
+          format: sarif
+          output: trivy-${{ matrix.image }}.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+
+      - name: Upload Trivy SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-${{ matrix.image }}.sarif
+          category: trivy-${{ matrix.image }}
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Create GitHub Release with the Linux tarball.
+  # ─────────────────────────────────────────────────────────────────────────────
+  github-release:
+    name: GitHub Release
+    needs: [build, docker]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/aurora-waf-*.tar.gz
+            dist/aurora-waf-*.tar.gz.sha256
+          body: |
+            ## Docker Images (GHCR)
+
+            ```bash
+            # Control Plane
+            docker pull ghcr.io/${{ github.repository_owner }}/aurora-waf-controller:${{ github.ref_name }}
+
+            # WAF Node (NGINX + Module)
+            docker pull ghcr.io/${{ github.repository_owner }}/aurora-waf-node:${{ github.ref_name }}
+            ```
+
+            ## Linux Systemd (Bare-metal)
+
+            ```bash
+            # Download and install
+            tar xzf aurora-waf-*-linux-amd64.tar.gz
+            cd aurora-waf-*-linux-amd64
+            sudo bash install.sh
+            ```
+
+            See the included `README.md` in the tarball for full instructions.

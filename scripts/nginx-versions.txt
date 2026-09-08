@@ -1,0 +1,8 @@
+# Supported NGINX versions for Aurora WAF module builds.
+# Format: VERSION SHA256
+# SHA256 is verified against the official nginx.org tarball.
+# Add new versions here when NGINX releases a new stable/mainline.
+1.26.3  a976cb82fe79150244079f18171e0c4e039f4eed4fb0b52b07dbeaa44a285e45
+1.27.4  124b8e498c6d3e7b1e39e837bf7e33b5c7fdd7ae1cab84c72cbb6a9e60d3b9a3
+1.28.0  2b2c3b48f7aadbcc5c5ecf3025d1e2e5df9c4b38ef7ef6aa7a756ee06ebad820
+1.30.4  4261dc90e9e47c1c4041276e9aaa3d48ebe2e664f728e14fa95ae6c67d57a08b
