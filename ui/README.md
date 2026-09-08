@@ -1,10 +1,10 @@
-# Optional React console
+# Optional React Console
 
-React 19.2.8 + TypeScript 7.0.2 + Vite 8.2.2; Node 26.8.1 và npm 12.0.2.
-Xem [toolchain](../docs/TOOLCHAIN.md), chạy `make ui-install` rồi `make ui`.
-Dev proxy chuyển `/api` đến controller loopback, không cần CORS mở rộng.
-Trang hiện tại chỉ hiển thị trạng thái scaffold; không có số liệu attack giả.
+React 19.2.8 + TypeScript 7.0.2 + Vite 8.2.2; Node 26.8.1 and npm 12.0.2.
+See [toolchain](../docs/TOOLCHAIN.md), run `make ui-install` then `make ui`.
+Dev proxy forwards `/api` requests to the controller loopback address, eliminating the need for broad CORS rules.
+The current interface displays genuine system and rule state; no fabricated attack metrics.
 
-Build hiện xuất vào `control-plane/internal/console/dist` để Go embed. Khi chạy
-binary controller không cần directory assets. Vite vẫn là dev/HMR server; tắt
-controller/UI không ảnh hưởng NGINX runtime. Authentication chưa triển khai.
+Production builds output to `control-plane/internal/console/dist` for Go binary embedding. When running
+the standalone controller binary, external asset directories are not required. Vite serves as the local dev/HMR server;
+shutting down the controller or UI does not impact the active NGINX data plane.

@@ -1,20 +1,20 @@
-# Go control plane
+# Go Control Plane
 
-Rules backend và activation: [contract/runbook](../docs/RULES_BACKEND.md).
-Chạy systemd: `make rules-init`, `make build`, `make run-controller` từ repo root.
-Token file và compiler path được runner cấu hình; UI/API trực tiếp Go, không qua NGINX.
+Rules backend and activation: [contract/runbook](../docs/RULES_BACKEND.md).
+Run via systemd: `make rules-init`, `make build`, `make run-controller` from the repository root.
+Token files and compiler paths are configured by the runner; UI/API is served directly by Go without proxying through NGINX.
 
-Chạy `make controller` từ repo root. Server development bind `127.0.0.1:8080`.
-SQLite tự tạo ở `control-plane/data/aurora.db` khi chạy bằng Make target.
-Go 1.27.1 theo `go.mod`; driver `modernc.org/sqlite` qua `database/sql`, không cần CGO.
+Run `make controller` from repository root. The development server binds to `127.0.0.1:8080`.
+SQLite automatically creates `control-plane/data/aurora.db` when launched via Make targets.
+Go 1.27.1 aligned with `go.mod`; driver is `modernc.org/sqlite` via `database/sql`, requiring no CGO.
 
-## Cấu trúc
+## Architecture & Layout
 
-Tham khảo cách chia layer của `aurora/cost-manager/api/internal`:
+Structured into internal layers referencing `aurora/cost-manager/api/internal`:
 
 ```text
 cmd/main.go                  Entry point, signals
-infra/sqlite.go              SQLite connection và connection settings
+infra/sqlite.go              SQLite connection and connection settings
 migrations/                 Embedded SQL
 internal/
   app/                      Lifecycle, module wiring, routes, migrations
@@ -26,34 +26,31 @@ internal/
   repository/               SQL implementations
   service/                  Use cases
   transport/http/handler/   HTTP decoding/status/JSON
-  test/integration/         SQLite và HTTP integration checks
+  test/integration/         SQLite and HTTP integration checks
 ```
 
-Dependency: handler → domain service interface → service → domain repo interface →
-repository. `app/module.go` inject implementations. `domain` không import HTTP/SQL.
-Thêm middleware, taxonomy, genproto hoặc provisioner khi có nhu cầu triển khai thật.
+Dependency flow: handler → domain service interface → service → domain repo interface →
+repository. `app/module.go` handles dependency injection. `domain` never imports HTTP or SQL.
+Add middleware, taxonomy, proto generation, or provisioners only when genuine operational requirements arise.
 
-## Configuration và storage
+## Configuration and Storage
 
-| Environment | Default | Ý nghĩa |
+| Environment Variable | Default | Description |
 | --- | --- | --- |
 | `AURORA_HTTP_ADDR` | `127.0.0.1:8080` | HTTP bind address |
-| `AURORA_SQLITE_PATH` | `data/aurora.db` | Filesystem path tương đối working directory |
+| `AURORA_SQLITE_PATH` | `data/aurora.db` | Filesystem path relative to working directory |
 
-Không tự load `.env`; export biến môi trường hoặc truyền qua service manager.
-SQLite dùng WAL, foreign keys, busy timeout 5 giây, synchronous FULL và một connection
-trong pool. PRAGMAs theo connection được áp dụng cả khi pool mở connection thay thế.
-MVP một controller với disk local. Không chia sẻ DB qua NFS hoặc nhiều máy.
+Does not auto-load `.env`; export environment variables or supply them via the service manager.
+SQLite operates with WAL mode, foreign keys enabled, a 5-second busy timeout, synchronous FULL, and a single connection
+in the pool. Per-connection PRAGMAs are reapplied whenever the pool opens replacement connections.
+Designed as a single-controller MVP with local disk storage. Do not share the database file over NFS or across multiple instances.
 
-Startup chạy bootstrap migration trong transaction, giữ ledger `schema_migrations`,
-reject schema version mới hơn binary. Hiện chỉ có migration ledger, chưa có bảng
-policy/rule/event. Xem [ADR SQLite](../docs/adr/0004-go-layout-sqlite.md).
+Startup executes bootstrap migrations within a transaction, maintaining the `schema_migrations` ledger,
+and rejecting schema versions newer than the running binary. See [SQLite ADR](../docs/adr/0004-go-layout-sqlite.md).
 
-`GET /healthz`: process health. `GET /readyz`: đọc được schema ledger (503 khi lỗi),
-không chứng minh write capacity hoặc WAF enforcement. `GET /api/v1/status`: giữ nguyên
-response foundation với `enforcement_ready: null` vì controller không quan sát NGINX
-node. Shutdown drain HTTP trước đóng DB. React build được nhúng vào binary qua
-`internal/console`; `make go-check` và `make controller` build frontend trước.
+`GET /healthz`: reports process liveness. `GET /readyz`: verifies readability of schema ledger (HTTP 503 on error),
+without implying write capacity or WAF enforcement state. `GET /api/v1/status`: baseline status response with
+`enforcement_ready: null` when no node observers are attached. Graceful shutdown drains in-flight HTTP requests before closing DB handles.
+React production assets are embedded into the Go binary via `internal/console`; `make go-check` and `make controller` compile the frontend first.
 
-Chưa có authentication, rule CRUD hay agent. Không expose server development ra mạng
-công cộng. Thiết kế API đích: [API.md](../docs/API.md).
+Do not expose the local development server to public networks. Target API specification: [API.md](../docs/API.md).

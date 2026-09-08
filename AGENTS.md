@@ -4,50 +4,50 @@
 
 ## Workflow-first development
 
-- Đặt workflow end-to-end lên trước file, package, service hoặc abstraction.
-- Trước khi implement, xác định rõ workflow owner, authority source, durable boundary, retry/settlement rule, failure mode và security invariant.
-- Mỗi change chỉ nên tác động workflow được yêu cầu. Không kéo theo cleanup hoặc refactor của workflow khác.
-- Ưu tiên implementation nằm trong module/workflow owner để giữ dependency direction và blast radius nhỏ.
-- Test theo behavior và boundary của workflow: success, failure, retry/replay, stale event, authorization và recovery khi có liên quan.
+- Prioritize end-to-end workflows over files, packages, services, or abstractions.
+- Before implementing, clearly determine the workflow owner, authority source, durable boundary, retry/settlement rule, failure mode, and security invariants.
+- Each change should only impact the requested workflow. Never drag along cleanups or refactorings of other workflows.
+- Prefer placing implementations inside the module/workflow owner to maintain strict dependency direction and minimize blast radius.
+- Test against workflow behavior and boundaries: success, failure, retry/replay, stale events, authorization, and recovery when applicable.
 
 ## Workflow isolation over helpers
 
-- Không tạo helper function theo mặc định.
-- Giữ logic tại workflow owner và call site khi điều đó làm ownership, state transition và failure path rõ hơn.
-- Chỉ tạo helper khi thật sự bắt buộc cho correctness hoặc security, hoặc khi không thể giữ invariant nhất quán tại call sites mà không tạo rủi ro thực tế.
-- Helper bắt buộc phải có scope nhỏ nhất có thể: ưu tiên private function trong cùng workflow/module, sau đó mới tới package-local. Không đưa vào shared/global utility nếu chưa có nhiều workflow với cùng một contract được chứng minh.
-- Không tạo generic abstraction, utility layer hoặc reusable helper để dự đoán nhu cầu tương lai.
-- Không refactor code hiện có thành helper chỉ vì trùng cú pháp trong khi semantics, authority hoặc failure behavior thuộc các workflow khác nhau.
-- Nếu buộc phải thêm helper, change description phải giải thích vì sao inline/workflow-local implementation không đủ và helper đó bảo toàn isolation như thế nào.
+- Do not create helper functions by default.
+- Keep logic at the workflow owner and call site when it makes ownership, state transitions, and failure paths clearer.
+- Only introduce a helper when strictly required for correctness or security, or when an invariant cannot be maintained consistently across call sites without genuine operational risk.
+- Helpers must have the narrowest possible scope: prioritize private functions within the same workflow/module, followed by package-local. Never move helpers into shared/global utilities without proven identical contracts across multiple workflows.
+- Do not create generic abstractions, utility layers, or reusable helpers in anticipation of future needs.
+- Do not refactor existing code into helpers solely due to syntactic similarity when semantics, authority, or failure behavior belong to different workflows.
+- If adding a helper is unavoidable, the change description must explain why an inline/workflow-local implementation is insufficient and how the helper preserves workflow isolation.
 
 ## Flat workflow and flat entity
 
-- Mỗi workflow phải có command, projection/result, service port và repository port riêng; không dùng result entity của workflow khác làm input hoặc authority của workflow hiện tại.
-- Entity của API workflow phải là flat projection theo đúng workflow owner. Không lồng `Schedule -> Version -> Bracket`, không embed hoặc compose entity của workflow khác để tiết kiệm mapping.
-- Repeated line/bracket records chỉ được phép là type con mang tên theo chính workflow đó. Không dùng một type input chung xuyên publish, detail, cache, estimate hoặc settlement.
-- Chỉ kernel primitive được phép compose các kernel value object/snapshot khi composition đó là invariant nội tại của kernel. API/module workflow không được dựa vào ngoại lệ này.
-- Không gọi workflow read/detail từ workflow mutation/publish. Mutation phải đọc authority bằng projection/port riêng của chính mutation workflow.
-- Ưu tiên mapping tường minh và duplication nhỏ theo workflow hơn abstraction hoặc entity graph làm ownership khó đọc.
+- Each workflow must have its own command, projection/result, service port, and repository port; do not reuse result entities of other workflows as inputs or authorities for the current workflow.
+- API workflow entities must be flat projections specific to the workflow owner. Do not nest `Schedule -> Version -> Bracket`; do not embed or compose entities of other workflows to save on mapping effort.
+- Repeated line/bracket records are only permitted as child types named after that specific workflow. Do not share a common input type across publish, detail, cache, estimate, or settlement workflows.
+- Only kernel primitives may compose kernel value objects/snapshots when such composition is an intrinsic kernel invariant. API/module workflows cannot rely on this exception.
+- Never invoke read/detail workflows from mutation/publish workflows. Mutations must read authority via their own dedicated projection/port.
+- Prefer explicit mapping and minor duplication per workflow over abstractions or entity graphs that obscure ownership.
 
 ## CTE-first repository
 
-- Repository ưu tiên CTE để biểu diễn target, authority, latest version, winner, count và mutation projection trong một câu SQL dễ trace.
-- Dùng transaction với nhiều statement khi durable transition thực sự có nhiều mutation boundary; không tách query chỉ để tái sử dụng repository method của workflow khác.
-- CTE không được biến thành abstraction dùng chung. Mỗi query vẫn thuộc đúng một repository port/workflow và trả về flat projection của workflow đó.
+- Repositories should prioritize Common Table Expressions (CTEs) to express target, authority, latest version, winner, count, and mutation projections within a single, traceable SQL query.
+- Use multi-statement transactions when durable transitions involve genuine multiple mutation boundaries; do not split queries merely to reuse repository methods from other workflows.
+- CTEs must not become shared abstractions. Each query remains bound to exactly one repository port/workflow and returns flat projections for that workflow.
 
 ## Workflow contexts, never God Contexts
 
-- Không dùng `#[allow(clippy::too_many_arguments)]` để unblock build hoặc che nợ thiết kế. Ngoại lệ phải được user phê duyệt tường minh trước khi commit.
-- Khi workflow cần nhiều capability, tạo context riêng ngay trong module owner. Context chỉ được chứa capability mà workflow đó thật sự sử dụng.
-- Dữ liệu nghiệp vụ, signed input và transport input phải đi qua command/request type có tên theo workflow; không trộn chúng vào capability context.
-- Cấm `AppContext`, `ServiceContext`, dependency bag hoặc context dùng chung cho các workflow không cùng authority/failure boundary.
-- Không di chuyển dependency vào context chỉ để giảm số argument. Mỗi field phải phản ánh capability, input hoặc invariant cụ thể của workflow owner.
+- Do not use `#[allow(clippy::too_many_arguments)]` to unblock builds or mask design debt. Any exception requires explicit user approval before commit.
+- When a workflow requires multiple capabilities, create a dedicated context within the owning module. The context must contain only capabilities genuinely utilized by that workflow.
+- Business data, signed inputs, and transport inputs must flow through workflow-named command/request types; never mix them into capability contexts.
+- `AppContext`, `ServiceContext`, dependency bags, or shared contexts spanning workflows without common authority/failure boundaries are strictly forbidden.
+- Do not move dependencies into a context solely to reduce argument counts. Each field must reflect a concrete capability, input, or invariant of the workflow owner.
 
 ## Required working order
 
-2. Trace workflow end-to-end trong code/config/contract hiện tại.
-3. Chốt ownership, Source of Truth, invariants và failure semantics.
-4. Implement thay đổi với scope workflow nhỏ nhất.
-5. Verify bằng test/check đúng boundary.
+2. Trace the workflow end-to-end through existing code/config/contracts.
+3. Lock in ownership, Source of Truth, invariants, and failure semantics.
+4. Implement changes with the smallest workflow blast radius.
+5. Verify against the correct boundary via behavioral tests and checks.
 
-Các `AGENTS.md` sâu hơn trong cây thư mục bổ sung rule riêng cho subtree và phải được đọc trước khi làm việc trong subtree đó.
+Deeper `AGENTS.md` files throughout the directory tree define subtree-specific rules and must be read prior to working in those subtrees.

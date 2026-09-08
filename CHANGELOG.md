@@ -7,24 +7,24 @@
   checks; removed inert list controls and fake cluster indicators on the list page.
 
 - Rules backend: SQLite immutable revisions/audit, authenticated list/detail/history/stats,
-  create idempotency và optimistic update/enable/disable. Freeze publication, Rust exact-path
-  compiler/allow-log-block, ABI v3 generation và journaled atomic activation CLI.
-  Kiểm tra 2 workers/20 clients/6 publications dưới traffic.
+  create idempotency and optimistic update/enable/disable. Freeze publication, Rust exact-path
+  compiler/allow-log-block, ABI v3 generation, and journaled atomic activation CLI.
+  Verified with 2 workers/20 clients/6 publications under traffic.
 - Create Rule v2: full form validation, immutable SQLite definitions/revision, atomic
-  idempotency/retry, authenticated React create/list/detail/history và browser recovery tests.
-  Không Blueprint; unsupported definitions bị chặn publish, không thay đổi NGINX khi lưu.
+  idempotency/retry, authenticated React create/list/detail/history, and browser recovery tests.
+  No Blueprint; unsupported definitions are blocked from publishing, no NGINX changes upon save.
 
-- Nhúng React vào Go binary; thêm immutable Rust exact-path runtime, C ABI v2 và
-  NGINX dynamic module load được trên 1.30.4. Thêm reload/load tests và demo data plane
-  :8090 độc lập controller. `enforcement_ready` đổi sang null khi chưa có node observer.
-- Thêm NGINX local runner cho UI/API với systemd user services, config validation,
-  smoke checks và hướng dẫn run/stop; chưa có WAF HTTP module.
-- Nâng baseline stable: Go 1.27.1, Rust 1.98.1/edition 2024, Node 26.8.1,
-  npm 12.0.2, React 19.2.8, TypeScript 7.0.2, Vite 8.2.2; đồng bộ local/CI pins.
-- Tổ chức Go theo internal layers tham khảo cost-manager; SQLite bootstrap, readiness,
-  graceful shutdown và storage integration tests; Go baseline theo `control-plane/go.mod`.
-- Khởi tạo Rust workspace và C ABI capability smoke test.
-- Thêm Go development controller với health/status API.
-- Thêm React/TypeScript console kết nối status API.
-- Thêm architecture validation, contracts, runbooks và roadmap stage/phase/task.
-- Chưa có WAF enforcement hoặc NGINX HTTP module.
+- Embedded React into Go binary; added immutable Rust exact-path runtime, C ABI v2, and
+  loadable NGINX dynamic module on 1.30.4. Added reload/load tests and demo data plane
+  on :8090 running independently of the controller. `enforcement_ready` set to null when no node observer is present.
+- Added NGINX local runner for UI/API with systemd user services, config validation,
+  smoke checks, and run/stop guides; without WAF HTTP module.
+- Bumped stable baseline: Go 1.27.1, Rust 1.98.1/edition 2024, Node 26.8.1,
+  npm 12.0.2, React 19.2.8, TypeScript 7.0.2, Vite 8.2.2; synchronized local/CI pins.
+- Structured Go into internal layers referencing cost-manager; SQLite bootstrap, readiness,
+  graceful shutdown, and storage integration tests; Go baseline aligned with `control-plane/go.mod`.
+- Initialized Rust workspace and C ABI capability smoke test.
+- Added Go development controller with health/status API.
+- Added React/TypeScript console connecting to status API.
+- Added architecture validation, contracts, runbooks, and roadmap stages/phases/tasks.
+- WAF enforcement and NGINX HTTP module not yet enabled at baseline.
