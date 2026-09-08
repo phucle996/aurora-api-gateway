@@ -62,6 +62,8 @@ jobs:
           cd build/nginx-source/nginx-1.30.4
           make -j$(nproc)
           make DESTDIR="$GITHUB_WORKSPACE/build/nginx-runtime" install
+          mkdir -p "$GITHUB_WORKSPACE/build/nginx-runtime/usr/sbin"
+          cp -f "$GITHUB_WORKSPACE/build/nginx-runtime/usr/local/nginx/sbin/nginx" "$GITHUB_WORKSPACE/build/nginx-runtime/usr/sbin/nginx"
 
       # ── UI ─────────────────────────────────────────────────────────────────
       - name: Build UI assets
@@ -154,6 +156,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         include:
           - image: controller
@@ -200,6 +203,8 @@ jobs:
           cd build/nginx-source/nginx-1.30.4
           make -j$(nproc)
           make DESTDIR="$GITHUB_WORKSPACE/build/nginx-runtime" install
+          mkdir -p "$GITHUB_WORKSPACE/build/nginx-runtime/usr/sbin"
+          cp -f "$GITHUB_WORKSPACE/build/nginx-runtime/usr/local/nginx/sbin/nginx" "$GITHUB_WORKSPACE/build/nginx-runtime/usr/sbin/nginx"
           cd "$GITHUB_WORKSPACE"
 
           # UI + Controller binary
