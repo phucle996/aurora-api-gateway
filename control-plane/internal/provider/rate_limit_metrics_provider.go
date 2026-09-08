@@ -53,15 +53,11 @@ type DynamicRateLimitMetricsProvider struct {
 func NewDynamicRateLimitMetricsProvider(
 	settingsRepo repo.SettingsRepository,
 	rateLimitRepo repo.RateLimitRepository,
-	client *http.Client,
 ) *DynamicRateLimitMetricsProvider {
-	if client == nil {
-		client = &http.Client{Timeout: 4 * time.Second}
-	}
 	return &DynamicRateLimitMetricsProvider{
 		settingsRepo:  settingsRepo,
 		rateLimitRepo: rateLimitRepo,
-		httpClient:    client,
+		httpClient:    &http.Client{Timeout: 4 * time.Second},
 	}
 }
 

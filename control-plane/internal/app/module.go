@@ -3,8 +3,6 @@ package app
 import (
 	"context"
 	"database/sql"
-	"net/http"
-	"time"
 
 	"aurora-waf.local/control-plane/internal/config"
 	"aurora-waf.local/control-plane/internal/domain/entity"
@@ -89,10 +87,9 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	if metricsCfg == nil {
 		metricsCfg = &entity.MetricsIntegrationConfig{Mode: "standalone"}
 	}
-	httpClient := &http.Client{Timeout: 4 * time.Second}
 
 	rateLimitRepo := repository.NewRateLimitRepository(writerDB, readerDB)
-	rateLimitMetricsProvider := provider.NewDynamicRateLimitMetricsProvider(settingsRepo, rateLimitRepo, httpClient)
+	rateLimitMetricsProvider := provider.NewDynamicRateLimitMetricsProvider(settingsRepo, rateLimitRepo)
 	rateLimitSvc := service.NewRateLimitService(rateLimitRepo, rateLimitMetricsProvider)
 	rateLimitCollector := provider.NewRateLimitCollector(rateLimitSvc, cfg.RateLimitUDPAddr)
 	rateLimitHdr := handler.NewRateLimitHandler(rateLimitSvc, rateLimitCollector)
