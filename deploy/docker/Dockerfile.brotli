@@ -1,5 +1,4 @@
-# Optional, offline install artifact. Nothing here is loaded until an operator installs it.
-FROM ubuntu:26.04 AS builder
+FROM ubuntu:24.04 AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential cmake libpcre2-dev zlib1g-dev ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY build/nginx-source/nginx-1.30.4.tar.gz /src/nginx.tar.gz
 COPY build/ngx-brotli-source /src/ngx_brotli

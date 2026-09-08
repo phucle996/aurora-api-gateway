@@ -76,17 +76,6 @@ jobs:
           CGO_ENABLED: "0"
         run: go build -buildvcs=false -trimpath -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o ../build/aurora-controller ./cmd
 
-      # ── Brotli offline package ─────────────────────────────────────────────
-      - name: Build brotli dependency package
-        run: |
-          if [ -f deploy/docker/Dockerfile.brotli ]; then
-            docker build -f deploy/docker/Dockerfile.brotli -t aurora-brotli-build .
-            docker create --name brotli-extract aurora-brotli-build true
-            mkdir -p build/brotli-package
-            docker cp brotli-extract:/opt/brotli-package/. build/brotli-package/
-            docker rm brotli-extract
-          fi
-
       # ── Trivy source code scan ────────────────────────────────────────────
       - name: Trivy filesystem vulnerability scan
         uses: aquasecurity/trivy-action@v0.36.0
@@ -218,13 +207,9 @@ jobs:
             -ldflags="-s -w -X main.version=${{ github.ref_name }}" \
             -o ../build/aurora-controller ./cmd && cd ..
 
-          # Brotli package
-          if [ -f deploy/docker/Dockerfile.brotli ]; then
-            docker build -f deploy/docker/Dockerfile.brotli -t aurora-brotli-build .
-            docker create --name brotli-extract aurora-brotli-build true
-            mkdir -p build/brotli-package
-            docker cp brotli-extract:/opt/brotli-package/. build/brotli-package/
-            docker rm brotli-extract
+          # Brotli package (only needed for node image)
+          if [ "${{ matrix.image }}" = "node" ] && [ -f deploy/docker/Dockerfile.brotli ]; then
+            bash scripts/build-brotli-module.sh
           fi
 
       - name: Log in to GHCR
