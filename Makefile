@@ -1,4 +1,4 @@
-.PHONY: check rust-check go-check ui-install ui-build ui controller ffi-smoke build smoke module module-test compiler rules-init rules-test
+.PHONY: check rust-check go-check ui-install ui-build ui controller ffi-smoke build smoke module module-test compiler rules-init rules-test clean
 
 NGINX ?= $(shell command -v nginx)
 
@@ -95,3 +95,6 @@ smoke:
 	curl --fail --silent --show-error --max-time 3 http://127.0.0.1:8080/api/v1/status
 	curl --fail --silent --show-error --max-time 3 http://127.0.0.1:8090/ok
 	test "$$(curl --silent --show-error --max-time 3 --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8090/__aurora_blocked)" = 403
+
+clean:
+	rm -rf build ui/dist
