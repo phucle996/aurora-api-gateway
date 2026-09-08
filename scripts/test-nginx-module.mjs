@@ -12,15 +12,13 @@ const nginx = process.env.NGINX || 'nginx';
 const dir = mkdtempSync(path.join(os.tmpdir(), 'aurora-module-test-'));
 mkdirSync(`${dir}/html`);
 for (const name of ['ok', 'blocked', 'off', 'audit', 'override', 'new']) writeFileSync(`${dir}/html/${name}`, `${name}\n`);
-const probe = net.createServer();
-probe.listen(0, '127.0.0.1');
-await once(probe, 'listening');
-const port = probe.address().port;
-await new Promise(resolve => probe.close(resolve));
+const basePort = 40000 + Math.floor(Math.random() * 10000);
+const testPort = basePort;
+const port = basePort + 500;
 const policy = { schema_version: 1, block_paths: ['/blocked', '/off', '/audit'] };
 writeFileSync(`${dir}/policy.json`, JSON.stringify(policy));
 writeFileSync(`${dir}/override.json`, JSON.stringify({ schema_version: 1, block_paths: ['/override'] }));
-const config = `load_module ${root}/build/modules/ngx_http_aurora_waf_module.so;
+const renderConfig = (p) => `load_module ${root}/build/modules/ngx_http_aurora_waf_module.so;
 worker_processes 2;
 pid ${dir}/nginx.pid;
 error_log ${dir}/error.log notice;
@@ -33,7 +31,7 @@ http {
   uwsgi_temp_path ${dir}/uwsgi;
   scgi_temp_path ${dir}/scgi;
   server {
-    listen 127.0.0.1:${port};
+    listen 127.0.0.1:${p};
     root ${dir}/html;
     aurora_waf on;
     aurora_waf_policy ${dir}/policy.json;
@@ -45,17 +43,19 @@ http {
     location = /metrics { aurora_waf_metrics; }
   }
 }`;
-writeFileSync(`${dir}/nginx.conf`, config);
+writeFileSync(`${dir}/nginx.conf`, renderConfig(testPort));
+const childEnv = { ...process.env };
+delete childEnv.NGINX;
 const args = ['-e', 'stderr', '-p', `${dir}/`, '-c', `${dir}/nginx.conf`];
-assert.equal(spawnSync(nginx, [...args, '-t'], { encoding: 'utf8' }).status, 0, 'valid policy/module must load');
+assert.equal(spawnSync(nginx, [...args, '-t'], { env: childEnv, encoding: 'utf8' }).status, 0, 'valid policy/module must load');
 
 // Startup validation must reject configurations that silently weaken the contract.
-for (const bad of [config.replace('aurora_waf on;', 'aurora_waf on; satisfy any;'), config.replace(`aurora_waf_policy ${dir}/policy.json;`, '')]) {
+for (const bad of [renderConfig(testPort).replace('aurora_waf on;', 'aurora_waf on; satisfy any;'), renderConfig(testPort).replace(`aurora_waf_policy ${dir}/policy.json;`, '')]) {
   writeFileSync(`${dir}/nginx.conf`, bad);
-  assert.notEqual(spawnSync(nginx, [...args, '-t'], { encoding: 'utf8' }).status, 0);
+  assert.notEqual(spawnSync(nginx, [...args, '-t'], { env: childEnv, encoding: 'utf8' }).status, 0);
 }
-writeFileSync(`${dir}/nginx.conf`, config);
-const child = spawn(nginx, [...args, '-g', 'daemon off;'], { stdio: ['ignore', 'ignore', 'pipe'] });
+writeFileSync(`${dir}/nginx.conf`, renderConfig(port));
+const child = spawn(nginx, [...args, '-g', 'daemon off;'], { env: childEnv, stdio: ['ignore', 'ignore', 'pipe'] });
 let stderr = '';
 child.stderr.on('data', chunk => { stderr += chunk; });
 const exited = once(child, 'exit');
@@ -75,7 +75,7 @@ try {
 
   // Invalid direct HUP must preserve the running generation, even without a controller.
   writeFileSync(`${dir}/policy.json`, '{invalid');
-  assert.notEqual(spawnSync(nginx, [...args, '-t'], { encoding: 'utf8' }).status, 0);
+  assert.notEqual(spawnSync(nginx, [...args, '-t'], { env: childEnv, encoding: 'utf8' }).status, 0);
   child.kill('SIGHUP');
   for (let attempt = 0; ; attempt++) {
     if (new RegExp(`${child.pid}#[0-9]+: invalid Aurora policy`).test(readFileSync(`${dir}/error.log`, 'utf8'))) break;

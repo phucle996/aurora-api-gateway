@@ -21,11 +21,12 @@ if [[ ! -f /usr/include/pcre2.h ]]; then
     mkdir -p "$aurora_root/build/nginx-deps/root"
     cd "$aurora_root/build/nginx-deps"
     if [[ ! -f root/usr/include/pcre2.h ]]; then
-        apt-get download libpcre2-dev=10.46-1build1
-        dpkg-deb --extract libpcre2-dev_10.46-1build1_amd64.deb root
+        apt-get download libpcre2-dev
+        dpkg-deb --extract libpcre2-dev_*.deb root
     fi
     aurora_cc_flags="-I$aurora_root/build/nginx-deps/root/usr/include"
     aurora_ld_flags="-L$aurora_root/build/nginx-deps/root/usr/lib/x86_64-linux-gnu"
+    cd "$aurora_root"
 fi
 
 build_module_for_version() {
