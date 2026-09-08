@@ -19,10 +19,12 @@ ConfigurationDirectory=aurora-waf
 RuntimeDirectory=aurora-waf
 
 # ─── Biến môi trường Controller ──────────────────────────────────────────────
+Environment="AURORA_ENV=production"
 Environment="AURORA_HTTP_ADDR=127.0.0.1:8080"
 Environment="AURORA_SQLITE_PATH=/var/lib/aurora-waf/aurora.db"
 Environment="AURORA_ADMIN_TOKEN_FILE=/etc/aurora-waf/admin.token"
 Environment="AURORA_COMPILER_PATH=/usr/local/bin/aurora-compile"
+EnvironmentFile=-/etc/aurora-waf/controller.env
 
 # ─── Lệnh thực thi ──────────────────────────────────────────────────────────
 ExecStart=/usr/local/bin/aurora-controller

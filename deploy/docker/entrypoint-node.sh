@@ -5,7 +5,14 @@ export CONTROLLER_URL="${CONTROLLER_URL:-http://controller:8080}"
 export NODE_ID="${NODE_ID:-node-01}"
 NGINX_RAW_VER=$(/opt/nginx/usr/sbin/nginx -v 2>&1 | sed -n 's/.*nginx\/\([0-9.]*\).*/\1/p')
 export NODE_VERSION="${NODE_VERSION:-${NGINX_RAW_VER:-1.30.4}}"
-export AUTH_TOKEN="${AUTH_TOKEN:-71b268cadc82c2ecfff176c7dfd5c4ac77a0e6a3cd0ae3a7d87b1b9bb686b994}"
+if [ -z "${AUTH_TOKEN:-}" ]; then
+  if [ "${AURORA_ENV:-}" = "production" ] || [ "${NODE_ENV:-}" = "production" ]; then
+    echo "FATAL: In production environment, AUTH_TOKEN must be explicitly provided for node communication!" >&2
+    exit 1
+  else
+    export AUTH_TOKEN="71b268cadc82c2ecfff176c7dfd5c4ac77a0e6a3cd0ae3a7d87b1b9bb686b994"
+  fi
+fi
 export HEARTBEAT_INTERVAL="${HEARTBEAT_INTERVAL:-5}"
 
 echo "[Aurora Node: ${NODE_ID}] Cấu hình kết nối tới Controller: ${CONTROLLER_URL} (Heartbeat: ${HEARTBEAT_INTERVAL}s)..."

@@ -1,4 +1,4 @@
-.PHONY: check rust-check go-check ui-install ui-build ui controller ffi-smoke build nginx-check run run-controller run-nginx stop status smoke module module-test compiler rules-init rules-test
+.PHONY: check rust-check go-check ui-install ui-build ui controller ffi-smoke build smoke module module-test compiler rules-init rules-test
 
 NGINX ?= $(shell command -v nginx)
 
@@ -75,31 +75,6 @@ prometheus-test: module
 
 rolling-test: module
 	node scripts/test-rolling-reload-e2e.mjs
-
-nginx-check:
-	test -n "$(NGINX)"
-	mkdir -p build/runtime
-	"$(NGINX)" -e stderr -p "$(CURDIR)/" -c deploy/nginx/nginx.conf -t
-
-run: nginx-check
-	$(MAKE) run-controller
-	$(MAKE) run-nginx
-	$(MAKE) smoke
-
-run-controller:
-	test -x build/aurora-controller
-	test -f control-plane/data/admin.token
-	systemd-run --user --collect --unit=aurora-waf-controller --working-directory="$(CURDIR)/control-plane" --setenv=AURORA_HTTP_ADDR=127.0.0.1:8080 --setenv=AURORA_SQLITE_PATH="$(CURDIR)/control-plane/data/aurora.db" --setenv=AURORA_ADMIN_TOKEN_FILE="$(CURDIR)/control-plane/data/admin.token" --setenv=AURORA_COMPILER_PATH="$(CURDIR)/target/release/aurora-compile" --property=TimeoutStopSec=10 "$(CURDIR)/build/aurora-controller"
-	curl --fail --silent --show-error --retry 10 --retry-delay 1 --retry-all-errors --max-time 3 http://127.0.0.1:8080/readyz
-
-run-nginx: nginx-check
-	systemd-run --user --collect --unit=aurora-waf-nginx --working-directory="$(CURDIR)" --property=KillSignal=SIGQUIT --property=TimeoutStopSec=10 "$(NGINX)" -e stderr -p "$(CURDIR)/" -c deploy/nginx/nginx.conf -g 'daemon off;'
-
-stop:
-	systemctl --user stop aurora-waf-nginx.service aurora-waf-controller.service 2>/dev/null || true
-
-status:
-	systemctl --user --no-pager status aurora-waf-nginx.service aurora-waf-controller.service 2>/dev/null || true
 
 .PHONY: docker-up docker-down docker-logs docker-status
 docker-up:

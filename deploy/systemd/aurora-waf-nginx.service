@@ -1,5 +1,5 @@
 [Unit]
-Description=Aurora WAF NGINX Data Plane Node (mTLS Policy Bootstrap)
+Description=Aurora WAF NGINX Data Plane Node
 Documentation=https://github.com/phucle996/aurora-waf
 After=network-online.target
 Wants=network-online.target
@@ -10,46 +10,45 @@ Type=forking
 PIDFile=/var/run/aurora-waf/nginx.pid
 
 # ─── Cấu hình tham số môi trường và đường dẫn ──────────────────────────────
+Environment="NODE_ID=node-01"
 Environment="CONTROL_PLANE_URL=https://control-plane.internal:8080"
 Environment="POLICY_DEST=/etc/aurora-waf/active-policy.json"
 Environment="CERTS_DIR=/etc/aurora-waf/certs"
 Environment="NGINX_CONF=/etc/nginx/nginx.conf"
+EnvironmentFile=-/etc/aurora-waf/node.env
 
-# ─── Bước 1: ExecStartPre - Kéo snapshot policy mới nhất qua mTLS ───────────
-# - Bắt tay mTLS hai chiều dùng ca.crt, node.crt, node.key
-# - Ghi ra file tạm và dùng atomic rename để tránh xung đột
-# - Nếu controller bận nhưng trên node đã có policy cũ: Fallback dùng cache cũ (HA)
-# - Nếu khởi động lần đầu mà không lấy được policy: Fail-closed (không cho NGINX chạy)
+# ─── Bước 1: ExecStartPre - Đảm bảo thư mục runtime và baseline policy ──────
 ExecStartPre=/usr/bin/bash -c '\
     set -euo pipefail; \
-    echo "[Aurora WAF] Đang khởi động tiến trình bootstrap node qua mTLS..."; \
     mkdir -p $(dirname "$POLICY_DEST") /var/run/aurora-waf; \
-    TMP_FILE="${POLICY_DEST}.tmp"; \
-    \
-    if [ ! -f "${CERTS_DIR}/node.crt" ] || [ ! -f "${CERTS_DIR}/node.key" ] || [ ! -f "${CERTS_DIR}/ca.crt" ]; then \
-        echo "[Aurora WAF] LỖI: Thiếu chứng chỉ mTLS trong ${CERTS_DIR}"; \
-        exit 1; \
+    if [ ! -f "$POLICY_DEST" ]; then \
+        echo "[Aurora WAF] Khởi tạo baseline policy ban đầu..."; \
+        printf "{\n  \"schema_version\": 1,\n  \"block_paths\": [\n    \"/blocked\",\n    \"/__aurora_blocked\"\n  ]\n}\n" > "$POLICY_DEST"; \
+        chmod 600 "$POLICY_DEST"; \
     fi; \
-    \
-    HTTP_CODE=$(curl --silent --show-error --write-out "%%{http_code}" \
-        --cacert "${CERTS_DIR}/ca.crt" \
-        --cert "${CERTS_DIR}/node.crt" \
-        --key "${CERTS_DIR}/node.key" \
-        --connect-timeout 5 \
-        --max-time 15 \
-        --output "$TMP_FILE" \
-        "${CONTROL_PLANE_URL}/api/v1/rule-releases/active" || echo "000"); \
-    \
-    if [ "$HTTP_CODE" -eq 200 ] && [ -s "$TMP_FILE" ]; then \
-        mv -f "$TMP_FILE" "$POLICY_DEST"; \
-        echo "[Aurora WAF] Đồng bộ snapshot policy thành công qua mTLS."; \
-    elif [ -s "$POLICY_DEST" ]; then \
-        echo "[Aurora WAF] CẢNH BÁO: Không thể tải policy từ controller (HTTP $HTTP_CODE), dùng lại cache snapshot cũ."; \
-        rm -f "$TMP_FILE"; \
-    else \
-        echo "[Aurora WAF] LỖI: Không thể khởi động node khi thiếu policy snapshot hợp lệ."; \
-        rm -f "$TMP_FILE"; \
-        exit 1; \
+    if [ -f "${CERTS_DIR}/node.crt" ] && [ -f "${CERTS_DIR}/node.key" ] && [ -f "${CERTS_DIR}/ca.crt" ]; then \
+        TMP_FILE="${POLICY_DEST}.tmp"; \
+        AUTH_HEADER=(); \
+        if [ -n "${AUTH_TOKEN:-}" ]; then \
+            AUTH_HEADER=(-H "Authorization: Bearer ${AUTH_TOKEN}"); \
+        fi; \
+        HTTP_CODE=$(curl --silent --show-error --write-out "%%{http_code}" \
+            --cacert "${CERTS_DIR}/ca.crt" \
+            --cert "${CERTS_DIR}/node.crt" \
+            --key "${CERTS_DIR}/node.key" \
+            "${AUTH_HEADER[@]}" \
+            --connect-timeout 3 \
+            --max-time 10 \
+            --output "$TMP_FILE" \
+            "${CONTROL_PLANE_URL}/api/v1/policy-sync/${NODE_ID}" || echo "000"); \
+        if [ "$HTTP_CODE" -eq 200 ] && [ -s "$TMP_FILE" ]; then \
+            mv -f "$TMP_FILE" "$POLICY_DEST"; \
+            chmod 600 "$POLICY_DEST"; \
+            echo "[Aurora WAF] Đồng bộ snapshot policy thành công từ controller."; \
+        else \
+            rm -f "$TMP_FILE"; \
+            echo "[Aurora WAF] Không thể tải policy từ controller (HTTP $HTTP_CODE), tiếp tục dùng policy hiện có."; \
+        fi; \
     fi'
 
 # ─── Bước 2: ExecStartPre - Kiểm tra cú pháp NGINX và nạp thử WAF Engine ──

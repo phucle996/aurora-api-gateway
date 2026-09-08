@@ -9,6 +9,7 @@
 *.so
 *.a
 /control-plane/data/
+/data/
 *.db
 *.db-wal
 *.db-shm

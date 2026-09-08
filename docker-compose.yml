@@ -19,106 +19,27 @@ services:
       retries: 5
       start_period: 2s
 
-  node-01:
-    networks:
-      default:
-      access-ingress:
-        ipv4_address: 172.29.253.11
-    volumes:
-      - node-01-policy:/var/lib/aurora-policy
-      - node-01-routing:/var/lib/aurora-routing
+  node:
     build:
       context: .
       dockerfile: deploy/docker/Dockerfile.node
-    container_name: aurora-node-01
+    container_name: aurora-node
     environment:
       - CONTROLLER_URL=http://controller:8080
       - NODE_ID=node-01
-      - TRUSTED_PROXY_CIDRS=172.29.253.2/32
       - AUTH_TOKEN=71b268cadc82c2ecfff176c7dfd5c4ac77a0e6a3cd0ae3a7d87b1b9bb686b994
     ports:
-      - "8091:80"
-    depends_on:
-      controller:
-        condition: service_healthy
-    restart: unless-stopped
-
-  node-02:
-    networks:
-      default:
-      access-ingress:
-        ipv4_address: 172.29.253.12
-    volumes:
-      - node-02-policy:/var/lib/aurora-policy
-      - node-02-routing:/var/lib/aurora-routing
-    build:
-      context: .
-      dockerfile: deploy/docker/Dockerfile.node
-    container_name: aurora-node-02
-    environment:
-      - CONTROLLER_URL=http://controller:8080
-      - NODE_ID=node-02
-      - TRUSTED_PROXY_CIDRS=172.29.253.2/32
-      - AUTH_TOKEN=71b268cadc82c2ecfff176c7dfd5c4ac77a0e6a3cd0ae3a7d87b1b9bb686b994
-    ports:
-      - "8092:80"
-    depends_on:
-      controller:
-        condition: service_healthy
-    restart: unless-stopped
-
-  node-03:
-    networks:
-      default:
-      access-ingress:
-        ipv4_address: 172.29.253.13
-    volumes:
-      - node-03-policy:/var/lib/aurora-policy
-      - node-03-routing:/var/lib/aurora-routing
-    build:
-      context: .
-      dockerfile: deploy/docker/Dockerfile.node
-    container_name: aurora-node-03
-    environment:
-      - CONTROLLER_URL=http://controller:8080
-      - NODE_ID=node-03
-      - TRUSTED_PROXY_CIDRS=172.29.253.2/32
-      - AUTH_TOKEN=71b268cadc82c2ecfff176c7dfd5c4ac77a0e6a3cd0ae3a7d87b1b9bb686b994
-    ports:
-      - "8093:80"
-    depends_on:
-      controller:
-        condition: service_healthy
-    restart: unless-stopped
-
-  lb:
-    networks:
-      access-ingress:
-        ipv4_address: 172.29.253.2
-    image: nginx:alpine
-    container_name: aurora-lb
-    ports:
+      - "80:80"
       - "8090:80"
     volumes:
-      - ./deploy/docker/nginx-lb.conf:/etc/nginx/nginx.conf:ro
+      - node-policy:/var/lib/aurora-policy
+      - node-routing:/var/lib/aurora-routing
     depends_on:
-      - node-01
-      - node-02
-      - node-03
+      controller:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
   controller-data:
-  node-01-policy:
-  node-01-routing:
-  node-02-policy:
-  node-02-routing:
-  node-03-policy:
-  node-03-routing:
-
-# The ingress bridge gives the trusted LB a stable, exclusive source identity.
-networks:
-  access-ingress:
-    ipam:
-      config:
-        - subnet: 172.29.253.0/24
+  node-policy:
+  node-routing:
