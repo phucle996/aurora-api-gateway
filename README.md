@@ -112,6 +112,20 @@ Aurora WAF is organized into four decoupled layers:
 
 ## ⚡ Quick Start
 
+### Standalone Linux / Systemd (One-Line Installer)
+
+Install Aurora WAF (Control Plane + NGINX dynamic modules) on any Linux server:
+
+```bash
+# Install latest release
+curl -fsSL https://raw.githubusercontent.com/phucle996/aurora-waf/main/install.sh | sudo bash
+
+# Or install a specific version
+curl -fsSL https://raw.githubusercontent.com/phucle996/aurora-waf/main/install.sh | sudo bash -s -- -v v0.1.0
+```
+
+The script automatically detects your installed NGINX version, matches the appropriate pre-compiled WAF module, configures systemd units, and starts the service.
+
 ### Running with Docker Compose
 
 The fastest way to test Aurora WAF with a complete multi-node cluster and load balancer is via Docker Compose:

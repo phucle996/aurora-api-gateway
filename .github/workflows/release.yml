@@ -134,12 +134,12 @@ jobs:
           cp deploy/docker/node-dependencies.sh     "dist/${DIST}/deploy/"
           cp deploy/docker/nginx-node.conf.template "dist/${DIST}/deploy/"
 
-          # Self-contained installer (generates systemd units and starts services)
-          install -m 755 deploy/systemd/install.sh "dist/${DIST}/install.sh"
+          # Self-contained installer (downloads release package or uses local bundle, generates systemd units)
+          install -m 755 install.sh "dist/${DIST}/install.sh"
           cp deploy/systemd/RELEASE_README.md "dist/${DIST}/README.md"
 
           tar -czf "dist/aurora-waf-${VERSION}-linux-amd64.tar.gz" -C dist "${DIST}"
-          sha256sum "dist/aurora-waf-${VERSION}-linux-amd64.tar.gz" > "dist/aurora-waf-${VERSION}-linux-amd64.tar.gz.sha256"
+          (cd dist && sha256sum "aurora-waf-${VERSION}-linux-amd64.tar.gz" > "aurora-waf-${VERSION}-linux-amd64.tar.gz.sha256")
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
@@ -295,12 +295,18 @@ jobs:
             ```
 
             ## Linux Systemd (Bare-metal)
-
+            
             ```bash
-            # Download and install
+            # One-line quick installer (installs latest release)
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | sudo bash
+            
+            # Or install this specific release
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | sudo bash -s -- -v ${{ github.ref_name }}
+            
+            # Or install from downloaded tarball
             tar xzf aurora-waf-*-linux-amd64.tar.gz
             cd aurora-waf-*-linux-amd64
-            sudo bash install.sh
+            sudo ./install.sh
             ```
-
+            
             See the included `README.md` in the tarball for full instructions.
