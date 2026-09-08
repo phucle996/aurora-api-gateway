@@ -46,7 +46,7 @@ fn sha256_digest(data: &[u8]) -> [u8; 32] {
     }
     msg.extend_from_slice(&bit_len.to_be_bytes());
 
-    for chunk in msg.chunks_exact(64) {
+    for chunk in msg.as_chunks::<64>().0 {
         let mut w = [0u32; 64];
         for i in 0..16 {
             w[i] = u32::from_be_bytes([
@@ -321,10 +321,10 @@ pub fn post_json(url: &str, path: &str, token: &str, payload: &str) -> Result<u1
     let resp_str = String::from_utf8_lossy(&response[..n]);
     let status_line = resp_str.lines().next().unwrap_or("");
     let parts: Vec<&str> = status_line.split_whitespace().collect();
-    if parts.len() >= 2 {
-        if let Ok(code) = parts[1].parse::<u16>() {
-            return Ok(code);
-        }
+    if parts.len() >= 2
+        && let Ok(code) = parts[1].parse::<u16>()
+    {
+        return Ok(code);
     }
     Err(format!("invalid status line: {status_line}"))
 }
@@ -338,8 +338,9 @@ fn decode_chunked(body: &[u8]) -> Result<String, String> {
             .windows(2)
             .position(|w| w == b"\r\n")
             .ok_or("invalid chunked framing")?;
-        let len_str =
-            std::str::from_utf8(&chunk_slice[..nl]).map_err(|e| e.to_string())?.trim();
+        let len_str = std::str::from_utf8(&chunk_slice[..nl])
+            .map_err(|e| e.to_string())?
+            .trim();
         let chunk_len =
             usize::from_str_radix(len_str, 16).map_err(|e| format!("chunk len err: {e}"))?;
         if chunk_len == 0 {
@@ -376,4 +377,3 @@ mod tests {
         );
     }
 }
-

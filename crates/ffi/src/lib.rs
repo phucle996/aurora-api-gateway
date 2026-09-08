@@ -367,16 +367,16 @@ pub unsafe extern "C" fn aurora_waf_start_runtime(
             std::env::var("AURORA_ACCESS_POLICY_PATH").unwrap_or_default()
         };
 
-        telemetry::start_runtime(
-            &url,
-            &nid,
-            &tok,
-            interval,
+        telemetry::start_runtime(telemetry::RuntimeConfig {
+            controller_url: &url,
+            node_id: &nid,
+            token: &tok,
+            interval_seconds: interval,
             active_release_id,
-            &pol_file,
-            &acc_file,
-            is_leader != 0,
-        );
+            policy_path: &pol_file,
+            access_path: &acc_file,
+            is_leader: is_leader != 0,
+        });
     }));
     OK
 }
@@ -502,7 +502,8 @@ mod tests {
             now: 1000,
         };
         let mut decision = Decision::default();
-        let eval_status = unsafe { aurora_access_evaluate(std::ptr::null(), &input, &mut decision) };
+        let eval_status =
+            unsafe { aurora_access_evaluate(std::ptr::null(), &input, &mut decision) };
         assert_eq!(eval_status, 0);
         assert_eq!(decision.action, 1); // blocked
         assert_eq!(decision.rule_id, 101);
@@ -518,9 +519,8 @@ mod tests {
 
         // Explicit match record C ABI
         let explicit_ip = b"10.0.0.99";
-        let rec_status = unsafe {
-            aurora_access_record_match(42, 999, explicit_ip.as_ptr(), explicit_ip.len())
-        };
+        let rec_status =
+            unsafe { aurora_access_record_match(42, 999, explicit_ip.as_ptr(), explicit_ip.len()) };
         assert_eq!(rec_status, 0);
         let explicit_matches = drain_access_matches(10);
         assert_eq!(explicit_matches.len(), 1);

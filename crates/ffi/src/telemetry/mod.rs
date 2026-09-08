@@ -50,6 +50,18 @@ fn atomic_write_file(path: &str, data: &[u8]) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Configuration for starting the In-Process Native Rust Runtime.
+pub struct RuntimeConfig<'a> {
+    pub controller_url: &'a str,
+    pub node_id: &'a str,
+    pub token: &'a str,
+    pub interval_seconds: u32,
+    pub active_release_id: i64,
+    pub policy_path: &'a str,
+    pub access_path: &'a str,
+    pub is_leader: bool,
+}
+
 /// Khởi chạy Background Telemetry Thread (backward compatibility).
 pub fn start_telemetry(
     controller_url: &str,
@@ -58,45 +70,40 @@ pub fn start_telemetry(
     interval_seconds: u32,
     active_release_id: i64,
 ) -> bool {
-    start_runtime(
+    start_runtime(RuntimeConfig {
         controller_url,
         node_id,
         token,
         interval_seconds,
         active_release_id,
-        "",
-        "",
-        true,
-    )
+        policy_path: "",
+        access_path: "",
+        is_leader: true,
+    })
 }
 
 /// Khởi chạy In-Process Native Rust Runtime trong tiến trình NGINX Worker.
-pub fn start_runtime(
-    controller_url: &str,
-    node_id: &str,
-    token: &str,
-    interval_seconds: u32,
-    active_release_id: i64,
-    policy_path: &str,
-    access_path: &str,
-    is_leader: bool,
-) -> bool {
+pub fn start_runtime(config: RuntimeConfig<'_>) -> bool {
     if TELEMETRY_RUNNING.swap(true, Ordering::SeqCst) {
         return true;
     }
 
-    let url = controller_url.to_string();
-    let nid = node_id.to_string();
-    let tok = token.to_string();
-    let interval = if interval_seconds == 0 { 5 } else { interval_seconds };
-    let pol_file = policy_path.to_string();
-    let acc_file = access_path.to_string();
+    let url = config.controller_url.to_string();
+    let nid = config.node_id.to_string();
+    let tok = config.token.to_string();
+    let interval = if config.interval_seconds == 0 {
+        5
+    } else {
+        config.interval_seconds
+    };
+    let pol_file = config.policy_path.to_string();
+    let acc_file = config.access_path.to_string();
+    let is_leader = config.is_leader;
+    let active_release_id = config.active_release_id;
 
     let owner = u64::from(std::process::id());
-    if is_leader {
-        if let Some(slot) = shared_slot(3) {
-            slot.store(owner, Ordering::Release);
-        }
+    if is_leader && let Some(slot) = shared_slot(3) {
+        slot.store(owner, Ordering::Release);
     }
 
     let spawn_res = thread::Builder::new()
@@ -169,37 +176,34 @@ pub fn start_runtime(
                     let access_endpoint = format!("/api/v1/access-sync/{nid}");
                     if let Ok(resp_str) = client::get_json(&url, &access_endpoint, &tok)
                         && let Ok(target) = serde_json::from_str::<DesiredSnapshot>(&resp_str)
+                        && target.release_id > 0
+                        && target.release_id != current_access_release
+                        && client::sha256_hex(target.payload.get().as_bytes()) == target.digest
                     {
-                        if target.release_id > 0 && target.release_id != current_access_release {
-                            let raw_payload = target.payload.get().as_bytes();
-                            let calc_digest = client::sha256_hex(raw_payload);
-                            if calc_digest == target.digest {
-                                match aurora_engine::access::AccessEngine::from_snapshot(raw_payload) {
-                                    Ok(engine) => {
-                                        if let Ok(mut g) = crate::access::DYNAMIC_ACCESS_ENGINE.write() {
-                                            *g = Some(std::sync::Arc::new(engine));
-                                        }
-                                        if is_leader && !acc_file.is_empty() {
-                                            let _ = atomic_write_file(&acc_file, raw_payload);
-                                        }
-                                        if is_leader {
-                                            let report = format!(
-                                                r#"{{"release_id":{},"phase":"observed","message":"In-memory access engine hot-swapped in RAM"}}"#,
-                                                target.release_id
-                                            );
-                                            let _ = client::post_json(&url, &access_endpoint, &tok, &report);
-                                        }
-                                        current_access_release = target.release_id;
-                                    }
-                                    Err(err) => {
-                                        if is_leader {
-                                            let report = format!(
-                                                r#"{{"release_id":{},"phase":"failed","message":"Access compilation error: {:?}"}}"#,
-                                                target.release_id, err
-                                            );
-                                            let _ = client::post_json(&url, &access_endpoint, &tok, &report);
-                                        }
-                                    }
+                        match aurora_engine::access::AccessEngine::from_snapshot(target.payload.get().as_bytes()) {
+                            Ok(engine) => {
+                                if let Ok(mut g) = crate::access::DYNAMIC_ACCESS_ENGINE.write() {
+                                    *g = Some(std::sync::Arc::new(engine));
+                                }
+                                if is_leader && !acc_file.is_empty() {
+                                    let _ = atomic_write_file(&acc_file, target.payload.get().as_bytes());
+                                }
+                                if is_leader {
+                                    let report = format!(
+                                        r#"{{"release_id":{},"phase":"observed","message":"In-memory access engine hot-swapped in RAM"}}"#,
+                                        target.release_id
+                                    );
+                                    let _ = client::post_json(&url, &access_endpoint, &tok, &report);
+                                }
+                                current_access_release = target.release_id;
+                            }
+                            Err(err) => {
+                                if is_leader {
+                                    let report = format!(
+                                        r#"{{"release_id":{},"phase":"failed","message":"Access compilation error: {:?}"}}"#,
+                                        target.release_id, err
+                                    );
+                                    let _ = client::post_json(&url, &access_endpoint, &tok, &report);
                                 }
                             }
                         }
@@ -209,37 +213,34 @@ pub fn start_runtime(
                     let policy_endpoint = format!("/api/v1/policy-sync/{nid}");
                     if let Ok(resp_str) = client::get_json(&url, &policy_endpoint, &tok)
                         && let Ok(target) = serde_json::from_str::<DesiredSnapshot>(&resp_str)
+                        && target.release_id > 0
+                        && target.release_id != current_policy_release
+                        && client::sha256_hex(target.payload.get().as_bytes()) == target.digest
                     {
-                        if target.release_id > 0 && target.release_id != current_policy_release {
-                            let raw_payload = target.payload.get().as_bytes();
-                            let calc_digest = client::sha256_hex(raw_payload);
-                            if calc_digest == target.digest {
-                                match aurora_engine::Engine::from_policy(raw_payload) {
-                                    Ok(engine) => {
-                                        if let Ok(mut g) = crate::DYNAMIC_POLICY_ENGINE.write() {
-                                            *g = Some(std::sync::Arc::new(engine));
-                                        }
-                                        if is_leader && !pol_file.is_empty() {
-                                            let _ = atomic_write_file(&pol_file, raw_payload);
-                                        }
-                                        if is_leader {
-                                            let report = format!(
-                                                r#"{{"release_id":{},"phase":"observed","message":"In-memory policy engine hot-swapped in RAM"}}"#,
-                                                target.release_id
-                                            );
-                                            let _ = client::post_json(&url, &policy_endpoint, &tok, &report);
-                                        }
-                                        current_policy_release = target.release_id;
-                                    }
-                                    Err(err) => {
-                                        if is_leader {
-                                            let report = format!(
-                                                r#"{{"release_id":{},"phase":"failed","message":"Policy compilation error: {:?}"}}"#,
-                                                target.release_id, err
-                                            );
-                                            let _ = client::post_json(&url, &policy_endpoint, &tok, &report);
-                                        }
-                                    }
+                        match aurora_engine::Engine::from_policy(target.payload.get().as_bytes()) {
+                            Ok(engine) => {
+                                if let Ok(mut g) = crate::DYNAMIC_POLICY_ENGINE.write() {
+                                    *g = Some(std::sync::Arc::new(engine));
+                                }
+                                if is_leader && !pol_file.is_empty() {
+                                    let _ = atomic_write_file(&pol_file, target.payload.get().as_bytes());
+                                }
+                                if is_leader {
+                                    let report = format!(
+                                        r#"{{"release_id":{},"phase":"observed","message":"In-memory policy engine hot-swapped in RAM"}}"#,
+                                        target.release_id
+                                    );
+                                    let _ = client::post_json(&url, &policy_endpoint, &tok, &report);
+                                }
+                                current_policy_release = target.release_id;
+                            }
+                            Err(err) => {
+                                if is_leader {
+                                    let report = format!(
+                                        r#"{{"release_id":{},"phase":"failed","message":"Policy compilation error: {:?}"}}"#,
+                                        target.release_id, err
+                                    );
+                                    let _ = client::post_json(&url, &policy_endpoint, &tok, &report);
                                 }
                             }
                         }
@@ -249,28 +250,24 @@ pub fn start_runtime(
                     let upstream_endpoint = format!("/api/v1/upstream-sync/{nid}");
                     if let Ok(resp_str) = client::get_json(&url, &upstream_endpoint, &tok)
                         && let Ok(target) = serde_json::from_str::<DesiredUpstreamSnapshot>(&resp_str)
+                        && target.release_id > 0
+                        && target.release_id != current_upstream_release
+                        && client::sha256_hex(target.config_content.as_bytes()) == target.digest
                     {
-                        if target.release_id > 0 && target.release_id != current_upstream_release {
-                            let calc_digest = client::sha256_hex(target.config_content.as_bytes());
-                            if calc_digest == target.digest {
-                                let raw_upstreams = target.upstreams.get().as_bytes();
-                                let swap_res = unsafe {
-                                    crate::upstream::aurora_upstream_swap(raw_upstreams.as_ptr(), raw_upstreams.len())
-                                };
+                        let raw_upstreams = target.upstreams.get().as_bytes();
+                        let swap_res = unsafe {
+                            crate::upstream::aurora_upstream_swap(raw_upstreams.as_ptr(), raw_upstreams.len())
+                        };
 
-                                if swap_res == 0 {
-                                    // Registry validation is not proof of NGINX routing activation.
-                                    // The privileged routing reconciler validates and reloads the full domain snapshot.
-                                    if is_leader {
-                                        let report = format!(
-                                            r#"{{"release_id":{},"phase":"validated","message":"Registry validated; routing activation is owned by the domain reconciler"}}"#,
-                                            target.release_id
-                                        );
-                                        let _ = client::post_json(&url, &upstream_endpoint, &tok, &report);
-                                    }
-                                    current_upstream_release = target.release_id;
-                                }
+                        if swap_res == 0 {
+                            if is_leader {
+                                let report = format!(
+                                    r#"{{"release_id":{},"phase":"validated","message":"Registry validated; routing activation is owned by the domain reconciler"}}"#,
+                                    target.release_id
+                                );
+                                let _ = client::post_json(&url, &upstream_endpoint, &tok, &report);
                             }
+                            current_upstream_release = target.release_id;
                         }
                     }
 

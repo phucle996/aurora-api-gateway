@@ -112,7 +112,7 @@ func (p *notificationProvider) testEmailChannel(cfg map[string]interface{}) (err
 	return nil, fmt.Sprintf("Kết nối TCP thành công tới máy chủ SMTP %s (Port %s)", host, portStr)
 }
 
-func (p *notificationProvider) sendEmail(ctx context.Context, cfg map[string]interface{}, alert entity.AlertEvent) error {
+func (p *notificationProvider) sendEmail(ctx context.Context, cfg map[string]interface{}, _ entity.AlertEvent) error {
 	host, _ := cfg["host"].(string)
 	if host == "" || strings.Contains(host, "placeholder") || strings.Contains(host, "example.com") {
 		return nil
@@ -326,9 +326,10 @@ func (p *notificationProvider) sendDiscord(ctx context.Context, cfg map[string]i
 	}
 
 	color := 0xe06c75 // red
-	if alert.Severity == "medium" {
+	switch alert.Severity {
+	case "medium":
 		color = 0xe5c07b // yellow
-	} else if alert.Severity == "low" {
+	case "low":
 		color = 0x61afef // blue
 	}
 

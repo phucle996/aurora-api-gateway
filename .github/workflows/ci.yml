@@ -81,6 +81,13 @@ jobs:
       - name: Build compiler binary
         run: cargo build --locked -p aurora-engine --bin aurora-compile --release
 
+      - name: Ensure embedded UI assets exist
+        run: |
+          mkdir -p control-plane/internal/console/dist
+          if [ ! -f control-plane/internal/console/dist/index.html ]; then
+            echo '<!doctype html><html><head><title>Aurora WAF</title></head><body>Aurora WAF</body></html>' > control-plane/internal/console/dist/index.html
+          fi
+
       - name: Run Go vet
         working-directory: control-plane
         run: go vet ./...
@@ -133,6 +140,13 @@ jobs:
 
       - name: Module lifecycle integration test
         run: NGINX="$PWD/build/nginx-source/nginx-1.30.4/objs/nginx" node scripts/test-nginx-module.mjs
+
+      - name: Ensure embedded UI assets exist
+        run: |
+          mkdir -p control-plane/internal/console/dist
+          if [ ! -f control-plane/internal/console/dist/index.html ]; then
+            echo '<!doctype html><html><head><title>Aurora WAF</title></head><body>Aurora WAF</body></html>' > control-plane/internal/console/dist/index.html
+          fi
 
       - name: Rules publication and activation under traffic
         run: make rules-test NGINX="$PWD/build/nginx-source/nginx-1.30.4/objs/nginx"

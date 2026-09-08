@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -33,13 +33,13 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: control-plane/go.mod
           cache-dependency-path: control-plane/go.sum
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -89,7 +89,7 @@ jobs:
 
       # ── Trivy source code scan ────────────────────────────────────────────
       - name: Trivy filesystem vulnerability scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -99,7 +99,7 @@ jobs:
           exit-code: "1"
 
       - name: Trivy config and secret scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -172,7 +172,7 @@ jobs:
             dockerfile: deploy/docker/Dockerfile.node
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -183,13 +183,13 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: control-plane/go.mod
           cache-dependency-path: control-plane/go.sum
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -256,7 +256,7 @@ jobs:
 
       # ── Trivy vulnerability scan ─────────────────────────────────────────
       - name: Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.IMAGE_PREFIX }}-${{ matrix.image }}:${{ steps.meta.outputs.version }}
           format: sarif

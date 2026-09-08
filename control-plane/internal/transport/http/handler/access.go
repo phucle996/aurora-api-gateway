@@ -155,13 +155,8 @@ func (h *AccessHandler) Change(c *gin.Context) {
 			// Normalize and validate source entries (CIDR, Country, ASN, Group ID)
 			for i, value := range doc.Values {
 				switch doc.Source {
-				case "cidr":
-					n, e := parseNetwork(value)
-					if e != nil {
-						c.JSON(http.StatusUnprocessableEntity, gin.H{"message": taxonomy.ErrAccessInvalid.Error()})
-						return
-					}
-					if strings.TrimSpace(value) != n {
+				case "ip", "cidr":
+					if doc.Source == "ip" {
 						if _, e := netip.ParseAddr(value); e != nil {
 							p, pe := netip.ParsePrefix(value)
 							if pe != nil || p.Bits() != p.Addr().BitLen() {
@@ -169,6 +164,11 @@ func (h *AccessHandler) Change(c *gin.Context) {
 								return
 							}
 						}
+					}
+					n, e := parseNetwork(value)
+					if e != nil {
+						c.JSON(http.StatusUnprocessableEntity, gin.H{"message": taxonomy.ErrAccessInvalid.Error()})
+						return
 					}
 					doc.Values[i] = n
 				case "country":

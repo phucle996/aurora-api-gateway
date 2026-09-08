@@ -200,9 +200,9 @@ impl Engine {
                             && label.len() <= 63
                             && !label.starts_with('-')
                             && !label.ends_with('-')
-                            && label.bytes().all(|b| {
-                                b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-'
-                            })
+                            && label
+                                .bytes()
+                                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
                     })
                 };
 
@@ -470,8 +470,18 @@ mod tests {
           {"id":1,"host":"api.test","priority":0,"rules":[{"id":1,"path":"/api/login","action":"block","score":0,"priority":0}]}
         ]}"#;
         let e = Engine::from_policy(bytes).unwrap();
-        assert_eq!(e.evaluate_request(b"api.test", b"/api/login").unwrap().action, 1);
-        assert_eq!(e.evaluate_request(b"other.test", b"/api/login").unwrap().action, 0);
+        assert_eq!(
+            e.evaluate_request(b"api.test", b"/api/login")
+                .unwrap()
+                .action,
+            1
+        );
+        assert_eq!(
+            e.evaluate_request(b"other.test", b"/api/login")
+                .unwrap()
+                .action,
+            0
+        );
     }
 
     /// Kiểm tra tính tương thích ngược và giới hạn biên của Schema v1
@@ -570,7 +580,9 @@ mod tests {
         assert_eq!(dec_apex.rule_id, 20);
 
         // 4. Nested subdomain bar.sub.example.com should match wildcard policy id 2
-        let dec_nested = e.evaluate_request(b"bar.sub.example.com", b"/test").unwrap();
+        let dec_nested = e
+            .evaluate_request(b"bar.sub.example.com", b"/test")
+            .unwrap();
         assert_eq!(dec_nested.rule_id, 20);
 
         // 5. Unrelated host other.com should match catch-all policy id 1 (Allow)

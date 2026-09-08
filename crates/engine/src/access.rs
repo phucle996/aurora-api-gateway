@@ -54,7 +54,8 @@ impl AccessEngine {
         {
             return Err(crate::Error::InvalidPolicy);
         }
-        snap.rules.sort_by_key(|r| (r.priority, crate::host_specificity(&r.host), r.id));
+        snap.rules
+            .sort_by_key(|r| (r.priority, crate::host_specificity(&r.host), r.id));
         let mut ids = std::collections::HashSet::new();
         let mut rules = Vec::new();
         for rule in snap.rules {
@@ -239,46 +240,54 @@ mod tests {
         ]}"#).unwrap();
 
         // public.corp.internal is exact match (priority 1, specificity 0, id 2) -> Allow (action 0)
-        let res1 = e.evaluate(AccessRequest {
-            ip: b"10.0.0.1",
-            host: b"public.corp.internal",
-            path: b"/index",
-            method: b"GET",
-            now: 10,
-        }).unwrap();
+        let res1 = e
+            .evaluate(AccessRequest {
+                ip: b"10.0.0.1",
+                host: b"public.corp.internal",
+                path: b"/index",
+                method: b"GET",
+                now: 10,
+            })
+            .unwrap();
         assert_eq!(res1.rule_id, 2);
         assert_eq!(res1.action, 0);
 
         // secret.corp.internal matches wildcard *.corp.internal -> Block (action 1)
-        let res2 = e.evaluate(AccessRequest {
-            ip: b"10.0.0.1",
-            host: b"secret.corp.internal",
-            path: b"/index",
-            method: b"GET",
-            now: 10,
-        }).unwrap();
+        let res2 = e
+            .evaluate(AccessRequest {
+                ip: b"10.0.0.1",
+                host: b"secret.corp.internal",
+                path: b"/index",
+                method: b"GET",
+                now: 10,
+            })
+            .unwrap();
         assert_eq!(res2.rule_id, 1);
         assert_eq!(res2.action, 1);
 
         // corp.internal apex matches wildcard *.corp.internal -> Block (action 1)
-        let res3 = e.evaluate(AccessRequest {
-            ip: b"10.0.0.1",
-            host: b"corp.internal",
-            path: b"/index",
-            method: b"GET",
-            now: 10,
-        }).unwrap();
+        let res3 = e
+            .evaluate(AccessRequest {
+                ip: b"10.0.0.1",
+                host: b"corp.internal",
+                path: b"/index",
+                method: b"GET",
+                now: 10,
+            })
+            .unwrap();
         assert_eq!(res3.rule_id, 1);
         assert_eq!(res3.action, 1);
 
         // other.internal does not match -> default Allow
-        let res4 = e.evaluate(AccessRequest {
-            ip: b"10.0.0.1",
-            host: b"other.internal",
-            path: b"/index",
-            method: b"GET",
-            now: 10,
-        }).unwrap();
+        let res4 = e
+            .evaluate(AccessRequest {
+                ip: b"10.0.0.1",
+                host: b"other.internal",
+                path: b"/index",
+                method: b"GET",
+                now: 10,
+            })
+            .unwrap();
         assert_eq!(res4.rule_id, 0);
         assert_eq!(res4.action, 0);
     }

@@ -6,7 +6,10 @@ use std::{
     collections::VecDeque,
     panic::{AssertUnwindSafe, catch_unwind},
     slice,
-    sync::{Arc, Mutex, RwLock, atomic::{AtomicU64, Ordering}},
+    sync::{
+        Arc, Mutex, RwLock,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -34,15 +37,15 @@ pub fn enqueue_access_match(release_id: i64, rule_id: i64, ip: &str) {
     let seq = MATCH_SEQ.fetch_add(1, Ordering::Relaxed);
     let key = format!("{}:{}:{}", now.as_millis(), std::process::id(), seq);
 
-    if let Ok(mut q) = MATCH_QUEUE.lock() {
-        if q.len() < 5000 {
-            q.push_back(AccessMatchItem {
-                key,
-                release_id,
-                rule_id,
-                ip: ip.to_string(),
-            });
-        }
+    if let Ok(mut q) = MATCH_QUEUE.lock()
+        && q.len() < 5000
+    {
+        q.push_back(AccessMatchItem {
+            key,
+            release_id,
+            rule_id,
+            ip: ip.to_string(),
+        });
     }
 }
 
@@ -246,4 +249,3 @@ pub unsafe extern "C" fn aurora_access_evaluate(
         Err(_) => 2,
     }
 }
-
