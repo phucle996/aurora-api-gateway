@@ -1,7 +1,9 @@
 use crate::config::Config;
+use crate::grpc::pb::{
+    AppendModuleJobLogRequest, ModuleReportItem, ModuleReportRequest, PollModuleJobResponse,
+};
+use crate::grpc::GrpcClient;
 use crate::nginx::NginxManager;
-use reqwest::Client;
-use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -9,45 +11,9 @@ use tokio::fs;
 use tokio::process::Command;
 use tracing::info;
 
-#[derive(Deserialize, Debug)]
-struct PollJobResponse {
-    id: i64,
-    action: String,
-}
-
-#[derive(Serialize, Debug)]
-struct AppendJobLogRequest<'a> {
-    stage: &'a str,
-    progress: i32,
-    message: &'a str,
-    log_chunk: &'a str,
-}
-
-#[derive(Serialize, Debug, Clone)]
-struct ModuleReportItem {
-    name: String,
-    available: bool,
-    loaded: bool,
-    source: String,
-}
-
-#[derive(Serialize, Debug)]
-struct ModuleReportPayload {
-    checked_at: i64,
-    nginx_version: String,
-    architecture: String,
-    installable: bool,
-    error: String,
-    job_id: i64,
-    job_state: String,
-    job_message: String,
-    job_logs: String,
-    modules: Vec<ModuleReportItem>,
-}
-
 pub async fn run_modules_sync_loop(
     cfg: Arc<Config>,
-    client: Client,
+    client: GrpcClient,
     nginx: Arc<NginxManager>,
 ) {
     let interval = tokio::time::Duration::from_secs(cfg.sync_interval_secs);
@@ -64,23 +30,13 @@ pub async fn run_modules_sync_loop(
     loop {
         ticker.tick().await;
 
-        let poll_url = format!("{}/api/v1/module-sync/{}/poll", cfg.controller_url, cfg.node_id);
-        let poll_res = client
-            .post(&poll_url)
-            .header("Authorization", format!("Bearer {}", cfg.auth_token))
-            .send()
-            .await;
-
-        let job = match poll_res {
-            Ok(r) if r.status().is_success() => r.json::<PollJobResponse>().await.unwrap_or(PollJobResponse {
+        let job = client
+            .poll_module_job(&cfg.node_id)
+            .await
+            .unwrap_or(PollModuleJobResponse {
                 id: 0,
                 action: String::new(),
-            }),
-            _ => PollJobResponse {
-                id: 0,
-                action: String::new(),
-            },
-        };
+            });
 
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -218,7 +174,7 @@ pub async fn run_modules_sync_loop(
                             job_logs.push_str(&format!("[Error] {}\n", e));
                             let _ = fs::write(&modules_conf, &old_content).await;
                             if dep_http.parent().map(|p| p.exists()).unwrap_or(false) {
-                                let _ = fs::write(&dep_http, &old_http).await;
+                                    let _ = fs::write(&dep_http, &old_http).await;
                             }
                         }
                     }
@@ -279,23 +235,31 @@ pub async fn run_modules_sync_loop(
         let modules_content = fs::read_to_string(&modules_conf).await.unwrap_or_default();
         let mut reported_modules = vec![
             ModuleReportItem {
-                name: "gzip".to_string(),
+                name: "brotli".to_string(),
                 available: true,
-                loaded: true,
-                source: "nginx build".to_string(),
+                loaded: modules_content.contains("ngx_http_brotli_filter_module.so")
+                    && modules_content.contains("ngx_http_brotli_static_module.so"),
+                source: "dynamic module".to_string(),
+            },
+            ModuleReportItem {
+                name: "headers-more".to_string(),
+                available: true,
+                loaded: modules_content.contains("ngx_http_headers_more_filter_module.so"),
+                source: "dynamic module".to_string(),
+            },
+            ModuleReportItem {
+                name: "lua".to_string(),
+                available: true,
+                loaded: modules_content.contains("ngx_http_lua_module.so"),
+                source: "dynamic module".to_string(),
+            },
+            ModuleReportItem {
+                name: "geoip2".to_string(),
+                available: true,
+                loaded: modules_content.contains("ngx_http_geoip2_module.so"),
+                source: "dynamic module".to_string(),
             },
         ];
-
-        let brotli_avail = std::path::Path::new("/opt/aurora-dependencies/brotli").exists()
-            || cfg.modules_dir.join("ngx_http_brotli_filter_module.so").exists();
-        let brotli_loaded = modules_content.contains("ngx_http_brotli_filter_module.so")
-            || modules_content.contains("brotli");
-        reported_modules.push(ModuleReportItem {
-            name: "brotli".to_string(),
-            available: brotli_avail,
-            loaded: brotli_loaded,
-            source: "dynamic module".to_string(),
-        });
 
         // Scan modules_dir for any other dynamically loaded modules
         if let Ok(mut entries) = fs::read_dir(&cfg.modules_dir).await {
@@ -326,7 +290,8 @@ pub async fn run_modules_sync_loop(
             }
         }
 
-        let report = ModuleReportPayload {
+        let req = ModuleReportRequest {
+            node_id: cfg.node_id.clone(),
             checked_at: now,
             nginx_version,
             architecture: std::env::consts::ARCH.to_string(),
@@ -339,13 +304,7 @@ pub async fn run_modules_sync_loop(
             modules: reported_modules,
         };
 
-        let report_url = format!("{}/api/v1/module-sync/{}/report", cfg.controller_url, cfg.node_id);
-        let _ = client
-            .post(&report_url)
-            .header("Authorization", format!("Bearer {}", cfg.auth_token))
-            .json(&report)
-            .send()
-            .await;
+        let _ = client.report_modules(req).await;
 
         last_check = now;
     }
@@ -393,7 +352,7 @@ async fn discover_module_sos(modules_dir: &std::path::Path, mod_name: &str) -> V
 }
 
 async fn stream_log(
-    client: &Client,
+    client: &GrpcClient,
     cfg: &Config,
     job_id: i64,
     stage: &str,
@@ -401,17 +360,13 @@ async fn stream_log(
     message: &str,
     log_chunk: &str,
 ) {
-    let url = format!("{}/api/v1/module-sync/{}/jobs/{}/log", cfg.controller_url, cfg.node_id, job_id);
-    let req = AppendJobLogRequest {
-        stage,
+    let req = AppendModuleJobLogRequest {
+        node_id: cfg.node_id.clone(),
+        job_id,
+        stage: stage.to_string(),
         progress,
-        message,
-        log_chunk,
+        message: message.to_string(),
+        log_chunk: log_chunk.to_string(),
     };
-    let _ = client
-        .post(&url)
-        .header("Authorization", format!("Bearer {}", cfg.auth_token))
-        .json(&req)
-        .send()
-        .await;
+    let _ = client.append_module_job_log(req).await;
 }

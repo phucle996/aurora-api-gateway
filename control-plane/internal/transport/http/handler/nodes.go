@@ -165,6 +165,11 @@ func (h *NodeHandler) Heartbeat(c *gin.Context) {
 		return
 	}
 
+	if payload.Timestamp <= 0 || payload.Timestamp > time.Now().Unix()+60 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid heartbeat timestamp: must be positive and not skewed in the future"})
+		return
+	}
+
 	payload.IP = c.ClientIP()
 	payload.Authentication = "Bearer / HTTP"
 	if c.Request.TLS != nil {
@@ -219,22 +224,22 @@ func (h *NodeHandler) ReloadNode(c *gin.Context) {
 	})
 }
 
-// RollingReloadCluster starts a sequential rolling reload across the node cluster.
-func (h *NodeHandler) RollingReloadCluster(c *gin.Context) {
+// RollingReload starts a sequential rolling reload across nodes.
+func (h *NodeHandler) RollingReload(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), nodeReloadTimeout)
 	defer cancel()
 
-	status, err := h.service.TriggerClusterRollingReload(ctx)
+	status, err := h.service.TriggerRollingReload(ctx)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "cluster rolling reload timed out"})
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "rolling reload timed out"})
 			return
 		}
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, dto.ClusterRollingStatusResponse{
+	c.JSON(http.StatusOK, dto.RollingStatusResponse{
 		Active:         status.Active,
 		CurrentNodeID:  status.CurrentNodeID,
 		PendingNodes:   status.PendingNodes,
@@ -243,12 +248,12 @@ func (h *NodeHandler) RollingReloadCluster(c *gin.Context) {
 	})
 }
 
-// GetRollingStatus retrieves the current progress of cluster rolling reload.
+// GetRollingStatus retrieves the current progress of rolling reload.
 func (h *NodeHandler) GetRollingStatus(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), nodeQueryTimeout)
 	defer cancel()
 
-	status, err := h.service.GetClusterRollingStatus(ctx)
+	status, err := h.service.GetRollingStatus(ctx)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "get rolling reload status timed out"})
@@ -258,7 +263,7 @@ func (h *NodeHandler) GetRollingStatus(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, dto.ClusterRollingStatusResponse{
+	c.JSON(http.StatusOK, dto.RollingStatusResponse{
 		Active:         status.Active,
 		CurrentNodeID:  status.CurrentNodeID,
 		PendingNodes:   status.PendingNodes,
@@ -278,6 +283,9 @@ func (h *NodeHandler) EventsStream(c *gin.Context) {
 	defer unsubscribe()
 
 	c.SSEvent("ping", gin.H{"status": "connected"})
+	if initialNodes, err := h.service.ListNodes(c.Request.Context()); err == nil && len(initialNodes) > 0 {
+		c.SSEvent("nodes_snapshot", initialNodes)
+	}
 	c.Writer.Flush()
 
 	keepAliveTicker := time.NewTicker(15 * time.Second)

@@ -25,6 +25,9 @@ type NodeHeartbeatPayload struct {
 	ActiveReleaseID   int64
 	IP                string
 	Version           string
+	Status            string
+	MetadataDigest    string
+	Metadata          *NginxMetadata
 }
 
 // NodeMetricHistoryRecord đại diện cho 1 bản ghi rollup 1 phút được lưu vào bảng node_metrics_history.

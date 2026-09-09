@@ -13,6 +13,7 @@ export HEARTBEAT_INTERVAL="${HEARTBEAT_INTERVAL:-5}"
 export AURORA_SERVER_URL="${CONTROLLER_URL}"
 export AURORA_NODE_ID="${NODE_ID}"
 export AURORA_AUTH_TOKEN="${AUTH_TOKEN}"
+export NGINX_STUB_STATUS_URL="${NGINX_STUB_STATUS_URL:-http://127.0.0.1:80/stub_status}"
 
 echo "[Aurora Node: ${NODE_ID}] Configuring connection to Controller: ${CONTROLLER_URL} (Heartbeat: ${HEARTBEAT_INTERVAL}s)..."
 
@@ -112,4 +113,5 @@ exec /usr/local/bin/aurora-agent \
   --nginx-conf "${NGINX_CONF:-/etc/nginx/nginx.conf}" \
   --policy-dir "${POLICY_DIR:-/var/lib/aurora-policy}" \
   --routing-dir "${ROUTING_DIR:-/var/lib/aurora-routing}" \
-  --modules-dir "${MODULES_DIR:-/opt/modules}"
+  --modules-dir "${MODULES_DIR:-/opt/modules}" \
+  --nginx-stub-status-url "${NGINX_STUB_STATUS_URL}"

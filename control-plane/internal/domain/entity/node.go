@@ -34,14 +34,27 @@ type ClusterNodeRecord struct {
 	ReloadStatus           string
 }
 
-// NodeCommandDirective đại diện cho chỉ thị gửi từ Control Plane xuống Node qua response của Heartbeat.
-type NodeCommandDirective struct {
-	Action           string // "none" | "reload_process" | "sync_policy"
-	DesiredReleaseID int64
+// NginxMetadata đại diện cho thông tin định danh và runtime của tiến trình NGINX do node báo cáo.
+type NginxMetadata struct {
+	Version          string `json:"version"`
+	MasterPID        int64  `json:"master_pid"`
+	WorkerCount      int32  `json:"worker_count"`
+	ActiveReleaseID  int64  `json:"active_release_id"`
+	RuntimeStartedAt int64  `json:"runtime_started_at"`
+	Hostname         string `json:"hostname"`
+	Role             string `json:"role"`
+	WorkerIdentity   string `json:"worker_identity"`
 }
 
-// ClusterRollingStatus đại diện cho tiến trình thực hiện Rolling Reload tuần tự trên toàn cụm.
-type ClusterRollingStatus struct {
+// NodeCommandDirective đại diện cho chỉ thị gửi từ Control Plane xuống Node qua response của Heartbeat.
+type NodeCommandDirective struct {
+	Action               string // "none" | "reload_process" | "sync_policy"
+	DesiredReleaseID     int64
+	MetadataAcknowledged bool
+}
+
+// RollingStatus đại diện cho tiến trình thực hiện Rolling Reload tuần tự trên các nodes.
+type RollingStatus struct {
 	Active         bool
 	CurrentNodeID  string
 	PendingNodes   []string

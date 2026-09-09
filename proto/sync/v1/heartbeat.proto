@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package aurora.sync.v1;
+
+option go_package = "aurora-waf.local/control-plane/internal/transport/grpc/pb;pb";
+
+service HeartbeatService {
+  rpc SendHeartbeat (HeartbeatRequest) returns (HeartbeatResponse);
+}
+
+enum HealthStatus {
+  HEALTH_STATUS_UNKNOWN = 0;
+  HEALTH_STATUS_SERVING = 1;     // NGINX is alive and serving traffic
+  HEALTH_STATUS_DEGRADED = 2;    // NGINX reload failed or partially degraded
+  HEALTH_STATUS_DOWN = 3;        // NGINX process not running
+}
+
+message NginxMetadata {
+  string version = 1;
+  int64 master_pid = 2;
+  int32 worker_count = 3;
+  int64 active_release_id = 4;
+  int64 runtime_started_at = 5;
+  string hostname = 6;
+  string role = 7;
+  string worker_identity = 8;
+}
+
+message HeartbeatRequest {
+  string node_id = 1;
+  int64 timestamp = 2;
+  HealthStatus status = 3;
+  int64 active_release_id = 4;
+  string metadata_digest = 5;          // Short hash for RAM diffing
+  optional NginxMetadata metadata = 6;  // Only sent on boot or when digest changes
+}
+
+message HeartbeatResponse {
+  string action = 1;                   // "none", "reload", "restart", "resync_metadata"
+  int64 desired_release_id = 2;
+  bool metadata_acknowledged = 3;      // Confirms Controller received & cached metadata
+}

@@ -36,8 +36,8 @@ type NodeCommandDirectiveResponse struct {
 	DesiredReleaseID int64  `json:"desired_release_id,omitempty"`
 }
 
-// ClusterRollingStatusResponse represents HTTP wire status of cluster rolling reload.
-type ClusterRollingStatusResponse struct {
+// RollingStatusResponse represents HTTP wire status of rolling reload.
+type RollingStatusResponse struct {
 	Active         bool     `json:"active"`
 	CurrentNodeID  string   `json:"currentNodeId,omitempty"`
 	PendingNodes   []string `json:"pendingNodes"`

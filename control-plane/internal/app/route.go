@@ -156,7 +156,7 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	r.GET("/api/v1/events/stream", authMidd, m.NodeHandler.EventsStream)                 // Server-Sent Events (SSE) realtime metrics & liveness stream
 	r.GET("/api/v1/nodes", authMidd, m.NodeHandler.List)                                 // Danh sách nodes trong cluster
 	r.GET("/api/v1/nodes/rolling-status", authMidd, m.NodeHandler.GetRollingStatus)      // Trạng thái tiến trình rolling reload
-	r.POST("/api/v1/nodes/rolling-reload", authMidd, m.NodeHandler.RollingReloadCluster) // Kích hoạt rolling reload toàn cụm
+	r.POST("/api/v1/nodes/rolling-reload", authMidd, m.NodeHandler.RollingReload)        // Kích hoạt rolling reload tuần tự
 	r.GET("/api/v1/nodes/:id", authMidd, m.NodeHandler.GetByID)                          // Chi tiết 1 node
 	r.GET("/api/v1/nodes/:id/config", authMidd, m.NodeHandler.GetConfig)                 // Kéo file cấu hình thực tế từ container node
 	r.POST("/api/v1/nodes/:id/reload", authMidd, m.NodeHandler.ReloadNode)               // Đặt lệnh reload cho 1 node

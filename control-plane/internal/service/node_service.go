@@ -1,21 +1,42 @@
 package service
 
 import (
-	"aurora-waf.local/control-plane/internal/domain/entity"
-	"aurora-waf.local/control-plane/internal/domain/repo"
-	domainService "aurora-waf.local/control-plane/internal/domain/service"
-	"aurora-waf.local/control-plane/internal/provider"
 	"context"
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"aurora-waf.local/control-plane/internal/domain/entity"
+	"aurora-waf.local/control-plane/internal/domain/repo"
+	domainService "aurora-waf.local/control-plane/internal/domain/service"
+	"aurora-waf.local/control-plane/internal/provider"
 )
+
+type nodeLiveState struct {
+	ID               string
+	Hostname         string
+	IP               string
+	Status           string // "Ready", "Degraded", "Offline"
+	Version          string
+	ActiveReleaseID  int64
+	DesiredReleaseID int64
+	LastSeen         time.Time
+	RuntimeStartedAt int64
+	WorkerIdentity   string
+	Role             string
+	MetadataDigest   string
+	Metadata         *entity.NginxMetadata
+	PendingCommand   string
+	ReloadStatus     string
+	LastTimestamp    int64
+	MetricsScope     string
+	Certificate      string
+}
 
 type nodeService struct {
 	heartbeatMu sync.Mutex
@@ -23,16 +44,20 @@ type nodeService struct {
 	metricsSvc  domainService.MetricsService
 	eventHub    provider.EventHub
 
+	nodesMu sync.RWMutex
+	nodes   map[string]*nodeLiveState
+
 	batchMu      sync.Mutex
 	pendingBeats map[string]entity.NodeHeartbeatEvent
 }
 
-// NewNodeService khởi tạo service quản lý workflow Cluster Nodes.
+// NewNodeService khởi tạo service quản lý workflow Nodes.
 func NewNodeService(repo repo.NodeRepository, metricsSvc domainService.MetricsService, eventHub provider.EventHub) domainService.NodeService {
 	s := &nodeService{
 		repo:         repo,
 		metricsSvc:   metricsSvc,
 		eventHub:     eventHub,
+		nodes:        make(map[string]*nodeLiveState),
 		pendingBeats: make(map[string]entity.NodeHeartbeatEvent),
 	}
 
@@ -40,7 +65,42 @@ func NewNodeService(repo repo.NodeRepository, metricsSvc domainService.MetricsSe
 		go s.flushLoop(1200 * time.Millisecond)
 	}
 
+	go s.livenessReaper(5 * time.Second)
+
 	return s
+}
+
+func (s *nodeService) livenessReaper(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		now := time.Now()
+		var offlineEvents []entity.NodeHeartbeatEvent
+
+		s.nodesMu.Lock()
+		for id, node := range s.nodes {
+			if node.Status != "Offline" && now.Sub(node.LastSeen) > 15*time.Second {
+				node.Status = "Offline"
+				offlineEvents = append(offlineEvents, entity.NodeHeartbeatEvent{
+					NodeID:           node.ID,
+					IP:               node.IP,
+					Status:           "Not Ready",
+					Timestamp:        now.Unix(),
+					RuntimeStartedAt: node.RuntimeStartedAt,
+				})
+			}
+			// Xóa các node không hoạt động quá 10 phút khỏi RAM
+			if now.Sub(node.LastSeen) > 10*time.Minute {
+				delete(s.nodes, id)
+			}
+		}
+		s.nodesMu.Unlock()
+
+		if len(offlineEvents) > 0 && s.eventHub != nil {
+			s.eventHub.Broadcast("nodes_heartbeat", offlineEvents)
+		}
+	}
 }
 
 // SubscribeEvents đăng ký nhận luồng sự kiện realtime từ hệ thống.
@@ -100,38 +160,113 @@ func (s *nodeService) ListNodes(ctx context.Context) ([]entity.ClusterNodeRecord
 		return nil, fmt.Errorf("nodeService.ListNodes: %w", err)
 	}
 
-	// 2. Chuẩn hóa hiển thị thời gian tương đối cho LastHeartbeat và trạng thái liveness
+	s.nodesMu.RLock()
+	defer s.nodesMu.RUnlock()
+
 	now := time.Now().UTC()
+	nodeMap := make(map[string]*entity.ClusterNodeRecord, len(nodes))
+	for i := range nodes {
+		nodeMap[nodes[i].ID] = &nodes[i]
+	}
+
+	// Merge các node từ in-memory live states
+	for id, live := range s.nodes {
+		rec, exists := nodeMap[id]
+		if !exists {
+			var relID *int64
+			if live.ActiveReleaseID > 0 {
+				r := live.ActiveReleaseID
+				relID = &r
+			}
+			newNode := entity.ClusterNodeRecord{
+				ID:               live.ID,
+				Name:             live.ID,
+				Hostname:         live.Hostname,
+				IP:               live.IP,
+				Version:          live.Version,
+				Status:           live.Status,
+				ActiveReleaseID:  relID,
+				RuntimeStartedAt: live.RuntimeStartedAt,
+				MetricsScope:     live.MetricsScope,
+				Certificate:      live.Certificate,
+			}
+			nodes = append(nodes, newNode)
+			rec = &nodes[len(nodes)-1]
+			nodeMap[id] = rec
+		} else {
+			if live.Hostname != "" {
+				rec.Hostname = live.Hostname
+			}
+			if live.MetricsScope != "" {
+				rec.MetricsScope = live.MetricsScope
+			}
+			if live.Certificate != "" {
+				rec.Certificate = live.Certificate
+			}
+			if live.RuntimeStartedAt > 0 {
+				rec.RuntimeStartedAt = live.RuntimeStartedAt
+			}
+		}
+
+		diff := now.Sub(live.LastSeen)
+		rec.LastHeartbeatTimestamp = live.LastSeen.Unix()
+		if diff < time.Minute {
+			rec.LastHeartbeat = fmt.Sprintf("%ds ago", int(diff.Seconds()))
+		} else if diff < time.Hour {
+			rec.LastHeartbeat = fmt.Sprintf("%dm ago", int(diff.Minutes()))
+		} else {
+			rec.LastHeartbeat = fmt.Sprintf("%dh ago", int(diff.Hours()))
+		}
+
+		if diff > 15*time.Second {
+			rec.Status = "Not Ready"
+			rec.Uptime = "Offline"
+		} else {
+			rec.Status = live.Status
+			if rec.Status == "" || rec.Status == "HEALTH_STATUS_SERVING" {
+				rec.Status = "Ready"
+			}
+			if live.RuntimeStartedAt > 0 {
+				rec.Uptime = formatNodeUptime(time.Unix(live.RuntimeStartedAt, 0).UTC().Format(time.RFC3339), now)
+			} else {
+				rec.Uptime = "Unknown"
+			}
+		}
+
+		if live.ActiveReleaseID > 0 {
+			r := live.ActiveReleaseID
+			rec.ActiveReleaseID = &r
+			if live.DesiredReleaseID > 0 && live.ActiveReleaseID != live.DesiredReleaseID {
+				rec.SyncStatus = "Drift"
+				rec.PolicySync = "Drift Detected"
+			} else {
+				rec.SyncStatus = "In Sync"
+				rec.PolicySync = "Synchronized"
+			}
+		}
+	}
+
 	for i := range nodes {
 		node := &nodes[i]
-		t, err := time.Parse(time.RFC3339Nano, node.LastHeartbeat)
-		if err != nil {
-			t, err = time.ParseInLocation("2006-01-02 15:04:05", node.LastHeartbeat, time.UTC)
-		}
-		node.Status = "Not Ready"
-		node.Uptime = "Offline"
-		if err == nil {
-			node.LastHeartbeatTimestamp = t.Unix()
-			diff := now.Sub(t)
-			if diff < time.Minute {
-				node.LastHeartbeat = fmt.Sprintf("%ds ago", int(diff.Seconds()))
-			} else if diff < time.Hour {
-				node.LastHeartbeat = fmt.Sprintf("%dm ago", int(diff.Minutes()))
-			} else {
-				node.LastHeartbeat = fmt.Sprintf("%dh ago", int(diff.Hours()))
+		if _, inLive := s.nodes[node.ID]; !inLive {
+			t, err := time.Parse(time.RFC3339Nano, node.LastHeartbeat)
+			if err != nil {
+				t, err = time.ParseInLocation("2006-01-02 15:04:05", node.LastHeartbeat, time.UTC)
 			}
-
-			if diff > 45*time.Second {
-				node.Status = "Not Ready"
-				node.Uptime = "Offline"
-			} else {
-				node.Status = "Ready"
-				if node.RuntimeStartedAt <= 0 {
-					node.Uptime = "Unknown"
+			node.Status = "Not Ready"
+			node.Uptime = "Offline"
+			if err == nil {
+				node.LastHeartbeatTimestamp = t.Unix()
+				diff := now.Sub(t)
+				if diff < time.Minute {
+					node.LastHeartbeat = fmt.Sprintf("%ds ago", int(diff.Seconds()))
+				} else if diff < time.Hour {
+					node.LastHeartbeat = fmt.Sprintf("%dm ago", int(diff.Minutes()))
+				} else {
+					node.LastHeartbeat = fmt.Sprintf("%dh ago", int(diff.Hours()))
 				}
-				node.Uptime = "Unknown"
-				if node.RuntimeStartedAt > 0 {
-					node.Uptime = formatNodeUptime(time.Unix(node.RuntimeStartedAt, 0).UTC().Format(time.RFC3339), now)
+				if diff <= 15*time.Second {
+					node.Status = "Ready"
 				}
 			}
 		}
@@ -140,7 +275,6 @@ func (s *nodeService) ListNodes(ctx context.Context) ([]entity.ClusterNodeRecord
 			node.PolicySync = "Unknown (stale heartbeat)"
 		}
 
-		// Nạp dữ liệu đo đạc thực tế từ In-Memory Ring Buffer thay vì gán tĩnh
 		if s.metricsSvc != nil {
 			if pt := s.metricsSvc.GetLatestMetricPoint(node.ID); pt != nil && pt.Timestamp == node.LastHeartbeatTimestamp && node.Status == "Ready" {
 				node.MetricsAvailable = true
@@ -167,20 +301,52 @@ func (s *nodeService) GetNodeByID(ctx context.Context, id string) (*entity.Clust
 	if err != nil {
 		return nil, fmt.Errorf("nodeService.GetNodeByID: %w", err)
 	}
+
+	s.nodesMu.RLock()
+	live, inLive := s.nodes[id]
+	s.nodesMu.RUnlock()
+
+	now := time.Now().UTC()
+	if node == nil && inLive {
+		var relID *int64
+		if live.ActiveReleaseID > 0 {
+			r := live.ActiveReleaseID
+			relID = &r
+		}
+		newNode := &entity.ClusterNodeRecord{
+			ID:               live.ID,
+			Name:             live.ID,
+			Hostname:         live.Hostname,
+			IP:               live.IP,
+			Version:          live.Version,
+			Status:           live.Status,
+			ActiveReleaseID:  relID,
+			RuntimeStartedAt: live.RuntimeStartedAt,
+			MetricsScope:     live.MetricsScope,
+			Certificate:      live.Certificate,
+		}
+		node = newNode
+	}
+
 	if node == nil {
 		return nil, nil
 	}
 
-	now := time.Now().UTC()
-	t, parseErr := time.Parse(time.RFC3339Nano, node.LastHeartbeat)
-	if parseErr != nil {
-		t, parseErr = time.ParseInLocation("2006-01-02 15:04:05", node.LastHeartbeat, time.UTC)
-	}
-	node.Status = "Not Ready"
-	node.Uptime = "Offline"
-	if parseErr == nil {
-		node.LastHeartbeatTimestamp = t.Unix()
-		diff := now.Sub(t)
+	if inLive {
+		if live.Hostname != "" {
+			node.Hostname = live.Hostname
+		}
+		if live.MetricsScope != "" {
+			node.MetricsScope = live.MetricsScope
+		}
+		if live.Certificate != "" {
+			node.Certificate = live.Certificate
+		}
+		if live.RuntimeStartedAt > 0 {
+			node.RuntimeStartedAt = live.RuntimeStartedAt
+		}
+		diff := now.Sub(live.LastSeen)
+		node.LastHeartbeatTimestamp = live.LastSeen.Unix()
 		if diff < time.Minute {
 			node.LastHeartbeat = fmt.Sprintf("%ds ago", int(diff.Seconds()))
 		} else if diff < time.Hour {
@@ -189,17 +355,58 @@ func (s *nodeService) GetNodeByID(ctx context.Context, id string) (*entity.Clust
 			node.LastHeartbeat = fmt.Sprintf("%dh ago", int(diff.Hours()))
 		}
 
-		if diff > 45*time.Second {
+		if diff > 15*time.Second {
 			node.Status = "Not Ready"
 			node.Uptime = "Offline"
 		} else {
-			node.Status = "Ready"
-			if node.RuntimeStartedAt <= 0 {
+			node.Status = live.Status
+			if node.Status == "" || node.Status == "HEALTH_STATUS_SERVING" {
+				node.Status = "Ready"
+			}
+			if live.RuntimeStartedAt > 0 {
+				node.Uptime = formatNodeUptime(time.Unix(live.RuntimeStartedAt, 0).UTC().Format(time.RFC3339), now)
+			} else {
 				node.Uptime = "Unknown"
 			}
-			node.Uptime = "Unknown"
-			if node.RuntimeStartedAt > 0 {
-				node.Uptime = formatNodeUptime(time.Unix(node.RuntimeStartedAt, 0).UTC().Format(time.RFC3339), now)
+		}
+
+		if live.ActiveReleaseID > 0 {
+			r := live.ActiveReleaseID
+			node.ActiveReleaseID = &r
+			if live.DesiredReleaseID > 0 && live.ActiveReleaseID != live.DesiredReleaseID {
+				node.SyncStatus = "Drift"
+				node.PolicySync = "Drift Detected"
+			} else {
+				node.SyncStatus = "In Sync"
+				node.PolicySync = "Synchronized"
+			}
+		}
+	} else {
+		t, parseErr := time.Parse(time.RFC3339Nano, node.LastHeartbeat)
+		if parseErr != nil {
+			t, parseErr = time.ParseInLocation("2006-01-02 15:04:05", node.LastHeartbeat, time.UTC)
+		}
+		node.Status = "Not Ready"
+		node.Uptime = "Offline"
+		if parseErr == nil {
+			node.LastHeartbeatTimestamp = t.Unix()
+			diff := now.Sub(t)
+			if diff < time.Minute {
+				node.LastHeartbeat = fmt.Sprintf("%ds ago", int(diff.Seconds()))
+			} else if diff < time.Hour {
+				node.LastHeartbeat = fmt.Sprintf("%dm ago", int(diff.Minutes()))
+			} else {
+				node.LastHeartbeat = fmt.Sprintf("%dh ago", int(diff.Hours()))
+			}
+
+			if diff > 15*time.Second {
+				node.Status = "Not Ready"
+				node.Uptime = "Offline"
+			} else {
+				node.Status = "Ready"
+				if node.RuntimeStartedAt > 0 {
+					node.Uptime = formatNodeUptime(time.Unix(node.RuntimeStartedAt, 0).UTC().Format(time.RFC3339), now)
+				}
 			}
 		}
 	}
@@ -208,7 +415,6 @@ func (s *nodeService) GetNodeByID(ctx context.Context, id string) (*entity.Clust
 		node.PolicySync = "Unknown (stale heartbeat)"
 	}
 
-	// Nạp dữ liệu đo đạc thực tế từ In-Memory Ring Buffer
 	if s.metricsSvc != nil {
 		if pt := s.metricsSvc.GetLatestMetricPoint(node.ID); pt != nil && pt.Timestamp == node.LastHeartbeatTimestamp && node.Status == "Ready" {
 			node.MetricsAvailable = true
@@ -224,6 +430,7 @@ func (s *nodeService) GetNodeByID(ctx context.Context, id string) (*entity.Clust
 		node.ActiveConnections = "—"
 		node.RequestsPerSecond = "—"
 	}
+
 	return node, nil
 }
 
@@ -234,7 +441,7 @@ func (s *nodeService) GetNodeConfig(ctx context.Context, nodeID string) (string,
 		return "", fmt.Errorf("nodeService.GetNodeConfig: %w", err)
 	}
 	if node == nil {
-		return "", errors.New("node does not exist in cluster")
+		return "", errors.New("node does not exist")
 	}
 
 	// Thử các endpoint khả dụng của node theo thứ tự:
@@ -304,40 +511,127 @@ func (s *nodeService) GetNodeConfig(ctx context.Context, nodeID string) (string,
 }
 
 // RecordHeartbeat tiếp nhận và xử lý gói tin Push Heartbeat Telemetry gửi từ Node, đồng thời trả về chỉ thị lệnh từ Control Plane.
+// Xử lý 100% In-Memory (No-Write to SQLite) để đảm bảo throughput cao và triệt tiêu lock contention.
 func (s *nodeService) RecordHeartbeat(ctx context.Context, payload entity.NodeHeartbeatPayload) (*entity.NodeCommandDirective, error) {
-	if payload.NodeID == "" {
-		return nil, errors.New("node_id không được để trống")
-	}
-	if payload.Timestamp <= 0 || payload.Timestamp > time.Now().Unix()+5 {
-		return nil, errors.New("invalid heartbeat timestamp")
-	}
-	if payload.MetricsScope != "container" && payload.MetricsScope != "host" {
-		payload.MetricsAvailable = false
-	}
-	if math.IsNaN(payload.CPUUsage) || math.IsInf(payload.CPUUsage, 0) || math.IsNaN(payload.MemoryUsage) || math.IsInf(payload.MemoryUsage, 0) || math.IsNaN(payload.RequestsPerSecond) || math.IsInf(payload.RequestsPerSecond, 0) || payload.CPUUsage < 0 || payload.CPUUsage > 100 || payload.MemoryUsage < 0 || payload.MemoryUsage > 100 || payload.RequestsPerSecond < 0 || payload.ActiveConnections < 0 {
-		return nil, errors.New("invalid heartbeat metrics")
-	}
-	s.heartbeatMu.Lock()
-	defer s.heartbeatMu.Unlock()
+	now := time.Now()
+	metadataAcknowledged := false
 
-	// 0. Lấy trạng thái trước đó của node để phát hiện State Transitions (release change, reload)
-	prevNode, err := s.repo.GetHeartbeatState(ctx, payload.NodeID)
-	if err != nil {
-		return nil, err
+	s.nodesMu.Lock()
+	node, exists := s.nodes[payload.NodeID]
+	var prevReleaseID int64
+	var prevReloadStatus string
+	var prevWorkerIdentity string
+
+	if !exists {
+		hostname := payload.Hostname
+		if payload.Metadata != nil && payload.Metadata.Hostname != "" {
+			hostname = payload.Metadata.Hostname
+		}
+		node = &nodeLiveState{
+			ID:               payload.NodeID,
+			Hostname:         hostname,
+			IP:               payload.IP,
+			Status:           "Ready",
+			PendingCommand:   "none",
+			ReloadStatus:     "none",
+			RuntimeStartedAt: payload.RuntimeStartedAt,
+			MetricsScope:     payload.MetricsScope,
+			Certificate:      payload.Authentication,
+		}
+		s.nodes[payload.NodeID] = node
+
+		// Đảm bảo node tồn tại trong bảng SQLite 1 lần duy nhất khi node xuất hiện lần đầu
+		_ = s.repo.EnsureNodeExists(ctx, payload.NodeID, payload.IP, hostname)
+	} else {
+		prevReleaseID = node.ActiveReleaseID
+		prevReloadStatus = node.ReloadStatus
+		prevWorkerIdentity = node.WorkerIdentity
 	}
-	if prevNode != nil && payload.Timestamp <= prevNode.Timestamp {
+
+	if node.LastTimestamp > 0 && payload.Timestamp <= node.LastTimestamp {
+		s.nodesMu.Unlock()
 		return &entity.NodeCommandDirective{Action: "none"}, nil
 	}
-
-	// 1. Cập nhật thời điểm heartbeat và liveness vào SQLite
-	if err := s.repo.UpdateHeartbeat(ctx, payload); err != nil {
-		return nil, fmt.Errorf("nodeService.RecordHeartbeat: %w", err)
+	node.LastTimestamp = payload.Timestamp
+	node.LastSeen = now
+	if payload.Status != "" {
+		node.Status = payload.Status
+	} else {
+		node.Status = "Ready"
+	}
+	if payload.IP != "" {
+		node.IP = payload.IP
+	}
+	if payload.ActiveReleaseID > 0 {
+		node.ActiveReleaseID = payload.ActiveReleaseID
+	}
+	if payload.WorkerIdentity != "" {
+		node.WorkerIdentity = payload.WorkerIdentity
+	}
+	if payload.Hostname != "" {
+		node.Hostname = payload.Hostname
+	}
+	if payload.RuntimeStartedAt > 0 {
+		node.RuntimeStartedAt = payload.RuntimeStartedAt
+	}
+	if payload.MetricsScope != "" {
+		node.MetricsScope = payload.MetricsScope
+	}
+	if payload.Authentication != "" {
+		node.Certificate = payload.Authentication
+	}
+	if payload.MetadataDigest != "" {
+		node.MetadataDigest = payload.MetadataDigest
+	}
+	if payload.Metadata != nil {
+		node.Metadata = payload.Metadata
+		if payload.Metadata.Version != "" {
+			node.Version = payload.Metadata.Version
+		}
+		if payload.Metadata.Hostname != "" {
+			node.Hostname = payload.Metadata.Hostname
+		}
+		if payload.Metadata.RuntimeStartedAt > 0 {
+			node.RuntimeStartedAt = payload.Metadata.RuntimeStartedAt
+		}
+		if payload.Metadata.WorkerIdentity != "" {
+			node.WorkerIdentity = payload.Metadata.WorkerIdentity
+		}
+		if payload.Metadata.Role != "" {
+			node.Role = payload.Metadata.Role
+		}
+		metadataAcknowledged = true
 	}
 
-	// 2. Đẩy điểm đo tức thời vào In-Memory Ring Buffer trong MetricsService
+	// 1. Kiểm tra lệnh đang chờ
+	action := "none"
+	if node.PendingCommand != "" && node.PendingCommand != "none" {
+		action = node.PendingCommand
+		node.PendingCommand = "none"
+		node.ReloadStatus = "reloading"
+	}
+
+	// 2. Lấy bản release mới nhất mong muốn và lệnh pending từ DB nếu có
+	cmd, desiredRelease, _ := s.repo.GetNodeCommandAndLatestRelease(ctx, payload.NodeID)
+	if cmd != "" && cmd != "none" && action == "none" {
+		action = cmd
+		node.ReloadStatus = "reloading"
+	}
+	if desiredRelease > 0 && node.ActiveReleaseID > 0 && node.ActiveReleaseID < desiredRelease && action == "none" {
+		action = "reload"
+	}
+	node.DesiredReleaseID = desiredRelease
+
+	nodeStatus := node.Status
+	runtimeStartedAt := node.RuntimeStartedAt
+	nodeIP := node.IP
+	activeRelID := node.ActiveReleaseID
+	workerIdentity := node.WorkerIdentity
+	s.nodesMu.Unlock()
+
+	// 3. Đẩy điểm đo vào RAM nếu có metrics kèm theo
 	if s.metricsSvc != nil && payload.MetricsAvailable {
-		now := time.Now().Unix()
-		minutesAgo := int(float64(now-payload.Timestamp) / 60.0)
+		minutesAgo := int(float64(now.Unix()-payload.Timestamp) / 60.0)
 		label := fmt.Sprintf("-%dm", minutesAgo)
 		if minutesAgo <= 0 {
 			label = "Now"
@@ -354,25 +648,14 @@ func (s *nodeService) RecordHeartbeat(ctx context.Context, payload entity.NodeHe
 		})
 	}
 
-	// 3. Lấy chỉ thị lệnh chờ thực thi và bản release mong muốn
-	action, desiredRelease, err := s.repo.GetNodeCommandAndLatestRelease(ctx, payload.NodeID)
-	if err != nil {
-		action = "none"
-	}
-	if action == "" {
-		action = "none"
-	}
-
-	// 4. Tính toán Sync Status và Ruleset Name cho realtime event
+	// 4. Tính toán Sync Status cho realtime event
 	syncStatus := "In Sync"
-	if desiredRelease > 0 {
-		if payload.ActiveReleaseID != desiredRelease {
-			syncStatus = "Drift"
-		}
+	if desiredRelease > 0 && activeRelID > 0 && activeRelID != desiredRelease {
+		syncStatus = "Drift"
 	}
 	rulesetName := "none"
-	if payload.ActiveReleaseID > 0 {
-		rulesetName = fmt.Sprintf("rev-%d", payload.ActiveReleaseID)
+	if activeRelID > 0 {
+		rulesetName = fmt.Sprintf("rev-%d", activeRelID)
 	}
 
 	// 5. Đưa nhịp tim vào hàng đợi gom batch để phát sóng chung 1 event duy nhất
@@ -381,9 +664,9 @@ func (s *nodeService) RecordHeartbeat(ctx context.Context, payload entity.NodeHe
 			NodeID:           payload.NodeID,
 			MetricsScope:     payload.MetricsScope,
 			MetricsAvailable: payload.MetricsAvailable,
-			RuntimeStartedAt: payload.RuntimeStartedAt,
-			IP:               payload.IP,
-			Status:           "Ready",
+			RuntimeStartedAt: runtimeStartedAt,
+			IP:               nodeIP,
+			Status:           nodeStatus,
 			RPS:              payload.RequestsPerSecond,
 			ActiveConns:      payload.ActiveConnections,
 			CPUUsage:         payload.CPUUsage,
@@ -395,65 +678,67 @@ func (s *nodeService) RecordHeartbeat(ctx context.Context, payload entity.NodeHe
 	}
 
 	// 6. Phát hiện và ghi nhận sự kiện đồng bộ thực tế vào node_sync_logs
-	if prevNode == nil {
-		// Node mới tham gia cluster lần đầu
+	if !exists {
 		if logRec, err := s.repo.InsertSyncLog(ctx, payload.NodeID, "release_applied", nil, fmt.Sprintf("Node %s tham gia cụm và kích hoạt heartbeat", payload.NodeID)); err == nil && s.eventHub != nil {
 			s.eventHub.Broadcast("node_sync", logRec)
 		}
 	} else {
-		// Đổi release
-		if payload.ActiveReleaseID > 0 && (prevNode.ActiveReleaseID == nil || *prevNode.ActiveReleaseID != payload.ActiveReleaseID) {
-			msg := fmt.Sprintf("Node áp dụng thành công ruleset release #%d", payload.ActiveReleaseID)
-			relID := payload.ActiveReleaseID
+		if activeRelID > 0 && activeRelID != prevReleaseID {
+			msg := fmt.Sprintf("Node áp dụng thành công ruleset release #%d", activeRelID)
+			relID := activeRelID
 			if logRec, err := s.repo.InsertSyncLog(ctx, payload.NodeID, "release_applied", &relID, msg); err == nil && s.eventHub != nil {
 				s.eventHub.Broadcast("node_sync", logRec)
 			}
 		}
-		// Vừa hoàn thành reload
-		if prevNode.ReloadStatus == "reloading" && prevNode.WorkerIdentity != "" && payload.WorkerIdentity != "" && prevNode.WorkerIdentity != payload.WorkerIdentity {
+		if prevReloadStatus == "reloading" && prevWorkerIdentity != "" && workerIdentity != "" && prevWorkerIdentity != workerIdentity {
 			msg := "Hoàn tất reload worker NGINX áp dụng cấu hình mới"
+			s.nodesMu.Lock()
+			node.ReloadStatus = "completed"
+			s.nodesMu.Unlock()
+			_ = s.repo.SetNodeCommand(ctx, payload.NodeID, "none", "completed")
 			if logRec, err := s.repo.InsertSyncLog(ctx, payload.NodeID, "reload_completed", nil, msg); err == nil && s.eventHub != nil {
 				s.eventHub.Broadcast("node_sync", logRec)
+			}
+			pending, reloading, _, _ := s.repo.GetRollingNodesStatus(ctx)
+			if len(reloading) == 0 && len(pending) > 0 {
+				nextNodeID := pending[0]
+				_ = s.repo.SetNodeCommand(ctx, nextNodeID, "reload_process", "pending")
+				s.nodesMu.Lock()
+				if nextNode, ok := s.nodes[nextNodeID]; ok {
+					nextNode.PendingCommand = "reload_process"
+					nextNode.ReloadStatus = "pending"
+				}
+				s.nodesMu.Unlock()
 			}
 		}
 	}
 
-	// 7. Nếu node này vừa hoàn thành reload, kích hoạt node kế tiếp trong hàng đợi rolling cluster
-	node, err := s.repo.GetHeartbeatState(ctx, payload.NodeID)
-	if err == nil && node != nil && node.ReloadStatus == "completed" {
-		pending, reloading, _, _ := s.repo.GetRollingNodesStatus(ctx)
-		if len(reloading) == 0 && len(pending) > 0 {
-			nextNodeID := pending[0]
-			_ = s.repo.SetNodeCommand(ctx, nextNodeID, "reload_process", "pending")
-		}
-	}
-
 	return &entity.NodeCommandDirective{
-		Action:           action,
-		DesiredReleaseID: desiredRelease,
+		Action:               action,
+		DesiredReleaseID:     desiredRelease,
+		MetadataAcknowledged: metadataAcknowledged,
 	}, nil
 }
 
 // TriggerNodeReload yêu cầu thực hiện reload cho một node cụ thể.
 func (s *nodeService) TriggerNodeReload(ctx context.Context, nodeID string) error {
-	node, err := s.repo.GetNodeByID(ctx, nodeID)
-	if err != nil {
-		return fmt.Errorf("truy vấn node thất bại: %w", err)
+	s.nodesMu.Lock()
+	if n, ok := s.nodes[nodeID]; ok {
+		n.PendingCommand = "reload_process"
+		n.ReloadStatus = "pending"
 	}
-	if node == nil {
-		return fmt.Errorf("không tìm thấy node %s", nodeID)
-	}
+	s.nodesMu.Unlock()
 	return s.repo.SetNodeCommand(ctx, nodeID, "reload_process", "pending")
 }
 
-// TriggerClusterRollingReload kích hoạt chu trình rolling reload tuần tự trên toàn bộ cụm.
-func (s *nodeService) TriggerClusterRollingReload(ctx context.Context) (*entity.ClusterRollingStatus, error) {
+// TriggerRollingReload kích hoạt chu trình rolling reload tuần tự trên các nodes.
+func (s *nodeService) TriggerRollingReload(ctx context.Context) (*entity.RollingStatus, error) {
 	nodes, err := s.repo.ListNodes(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("truy vấn danh sách node thất bại: %w", err)
 	}
 	if len(nodes) == 0 {
-		return nil, errors.New("không có node nào trong cluster để thực hiện rolling reload")
+		return nil, errors.New("không có node nào để thực hiện rolling reload")
 	}
 
 	nodeIDs := make([]string, 0, len(nodes))
@@ -461,7 +746,7 @@ func (s *nodeService) TriggerClusterRollingReload(ctx context.Context) (*entity.
 		nodeIDs = append(nodeIDs, n.ID)
 	}
 
-	if err := s.repo.SetClusterRollingReload(ctx, nodeIDs); err != nil {
+	if err := s.repo.SetRollingReload(ctx, nodeIDs); err != nil {
 		return nil, err
 	}
 
@@ -470,17 +755,17 @@ func (s *nodeService) TriggerClusterRollingReload(ctx context.Context) (*entity.
 		pending = nodeIDs[1:]
 	}
 
-	return &entity.ClusterRollingStatus{
+	return &entity.RollingStatus{
 		Active:         true,
 		CurrentNodeID:  nodeIDs[0],
 		PendingNodes:   pending,
 		CompletedNodes: []string{},
-		Message:        fmt.Sprintf("Đã bắt đầu Rolling Reload tuần tự cho %d node trong cụm (Node bắt đầu: %s)", len(nodeIDs), nodeIDs[0]),
+		Message:        fmt.Sprintf("Đã bắt đầu Rolling Reload tuần tự cho %d node (Node bắt đầu: %s)", len(nodeIDs), nodeIDs[0]),
 	}, nil
 }
 
-// GetClusterRollingStatus trả về trạng thái tiến trình rolling reload hiện tại của cụm.
-func (s *nodeService) GetClusterRollingStatus(ctx context.Context) (*entity.ClusterRollingStatus, error) {
+// GetRollingStatus trả về trạng thái tiến trình rolling reload hiện tại.
+func (s *nodeService) GetRollingStatus(ctx context.Context) (*entity.RollingStatus, error) {
 	pending, reloading, completed, err := s.repo.GetRollingNodesStatus(ctx)
 	if err != nil {
 		return nil, err
@@ -499,7 +784,7 @@ func (s *nodeService) GetClusterRollingStatus(ctx context.Context) (*entity.Clus
 		msg = fmt.Sprintf("Tiến trình Rolling Reload đang diễn ra: Node đang xử lý: %s, Còn lại: %d, Hoàn tất: %d", current, len(pending), len(completed))
 	}
 
-	return &entity.ClusterRollingStatus{
+	return &entity.RollingStatus{
 		Active:         active,
 		CurrentNodeID:  current,
 		PendingNodes:   pending,

@@ -67,6 +67,13 @@ http {
         location = /metrics {
             aurora_waf_metrics;
         }
+
+        location = /stub_status {
+            stub_status;
+            access_log off;
+            allow 127.0.0.1;
+            deny all;
+        }
     }
     include /var/lib/aurora-routing/active-domain-routing.conf;
     # Keep workload server first for the existing telemetry config inheritance.

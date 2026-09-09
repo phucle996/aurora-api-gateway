@@ -1,27 +1,14 @@
 use crate::config::Config;
+use crate::grpc::GrpcClient;
 use crate::nginx::NginxManager;
-use reqwest::Client;
-use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use tokio::fs;
 use tracing::{error, info, warn};
 
-#[derive(Deserialize, Debug)]
-struct CertificateAsset {
-    name: String,
-    content: String,
-}
-
-#[derive(Deserialize, Debug)]
-struct DomainRoutingBundle {
-    config: String,
-    files: Vec<CertificateAsset>,
-}
-
 pub async fn run_routing_sync_loop(
     cfg: Arc<Config>,
-    client: Client,
+    client: GrpcClient,
     nginx: Arc<NginxManager>,
 ) {
     let interval = tokio::time::Duration::from_secs(cfg.sync_interval_secs);
@@ -40,28 +27,10 @@ pub async fn run_routing_sync_loop(
     loop {
         ticker.tick().await;
 
-        let url = format!("{}/api/v1/domain-routing/{}/bundle", cfg.controller_url, cfg.node_id);
-        let resp = match client
-            .get(&url)
-            .header("Authorization", format!("Bearer {}", cfg.auth_token))
-            .send()
-            .await
-        {
-            Ok(r) if r.status().is_success() => r,
-            Ok(r) => {
-                warn!(status = %r.status(), "Domain routing bundle fetch returned non-success");
-                continue;
-            }
+        let bundle = match client.get_domain_routing_bundle(&cfg.node_id).await {
+            Ok(resp) => resp,
             Err(e) => {
-                error!("Failed to fetch domain routing bundle: {}", e);
-                continue;
-            }
-        };
-
-        let bundle: DomainRoutingBundle = match resp.json().await {
-            Ok(b) => b,
-            Err(e) => {
-                error!("Failed to parse domain routing bundle JSON: {}", e);
+                warn!("Failed to fetch domain routing bundle via gRPC: {}", e);
                 continue;
             }
         };

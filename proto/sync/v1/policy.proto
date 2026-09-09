@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package aurora.sync.v1;
+
+option go_package = "aurora-waf.local/control-plane/internal/transport/grpc/pb;pb";
+
+service PolicySyncService {
+  rpc GetPolicy (GetPolicyRequest) returns (PolicySyncResponse);
+  rpc ReportPolicy (ReportPolicyRequest) returns (ReportPolicyResponse);
+}
+
+message GetPolicyRequest {
+  string node_id = 1;
+}
+
+message PolicySyncResponse {
+  int64 release_id = 1;
+  string digest = 2;
+  string payload_json = 3;
+}
+
+message ReportPolicyRequest {
+  string node_id = 1;
+  int64 release_id = 2;
+  string phase = 3;
+  string message = 4;
+}
+
+message ReportPolicyResponse {
+  bool success = 1;
+}

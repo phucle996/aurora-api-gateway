@@ -40,6 +40,34 @@ impl NginxManager {
         }
     }
 
+    /// Check if the NGINX master process is currently active
+    pub async fn is_running(&self) -> bool {
+        let mut guard = self.child.lock().await;
+        if let Some(child) = guard.as_mut() {
+            matches!(child.try_wait(), Ok(None))
+        } else {
+            false
+        }
+    }
+
+    /// Retrieve the PID of the NGINX master process
+    pub async fn master_pid(&self) -> u32 {
+        let guard = self.child.lock().await;
+        guard.as_ref().and_then(|c| c.id()).unwrap_or(0)
+    }
+
+    /// Query the NGINX binary version string
+    pub async fn get_version(&self) -> String {
+        let output = Command::new(&self.nginx_bin).arg("-v").output().await;
+        if let Ok(out) = output {
+            let s = String::from_utf8_lossy(&out.stderr);
+            if let Some(v) = s.lines().next() {
+                return v.trim().to_string();
+            }
+        }
+        "nginx".to_string()
+    }
+
     /// Spawn and supervise the NGINX master process
     pub async fn start(&self) -> Result<()> {
         let mut guard = self.child.lock().await;

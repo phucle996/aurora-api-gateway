@@ -308,8 +308,8 @@ func (r *sqliteNodeRepository) GetNodeCommandAndLatestRelease(ctx context.Contex
 	return cmd, desiredRelease, nil
 }
 
-// SetClusterRollingReload thiết lập quy trình rolling reload toàn cụm.
-func (r *sqliteNodeRepository) SetClusterRollingReload(ctx context.Context, nodeIDs []string) error {
+// SetRollingReload thiết lập quy trình rolling reload tuần tự.
+func (r *sqliteNodeRepository) SetRollingReload(ctx context.Context, nodeIDs []string) error {
 	if len(nodeIDs) == 0 {
 		return nil
 	}
@@ -560,4 +560,15 @@ func (r *sqliteNodeRepository) GetHeartbeatState(ctx context.Context, nodeID str
 		return nil, nil
 	}
 	return &state, err
+}
+
+func (r *sqliteNodeRepository) EnsureNodeExists(ctx context.Context, nodeID, ip, hostname string) error {
+	if nodeID == "" {
+		return nil
+	}
+	query := `INSERT INTO cluster_nodes (id, name, hostname, ip, status, version, sync_status, join_method, certificate, last_heartbeat, created_at)
+		VALUES (?, ?, ?, ?, 'Ready', '0.4.1', 'In Sync', 'gRPC Sync', 'None', datetime('now'), datetime('now'))
+		ON CONFLICT(id) DO NOTHING;`
+	_, err := r.db.ExecContext(ctx, query, nodeID, nodeID, hostname, ip)
+	return err
 }

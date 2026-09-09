@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	port "aurora-waf.local/control-plane/internal/domain/service"
 	"aurora-waf.local/control-plane/internal/provider"
 	"aurora-waf.local/control-plane/internal/service"
+	grpcserver "aurora-waf.local/control-plane/internal/transport/grpc"
 	"aurora-waf.local/control-plane/internal/transport/http/middleware"
 
 	"github.com/gin-gonic/gin"
@@ -23,9 +25,12 @@ import (
 // App là đối tượng cấp cao nhất, nắm giữ:
 //   - db: cặp pool kết nối SQLite (Writer + Reader) — đóng khi tắt
 //   - server: HTTP server với tất cả các route đã đăng ký
+//   - grpcServer: gRPC server cho giao tiếp Dataplane Node
 type App struct {
 	db                 *infra.DBPool
 	server             *http.Server
+	grpcServer         *grpcserver.Server
+	grpcLis            net.Listener
 	metrics            port.MetricsService
 	collector          *provider.RateLimitCollector
 	backupScheduler    *service.BackupScheduler
@@ -129,36 +134,62 @@ func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
 		}
 	}()
 
+	grpcSrv := grpcserver.NewServer(cfg.GRPCAddr, token, grpcserver.Handlers{
+		Heartbeat:     module.GRPCHeartbeatHandler,
+		Policy:        module.GRPCPolicySyncHandler,
+		Access:        module.GRPCAccessSyncHandler,
+		Upstream:      module.GRPCUpstreamSyncHandler,
+		DomainRouting: module.GRPCDomainRoutingHandler,
+		Module:        module.GRPCModuleSyncHandler,
+	})
+	grpcLis, err := net.Listen("tcp", cfg.GRPCAddr)
+	if err != nil {
+		_ = module.MetricsService.Close()
+		_ = pools.Close()
+		return nil, fmt.Errorf("listen gRPC %s: %w", cfg.GRPCAddr, err)
+	}
+
 	return &App{
-		db:                 pools,
-		metrics:            module.MetricsService,
-		collector:          module.RateLimitCollector,
-		backupScheduler:    module.BackupScheduler,
-		notificationWorker: module.NotificationWorker,
-		checkpointDone:     checkpointDone,
+		db: pools,
 		server: &http.Server{
 			Addr:              cfg.HTTPAddr,
 			Handler:           router,
 			ReadHeaderTimeout: 10 * time.Second,
 			IdleTimeout:       120 * time.Second,
 		},
+		grpcServer:         grpcSrv,
+		grpcLis:            grpcLis,
+		metrics:            module.MetricsService,
+		collector:          module.RateLimitCollector,
+		backupScheduler:    module.BackupScheduler,
+		notificationWorker: module.NotificationWorker,
+		checkpointDone:     checkpointDone,
 	}, nil
 }
 
 func (a *App) Run(ctx context.Context) error {
-	done := make(chan error, 1)
-	go func() { done <- a.server.ListenAndServe() }()
+	httpDone := make(chan error, 1)
+	grpcDone := make(chan error, 1)
+
+	go func() { httpDone <- a.server.ListenAndServe() }()
+	go func() { grpcDone <- a.grpcServer.Serve(a.grpcLis) }()
+
 	select {
-	case err := <-done:
+	case err := <-httpDone:
+		a.grpcServer.GracefulStop()
+		return err
+	case err := <-grpcDone:
+		_ = a.server.Close()
 		return err
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+		a.grpcServer.GracefulStop()
 		if err := a.server.Shutdown(shutdownCtx); err != nil {
 			_ = a.server.Close()
 			return err
 		}
-		err := <-done
+		err := <-httpDone
 		if errors.Is(err, http.ErrServerClosed) {
 			return nil
 		}
@@ -168,6 +199,9 @@ func (a *App) Run(ctx context.Context) error {
 
 // Close is called after Run has drained HTTP requests.
 func (a *App) Close() error {
+	if a.grpcServer != nil {
+		a.grpcServer.GracefulStop()
+	}
 	if a.checkpointDone != nil {
 		close(a.checkpointDone)
 	}

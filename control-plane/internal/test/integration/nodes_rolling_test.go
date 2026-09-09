@@ -99,7 +99,7 @@ func TestNodeReloadDirectives(t *testing.T) {
 	}
 }
 
-func TestClusterRollingReloadQueue(t *testing.T) {
+func TestRollingReloadQueue(t *testing.T) {
 	pools, mux := rollingFixture(t)
 
 	// Thêm node 2 và node 3 vào SQLite
@@ -112,17 +112,17 @@ func TestClusterRollingReloadQueue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 1. Kích hoạt Rolling Reload cho toàn cụm
-	reqCluster := httptest.NewRequest("POST", "/api/v1/nodes/rolling-reload", nil)
-	reqCluster.Header.Set("Authorization", "Bearer "+rollingTestToken)
-	wCluster := httptest.NewRecorder()
-	mux.ServeHTTP(wCluster, reqCluster)
-	if wCluster.Code != http.StatusOK {
-		t.Fatalf("kích hoạt rolling reload cluster thất bại: %d, body: %s", wCluster.Code, wCluster.Body.String())
+	// 1. Kích hoạt Rolling Reload
+	reqRolling := httptest.NewRequest("POST", "/api/v1/nodes/rolling-reload", nil)
+	reqRolling.Header.Set("Authorization", "Bearer "+rollingTestToken)
+	wRolling := httptest.NewRecorder()
+	mux.ServeHTTP(wRolling, reqRolling)
+	if wRolling.Code != http.StatusOK {
+		t.Fatalf("kích hoạt rolling reload thất bại: %d, body: %s", wRolling.Code, wRolling.Body.String())
 	}
 
-	var rollStatus entity.ClusterRollingStatus
-	if err := json.Unmarshal(wCluster.Body.Bytes(), &rollStatus); err != nil {
+	var rollStatus entity.RollingStatus
+	if err := json.Unmarshal(wRolling.Body.Bytes(), &rollStatus); err != nil {
 		t.Fatal(err)
 	}
 	if !rollStatus.Active {

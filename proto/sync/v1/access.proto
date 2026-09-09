@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package aurora.sync.v1;
+
+option go_package = "aurora-waf.local/control-plane/internal/transport/grpc/pb;pb";
+
+service AccessSyncService {
+  rpc GetAccess (GetAccessRequest) returns (AccessSyncResponse);
+  rpc ReportAccess (ReportAccessRequest) returns (ReportAccessResponse);
+}
+
+message GetAccessRequest {
+  string node_id = 1;
+}
+
+message AccessSyncResponse {
+  int64 release_id = 1;
+  string digest = 2;
+  string payload_json = 3;
+}
+
+message ReportAccessRequest {
+  string node_id = 1;
+  int64 release_id = 2;
+  string phase = 3;
+  string message = 4;
+}
+
+message ReportAccessResponse {
+  bool success = 1;
+}

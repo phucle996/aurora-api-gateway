@@ -320,7 +320,7 @@ func (p *PrometheusMetricsProvider) GetNodeTimeline(ctx context.Context, nodeID 
 	start := now - 3600 // 1 giờ gần nhất
 	step := 15          // 15 giây để biểu đồ chi tiết và phản hồi ngay các mẫu đo mới
 
-	query := fmt.Sprintf(`{__name__=~"aurora_node_cpu_percent|aurora_node_memory_percent|aurora_node_active_connections|aurora_node_requests_per_second",node_id=%s,job=%s}`, strconv.Quote(nodeID), strconv.Quote(p.jobName))
+	query := fmt.Sprintf(`{__name__=~"system_cpu_utilization_ratio|system_memory_utilization_ratio|http_connections_active|http_requests_per_second|aurora_node_cpu_percent|aurora_node_memory_percent|aurora_node_active_connections|aurora_node_requests_per_second",node_id=%s,job=%s}`, strconv.Quote(nodeID), strconv.Quote(p.jobName))
 	u := fmt.Sprintf("%s/api/v1/query_range?query=%s&start=%d&end=%d&step=%d",
 		strings.TrimRight(p.promURL, "/"),
 		url.QueryEscape(query),
@@ -382,14 +382,21 @@ func (p *PrometheusMetricsProvider) GetNodeTimeline(ctx context.Context, nodeID 
 		}
 		scope = seriesScope
 		var mask uint8
+		isRatio := false
 		switch name {
+		case "system_cpu_utilization_ratio":
+			mask = 1
+			isRatio = true
 		case "aurora_node_cpu_percent":
 			mask = 1
+		case "system_memory_utilization_ratio":
+			mask = 2
+			isRatio = true
 		case "aurora_node_memory_percent":
 			mask = 2
-		case "aurora_node_active_connections":
+		case "http_connections_active", "aurora_node_active_connections":
 			mask = 4
-		case "aurora_node_requests_per_second":
+		case "http_requests_per_second", "aurora_node_requests_per_second":
 			mask = 8
 		default:
 			return nil, taxonomy.ErrMetricsUnavailable
@@ -406,6 +413,9 @@ func (p *PrometheusMetricsProvider) GetNodeTimeline(ctx context.Context, nodeID 
 			}
 			if (mask == 1 || mask == 2) && val > 100 || mask == 4 && (val > 1e9 || val != math.Trunc(val)) {
 				return nil, taxonomy.ErrMetricsUnavailable
+			}
+			if isRatio && val <= 1.0 {
+				val = val * 100.0
 			}
 			sec := int64(ts)
 			pt := byTime[sec]

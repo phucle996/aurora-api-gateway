@@ -37,8 +37,27 @@ pub struct Config {
     #[arg(long, env = "METRICS_PORT", default_value_t = 9145)]
     pub metrics_port: u16,
 
+    #[arg(long, env = "METRICS_PROMETHEUS", default_value_t = false)]
+    pub metrics_prometheus: bool,
+
+    #[arg(long, env = "METRICS_OTLP_ENDPOINT")]
+    pub metrics_otlp_endpoint: Option<String>,
+
+    #[arg(long = "metrics-otlp-interval", env = "METRICS_OTLP_INTERVAL", default_value_t = 15)]
+    pub metrics_otlp_interval_secs: u64,
+
+    #[arg(
+        long = "nginx-stub-status-url",
+        env = "NGINX_STUB_STATUS_URL",
+        default_value = "http://127.0.0.1:80/stub_status"
+    )]
+    pub nginx_stub_status_url: String,
+
     #[arg(long, env = "NO_NGINX", default_value_t = false)]
     pub no_nginx: bool,
+
+    #[arg(long, env = "GRPC_URL")]
+    pub grpc_url: Option<String>,
 }
 
 impl Config {
@@ -46,6 +65,25 @@ impl Config {
         let config = Self::parse();
         config.validate();
         config
+    }
+
+    pub fn grpc_endpoint(&self) -> String {
+        if let Some(ref url) = self.grpc_url {
+            if !url.trim().is_empty() {
+                return url.clone();
+            }
+        }
+
+        // Fallback from controller_url
+        let base = self.controller_url.trim_end_matches('/');
+        if let Some(idx) = base.rfind(':') {
+            // Check if the part after ':' is digits (port)
+            let suffix = &base[idx + 1..];
+            if suffix.chars().all(|c| c.is_ascii_digit()) {
+                return format!("{}:9090", &base[..idx]);
+            }
+        }
+        format!("{}:9090", base)
     }
 
     pub fn validate(&self) {
@@ -109,8 +147,37 @@ mod tests {
         assert_eq!(cfg.heartbeat_interval_secs, 5);
         assert_eq!(cfg.sync_interval_secs, 3);
         assert_eq!(cfg.metrics_port, 9145);
+        assert!(!cfg.metrics_prometheus);
+        assert!(cfg.metrics_otlp_endpoint.is_none());
+        assert_eq!(cfg.metrics_otlp_interval_secs, 15);
+        assert_eq!(cfg.nginx_stub_status_url, "http://127.0.0.1:80/stub_status");
         assert!(!cfg.no_nginx);
         cfg.validate();
+    }
+
+    #[test]
+    fn test_metrics_flags() {
+        let cfg = Config::try_parse_from([
+            "aurora-agent",
+            "--controller-url", "http://controller:8080",
+            "--node-id", "node-01",
+            "--auth-token", "secret-token",
+            "--nginx-bin", "/nginx",
+            "--nginx-conf", "/nginx.conf",
+            "--policy-dir", "/policy",
+            "--routing-dir", "/routing",
+            "--modules-dir", "/modules",
+            "--metrics-prometheus",
+            "--metrics-otlp-endpoint", "http://otel-collector:4317",
+            "--metrics-otlp-interval", "30",
+            "--nginx-stub-status-url", "http://127.0.0.1:8080/stub_status",
+        ])
+        .expect("parse config with metrics flags");
+
+        assert!(cfg.metrics_prometheus);
+        assert_eq!(cfg.metrics_otlp_endpoint.as_deref(), Some("http://otel-collector:4317"));
+        assert_eq!(cfg.metrics_otlp_interval_secs, 30);
+        assert_eq!(cfg.nginx_stub_status_url, "http://127.0.0.1:8080/stub_status");
     }
 
     #[test]
@@ -134,7 +201,12 @@ mod tests {
             heartbeat_interval_secs: 5,
             sync_interval_secs: 3,
             metrics_port: 9145,
+            metrics_prometheus: false,
+            metrics_otlp_endpoint: None,
+            metrics_otlp_interval_secs: 15,
+            nginx_stub_status_url: "http://127.0.0.1:80/stub_status".to_string(),
             no_nginx: false,
+            grpc_url: None,
         };
         cfg.validate();
     }
@@ -154,8 +226,40 @@ mod tests {
             heartbeat_interval_secs: 5,
             sync_interval_secs: 3,
             metrics_port: 9145,
+            metrics_prometheus: false,
+            metrics_otlp_endpoint: None,
+            metrics_otlp_interval_secs: 15,
+            nginx_stub_status_url: "http://127.0.0.1:80/stub_status".to_string(),
             no_nginx: false,
+            grpc_url: None,
         };
         cfg.validate();
+    }
+
+    #[test]
+    fn test_grpc_endpoint_resolution() {
+        let mut cfg = Config {
+            controller_url: "http://127.0.0.1:8080".to_string(),
+            node_id: "node-01".to_string(),
+            auth_token: "token".to_string(),
+            nginx_bin: PathBuf::from("/nginx"),
+            nginx_conf: PathBuf::from("/nginx.conf"),
+            policy_dir: PathBuf::from("/policy"),
+            routing_dir: PathBuf::from("/routing"),
+            modules_dir: PathBuf::from("/modules"),
+            heartbeat_interval_secs: 5,
+            sync_interval_secs: 3,
+            metrics_port: 9145,
+            metrics_prometheus: false,
+            metrics_otlp_endpoint: None,
+            metrics_otlp_interval_secs: 15,
+            nginx_stub_status_url: "http://127.0.0.1:80/stub_status".to_string(),
+            no_nginx: false,
+            grpc_url: None,
+        };
+        assert_eq!(cfg.grpc_endpoint(), "http://127.0.0.1:9090");
+
+        cfg.grpc_url = Some("http://controller.aurora.local:9999".to_string());
+        assert_eq!(cfg.grpc_endpoint(), "http://controller.aurora.local:9999");
     }
 }

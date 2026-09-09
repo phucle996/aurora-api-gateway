@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package aurora.sync.v1;
+
+option go_package = "aurora-waf.local/control-plane/internal/transport/grpc/pb;pb";
+
+service ModuleSyncService {
+  rpc PollModuleJob (PollModuleJobRequest) returns (PollModuleJobResponse);
+  rpc AppendModuleJobLog (AppendModuleJobLogRequest) returns (AppendModuleJobLogResponse);
+  rpc ReportModules (ModuleReportRequest) returns (ModuleReportResponse);
+}
+
+message PollModuleJobRequest {
+  string node_id = 1;
+}
+
+message PollModuleJobResponse {
+  int64 id = 1;
+  string action = 2;
+}
+
+message AppendModuleJobLogRequest {
+  string node_id = 1;
+  int64 job_id = 2;
+  string stage = 3;
+  int32 progress = 4;
+  string message = 5;
+  string log_chunk = 6;
+}
+
+message AppendModuleJobLogResponse {
+  bool success = 1;
+}
+
+message ModuleReportItem {
+  string name = 1;
+  bool available = 2;
+  bool loaded = 3;
+  string source = 4;
+}
+
+message ModuleReportRequest {
+  string node_id = 1;
+  int64 checked_at = 2;
+  string nginx_version = 3;
+  string architecture = 4;
+  bool installable = 5;
+  string error = 6;
+  int64 job_id = 7;
+  string job_state = 8;
+  string job_message = 9;
+  string job_logs = 10;
+  repeated ModuleReportItem modules = 11;
+}
+
+message ModuleReportResponse {
+  bool success = 1;
+}

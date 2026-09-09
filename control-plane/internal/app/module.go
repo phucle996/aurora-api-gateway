@@ -10,6 +10,7 @@ import (
 	"aurora-waf.local/control-plane/internal/provider"
 	"aurora-waf.local/control-plane/internal/repository"
 	"aurora-waf.local/control-plane/internal/service"
+	grpchandler "aurora-waf.local/control-plane/internal/transport/grpc/handler"
 	"aurora-waf.local/control-plane/internal/transport/http/handler"
 )
 
@@ -17,28 +18,34 @@ import (
 // Nó được khởi tạo một lần duy nhất khi ứng dụng khởi động,
 // sau đó RegisterRoutes gắn các handler vào đúng URL tương ứng.
 type Module struct {
-	ModuleStoreHandler   *handler.ModuleStoreHandler
-	AccessHandler        *handler.AccessHandler
-	PolicyHandler        *handler.PolicyHandler
-	HealthcheckHandler   *handler.HealthcheckHandler
-	AuthHandler          *handler.AuthHandler
-	AuthService          port.AuthService // Xác thực JWT — cần tham chiếu trong middleware
-	RuleHandler          *handler.RuleHandler
-	NodeHandler          *handler.NodeHandler
-	MetricsHandler       *handler.MetricsHandler
-	MetricsService       port.MetricsService
-	DomainHandler        *handler.DomainHandler
-	DomainRoutingHandler *handler.DomainRoutingHandler
-	UpstreamHandler      *handler.UpstreamHandler
-	RateLimitHandler     *handler.RateLimitHandler
-	RateLimitCollector   *provider.RateLimitCollector
-	SystemHandler        *handler.SystemHandler
-	SecurityHandler      *handler.SecurityHandler
-	NotificationHandler  *handler.NotificationHandler
-	NotificationService  port.NotificationService
-	NotificationWorker   *service.NotificationWorker
-	BackupHandler        *handler.BackupHandler
-	BackupScheduler      *service.BackupScheduler
+	GRPCHeartbeatHandler     *grpchandler.HeartbeatHandler
+	GRPCPolicySyncHandler    *grpchandler.PolicySyncHandler
+	GRPCAccessSyncHandler    *grpchandler.AccessSyncHandler
+	GRPCUpstreamSyncHandler  *grpchandler.UpstreamSyncHandler
+	GRPCDomainRoutingHandler *grpchandler.DomainRoutingSyncHandler
+	GRPCModuleSyncHandler    *grpchandler.ModuleSyncHandler
+	ModuleStoreHandler       *handler.ModuleStoreHandler
+	AccessHandler            *handler.AccessHandler
+	PolicyHandler            *handler.PolicyHandler
+	HealthcheckHandler       *handler.HealthcheckHandler
+	AuthHandler              *handler.AuthHandler
+	AuthService              port.AuthService // Xác thực JWT — cần tham chiếu trong middleware
+	RuleHandler              *handler.RuleHandler
+	NodeHandler              *handler.NodeHandler
+	MetricsHandler           *handler.MetricsHandler
+	MetricsService           port.MetricsService
+	DomainHandler            *handler.DomainHandler
+	DomainRoutingHandler     *handler.DomainRoutingHandler
+	UpstreamHandler          *handler.UpstreamHandler
+	RateLimitHandler         *handler.RateLimitHandler
+	RateLimitCollector       *provider.RateLimitCollector
+	SystemHandler            *handler.SystemHandler
+	SecurityHandler          *handler.SecurityHandler
+	NotificationHandler      *handler.NotificationHandler
+	NotificationService      port.NotificationService
+	NotificationWorker       *service.NotificationWorker
+	BackupHandler            *handler.BackupHandler
+	BackupScheduler          *service.BackupScheduler
 }
 
 // NewModule khởi tạo toàn bộ chuỗi dependency của ứng dụng theo thứ tự:
@@ -129,28 +136,41 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	moduleStoreSvc := service.NewModuleStoreService(moduleStoreRepo, eventHub)
 	moduleStoreHdr := handler.NewModuleStoreHandler(moduleStoreSvc)
 
+	grpcHeartbeatHdr := grpchandler.NewHeartbeatHandler(nodeSvc)
+	grpcPolicyHdr := grpchandler.NewPolicySyncHandler(policySvc)
+	grpcAccessHdr := grpchandler.NewAccessSyncHandler(accessSvc)
+	grpcUpstreamHdr := grpchandler.NewUpstreamSyncHandler(upstreamSvc)
+	grpcRoutingHdr := grpchandler.NewDomainRoutingSyncHandler(domainRoutingSvc)
+	grpcModuleHdr := grpchandler.NewModuleSyncHandler(moduleStoreSvc)
+
 	return &Module{
-		ModuleStoreHandler:   moduleStoreHdr,
-		AccessHandler:        accessHdr,
-		PolicyHandler:        policyHdr,
-		HealthcheckHandler:   healthcheckHdr,
-		AuthHandler:          authHdr,
-		AuthService:          authSvc,
-		RuleHandler:          ruleHdr,
-		NodeHandler:          nodeHdr,
-		MetricsHandler:       metricsHdr,
-		MetricsService:       metricsSvc,
-		DomainHandler:        domainHdr,
-		DomainRoutingHandler: domainRoutingHdr,
-		UpstreamHandler:      upstreamHdr,
-		RateLimitHandler:     rateLimitHdr,
-		RateLimitCollector:   rateLimitCollector,
-		SystemHandler:        systemHdr,
-		SecurityHandler:      securityHdr,
-		NotificationHandler:  notificationHdr,
-		NotificationService:  notificationSvc,
-		NotificationWorker:   notificationWorker,
-		BackupHandler:        backupHdr,
-		BackupScheduler:      backupScheduler,
+		GRPCHeartbeatHandler:     grpcHeartbeatHdr,
+		GRPCPolicySyncHandler:    grpcPolicyHdr,
+		GRPCAccessSyncHandler:    grpcAccessHdr,
+		GRPCUpstreamSyncHandler:  grpcUpstreamHdr,
+		GRPCDomainRoutingHandler: grpcRoutingHdr,
+		GRPCModuleSyncHandler:    grpcModuleHdr,
+		ModuleStoreHandler:       moduleStoreHdr,
+		AccessHandler:            accessHdr,
+		PolicyHandler:            policyHdr,
+		HealthcheckHandler:       healthcheckHdr,
+		AuthHandler:              authHdr,
+		AuthService:              authSvc,
+		RuleHandler:              ruleHdr,
+		NodeHandler:              nodeHdr,
+		MetricsHandler:           metricsHdr,
+		MetricsService:           metricsSvc,
+		DomainHandler:            domainHdr,
+		DomainRoutingHandler:     domainRoutingHdr,
+		UpstreamHandler:          upstreamHdr,
+		RateLimitHandler:         rateLimitHdr,
+		RateLimitCollector:       rateLimitCollector,
+		SystemHandler:            systemHdr,
+		SecurityHandler:          securityHdr,
+		NotificationHandler:      notificationHdr,
+		NotificationService:      notificationSvc,
+		NotificationWorker:       notificationWorker,
+		BackupHandler:            backupHdr,
+		BackupScheduler:          backupScheduler,
 	}
 }
