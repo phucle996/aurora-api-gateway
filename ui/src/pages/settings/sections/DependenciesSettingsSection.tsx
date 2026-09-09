@@ -1,5 +1,21 @@
-import {useEffect, useRef, useState} from 'react';
-import {api} from '../../../lib/fetcher';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { api } from '../../../lib/fetcher';
+import {
+  Search,
+  RotateCw,
+  Server,
+  Layers,
+  CheckCircle2,
+  Download,
+  Terminal,
+  AlertCircle,
+  Filter,
+  Package,
+} from 'lucide-react';
+import { MODULE_CATALOG, type CatalogModule, type ModuleCategory } from './module-store/moduleCatalog';
+import { ModuleStoreCard } from './module-store/ModuleStoreCard';
+import { ModuleDetailModal } from './module-store/ModuleDetailModal';
+import { ModuleTaskDrawer } from './module-store/ModuleTaskDrawer';
 
 interface DependencyNode {
   node_id: string;
@@ -9,7 +25,7 @@ interface DependencyNode {
   fresh: boolean;
   installable: boolean;
   error: string;
-  modules: Array<{name: string; available: boolean; loaded: boolean; source: string}>;
+  modules: Array<{ name: string; available: boolean; loaded: boolean; source: string }>;
   job_id: number;
   job_action: string;
   job_state: string;
@@ -18,63 +34,481 @@ interface DependencyNode {
 
 export function DependenciesSettingsSection() {
   const [nodes, setNodes] = useState<DependencyNode[]>([]);
+  const [selectedNodeId, setSelectedNodeId] = useState<string>('');
   const [error, setError] = useState('');
-  const [pending, setPending] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<ModuleCategory>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'loaded' | 'available'>('all');
+
+  // Modals & Drawers
+  const [detailModule, setDetailModule] = useState<CatalogModule | null>(null);
+  const [showTaskDrawer, setShowTaskDrawer] = useState(false);
+
   const sequence = useRef(0);
-  async function refresh() {
+
+  async function refresh(isManual = false) {
     const current = ++sequence.current;
+    if (isManual) setIsRefreshing(true);
     try {
       const result = await api.get<DependencyNode[]>('/api/v1/settings/dependencies');
-      if (sequence.current === current) {setNodes(result); setError('');}
+      if (sequence.current === current) {
+        setNodes(result);
+        if (result.length > 0 && !selectedNodeId) {
+          setSelectedNodeId(result[0].node_id);
+        }
+        setError('');
+      }
     } catch (e) {
-      if (sequence.current === current) setError(e instanceof Error ? e.message : 'Cannot read dependency reports');
-    } finally {if (sequence.current === current) setLoading(false);}
+      if (sequence.current === current) {
+        setError(e instanceof Error ? e.message : 'Không tải được báo cáo dependencies');
+      }
+    } finally {
+      if (sequence.current === current) {
+        setLoading(false);
+        if (isManual) setIsRefreshing(false);
+      }
+    }
   }
+
   useEffect(() => {
     void refresh();
     const timer = setInterval(() => void refresh(), 3000);
-    return () => {clearInterval(timer); sequence.current++;};
+    return () => {
+      clearInterval(timer);
+      sequence.current++;
+    };
   }, []);
-  async function submit(node: string, action: 'check' | 'install_brotli') {
-    setPending(node);
-    try {await api.post(`/api/v1/settings/dependencies/${encodeURIComponent(node)}/jobs`, {action}); await refresh();}
-    catch(e) {setError(e instanceof Error ? e.message : 'Cannot queue dependency job');}
-    finally {setPending(null);}
+
+  const currentNode = useMemo(() => {
+    return nodes.find((n) => n.node_id === selectedNodeId) || nodes[0] || null;
+  }, [nodes, selectedNodeId]);
+
+  // Merge reported modules from node with static catalog
+  const allModules = useMemo(() => {
+    const catalog = [...MODULE_CATALOG];
+    if (!currentNode) return catalog;
+
+    // Check if there are extra modules reported by NGINX not in predefined catalog
+    currentNode.modules.forEach((mod) => {
+      const exists = catalog.some(
+        (c) => c.id === mod.name || c.packageName === mod.name || c.id === mod.name.replace(/^ngx_http_/, '').replace(/_module$/, '')
+      );
+      if (!exists && !mod.name.startsWith('http_')) {
+        catalog.push({
+          id: mod.name,
+          name: `NGINX ${mod.name}`,
+          packageName: mod.name,
+          category: 'utilities',
+          version: '1.0',
+          author: 'Third-party / Custom',
+          summary: `Module ${mod.name} nạp từ cấu hình runtime.`,
+          description: `Module NGINX được phát hiện và báo cáo tự động từ node ${currentNode.node_id}. Nguồn: ${mod.source}`,
+          iconName: 'Code2',
+          directivesExample: `# Module nạp tự động qua cấu hình NGINX`,
+          isDynamic: true,
+        });
+      }
+    });
+
+    return catalog;
+  }, [currentNode]);
+
+  const filteredModules = useMemo(() => {
+    return allModules.filter((mod) => {
+      // Category filter
+      if (selectedCategory !== 'all' && mod.category !== selectedCategory) {
+        return false;
+      }
+
+      // Determine if loaded
+      const isLoaded = Boolean(
+        currentNode?.modules.some((m) => {
+          if (m.name === mod.id || m.name === mod.packageName) return m.loaded;
+          if (mod.id === 'brotli' && m.name === 'brotli') return m.loaded;
+          if (mod.id === 'gzip' && m.name === 'gzip') return m.loaded;
+          if (mod.id === 'http2_upstream' && m.name === 'http2_upstream') return m.loaded;
+          return false;
+        })
+      );
+
+      // Status filter
+      if (statusFilter === 'loaded' && !isLoaded) return false;
+      if (statusFilter === 'available' && isLoaded) return false;
+
+      // Search query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchName = mod.name.toLowerCase().includes(q);
+        const matchDesc = mod.description.toLowerCase().includes(q);
+        const matchPkg = mod.packageName.toLowerCase().includes(q);
+        const matchAuthor = mod.author.toLowerCase().includes(q);
+        if (!matchName && !matchDesc && !matchPkg && !matchAuthor) return false;
+      }
+
+      return true;
+    });
+  }, [allModules, selectedCategory, statusFilter, searchQuery, currentNode]);
+
+  // Statistics
+  const stats = useMemo(() => {
+    if (!currentNode) {
+      return { total: MODULE_CATALOG.length, loaded: 0, available: MODULE_CATALOG.length };
+    }
+    const loadedCount = allModules.filter((mod) =>
+      currentNode.modules.some((m) => {
+        if (m.name === mod.id || m.name === mod.packageName) return m.loaded;
+        if (mod.id === 'brotli' && m.name === 'brotli') return m.loaded;
+        if (mod.id === 'gzip' && m.name === 'gzip') return m.loaded;
+        if (mod.id === 'http2_upstream' && m.name === 'http2_upstream') return m.loaded;
+        return false;
+      })
+    ).length;
+
+    return {
+      total: allModules.length,
+      loaded: loadedCount,
+      available: Math.max(0, allModules.length - loadedCount),
+    };
+  }, [allModules, currentNode]);
+
+  async function handleQueueJob(nodeId: string, action: 'check' | 'install_brotli') {
+    setPendingAction(action);
+    setShowTaskDrawer(true);
+    try {
+      await api.post(`/api/v1/settings/dependencies/${encodeURIComponent(nodeId)}/jobs`, { action });
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Không gửi được yêu cầu cài đặt');
+    } finally {
+      setPendingAction(null);
+    }
   }
-  return <section className="space-y-4">
-    <div className="bg-card border border-border rounded-lg p-5 space-y-2">
-      <h2 className="font-semibold">Dependencies &amp; NGINX modules</h2>
-      <p className="text-sm text-muted-foreground">Nodes check dependencies at startup and every 30 seconds. Reports older than 90 seconds are marked stale.</p>
-      <p className="text-xs text-muted-foreground">Install Brotli uses the compatible package included with the node image. Installation verifies integrity, validates NGINX configuration, reloads workers and checks a compressed response. Installed modules persist across container replacement. Compression for domain traffic is configured separately.</p>
-    </div>
-    {error && <p role="alert" className="text-destructive">{error}</p>}
-    {loading && <p>Loading dependency reports…</p>}
-    {!loading && !nodes.length && <p>No registered nodes.</p>}
-    {nodes.map(node => {
-      const fresh = !error && node.fresh && Date.now() - node.checked_at < 90000;
-      const brotli = node.modules.find(m => m.name === 'brotli');
-      const busy = pending === node.node_id || ['pending','running'].includes(node.job_state);
-      return <article key={node.node_id} className="bg-card border border-border rounded-lg p-5 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+
+  const isNodeBusy = Boolean(
+    pendingAction ||
+      (currentNode && (currentNode.job_state === 'pending' || currentNode.job_state === 'running'))
+  );
+
+  return (
+    <section className="space-y-5 font-sans">
+      {/* Top Banner / Hero */}
+      <div className="bg-card border border-border rounded-sm p-5 shadow-xs relative overflow-hidden">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
           <div>
-            <h3 className="font-semibold">{node.node_id}</h3>
-            <p className="text-xs text-muted-foreground">{node.nginx_version ? `NGINX ${node.nginx_version} · ${node.architecture}` : 'Waiting for startup report'}</p>
-            <p className="text-xs text-muted-foreground">{node.checked_at ? `${fresh ? 'Checked' : 'Stale'} · ${new Date(node.checked_at).toLocaleString()}` : 'Not checked yet'}</p>
+            <div className="flex items-center gap-2">
+              <Package className="w-5 h-5 text-primary" />
+              <h2 className="text-base font-semibold text-foreground tracking-tight">
+                NGINX Module Store (Kho ứng dụng Module)
+              </h2>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1 max-w-2xl leading-relaxed">
+              Quản lý và cài đặt các module NGINX mở rộng chỉ với 1-click theo phong cách aaPanel. Hệ thống tự động xác thực toàn vẹn SHA256, kiểm tra cú pháp và kích hoạt Zero-downtime Reload.
+            </p>
           </div>
-          <div className="flex gap-2">
-            <button type="button" disabled={busy} onClick={() => void submit(node.node_id,'check')} className="px-3 py-2 border border-border rounded text-xs disabled:opacity-50">Check again</button>
-            <button type="button" disabled={busy || !fresh || !node.installable || brotli?.loaded} onClick={() => void submit(node.node_id,'install_brotli')} className="px-3 py-2 bg-primary text-primary-foreground rounded text-xs disabled:opacity-50">{brotli?.loaded && fresh ? 'Brotli installed' : 'Install Brotli'}</button>
+
+          {/* Node Selector & Check Button */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {nodes.length > 1 && (
+              <div className="flex items-center gap-1.5 bg-muted/50 border border-border px-2.5 py-1.5 rounded-xs text-xs">
+                <Server className="w-3.5 h-3.5 text-muted-foreground" />
+                <select
+                  value={selectedNodeId}
+                  onChange={(e) => setSelectedNodeId(e.target.value)}
+                  className="bg-transparent border-none text-foreground font-mono focus:outline-none cursor-pointer"
+                >
+                  {nodes.map((node) => (
+                    <option key={node.node_id} value={node.node_id} className="bg-card">
+                      {node.node_id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {currentNode && (
+              <button
+                type="button"
+                disabled={isNodeBusy || isRefreshing}
+                onClick={() => void handleQueueJob(currentNode.node_id, 'check')}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-border text-xs bg-muted/40 hover:bg-muted text-foreground transition-colors rounded-xs cursor-pointer disabled:opacity-50"
+              >
+                <RotateCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-primary' : ''}`} />
+                <span>Quét lại Node</span>
+              </button>
+            )}
+
+            {currentNode && currentNode.job_id > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowTaskDrawer(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/30 text-primary text-xs font-semibold rounded-xs hover:bg-primary/20 transition-colors cursor-pointer"
+              >
+                <Terminal className="w-3.5 h-3.5" />
+                <span>Nhật ký Job #{currentNode.job_id}</span>
+              </button>
+            )}
           </div>
         </div>
-        {node.error && <p className="text-destructive text-sm">{node.error}</p>}
-        {!node.installable && !brotli?.loaded && <p className="text-xs text-muted-foreground">No compatible install package reported. Rebuild the node image with a Brotli package matching its NGINX version and architecture.</p>}
-        {node.job_id > 0 && <p role="status" className={`text-sm ${node.job_state === 'failed' ? 'text-destructive' : 'text-muted-foreground'}`}>Job #{node.job_id} · {node.job_action === 'install_brotli' ? 'Install Brotli' : 'Dependency check'} · {node.job_state}{node.job_message && ` — ${node.job_message}`}</p>}
-        <div className="overflow-x-auto"><table className="w-full text-sm text-left">
-          <thead><tr className="border-b border-border"><th className="py-2">Module / capability</th><th>Status</th><th>Evidence</th></tr></thead>
-          <tbody>{node.modules.map(module => <tr key={module.name} className="border-b border-border/50"><td className="py-2 font-mono text-xs">{module.name}</td><td>{!fresh ? 'Unknown · stale' : module.loaded ? 'Available' : 'Not loaded'}</td><td className="text-xs text-muted-foreground">{module.source}</td></tr>)}</tbody>
-        </table></div>
-      </article>;
-    })}
-  </section>;
+
+        {/* Node Telemetry Quick Info */}
+        {currentNode && (
+          <div className="mt-4 pt-3 border-t border-border/60 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-mono text-muted-foreground">
+            <div>
+              <span>Node ID: </span>
+              <span className="text-foreground font-semibold">{currentNode.node_id}</span>
+            </div>
+            <div>
+              <span>Phiên bản: </span>
+              <span className="text-foreground font-semibold">
+                {currentNode.nginx_version ? `NGINX ${currentNode.nginx_version}` : 'Đang chờ báo cáo...'}
+              </span>
+            </div>
+            <div>
+              <span>Kiến trúc: </span>
+              <span className="text-foreground font-semibold">{currentNode.architecture || 'x86_64'}</span>
+            </div>
+            <div>
+              <span>Trạng thái kiểm tra: </span>
+              <span className={currentNode.fresh ? 'text-emerald-500 font-semibold' : 'text-amber-500 font-semibold'}>
+                {currentNode.fresh ? 'Mới nhất (Online)' : 'Hết hạn (Stale)'}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* KPI Stats Bar */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="bg-card border border-border p-3.5 rounded-sm shadow-xs flex items-center justify-between">
+          <div>
+            <div className="text-[11px] text-muted-foreground uppercase font-mono tracking-wider">
+              Tổng Module trong Store
+            </div>
+            <div className="text-xl font-bold text-foreground font-mono mt-0.5">{stats.total}</div>
+          </div>
+          <div className="w-9 h-9 rounded-xs bg-muted/60 border border-border flex items-center justify-center">
+            <Layers className="w-4 h-4 text-primary" />
+          </div>
+        </div>
+
+        <div className="bg-card border border-border p-3.5 rounded-sm shadow-xs flex items-center justify-between">
+          <div>
+            <div className="text-[11px] text-muted-foreground uppercase font-mono tracking-wider">
+              Đang hoạt động (Active)
+            </div>
+            <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400 font-mono mt-0.5">
+              {stats.loaded}
+            </div>
+          </div>
+          <div className="w-9 h-9 rounded-xs bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-500/30 flex items-center justify-center">
+            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+          </div>
+        </div>
+
+        <div className="bg-card border border-border p-3.5 rounded-sm shadow-xs flex items-center justify-between">
+          <div>
+            <div className="text-[11px] text-muted-foreground uppercase font-mono tracking-wider">
+              Khả dụng để cài đặt
+            </div>
+            <div className="text-xl font-bold text-blue-600 dark:text-blue-400 font-mono mt-0.5">
+              {stats.available}
+            </div>
+          </div>
+          <div className="w-9 h-9 rounded-xs bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-500/30 flex items-center justify-center">
+            <Download className="w-4 h-4 text-blue-500" />
+          </div>
+        </div>
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div className="bg-card border border-border rounded-sm p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+        {/* Category Pills */}
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          {[
+            { key: 'all', label: 'Tất cả' },
+            { key: 'performance', label: 'Tối ưu & Nén' },
+            { key: 'security', label: 'Bảo mật & WAF' },
+            { key: 'observability', label: 'Giám sát & Traffic' },
+            { key: 'utilities', label: 'Định tuyến & Tiện ích' },
+          ].map((cat) => (
+            <button
+              key={cat.key}
+              type="button"
+              onClick={() => setSelectedCategory(cat.key as ModuleCategory)}
+              className={`px-3 py-1.5 rounded-xs transition-colors cursor-pointer font-medium ${
+                selectedCategory === cat.key
+                  ? 'bg-primary text-primary-foreground shadow-xs'
+                  : 'bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Search & Status Filter */}
+        <div className="flex items-center gap-2.5 flex-1 min-w-[280px] justify-end">
+          {/* Status filter dropdown */}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as 'all' | 'loaded' | 'available')}
+            className="bg-background border border-input px-2.5 py-1.5 text-xs text-foreground rounded-xs focus:outline-none focus:border-primary cursor-pointer"
+          >
+            <option value="all">Tất cả trạng thái</option>
+            <option value="loaded">Đã nạp / Hoạt động</option>
+            <option value="available">Chưa cài đặt</option>
+          </select>
+
+          {/* Search Input */}
+          <div className="relative w-full max-w-xs">
+            <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Tìm kiếm module..."
+              className="w-full bg-background border border-input pl-8 pr-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground rounded-xs focus:outline-none focus:border-primary font-sans"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Error Alert if any */}
+      {error && (
+        <div className="p-3.5 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-500/40 rounded-sm flex items-center justify-between text-xs text-rose-700 dark:text-rose-400">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => void refresh(true)}
+            className="underline hover:no-underline font-medium cursor-pointer"
+          >
+            Thử lại
+          </button>
+        </div>
+      )}
+
+      {/* Modules Cards Grid */}
+      {loading ? (
+        <div className="py-16 text-center text-muted-foreground flex flex-col items-center justify-center gap-2">
+          <RotateCw className="w-6 h-6 animate-spin text-primary" />
+          <span className="text-xs">Đang tải danh mục Module Store...</span>
+        </div>
+      ) : filteredModules.length === 0 ? (
+        <div className="py-16 text-center text-muted-foreground border border-border border-dashed rounded-sm bg-muted/10 p-8 space-y-2">
+          <Package className="w-8 h-8 mx-auto text-muted-foreground opacity-50" />
+          <p className="text-sm font-medium">Không tìm thấy module nào phù hợp</p>
+          <p className="text-xs text-muted-foreground/80">
+            Thử thay đổi bộ lọc danh mục hoặc từ khóa tìm kiếm của bạn.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredModules.map((module) => {
+            const isLoaded = Boolean(
+              currentNode?.modules.some((m) => {
+                if (m.name === module.id || m.name === module.packageName) return m.loaded;
+                if (module.id === 'brotli' && m.name === 'brotli') return m.loaded;
+                if (module.id === 'gzip' && m.name === 'gzip') return m.loaded;
+                if (module.id === 'http2_upstream' && m.name === 'http2_upstream') return m.loaded;
+                return false;
+              })
+            );
+
+            const evidence = currentNode?.modules.find(
+              (m) => m.name === module.id || m.name === module.packageName || (module.id === 'brotli' && m.name === 'brotli')
+            )?.source;
+
+            const isAvailable = Boolean(
+              module.action === 'install_brotli' ? currentNode?.installable && currentNode?.fresh : true
+            );
+
+            const isBusy =
+              isNodeBusy &&
+              (pendingAction === module.action ||
+                (currentNode?.job_action === module.action &&
+                  (currentNode?.job_state === 'pending' || currentNode?.job_state === 'running')));
+
+            return (
+              <ModuleStoreCard
+                key={module.id}
+                module={module}
+                isLoaded={isLoaded}
+                isAvailable={isAvailable}
+                isBusy={isBusy}
+                evidenceSource={evidence}
+                onInstall={
+                  module.action && currentNode
+                    ? () => void handleQueueJob(currentNode.node_id, module.action as 'install_brotli')
+                    : undefined
+                }
+                onViewDetails={() => setDetailModule(module)}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {/* Detail Modal */}
+      {detailModule && (
+        <ModuleDetailModal
+          module={detailModule}
+          isLoaded={Boolean(
+            currentNode?.modules.some((m) => {
+              if (m.name === detailModule.id || m.name === detailModule.packageName) return m.loaded;
+              if (detailModule.id === 'brotli' && m.name === 'brotli') return m.loaded;
+              if (detailModule.id === 'gzip' && m.name === 'gzip') return m.loaded;
+              if (detailModule.id === 'http2_upstream' && m.name === 'http2_upstream') return m.loaded;
+              return false;
+            })
+          )}
+          evidenceSource={
+            currentNode?.modules.find(
+              (m) => m.name === detailModule.id || m.name === detailModule.packageName || (detailModule.id === 'brotli' && m.name === 'brotli')
+            )?.source
+          }
+          onClose={() => setDetailModule(null)}
+          onInstall={
+            detailModule.action && currentNode
+              ? () => {
+                  const act = detailModule.action as 'install_brotli';
+                  setDetailModule(null);
+                  void handleQueueJob(currentNode.node_id, act);
+                }
+              : undefined
+          }
+          isBusy={isNodeBusy}
+          canInstall={Boolean(
+            detailModule.action === 'install_brotli' ? currentNode?.installable && currentNode?.fresh : true
+          )}
+        />
+      )}
+
+      {/* Task Drawer */}
+      {showTaskDrawer && currentNode && (
+        <ModuleTaskDrawer
+          nodeId={currentNode.node_id}
+          jobId={currentNode.job_id}
+          jobAction={currentNode.job_action}
+          jobState={currentNode.job_state}
+          jobMessage={currentNode.job_message}
+          onClose={() => setShowTaskDrawer(false)}
+          onRetry={() => {
+            if (currentNode.job_action === 'install_brotli') {
+              void handleQueueJob(currentNode.node_id, 'install_brotli');
+            } else {
+              void handleQueueJob(currentNode.node_id, 'check');
+            }
+          }}
+        />
+      )}
+    </section>
+  );
 }

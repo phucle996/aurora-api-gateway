@@ -49,7 +49,7 @@ export function SettingsHeader({ activeTab, onTabChange }: SettingsHeaderProps) 
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
               }`}
           >
-            {tab}
+            {tab === 'Dependencies' ? 'Module Store' : tab}
           </button>
         ))}
       </div>
