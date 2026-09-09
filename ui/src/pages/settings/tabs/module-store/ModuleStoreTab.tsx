@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { api } from '../../../../lib/fetcher';
 import { RotateCw, AlertCircle, Package } from 'lucide-react';
 import { MODULE_CATALOG, type CatalogModule, type ModuleCategory } from './sections/moduleCatalog';
-import { DependencyNode, checkIsModuleLoaded, getModuleEvidence } from './sections/types';
+import { ModuleStoreNode, checkIsModuleLoaded, getModuleEvidence } from './sections/types';
 import { ModuleStoreHeader } from './sections/ModuleStoreHeader';
 import { ModuleStoreStats } from './sections/ModuleStoreStats';
 import { ModuleStoreFilters } from './sections/ModuleStoreFilters';
@@ -12,7 +12,7 @@ import { ModuleDetailModal } from './sections/ModuleDetailModal';
 import { ModuleTaskDrawer } from './sections/ModuleTaskDrawer';
 
 export function ModuleStoreTab() {
-  const [nodes, setNodes] = useState<DependencyNode[]>([]);
+  const [nodes, setNodes] = useState<ModuleStoreNode[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string>('');
   const [error, setError] = useState('');
   const [pendingAction, setPendingAction] = useState<string | null>(null);
@@ -35,7 +35,7 @@ export function ModuleStoreTab() {
     const current = ++sequence.current;
     if (isManual) setIsRefreshing(true);
     try {
-      const result = await api.get<DependencyNode[]>('/api/v1/settings/dependencies');
+      const result = await api.get<ModuleStoreNode[]>('/api/v1/settings/modules');
       if (sequence.current === current) {
         setNodes(result);
         if (result.length > 0 && !selectedNodeId) {
@@ -45,7 +45,7 @@ export function ModuleStoreTab() {
       }
     } catch (e) {
       if (sequence.current === current) {
-        setError(e instanceof Error ? e.message : 'Không tải được báo cáo dependencies');
+        setError(e instanceof Error ? e.message : 'Không tải được báo cáo module store');
       }
     } finally {
       if (sequence.current === current) {
@@ -152,7 +152,7 @@ export function ModuleStoreTab() {
     setPendingAction(action);
     setShowTaskDrawer(true);
     try {
-      await api.post(`/api/v1/settings/dependencies/${encodeURIComponent(nodeId)}/jobs`, { action });
+      await api.post(`/api/v1/settings/modules/${encodeURIComponent(nodeId)}/jobs`, { action });
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Không gửi được yêu cầu cài đặt');
@@ -316,6 +316,7 @@ export function ModuleStoreTab() {
           jobAction={currentNode.job_action}
           jobState={currentNode.job_state}
           jobMessage={currentNode.job_message}
+          jobLogs={currentNode.job_logs}
           onClose={() => setShowTaskDrawer(false)}
           onRetry={() => {
             if (currentNode.job_action === 'install_brotli') {

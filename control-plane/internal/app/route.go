@@ -61,27 +61,40 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	r.GET("/api/v1/auth/me", authMidd, m.AuthHandler.Me)         // Thông tin user hiện tại
 	r.GET("/api/v1/system/info", authMidd, m.SystemHandler.Info) // Thông tin runtime hệ thống thực tế
 
-	r.GET("/api/v1/settings/dependencies", authMidd, m.DependenciesHandler.List)
-	r.POST("/api/v1/settings/dependencies/:node/jobs", authMidd, m.DependenciesHandler.Queue)
+	// Module Store & Jobs
+	r.GET("/api/v1/settings/modules", authMidd, m.ModuleStoreHandler.List)
+	r.POST("/api/v1/settings/modules/:node/jobs", authMidd, m.ModuleStoreHandler.Queue)
+	r.GET("/api/v1/settings/modules/jobs/:id/logs", authMidd, m.ModuleStoreHandler.GetJobLogs)
+
+	// Backward compatibility aliases for settings
+	r.GET("/api/v1/settings/dependencies", authMidd, m.ModuleStoreHandler.List)
+	r.POST("/api/v1/settings/dependencies/:node/jobs", authMidd, m.ModuleStoreHandler.Queue)
+	r.GET("/api/v1/settings/dependencies/jobs/:id/logs", authMidd, m.ModuleStoreHandler.GetJobLogs)
+
 	// Both node endpoints require the operator header, never query/cookie authentication.
-	r.POST("/api/v1/dependency-sync/:node/poll", authMidd, func(c *gin.Context) {
-		expected := sha256.Sum256([]byte("Bearer " + token))
-		actual := sha256.Sum256([]byte(c.GetHeader("Authorization")))
-		if token == "" || subtle.ConstantTimeCompare(expected[:], actual[:]) != 1 {
-			c.AbortWithStatus(403)
-			return
-		}
-		m.DependenciesHandler.Poll(c)
-	})
-	r.POST("/api/v1/dependency-sync/:node/report", authMidd, func(c *gin.Context) {
-		expected := sha256.Sum256([]byte("Bearer " + token))
-		actual := sha256.Sum256([]byte(c.GetHeader("Authorization")))
-		if token == "" || subtle.ConstantTimeCompare(expected[:], actual[:]) != 1 {
-			c.AbortWithStatus(403)
-			return
-		}
-		m.DependenciesHandler.Report(c)
-	})
+	registerNodeSync := func(pathPrefix string) {
+		r.POST(pathPrefix+"/:node/poll", authMidd, func(c *gin.Context) {
+			expected := sha256.Sum256([]byte("Bearer " + token))
+			actual := sha256.Sum256([]byte(c.GetHeader("Authorization")))
+			if token == "" || subtle.ConstantTimeCompare(expected[:], actual[:]) != 1 {
+				c.AbortWithStatus(403)
+				return
+			}
+			m.ModuleStoreHandler.Poll(c)
+		})
+		r.POST(pathPrefix+"/:node/report", authMidd, func(c *gin.Context) {
+			expected := sha256.Sum256([]byte("Bearer " + token))
+			actual := sha256.Sum256([]byte(c.GetHeader("Authorization")))
+			if token == "" || subtle.ConstantTimeCompare(expected[:], actual[:]) != 1 {
+				c.AbortWithStatus(403)
+				return
+			}
+			m.ModuleStoreHandler.Report(c)
+		})
+	}
+	registerNodeSync("/api/v1/module-sync")
+	registerNodeSync("/api/v1/dependency-sync")
+
 	// Quản lý Domain API
 	r.GET("/api/v1/domain-routing/:node", authMidd, m.DomainRoutingHandler.Desired)
 	r.GET("/api/v1/domain-routing/:node/bundle", authMidd, func(c *gin.Context) {

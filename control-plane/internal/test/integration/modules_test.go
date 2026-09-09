@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func TestDependenciesQueueReportReplayAndAuthority(t *testing.T) {
+func TestModulesQueueReportReplayAndAuthority(t *testing.T) {
 	h := upstreamsFixture(t)
 	call := func(method, path string, body any, want int) []byte {
 		t.Helper()
@@ -24,15 +24,15 @@ func TestDependenciesQueueReportReplayAndAuthority(t *testing.T) {
 		}
 		return w.Body.Bytes()
 	}
-	jobs := "/api/v1/settings/dependencies/node-local-01/jobs"
-	report := "/api/v1/dependency-sync/node-local-01/report"
-	poll := "/api/v1/dependency-sync/node-local-01/poll"
+	jobs := "/api/v1/settings/modules/node-local-01/jobs"
+	report := "/api/v1/module-sync/node-local-01/report"
+	poll := "/api/v1/module-sync/node-local-01/poll"
 	call("POST", jobs, map[string]any{"action": "install_brotli"}, 422)
 	call("POST", jobs, map[string]any{"action": "shell;curl example.com"}, 422)
 	now := time.Now().UnixMilli()
 	modules := []map[string]any{{"name": "gzip", "available": true, "loaded": true, "source": "runtime response check"}, {"name": "brotli", "available": false, "loaded": false, "source": "runtime response check"}}
 	body := map[string]any{"checked_at": now, "nginx_version": "1.30.4", "architecture": "x86_64", "modules": modules, "installable": true}
-	call("POST", "/api/v1/dependency-sync/unknown/report", body, 422)
+	call("POST", "/api/v1/module-sync/unknown/report", body, 422)
 	call("POST", report, body, 204)
 	var first, duplicate struct{ ID int64 }
 	json.Unmarshal(call("POST", jobs, map[string]any{"action": "install_brotli"}, 202), &first)
@@ -53,6 +53,7 @@ func TestDependenciesQueueReportReplayAndAuthority(t *testing.T) {
 	call("POST", report, body, 422) // Installation cannot succeed without observed Brotli.
 	modules[1]["available"] = true
 	modules[1]["loaded"] = true
+	body["job_logs"] = "Brotli compilation succeeded. NGINX reloaded ok."
 	call("POST", report, body, 204)
 	call("POST", report, body, 204) // Lost response/replay is idempotent.
 	body["job_state"] = "failed"
@@ -64,11 +65,36 @@ func TestDependenciesQueueReportReplayAndAuthority(t *testing.T) {
 		NodeID   string `json:"node_id"`
 		Fresh    bool
 		JobState string `json:"job_state"`
+		JobLogs  string `json:"job_logs"`
 	}
-	json.Unmarshal(call("GET", "/api/v1/settings/dependencies", nil, 200), &list)
-	if len(list) != 1 || !list[0].Fresh || list[0].JobState != "succeeded" {
-		t.Fatalf("invalid observed dependency projection: %+v", list)
+	json.Unmarshal(call("GET", "/api/v1/settings/modules", nil, 200), &list)
+	if len(list) != 1 || !list[0].Fresh || list[0].JobState != "succeeded" || list[0].JobLogs != "Brotli compilation succeeded. NGINX reloaded ok." {
+		t.Fatalf("invalid observed module projection: %+v", list)
 	}
+
+	// Verify legacy route alias works
+	var legacyList []struct {
+		NodeID   string `json:"node_id"`
+		Fresh    bool
+		JobState string `json:"job_state"`
+	}
+	json.Unmarshal(call("GET", "/api/v1/settings/dependencies", nil, 200), &legacyList)
+	if len(legacyList) != 1 || legacyList[0].JobState != "succeeded" {
+		t.Fatalf("legacy route alias failed: %+v", legacyList)
+	}
+
+	// Verify logs endpoint
+	var logsResp struct {
+		ID     int64  `json:"id"`
+		NodeID string `json:"node_id"`
+		Logs   string `json:"logs"`
+		State  string `json:"state"`
+	}
+	json.Unmarshal(call("GET", fmt.Sprintf("/api/v1/settings/modules/jobs/%d/logs", first.ID), nil, 200), &logsResp)
+	if logsResp.ID != first.ID || logsResp.Logs != "Brotli compilation succeeded. NGINX reloaded ok." || logsResp.State != "succeeded" {
+		t.Fatalf("job logs endpoint failed: %+v", logsResp)
+	}
+
 	for _, path := range []string{poll, report} {
 		r := httptest.NewRequest("POST", path+"?token=upstreams-test-token-at-least-32-bytes", nil)
 		w := httptest.NewRecorder()
@@ -82,5 +108,5 @@ func TestDependenciesQueueReportReplayAndAuthority(t *testing.T) {
 	call("POST", report, body, 422)
 	stale := map[string]any{"checked_at": time.Now().UnixMilli() - 95000, "nginx_version": "1.30.4", "modules": modules, "installable": true}
 	call("POST", report, stale, 422)
-	call("POST", fmt.Sprintf("/api/v1/settings/dependencies/%s/jobs", "unknown"), map[string]any{"action": "check"}, 422)
+	call("POST", fmt.Sprintf("/api/v1/settings/modules/%s/jobs", "unknown"), map[string]any{"action": "check"}, 422)
 }

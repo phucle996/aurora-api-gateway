@@ -2,14 +2,14 @@ package entity
 
 // Tuân thủ Flat Entity: không chứa json tags.
 
-type ListDependenciesQuery struct{}
+type ListModulesQuery struct{}
 
-type DependencyNode struct {
+type ModuleStoreNode struct {
 	NodeID       string
 	CheckedAt    int64
 	NginxVersion string
 	Architecture string
-	Modules      []DependencyNodeModule
+	Modules      []ModuleStoreNodeModule
 	Installable  bool
 	Error        string
 	Fresh        bool
@@ -17,50 +17,69 @@ type DependencyNode struct {
 	JobAction    string
 	JobState     string
 	JobMessage   string
+	JobLogs      string
 }
 
-type DependencyNodeModule struct {
+type ModuleStoreNodeModule struct {
 	Name      string
 	Available bool
 	Loaded    bool
 	Source    string
 }
 
-type QueueDependencyCommand struct {
+type QueueModuleJobCommand struct {
 	NodeID string
 	Action string
 	Actor  string
 }
 
-type QueueDependencyResult struct {
+type QueueModuleJobResult struct {
 	ID     int64
 	Action string
 	State  string
 }
 
-type PollDependencyQuery struct{ NodeID string }
+type PollModuleJobQuery struct {
+	NodeID string
+}
 
-type PollDependencyResult struct {
+type PollModuleJobResult struct {
 	ID     int64
 	Action string
 }
 
-type ReportDependencyCommand struct {
+type ReportModuleCommand struct {
 	NodeID       string
 	CheckedAt    int64
 	NginxVersion string
 	Architecture string
-	Modules      []ReportDependencyModule
+	Modules      []ReportModuleItem
 	Installable  bool
 	Error        string
 	JobID        int64
 	JobState     string
 	JobMessage   string
+	JobLogs      string
 }
 
-type ReportDependencyModule struct {
+type ReportModuleItem struct {
 	Name      string
 	Available bool
 	Loaded    bool
 	Source    string
+}
+
+type ModuleJobLogsQuery struct {
+	JobID int64
+}
+
+type ModuleJobLogs struct {
+	ID        int64
+	NodeID    string
+	Action    string
+	State     string
+	Message   string
+	Logs      string
+	CreatedAt int64
+	UpdatedAt int64
 }

@@ -459,8 +459,8 @@ CREATE TABLE IF NOT EXISTS origin_observations (
     peers_json TEXT NOT NULL
 );
 
--- Node dependencies and jobs
-CREATE TABLE IF NOT EXISTS node_dependencies (
+-- Node modules and jobs
+CREATE TABLE IF NOT EXISTS node_modules (
     node_id TEXT PRIMARY KEY REFERENCES cluster_nodes(id) ON DELETE CASCADE,
     checked_at INTEGER NOT NULL,
     received_at INTEGER NOT NULL,
@@ -471,12 +471,13 @@ CREATE TABLE IF NOT EXISTS node_dependencies (
     error TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS dependency_jobs (
+CREATE TABLE IF NOT EXISTS module_jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     node_id TEXT NOT NULL REFERENCES cluster_nodes(id) ON DELETE CASCADE,
-    action TEXT NOT NULL CHECK(action IN ('check','install_brotli')),
+    action TEXT NOT NULL,
     state TEXT NOT NULL CHECK(state IN ('pending','running','succeeded','failed')),
     message TEXT NOT NULL DEFAULT '',
+    logs TEXT NOT NULL DEFAULT '',
     requested_by TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL

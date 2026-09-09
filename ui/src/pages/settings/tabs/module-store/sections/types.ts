@@ -1,6 +1,6 @@
 import type { CatalogModule } from './moduleCatalog';
 
-export interface DependencyNode {
+export interface ModuleStoreNode {
   node_id: string;
   checked_at: number;
   nginx_version: string;
@@ -13,7 +13,11 @@ export interface DependencyNode {
   job_action: string;
   job_state: string;
   job_message: string;
+  job_logs?: string;
 }
+
+export type DependencyNode = ModuleStoreNode;
+
 
 export function checkIsModuleLoaded(mod: CatalogModule, nodeModules?: Array<{ name: string; loaded: boolean }>): boolean {
   if (!nodeModules) return false;

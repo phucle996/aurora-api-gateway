@@ -17,7 +17,7 @@ import (
 // Nó được khởi tạo một lần duy nhất khi ứng dụng khởi động,
 // sau đó RegisterRoutes gắn các handler vào đúng URL tương ứng.
 type Module struct {
-	DependenciesHandler  *handler.DependenciesHandler
+	ModuleStoreHandler   *handler.ModuleStoreHandler
 	AccessHandler        *handler.AccessHandler
 	PolicyHandler        *handler.PolicyHandler
 	HealthcheckHandler   *handler.HealthcheckHandler
@@ -125,12 +125,12 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	backupHdr := handler.NewBackupHandler(backupSvc)
 	backupScheduler := service.NewBackupScheduler(backupSvc, backupRepo)
 
-	depRepo := repository.NewDependenciesRepository(writerDB, readerDB)
-	depSvc := service.NewDependenciesService(depRepo)
-	dependenciesHdr := handler.NewDependenciesHandler(depSvc)
+	moduleStoreRepo := repository.NewModuleStoreRepository(writerDB, readerDB)
+	moduleStoreSvc := service.NewModuleStoreService(moduleStoreRepo)
+	moduleStoreHdr := handler.NewModuleStoreHandler(moduleStoreSvc)
 
 	return &Module{
-		DependenciesHandler:  dependenciesHdr,
+		ModuleStoreHandler:   moduleStoreHdr,
 		AccessHandler:        accessHdr,
 		PolicyHandler:        policyHdr,
 		HealthcheckHandler:   healthcheckHdr,

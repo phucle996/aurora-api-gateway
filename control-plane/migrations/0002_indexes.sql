@@ -24,6 +24,6 @@ CREATE INDEX IF NOT EXISTS idx_rl_hourly_bucket ON rate_limit_hourly_metrics(hou
 CREATE INDEX IF NOT EXISTS idx_rl_endpoints_bucket ON rate_limit_endpoint_metrics(hour_bucket);
 CREATE INDEX IF NOT EXISTS idx_rl_endpoints_blocked ON rate_limit_endpoint_metrics(blocked_count DESC);
 
--- Node dependencies indexes
-CREATE UNIQUE INDEX IF NOT EXISTS dependency_job_active ON dependency_jobs(node_id) WHERE state IN ('pending','running');
-CREATE INDEX IF NOT EXISTS dependency_job_latest ON dependency_jobs(node_id,id DESC);
+-- Node modules indexes
+CREATE UNIQUE INDEX IF NOT EXISTS module_job_active ON module_jobs(node_id) WHERE state IN ('pending','running');
+CREATE INDEX IF NOT EXISTS module_job_latest ON module_jobs(node_id,id DESC);

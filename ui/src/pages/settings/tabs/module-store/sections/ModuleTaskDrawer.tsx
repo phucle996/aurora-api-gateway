@@ -19,9 +19,11 @@ interface ModuleTaskDrawerProps {
   jobAction: string;
   jobState: string;
   jobMessage: string;
+  jobLogs?: string;
   onClose: () => void;
   onRetry?: () => void;
 }
+
 
 interface StepItem {
   id: number;
@@ -69,6 +71,7 @@ export function ModuleTaskDrawer({
   jobAction,
   jobState,
   jobMessage,
+  jobLogs,
   onClose,
   onRetry,
 }: ModuleTaskDrawerProps) {
@@ -80,7 +83,7 @@ export function ModuleTaskDrawer({
     jobAction === 'install_brotli'
       ? 'Cài đặt Google Brotli Module'
       : jobAction === 'check'
-        ? 'Kiểm tra toàn bộ Dependencies'
+        ? 'Kiểm tra toàn bộ Modules'
         : jobAction;
 
   return (
@@ -133,6 +136,17 @@ export function ModuleTaskDrawer({
           {jobMessage && (
             <div className="p-2 bg-background border border-border rounded-xs font-mono text-[11px] text-muted-foreground break-words">
               {jobMessage}
+            </div>
+          )}
+          {jobLogs && (
+            <div className="mt-2 space-y-1">
+              <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                <Terminal className="w-3 h-3 text-primary" />
+                <span>Nhật ký thực thi (Live Logs)</span>
+              </div>
+              <pre className="p-2.5 bg-zinc-950 text-zinc-200 border border-border rounded-xs font-mono text-[10.5px] leading-relaxed overflow-x-auto max-h-48 whitespace-pre-wrap selection:bg-primary/40">
+                {jobLogs}
+              </pre>
             </div>
           )}
         </div>
