@@ -109,4 +109,129 @@ func TestModulesQueueReportReplayAndAuthority(t *testing.T) {
 	stale := map[string]any{"checked_at": time.Now().UnixMilli() - 95000, "nginx_version": "1.30.4", "modules": modules, "installable": true}
 	call("POST", report, stale, 422)
 	call("POST", fmt.Sprintf("/api/v1/settings/modules/%s/jobs", "unknown"), map[string]any{"action": "check"}, 422)
+
+	// Verify SSE event stream endpoint returns initial job state
+	sseReq := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/settings/modules/jobs/%d/events", first.ID), nil)
+	sseReq.Header.Set("Authorization", "Bearer upstreams-test-token-at-least-32-bytes")
+	sseRec := httptest.NewRecorder()
+	h.ServeHTTP(sseRec, sseReq)
+	if sseRec.Code != 200 || !bytes.Contains(sseRec.Body.Bytes(), []byte("event:init")) {
+		t.Fatalf("SSE stream did not return expected init event: code %d, body: %s", sseRec.Code, sseRec.Body.String())
+	}
+}
+
+func TestModuleSyncOverviewAndFanout(t *testing.T) {
+	h := upstreamsFixture(t)
+	call := func(method, path string, body any, want int) []byte {
+		t.Helper()
+		var reqBody *bytes.Reader
+		if body != nil {
+			data, _ := json.Marshal(body)
+			reqBody = bytes.NewReader(data)
+		} else {
+			reqBody = bytes.NewReader([]byte{})
+		}
+		r := httptest.NewRequest(method, path, reqBody)
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Authorization", "Bearer upstreams-test-token-at-least-32-bytes")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != want {
+			t.Fatalf("%s %s: %d %s", method, path, w.Code, w.Body.String())
+		}
+		return w.Body.Bytes()
+	}
+
+	// 1. Initial report from node: brotli is NOT loaded
+	now := time.Now().UnixMilli()
+	modules := []map[string]any{
+		{"name": "gzip", "available": true, "loaded": true, "source": "runtime response check"},
+		{"name": "brotli", "available": false, "loaded": false, "source": "runtime response check"},
+	}
+	reportPayload := map[string]any{
+		"checked_at":    now,
+		"nginx_version": "1.30.4",
+		"architecture":  "x86_64",
+		"modules":       modules,
+		"installable":   true,
+	}
+	call("POST", "/api/v1/module-sync/node-local-01/report", reportPayload, 204)
+
+	// 2. Query Sync Overview: default brotli desired = false, actual = 0/1 loaded -> Synced
+	var overview []struct {
+		Name         string `json:"name"`
+		Desired      bool   `json:"desired"`
+		ActualLoaded int    `json:"actual_loaded"`
+		TotalNodes   int    `json:"total_nodes"`
+		SyncStatus   string `json:"sync_status"`
+		FeatureReady bool   `json:"feature_ready"`
+	}
+	json.Unmarshal(call("GET", "/api/v1/settings/modules/sync-overview", nil, 200), &overview)
+	if len(overview) == 0 {
+		t.Fatalf("expected sync overview items, got empty")
+	}
+	var brotliItem struct {
+		Name         string `json:"name"`
+		Desired      bool   `json:"desired"`
+		ActualLoaded int    `json:"actual_loaded"`
+		TotalNodes   int    `json:"total_nodes"`
+		SyncStatus   string `json:"sync_status"`
+		FeatureReady bool   `json:"feature_ready"`
+	}
+	for _, item := range overview {
+		if item.Name == "brotli" {
+			brotliItem = item
+		}
+	}
+	if brotliItem.Desired || brotliItem.SyncStatus != "Synced" || brotliItem.FeatureReady {
+		t.Fatalf("unexpected brotli initial overview: %+v", brotliItem)
+	}
+
+
+	// 3. Set generic desired state for brotli = enabled: true (Fleet-wide)
+	call("PUT", "/api/v1/settings/modules/brotli/desired", map[string]any{"enabled": true}, 200)
+
+	// 4. Trigger Fanout Sync: should queue install_brotli for node-local-01
+	var syncRes struct {
+		QueuedJobs int      `json:"queued_jobs"`
+		Nodes      []string `json:"node_ids"`
+	}
+	json.Unmarshal(call("POST", "/api/v1/settings/modules/sync", map[string]any{"module": "brotli"}, 200), &syncRes)
+
+	// 5. Node polls and receives the install_brotli job
+	var claimed struct {
+		ID     int64  `json:"id"`
+		Action string `json:"action"`
+	}
+	json.Unmarshal(call("POST", "/api/v1/module-sync/node-local-01/poll", nil, 200), &claimed)
+	if claimed.Action != "install_brotli" || claimed.ID == 0 {
+		t.Fatalf("expected node to poll install_brotli job, got: %+v", claimed)
+	}
+
+	// 6. While job is running, overview should show Progressing
+	json.Unmarshal(call("GET", "/api/v1/settings/modules/sync-overview", nil, 200), &overview)
+	for _, item := range overview {
+		if item.Name == "brotli" && item.SyncStatus != "Progressing" {
+			t.Fatalf("expected Progressing status while job active, got: %+v", item)
+		}
+	}
+
+	// 7. Node finishes canary reload, brotli is now loaded, reports succeeded
+	modules[1]["available"] = true
+	modules[1]["loaded"] = true
+	reportPayload["job_id"] = claimed.ID
+	reportPayload["job_state"] = "succeeded"
+	reportPayload["job_logs"] = "Brotli dynamic module loaded into candidate and verified."
+	reportPayload["checked_at"] = time.Now().UnixMilli()
+	call("POST", "/api/v1/module-sync/node-local-01/report", reportPayload, 204)
+
+	// 8. Overview now converges to Synced and FeatureReady = true
+	json.Unmarshal(call("GET", "/api/v1/settings/modules/sync-overview", nil, 200), &overview)
+	for _, item := range overview {
+		if item.Name == "brotli" {
+			if !item.Desired || item.SyncStatus != "Synced" || !item.FeatureReady || item.ActualLoaded != 1 {
+				t.Fatalf("expected brotli to be Synced & FeatureReady, got: %+v", item)
+			}
+		}
+	}
 }

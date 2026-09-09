@@ -84,7 +84,7 @@ if [ ! -f /var/lib/aurora-routing/active-domain-routing.conf ]; then
 fi
 
 # Discover and validate persisted optional modules before NGINX starts.
-/node-dependencies.sh init
+if [ -x /node-modules.sh ]; then /node-modules.sh init; else /node-dependencies.sh init; fi
 
 # Kiểm tra cú pháp NGINX
 /opt/nginx/usr/sbin/nginx -t -c /etc/nginx/nginx.conf

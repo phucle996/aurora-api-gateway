@@ -83,3 +83,52 @@ type ModuleJobLogs struct {
 	CreatedAt int64
 	UpdatedAt int64
 }
+
+type AppendModuleJobLogCommand struct {
+	NodeID   string
+	JobID    int64
+	Stage    string
+	Progress int
+	Message  string
+	LogChunk string
+}
+
+type ModuleJobProgressEvent struct {
+	JobID    int64
+	NodeID   string
+	Stage    string
+	Progress int
+	Message  string
+	LogChunk string
+	State    string
+}
+
+type GetModuleSyncOverviewQuery struct{}
+
+type ModuleSyncItem struct {
+	Name         string
+	Desired      bool
+	ActualLoaded int
+	TotalNodes   int
+	SyncStatus   string // "Synced", "OutOfSync", "Progressing"
+	FeatureReady bool
+	PendingJobs  int
+}
+
+type SetModuleDesiredCommand struct {
+	Name    string
+	Enabled bool
+	Actor   string
+}
+
+type TriggerModuleSyncCommand struct {
+	Name  string
+	Actor string
+}
+
+type TriggerModuleSyncResult struct {
+	QueuedJobs int
+	NodeIDs    []string
+}
+
+

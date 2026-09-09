@@ -13,4 +13,12 @@ type ModuleStoreService interface {
 	Poll(ctx context.Context, q entity.PollModuleJobQuery) (entity.PollModuleJobResult, error)
 	Report(ctx context.Context, c entity.ReportModuleCommand) error
 	GetJobLogs(ctx context.Context, q entity.ModuleJobLogsQuery) (*entity.ModuleJobLogs, error)
+	AppendJobLog(ctx context.Context, c entity.AppendModuleJobLogCommand) error
+	SubscribeJobEvents() (<-chan entity.SSEMessage, func())
+	GetSyncOverview(ctx context.Context, q entity.GetModuleSyncOverviewQuery) ([]entity.ModuleSyncItem, error)
+	SetDesiredState(ctx context.Context, c entity.SetModuleDesiredCommand) error
+	Sync(ctx context.Context, c entity.TriggerModuleSyncCommand) (entity.TriggerModuleSyncResult, error)
 }
+
+
+

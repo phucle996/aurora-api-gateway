@@ -5,10 +5,9 @@ import (
 	"strings"
 )
 
-const (
-	DefaultJWTSecret = "aurora-waf-jwt-secret-key-production-32b-fixed"
-	DefaultVersion   = "v1.0.0-rc1"
-	DefaultBuildTime = "2026-09-07 08:30:00"
+var (
+	DefaultVersion   = "dev"
+	DefaultBuildTime = "unknown"
 )
 
 type Config struct {
@@ -25,6 +24,11 @@ type Config struct {
 }
 
 func LoadConfig() Config {
+	jwtSecret := os.Getenv("AURORA_JWT_SECRET")
+	if jwtSecret == "" {
+		panic("AURORA_JWT_SECRET environment variable is required and cannot be empty")
+	}
+
 	var trustedProxies []string
 	if raw := os.Getenv("AURORA_TRUSTED_PROXIES"); raw != "" {
 		for _, p := range strings.Split(raw, ",") {
@@ -40,7 +44,7 @@ func LoadConfig() Config {
 		SQLitePath:       value("AURORA_SQLITE_PATH", "data/aurora.db"),
 		AdminTokenFile:   os.Getenv("AURORA_ADMIN_TOKEN_FILE"),
 		CompilerPath:     os.Getenv("AURORA_COMPILER_PATH"),
-		JWTSecret:        value("AURORA_JWT_SECRET", DefaultJWTSecret),
+		JWTSecret:        jwtSecret,
 		RateLimitUDPAddr: value("AURORA_RATE_LIMIT_UDP", "127.0.0.1:5140"),
 		Version:          value("AURORA_VERSION", DefaultVersion),
 		BuildTime:        value("AURORA_BUILD_TIME", DefaultBuildTime),

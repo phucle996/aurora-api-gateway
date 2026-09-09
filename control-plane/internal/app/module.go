@@ -126,7 +126,7 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	backupScheduler := service.NewBackupScheduler(backupSvc, backupRepo)
 
 	moduleStoreRepo := repository.NewModuleStoreRepository(writerDB, readerDB)
-	moduleStoreSvc := service.NewModuleStoreService(moduleStoreRepo)
+	moduleStoreSvc := service.NewModuleStoreService(moduleStoreRepo, eventHub)
 	moduleStoreHdr := handler.NewModuleStoreHandler(moduleStoreSvc)
 
 	return &Module{

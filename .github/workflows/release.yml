@@ -77,7 +77,12 @@ jobs:
         working-directory: control-plane
         env:
           CGO_ENABLED: "0"
-        run: go build -buildvcs=false -trimpath -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o ../build/aurora-controller ./cmd
+        run: |
+          BUILD_TIME=$(date -u +'%Y-%m-%d %H:%M:%S')
+          go build -buildvcs=false -trimpath \
+            -ldflags="-s -w -X 'main.version=${{ github.ref_name }}' -X 'main.buildTime=${BUILD_TIME}' -X 'aurora-waf.local/control-plane/internal/config.DefaultVersion=${{ github.ref_name }}' -X 'aurora-waf.local/control-plane/internal/config.DefaultBuildTime=${BUILD_TIME}'" \
+            -o ../build/aurora-controller ./cmd
+
 
       # ── Trivy source code scan ────────────────────────────────────────────
       - name: Trivy filesystem vulnerability scan
@@ -209,9 +214,12 @@ jobs:
 
           # UI + Controller binary
           cd ui && npm ci && npm run build && cd ..
-          cd control-plane && CGO_ENABLED=0 go build -buildvcs=false -trimpath \
-            -ldflags="-s -w -X main.version=${{ github.ref_name }}" \
+          cd control-plane
+          BUILD_TIME=$(date -u +'%Y-%m-%d %H:%M:%S')
+          CGO_ENABLED=0 go build -buildvcs=false -trimpath \
+            -ldflags="-s -w -X 'main.version=${{ github.ref_name }}' -X 'main.buildTime=${BUILD_TIME}' -X 'aurora-waf.local/control-plane/internal/config.DefaultVersion=${{ github.ref_name }}' -X 'aurora-waf.local/control-plane/internal/config.DefaultBuildTime=${BUILD_TIME}'" \
             -o ../build/aurora-controller ./cmd && cd ..
+
 
           # Brotli package (only needed for node image)
           if [ "${{ matrix.image }}" = "node" ] && [ -f deploy/docker/Dockerfile.brotli ]; then

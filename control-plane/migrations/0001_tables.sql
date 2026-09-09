@@ -482,3 +482,12 @@ CREATE TABLE IF NOT EXISTS module_jobs (
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );
+
+-- Fleet-wide generic desired state for optional NGINX modules
+CREATE TABLE IF NOT EXISTS module_desired_state (
+    name TEXT PRIMARY KEY,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    updated_by TEXT NOT NULL
+);
+

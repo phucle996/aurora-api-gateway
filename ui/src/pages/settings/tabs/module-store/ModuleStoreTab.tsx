@@ -10,6 +10,8 @@ import { ModuleStoreCard } from './sections/ModuleStoreCard';
 import { ModuleStoreTable } from './sections/ModuleStoreTable';
 import { ModuleDetailModal } from './sections/ModuleDetailModal';
 import { ModuleTaskDrawer } from './sections/ModuleTaskDrawer';
+import { SyncOverviewCard } from './sections/SyncOverviewCard';
+import type { ModuleSyncItem } from './sections/types';
 
 export function ModuleStoreTab() {
   const [nodes, setNodes] = useState<ModuleStoreNode[]>([]);
@@ -18,6 +20,10 @@ export function ModuleStoreTab() {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Sync Overview State (ArgoCD Style)
+  const [syncItems, setSyncItems] = useState<ModuleSyncItem[]>([]);
+  const [syncLoading, setSyncLoading] = useState(true);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -31,15 +37,29 @@ export function ModuleStoreTab() {
 
   const sequence = useRef(0);
 
+  async function fetchSyncOverview() {
+    try {
+      const result = await api.get<ModuleSyncItem[]>('/api/v1/settings/modules/sync-overview');
+      setSyncItems(result);
+    } catch {
+      // Ignored non-critical sync overview fetch error
+    } finally {
+      setSyncLoading(false);
+    }
+  }
+
   async function refresh(isManual = false) {
     const current = ++sequence.current;
     if (isManual) setIsRefreshing(true);
     try {
-      const result = await api.get<ModuleStoreNode[]>('/api/v1/settings/modules');
+      const [nodesResult] = await Promise.all([
+        api.get<ModuleStoreNode[]>('/api/v1/settings/modules'),
+        fetchSyncOverview(),
+      ]);
       if (sequence.current === current) {
-        setNodes(result);
-        if (result.length > 0 && !selectedNodeId) {
-          setSelectedNodeId(result[0].node_id);
+        setNodes(nodesResult);
+        if (nodesResult.length > 0 && !selectedNodeId) {
+          setSelectedNodeId(nodesResult[0].node_id);
         }
         setError('');
       }
@@ -63,6 +83,7 @@ export function ModuleStoreTab() {
       sequence.current++;
     };
   }, []);
+
 
   const currentNode = useMemo(() => {
     return nodes.find((n) => n.node_id === selectedNodeId) || nodes[0] || null;
@@ -184,12 +205,20 @@ export function ModuleStoreTab() {
         onOpenTaskDrawer={() => setShowTaskDrawer(true)}
       />
 
+      {/* Sync Overview (ArgoCD Style: Desired vs Live Actual State) */}
+      <SyncOverviewCard
+        items={syncItems}
+        loading={syncLoading}
+        onRefresh={fetchSyncOverview}
+      />
+
       {/* KPI Stats Bar */}
       <ModuleStoreStats
         total={stats.total}
         loaded={stats.loaded}
         available={stats.available}
       />
+
 
       {/* Filter and Search Bar */}
       <ModuleStoreFilters

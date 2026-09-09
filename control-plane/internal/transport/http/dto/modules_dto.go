@@ -26,3 +26,21 @@ type ReportModuleRequest struct {
 	JobMessage   string                    `json:"job_message"`
 	JobLogs      string                    `json:"job_logs"`
 }
+
+// AppendModuleJobLogRequest là body gửi log chunk và tiến trình từng bước từ node agent lên.
+type AppendModuleJobLogRequest struct {
+	Stage    string `json:"stage"`
+	Progress int    `json:"progress"`
+	Message  string `json:"message"`
+	LogChunk string `json:"log_chunk"`
+}
+
+// SetModuleDesiredRequest là payload thiết lập trạng thái mong muốn cho một module (fleet-wide generic).
+type SetModuleDesiredRequest struct {
+	Enabled bool `json:"enabled"`
+}
+
+// TriggerModuleSyncRequest là payload kích hoạt đồng bộ fanout cho module.
+type TriggerModuleSyncRequest struct {
+	Module string `json:"module"`
+}

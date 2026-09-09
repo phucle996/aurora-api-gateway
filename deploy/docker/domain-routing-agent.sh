@@ -13,7 +13,11 @@ routing_test=/etc/nginx/routing-validation.conf
 routing_headers=/etc/nginx/routing-auth.headers
 printf 'Authorization: Bearer %s\n' "$AUTH_TOKEN" > "$routing_headers"
 while true; do
-  /node-dependencies.sh tick || printf '[Dependencies] check failed; retrying\n' >&2
+  if [ -x /node-modules.sh ]; then
+    /node-modules.sh tick || printf '[Modules] check failed; retrying\n' >&2
+  else
+    /node-dependencies.sh tick || printf '[Dependencies] check failed; retrying\n' >&2
+  fi
   if [ -s /var/run/nginx.pid ] && curl --fail --silent --show-error --max-time 5 -H @"$routing_headers" "$CONTROLLER_URL/api/v1/domain-routing/$NODE_ID/bundle" -o "$routing_bundle"; then
     routing_files_ok=true
     if ! jq -e '.config | type == "string"' "$routing_bundle" >/dev/null || ! jq -e '.files | type == "array"' "$routing_bundle" >/dev/null; then

@@ -65,47 +65,45 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	r.GET("/api/v1/settings/modules", authMidd, m.ModuleStoreHandler.List)
 	r.POST("/api/v1/settings/modules/:node/jobs", authMidd, m.ModuleStoreHandler.Queue)
 	r.GET("/api/v1/settings/modules/jobs/:id/logs", authMidd, m.ModuleStoreHandler.GetJobLogs)
+	r.GET("/api/v1/settings/modules/jobs/:id/events", authMidd, m.ModuleStoreHandler.JobEventsStream)
+	r.GET("/api/v1/settings/modules/sync-overview", authMidd, m.ModuleStoreHandler.GetSyncOverview)
+	r.PUT("/api/v1/settings/modules/:name/desired", authMidd, m.ModuleStoreHandler.SetDesired)
+	r.POST("/api/v1/settings/modules/sync", authMidd, m.ModuleStoreHandler.TriggerSync)
 
-	// Backward compatibility aliases for settings
-	r.GET("/api/v1/settings/dependencies", authMidd, m.ModuleStoreHandler.List)
-	r.POST("/api/v1/settings/dependencies/:node/jobs", authMidd, m.ModuleStoreHandler.Queue)
-	r.GET("/api/v1/settings/dependencies/jobs/:id/logs", authMidd, m.ModuleStoreHandler.GetJobLogs)
 
-	// Both node endpoints require the operator header, never query/cookie authentication.
-	registerNodeSync := func(pathPrefix string) {
-		r.POST(pathPrefix+"/:node/poll", authMidd, func(c *gin.Context) {
-			expected := sha256.Sum256([]byte("Bearer " + token))
-			actual := sha256.Sum256([]byte(c.GetHeader("Authorization")))
-			if token == "" || subtle.ConstantTimeCompare(expected[:], actual[:]) != 1 {
-				c.AbortWithStatus(403)
-				return
-			}
-			m.ModuleStoreHandler.Poll(c)
-		})
-		r.POST(pathPrefix+"/:node/report", authMidd, func(c *gin.Context) {
-			expected := sha256.Sum256([]byte("Bearer " + token))
-			actual := sha256.Sum256([]byte(c.GetHeader("Authorization")))
-			if token == "" || subtle.ConstantTimeCompare(expected[:], actual[:]) != 1 {
-				c.AbortWithStatus(403)
-				return
-			}
-			m.ModuleStoreHandler.Report(c)
-		})
-	}
-	registerNodeSync("/api/v1/module-sync")
-	registerNodeSync("/api/v1/dependency-sync")
-
-	// Quản lý Domain API
-	r.GET("/api/v1/domain-routing/:node", authMidd, m.DomainRoutingHandler.Desired)
-	r.GET("/api/v1/domain-routing/:node/bundle", authMidd, func(c *gin.Context) {
+	// Middleware chặn sớm mọi request không dùng header Authorization chuẩn (tránh lộ token trong query string hoặc cookie)
+	requireOperatorHeader := func(c *gin.Context) {
 		expected := sha256.Sum256([]byte("Bearer " + token))
 		actual := sha256.Sum256([]byte(c.GetHeader("Authorization")))
 		if token == "" || subtle.ConstantTimeCompare(expected[:], actual[:]) != 1 {
 			c.AbortWithStatus(http.StatusForbidden)
 			return
 		}
-		m.DomainRoutingHandler.Bundle(c)
-	})
+		c.Next()
+	}
+
+	// Node Sync cho Module Store
+	r.POST("/api/v1/module-sync/:node/poll", authMidd, requireOperatorHeader, m.ModuleStoreHandler.Poll)
+	r.POST("/api/v1/module-sync/:node/report", authMidd, requireOperatorHeader, m.ModuleStoreHandler.Report)
+	r.POST("/api/v1/module-sync/:node/jobs/:id/log", authMidd, requireOperatorHeader, m.ModuleStoreHandler.AppendLog)
+
+	// Backward compatibility aliases
+	r.GET("/api/v1/settings/dependencies", authMidd, m.ModuleStoreHandler.List)
+	r.POST("/api/v1/settings/dependencies/:node/jobs", authMidd, m.ModuleStoreHandler.Queue)
+	r.GET("/api/v1/settings/dependencies/jobs/:id/logs", authMidd, m.ModuleStoreHandler.GetJobLogs)
+	r.GET("/api/v1/settings/dependencies/jobs/:id/events", authMidd, m.ModuleStoreHandler.JobEventsStream)
+	r.GET("/api/v1/settings/dependencies/sync-overview", authMidd, m.ModuleStoreHandler.GetSyncOverview)
+	r.PUT("/api/v1/settings/dependencies/:name/desired", authMidd, m.ModuleStoreHandler.SetDesired)
+	r.POST("/api/v1/settings/dependencies/sync", authMidd, m.ModuleStoreHandler.TriggerSync)
+	r.POST("/api/v1/dependency-sync/:node/poll", authMidd, requireOperatorHeader, m.ModuleStoreHandler.Poll)
+
+	r.POST("/api/v1/dependency-sync/:node/report", authMidd, requireOperatorHeader, m.ModuleStoreHandler.Report)
+	r.POST("/api/v1/dependency-sync/:node/jobs/:id/log", authMidd, requireOperatorHeader, m.ModuleStoreHandler.AppendLog)
+
+
+	// Quản lý Domain API
+	r.GET("/api/v1/domain-routing/:node", authMidd, m.DomainRoutingHandler.Desired)
+	r.GET("/api/v1/domain-routing/:node/bundle", authMidd, requireOperatorHeader, m.DomainRoutingHandler.Bundle)
 	r.GET("/api/v1/domains", authMidd, m.DomainHandler.List)            // Danh sách domain (filter, phân trang, stats)
 	r.GET("/api/v1/domains/catalog", authMidd, m.DomainHandler.Catalog) // Danh mục domain phục vụ target scope & dropdown
 	r.POST("/api/v1/domains", authMidd, m.DomainHandler.Create)         // Tạo mới domain

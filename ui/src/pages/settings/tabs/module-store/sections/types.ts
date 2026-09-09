@@ -18,6 +18,17 @@ export interface ModuleStoreNode {
 
 export type DependencyNode = ModuleStoreNode;
 
+export interface ModuleSyncItem {
+  name: string;
+  desired: boolean;
+  actual_loaded: number;
+  total_nodes: number;
+  sync_status: 'Synced' | 'OutOfSync' | 'Progressing';
+  feature_ready: boolean;
+  pending_jobs: number;
+}
+
+
 
 export function checkIsModuleLoaded(mod: CatalogModule, nodeModules?: Array<{ name: string; loaded: boolean }>): boolean {
   if (!nodeModules) return false;

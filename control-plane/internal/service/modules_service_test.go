@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"aurora-waf.local/control-plane/internal/domain/entity"
+	"aurora-waf.local/control-plane/internal/provider"
 )
 
 type mockModuleStoreRepo struct {
@@ -31,6 +32,34 @@ func (m *mockModuleStoreRepo) ReportModules(ctx context.Context, c entity.Report
 
 func (m *mockModuleStoreRepo) GetJobLogs(ctx context.Context, jobID int64) (*entity.ModuleJobLogs, error) {
 	return m.logs, nil
+}
+
+func (m *mockModuleStoreRepo) AppendJobLog(ctx context.Context, c entity.AppendModuleJobLogCommand) error {
+	if m.logs != nil && m.logs.ID == c.JobID {
+		m.logs.Logs += c.LogChunk
+	}
+	return nil
+}
+
+func (m *mockModuleStoreRepo) GetSyncOverview(ctx context.Context, q entity.GetModuleSyncOverviewQuery) ([]entity.ModuleSyncItem, error) {
+	return []entity.ModuleSyncItem{
+		{
+			Name:         "brotli",
+			Desired:      true,
+			ActualLoaded: 1,
+			TotalNodes:   1,
+			SyncStatus:   "Synced",
+			FeatureReady: true,
+		},
+	}, nil
+}
+
+func (m *mockModuleStoreRepo) SetDesiredState(ctx context.Context, c entity.SetModuleDesiredCommand) error {
+	return nil
+}
+
+func (m *mockModuleStoreRepo) FanoutSync(ctx context.Context, c entity.TriggerModuleSyncCommand) (entity.TriggerModuleSyncResult, error) {
+	return entity.TriggerModuleSyncResult{QueuedJobs: 1, NodeIDs: []string{"node-01"}}, nil
 }
 
 func TestModuleStoreService_Workflow(t *testing.T) {
@@ -60,7 +89,8 @@ func TestModuleStoreService_Workflow(t *testing.T) {
 		},
 	}
 
-	svc := NewModuleStoreService(repo)
+	eventHub := provider.NewEventHub()
+	svc := NewModuleStoreService(repo, eventHub)
 
 	// 1. Test List
 	nodes, err := svc.List(ctx, entity.ListModulesQuery{})
@@ -138,5 +168,60 @@ func TestModuleStoreService_Workflow(t *testing.T) {
 	_, err = svc.GetJobLogs(ctx, entity.ModuleJobLogsQuery{JobID: 0})
 	if err == nil {
 		t.Errorf("GetJobLogs with ID 0 should fail")
+	}
+
+	// 6. Test AppendJobLog and SubscribeJobEvents via provider.EventHub
+	ch, unsub := svc.SubscribeJobEvents()
+	defer unsub()
+
+	err = svc.AppendJobLog(ctx, entity.AppendModuleJobLogCommand{
+		NodeID:   "node-01",
+		JobID:    10,
+		Stage:    "CANARY_PROBE",
+		Progress: 60,
+		Message:  "Probing canary port...",
+		LogChunk: "Canary probe passed\n",
+	})
+	if err != nil {
+		t.Errorf("AppendJobLog error: %v", err)
+	}
+
+	select {
+	case msg := <-ch:
+		if msg.Event != "module_job_progress" {
+			t.Errorf("Expected event 'module_job_progress', got %q", msg.Event)
+		}
+		ev, ok := msg.Data.(entity.ModuleJobProgressEvent)
+		if !ok || ev.JobID != 10 || ev.Stage != "CANARY_PROBE" || ev.Progress != 60 {
+			t.Errorf("Received unexpected event data: %+v", msg.Data)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Errorf("Timed out waiting for SSE job event from EventHub")
+	}
+
+	// 7. Test Sync Overview & Desired State methods
+	overview, err := svc.GetSyncOverview(ctx, entity.GetModuleSyncOverviewQuery{})
+	if err != nil || len(overview) == 0 {
+		t.Fatalf("GetSyncOverview failed: %v", err)
+	}
+	if overview[0].Name != "brotli" || !overview[0].Desired || !overview[0].FeatureReady {
+		t.Errorf("Unexpected sync overview item: %+v", overview[0])
+	}
+
+	err = svc.SetDesiredState(ctx, entity.SetModuleDesiredCommand{
+		Name:    "brotli",
+		Enabled: true,
+		Actor:   "admin",
+	})
+	if err != nil {
+		t.Errorf("SetDesiredState failed: %v", err)
+	}
+
+	syncRes, err := svc.Sync(ctx, entity.TriggerModuleSyncCommand{
+		Name:  "brotli",
+		Actor: "admin",
+	})
+	if err != nil || syncRes.QueuedJobs != 1 {
+		t.Errorf("Sync failed: %v, result: %+v", err, syncRes)
 	}
 }

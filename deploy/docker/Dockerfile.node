@@ -18,13 +18,14 @@ COPY build/modules/ngx_http_aurora_waf_module.so /opt/modules/ngx_http_aurora_wa
 COPY deploy/docker/nginx-node.conf.template /etc/nginx/nginx-node.conf.template
 COPY deploy/docker/entrypoint-node.sh /entrypoint.sh
 COPY deploy/docker/domain-routing-agent.sh /domain-routing-agent.sh
+COPY deploy/docker/node-modules.sh /node-modules.sh
 COPY deploy/docker/node-dependencies.sh /node-dependencies.sh
 COPY build/brotli-package /opt/aurora-dependencies/brotli
 
 RUN if [ -f /opt/nginx/usr/local/nginx/sbin/nginx ] && [ ! -f /opt/nginx/usr/sbin/nginx ]; then \
         mkdir -p /opt/nginx/usr/sbin && cp -f /opt/nginx/usr/local/nginx/sbin/nginx /opt/nginx/usr/sbin/nginx; \
     fi \
-    && chmod +x /node-dependencies.sh /domain-routing-agent.sh /entrypoint.sh /opt/nginx/usr/sbin/nginx \
+    && chmod +x /node-modules.sh /node-dependencies.sh /domain-routing-agent.sh /entrypoint.sh /opt/nginx/usr/sbin/nginx \
     && mkdir -p /usr/share/aurora-demo \
     && printf 'Aurora demo backend: allowed.\n' > /usr/share/aurora-demo/ok \
     && printf 'Aurora demo backend: this file must not be served in enforce mode.\n' > /usr/share/aurora-demo/__aurora_blocked

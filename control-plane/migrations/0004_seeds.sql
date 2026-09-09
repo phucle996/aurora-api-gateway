@@ -13,8 +13,6 @@ VALUES (
     'admin'
 );
 
-
-
 -- Seed system settings
 INSERT OR IGNORE INTO system_settings (key, value) VALUES
     ('metrics_mode', 'disabled'),
@@ -53,3 +51,5 @@ INSERT OR IGNORE INTO backup_settings (
     1, 1, '0 2 * * *', 0, 'https://s3.ap-southeast-1.amazonaws.com', 'aurora-waf-backups', 'ap-southeast-1',
     '', '', 'backups/', 30, '', 'none', 'local'
 );
+
+

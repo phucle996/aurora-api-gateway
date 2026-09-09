@@ -47,13 +47,6 @@ func init() {
 //  6. Khởi tạo UI tĩnh (embedded console)
 //  7. Trả về App sẵn sàng chạy
 func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
-	// Kiểm tra điều kiện bảo mật tối thiểu trên production
-	if cfg.Env == "production" {
-		if cfg.JWTSecret == config.DefaultJWTSecret || len(cfg.JWTSecret) < 32 {
-			return nil, fmt.Errorf("production mode (AURORA_ENV=production) requires a custom AURORA_JWT_SECRET of at least 32 characters; default secret is prohibited")
-		}
-	}
-
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	pools, err := infra.OpenSQLitePool(ctx, cfg.SQLitePath)
