@@ -1,7 +1,6 @@
 import React from 'react';
 
 export type SettingsTab =
-  | 'Dependencies'
   | 'General'
   | 'Security'
   | 'Notifications'
@@ -17,7 +16,6 @@ interface SettingsHeaderProps {
 export function SettingsHeader({ activeTab, onTabChange }: SettingsHeaderProps) {
   const tabs: SettingsTab[] = [
     'General',
-    'Dependencies',
     'Security',
     'Notifications',
     'Integrations',
@@ -49,7 +47,7 @@ export function SettingsHeader({ activeTab, onTabChange }: SettingsHeaderProps) 
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
               }`}
           >
-            {tab === 'Dependencies' ? 'Module Store' : tab}
+            {tab}
           </button>
         ))}
       </div>

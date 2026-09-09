@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { SettingsHeader, type SettingsTab } from './components/SettingsHeader';
 import { GeneralTab } from './tabs/general/GeneralTab';
-import { ModuleStoreTab } from './tabs/module-store/ModuleStoreTab';
 import { SecurityTab } from './tabs/security/SecurityTab';
 import { NotificationsTab } from './tabs/notifications/NotificationsTab';
 import { IntegrationsTab } from './tabs/integrations/IntegrationsTab';
@@ -21,7 +20,6 @@ export default function SettingsPage() {
 
       {/* Tab Contents */}
       {activeTab === 'General' && <GeneralTab />}
-      {activeTab === 'Dependencies' && <ModuleStoreTab />}
       {activeTab === 'Security' && <SecurityTab />}
       {activeTab === 'Notifications' && <NotificationsTab />}
       {activeTab === 'Integrations' && <IntegrationsTab />}

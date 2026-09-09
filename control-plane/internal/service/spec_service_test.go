@@ -88,6 +88,9 @@ func TestSpecSyncService_InSyncAndMismatch(t *testing.T) {
 	if !strings.Contains(res1.SpecYAML, "example.com") {
 		t.Fatalf("expected SpecYAML to contain routing for example.com")
 	}
+	if !strings.Contains(res1.SpecYAML, "metrics:") {
+		t.Fatalf("expected SpecYAML to contain extensions.metrics config")
+	}
 
 	// 2. Query with matching hash -> returns InSync=true, SpecYAML="" (0 bytes payload)
 	res2, err := svc.SyncSpec(context.Background(), entity.SpecSyncQuery{

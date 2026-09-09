@@ -11,6 +11,7 @@ import {
   Gauge,
   Server,
   Settings,
+  Blocks,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -139,6 +140,12 @@ export function ConsoleSidebar({
       path: '/nodes',
       aliases: ['/cluster-nodes'],
       icon: <Server className="w-4 h-4 shrink-0" />,
+    },
+    {
+      label: 'Extensions',
+      path: '/extensions',
+      aliases: ['/extensions/'],
+      icon: <Blocks className="w-4 h-4 shrink-0" />,
     },
     {
       label: 'Settings',

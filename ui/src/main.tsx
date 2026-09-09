@@ -17,6 +17,7 @@ import DatasetEntriesPage from './pages/dataset-entries/page';
 import AddDatasetPage from './pages/add-dataset/page';
 import RateLimitsPage from './pages/rate-limits/page';
 import NodesPage from './pages/nodes/page';
+import ExtensionsPage from './pages/extensions/page';
 import SettingsPage from './pages/settings/page';
 import DomainsPage from './pages/domains/page';
 import CreateDomainPage from './pages/create-domain/page';
@@ -92,6 +93,9 @@ createRoot(document.getElementById('root')!).render(
           {/* Cluster & Nodes */}
           <Route path="/nodes" element={<NodesPage />} />
           <Route path="/cluster-nodes" element={<NodesPage />} />
+
+          {/* Dynamic Extensions */}
+          <Route path="/extensions" element={<ExtensionsPage />} />
 
           {/* Settings */}
           <Route path="/settings" element={<SettingsPage />} />

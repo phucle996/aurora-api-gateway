@@ -46,6 +46,8 @@ type Module struct {
 	NotificationWorker       *service.NotificationWorker
 	BackupHandler            *handler.BackupHandler
 	BackupScheduler          *service.BackupScheduler
+	ExtensionHandler         *handler.ExtensionHandler
+	ExtensionService         port.ExtensionService
 }
 
 // NewModule khởi tạo toàn bộ chuỗi dependency của ứng dụng theo thứ tự:
@@ -143,6 +145,10 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	grpcSpecHdr := grpchandler.NewSpecSyncHandler(specSyncSvc)
 	specHdr := handler.NewSpecHandler(specSyncSvc)
 
+	extensionRepo := repository.NewExtensionRepository(writerDB, readerDB)
+	extensionSvc := service.NewExtensionService(extensionRepo)
+	extensionHdr := handler.NewExtensionHandler(extensionSvc)
+
 	return &Module{
 		GRPCHeartbeatHandler:     grpcHeartbeatHdr,
 		GRPCPolicySyncHandler:    grpcPolicyHdr,
@@ -151,6 +157,8 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 		GRPCDomainRoutingHandler: grpcRoutingHdr,
 		GRPCSpecSyncHandler:      grpcSpecHdr,
 		SpecHandler:              specHdr,
+		ExtensionHandler:         extensionHdr,
+		ExtensionService:         extensionSvc,
 		AccessHandler:            accessHdr,
 		PolicyHandler:            policyHdr,
 		HealthcheckHandler:       healthcheckHdr,

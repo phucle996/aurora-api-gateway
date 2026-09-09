@@ -61,6 +61,12 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	r.GET("/api/v1/sync/spec", authMidd, m.SpecHandler.GetSpec)
 	r.GET("/api/v1/sync/spec/:node", authMidd, m.SpecHandler.GetSpec)
 
+	// Extension Management API
+	r.GET("/api/v1/extensions", authMidd, m.ExtensionHandler.List)
+	r.GET("/api/v1/extensions/:id", authMidd, m.ExtensionHandler.GetByID)
+	r.PUT("/api/v1/extensions/:id/status", authMidd, m.ExtensionHandler.UpdateStatus)
+	r.PUT("/api/v1/extensions/:id/config", authMidd, m.ExtensionHandler.UpdateConfig)
+
 	// Route protected — phải vượt qua authMidd
 	r.GET("/api/v1/auth/me", authMidd, m.AuthHandler.Me)         // Thông tin user hiện tại
 	r.GET("/api/v1/system/info", authMidd, m.SystemHandler.Info) // Thông tin runtime hệ thống thực tế
