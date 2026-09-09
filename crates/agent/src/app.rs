@@ -41,7 +41,8 @@ impl App {
             Err(_) => true,
         };
         if should_init_policy {
-            let initial_json = r#"{"schema_version":1,"block_paths":["/blocked","/__aurora_blocked"]}"#;
+            let initial_json =
+                r#"{"schema_version":1,"block_paths":["/blocked","/__aurora_blocked"]}"#;
             let _ = tokio::fs::write(&default_policy, initial_json).await;
         }
 
@@ -94,27 +95,6 @@ impl App {
             sync::heartbeat::run_heartbeat_loop(c1, cl1, n1, started_at).await;
         });
 
-        let c2 = self.cfg.clone();
-        let n2 = self.nginx.clone();
-        let cl2 = self.grpc_client.clone();
-        tokio::spawn(async move {
-            sync::policy::run_policy_sync_loop(c2, cl2, n2).await;
-        });
-
-        let c3 = self.cfg.clone();
-        let n3 = self.nginx.clone();
-        let cl3 = self.grpc_client.clone();
-        tokio::spawn(async move {
-            sync::routing::run_routing_sync_loop(c3, cl3, n3).await;
-        });
-
-        let c4 = self.cfg.clone();
-        let n4 = self.nginx.clone();
-        let cl4 = self.grpc_client.clone();
-        tokio::spawn(async move {
-            sync::modules::run_modules_sync_loop(c4, cl4, n4).await;
-        });
-
         // Initialize Extension Dispatcher
         let dispatcher = Arc::new(Mutex::new(ExtensionDispatcher::new(Arc::new(
             self.cfg.node_id.clone(),
@@ -130,12 +110,17 @@ impl App {
                     enabled: self.cfg.metrics_prometheus,
                     path: "/metrics".to_string(),
                 }),
-                otlp: self.cfg.metrics_otlp_endpoint.as_ref().map(|ep| crate::spec::OtlpSpec {
-                    enabled: true,
-                    endpoint: ep.clone(),
-                    interval_secs: self.cfg.metrics_otlp_interval_secs,
-                }),
+                otlp: self
+                    .cfg
+                    .metrics_otlp_endpoint
+                    .as_ref()
+                    .map(|ep| crate::spec::OtlpSpec {
+                        enabled: true,
+                        endpoint: ep.clone(),
+                        interval_secs: self.cfg.metrics_otlp_interval_secs,
+                    }),
             }),
+            ..Default::default()
         };
         dispatcher.lock().await.apply_spec(&initial_spec).await;
 
@@ -144,6 +129,7 @@ impl App {
             (*self.cfg).clone(),
             self.nginx.clone(),
             dispatcher.clone(),
+            Some(self.grpc_client.clone()),
         ));
         let spec_shutdown = shutdown.clone();
         tokio::spawn(async move {
@@ -157,7 +143,10 @@ impl App {
                 loop {
                     tokio::time::sleep(Duration::from_secs(2)).await;
                     if let Some(status) = n_watch.wait_or_check().await {
-                        error!("NGINX process exited unexpectedly with: {:?}. Restarting...", status);
+                        error!(
+                            "NGINX process exited unexpectedly with: {:?}. Restarting...",
+                            status
+                        );
                         if let Err(e) = n_watch.start().await {
                             error!("Failed to restart NGINX: {}", e);
                         }

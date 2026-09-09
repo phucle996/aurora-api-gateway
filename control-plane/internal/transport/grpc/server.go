@@ -20,7 +20,7 @@ type Handlers struct {
 	Access        *handler.AccessSyncHandler
 	Upstream      *handler.UpstreamSyncHandler
 	DomainRouting *handler.DomainRoutingSyncHandler
-	Module        *handler.ModuleSyncHandler
+	Spec          *handler.SpecSyncHandler
 }
 
 func NewServer(addr string, adminToken string, handlers Handlers) *Server {
@@ -44,8 +44,8 @@ func NewServer(addr string, adminToken string, handlers Handlers) *Server {
 	if handlers.DomainRouting != nil {
 		pb.RegisterDomainRoutingSyncServiceServer(s, handlers.DomainRouting)
 	}
-	if handlers.Module != nil {
-		pb.RegisterModuleSyncServiceServer(s, handlers.Module)
+	if handlers.Spec != nil {
+		pb.RegisterSpecSyncServiceServer(s, handlers.Spec)
 	}
 	reflection.Register(s)
 

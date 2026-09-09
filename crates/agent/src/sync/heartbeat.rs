@@ -109,7 +109,8 @@ pub async fn run_heartbeat_loop(
             metadata: metadata_payload,
         };
 
-        match client.send_heartbeat(req).await {
+        let handler = client.heartbeat_handler();
+        match handler.send_heartbeat(req).await {
             Ok(data) => {
                 if data.metadata_acknowledged {
                     cached_digest = current_digest;

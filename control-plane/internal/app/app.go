@@ -140,7 +140,7 @@ func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
 		Access:        module.GRPCAccessSyncHandler,
 		Upstream:      module.GRPCUpstreamSyncHandler,
 		DomainRouting: module.GRPCDomainRoutingHandler,
-		Module:        module.GRPCModuleSyncHandler,
+		Spec:          module.GRPCSpecSyncHandler,
 	})
 	grpcLis, err := net.Listen("tcp", cfg.GRPCAddr)
 	if err != nil {

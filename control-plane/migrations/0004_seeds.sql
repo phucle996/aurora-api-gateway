@@ -52,4 +52,18 @@ INSERT OR IGNORE INTO backup_settings (
     '', '', 'backups/', 30, '', 'none', 'local'
 );
 
+-- Seed default extensions catalog
+INSERT OR IGNORE INTO extensions (id, name, category, description, enabled, config_json) VALUES
+('metrics', 'Prometheus & OTLP Telemetry', 'observability', 'Exposes Prometheus pull metrics endpoint and pushes telemetry spans to OTLP collector.', 1, '{"enabled":true,"port":9145,"stub_status_url":"http://127.0.0.1:80/stub_status","prometheus":{"enabled":true,"path":"/metrics"},"otlp":{"enabled":false,"endpoint":"","interval_secs":15}}'),
+('access_logger', 'High-Throughput Access Logger', 'observability', 'Structured JSON access logging with zero-copy ring buffers and file streaming.', 0, '{"format":"json","output":"/var/log/aurora/access.log","buffer_size":1024,"flush_interval_ms":500}'),
+('distributed_tracing', 'OpenTelemetry Distributed Tracing', 'observability', 'Propagate W3C trace contexts and export distributed traces to Jaeger/Tempo.', 0, '{"sampling_rate":0.05,"endpoint":"http://127.0.0.1:4317","service_name":"aurora-dataplane"}'),
+('geoip', 'GeoIP2 Country & ASN Filter', 'security', 'Enrich client requests with MaxMind GeoIP2 country codes and enforce geo-fencing blocks.', 0, '{"database_path":"/var/lib/aurora/GeoLite2-City.mmdb","block_countries":["KP","IR"],"allow_countries":[]}'),
+('ip_reputation', 'Threat Intelligence & Reputation', 'security', 'Dynamically check client IPs against live reputation feeds and AbuseIPDB scoring.', 0, '{"min_confidence":80,"cache_ttl_secs":3600,"action":"block","sync_interval_mins":60}'),
+('bot_defense', 'Bot Defense & Challenge Engine', 'security', 'Defend against automated crawlers with silent JavaScript challenges and cryptographic cookies.', 0, '{"challenge_type":"js_challenge","cookie_ttl_secs":3600,"bypass_known_bots":true}'),
+('tor_blocker', 'Tor Exit Node Blocker', 'security', 'Automatically identify and block or flag requests originating from the Tor anonymity network.', 0, '{"action":"block","refresh_interval_hours":12}'),
+('rate_limiter', 'Distributed Token Bucket Rate Limiter', 'traffic', 'Protect origin backends with distributed sliding window or token bucket rate limiting.', 0, '{"backend":"in_memory","redis_url":"","default_rate":100,"default_burst":200}'),
+('circuit_breaker', 'Automatic Upstream Circuit Breaker', 'traffic', 'Automatically trip connections and isolate unhealthy upstreams on excessive 5xx failure rates.', 0, '{"error_threshold_percentage":50,"minimum_requests":20,"recovery_timeout_secs":30}'),
+('request_transformer', 'HTTP Header & URL Transformer', 'traffic', 'Inject security headers, remove upstream identifying signatures, and rewrite URI paths.', 0, '{"add_headers":{"X-Protected-By":"Aurora-WAF","Strict-Transport-Security":"max-age=31536000; includeSubDomains"},"remove_headers":["Server","X-Powered-By"]}'),
+('wasm_filter', 'Proxy-Wasm Extensible Filter', 'runtime', 'Execute custom WebAssembly (Wasm) filters in the NGINX request lifecycle.', 0, '{"module_path":"/var/lib/aurora/wasm/filter.wasm","config":""}');
+
 

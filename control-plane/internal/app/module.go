@@ -23,8 +23,8 @@ type Module struct {
 	GRPCAccessSyncHandler    *grpchandler.AccessSyncHandler
 	GRPCUpstreamSyncHandler  *grpchandler.UpstreamSyncHandler
 	GRPCDomainRoutingHandler *grpchandler.DomainRoutingSyncHandler
-	GRPCModuleSyncHandler    *grpchandler.ModuleSyncHandler
-	ModuleStoreHandler       *handler.ModuleStoreHandler
+	GRPCSpecSyncHandler      *grpchandler.SpecSyncHandler
+	SpecHandler              *handler.SpecHandler
 	AccessHandler            *handler.AccessHandler
 	PolicyHandler            *handler.PolicyHandler
 	HealthcheckHandler       *handler.HealthcheckHandler
@@ -132,16 +132,16 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	backupHdr := handler.NewBackupHandler(backupSvc)
 	backupScheduler := service.NewBackupScheduler(backupSvc, backupRepo)
 
-	moduleStoreRepo := repository.NewModuleStoreRepository(writerDB, readerDB)
-	moduleStoreSvc := service.NewModuleStoreService(moduleStoreRepo, eventHub)
-	moduleStoreHdr := handler.NewModuleStoreHandler(moduleStoreSvc)
-
 	grpcHeartbeatHdr := grpchandler.NewHeartbeatHandler(nodeSvc)
 	grpcPolicyHdr := grpchandler.NewPolicySyncHandler(policySvc)
 	grpcAccessHdr := grpchandler.NewAccessSyncHandler(accessSvc)
 	grpcUpstreamHdr := grpchandler.NewUpstreamSyncHandler(upstreamSvc)
 	grpcRoutingHdr := grpchandler.NewDomainRoutingSyncHandler(domainRoutingSvc)
-	grpcModuleHdr := grpchandler.NewModuleSyncHandler(moduleStoreSvc)
+
+	specSyncRepo := repository.NewSpecSyncRepository(writerDB, readerDB)
+	specSyncSvc := service.NewSpecSyncService(specSyncRepo)
+	grpcSpecHdr := grpchandler.NewSpecSyncHandler(specSyncSvc)
+	specHdr := handler.NewSpecHandler(specSyncSvc)
 
 	return &Module{
 		GRPCHeartbeatHandler:     grpcHeartbeatHdr,
@@ -149,8 +149,8 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 		GRPCAccessSyncHandler:    grpcAccessHdr,
 		GRPCUpstreamSyncHandler:  grpcUpstreamHdr,
 		GRPCDomainRoutingHandler: grpcRoutingHdr,
-		GRPCModuleSyncHandler:    grpcModuleHdr,
-		ModuleStoreHandler:       moduleStoreHdr,
+		GRPCSpecSyncHandler:      grpcSpecHdr,
+		SpecHandler:              specHdr,
 		AccessHandler:            accessHdr,
 		PolicyHandler:            policyHdr,
 		HealthcheckHandler:       healthcheckHdr,

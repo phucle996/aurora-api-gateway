@@ -52,6 +52,8 @@ impl NodeSpec {
 pub struct ExtensionsSpec {
     #[serde(default)]
     pub metrics: Option<MetricsExtensionSpec>,
+    #[serde(flatten, default)]
+    pub dynamic: std::collections::HashMap<String, serde_yaml::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

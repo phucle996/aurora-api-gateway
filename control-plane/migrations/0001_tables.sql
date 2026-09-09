@@ -459,35 +459,18 @@ CREATE TABLE IF NOT EXISTS origin_observations (
     peers_json TEXT NOT NULL
 );
 
--- Node modules and jobs
-CREATE TABLE IF NOT EXISTS node_modules (
-    node_id TEXT PRIMARY KEY REFERENCES cluster_nodes(id) ON DELETE CASCADE,
-    checked_at INTEGER NOT NULL,
-    received_at INTEGER NOT NULL,
-    nginx_version TEXT NOT NULL,
-    architecture TEXT NOT NULL,
-    modules_json TEXT NOT NULL,
-    installable INTEGER NOT NULL,
-    error TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS module_jobs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    node_id TEXT NOT NULL REFERENCES cluster_nodes(id) ON DELETE CASCADE,
-    action TEXT NOT NULL,
-    state TEXT NOT NULL CHECK(state IN ('pending','running','succeeded','failed')),
-    message TEXT NOT NULL DEFAULT '',
-    logs TEXT NOT NULL DEFAULT '',
-    requested_by TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
-);
-
--- Fleet-wide generic desired state for optional NGINX modules
-CREATE TABLE IF NOT EXISTS module_desired_state (
-    name TEXT PRIMARY KEY,
-    enabled INTEGER NOT NULL DEFAULT 0,
-    updated_at INTEGER NOT NULL,
-    updated_by TEXT NOT NULL
+-- Extensions catalog and configurations
+CREATE TABLE IF NOT EXISTS extensions (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL CHECK(category IN ('observability', 'security', 'auth', 'traffic', 'runtime')),
+    description TEXT NOT NULL DEFAULT '',
+    version TEXT NOT NULL DEFAULT '1.0.0',
+    enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0, 1)),
+    config_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(config_json)),
+    schema_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(schema_json)),
+    is_builtin INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 

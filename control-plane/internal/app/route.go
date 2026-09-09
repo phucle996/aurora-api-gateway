@@ -57,19 +57,13 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	r.GET("/api/v1/policy-sync/:node", authMidd, m.PolicyHandler.Desired)
 	r.POST("/api/v1/policy-sync/:node", authMidd, m.PolicyHandler.Report)
 
+	// Unified Spec Sync
+	r.GET("/api/v1/sync/spec", authMidd, m.SpecHandler.GetSpec)
+	r.GET("/api/v1/sync/spec/:node", authMidd, m.SpecHandler.GetSpec)
+
 	// Route protected — phải vượt qua authMidd
 	r.GET("/api/v1/auth/me", authMidd, m.AuthHandler.Me)         // Thông tin user hiện tại
 	r.GET("/api/v1/system/info", authMidd, m.SystemHandler.Info) // Thông tin runtime hệ thống thực tế
-
-	// Module Store & Jobs
-	r.GET("/api/v1/settings/modules", authMidd, m.ModuleStoreHandler.List)
-	r.POST("/api/v1/settings/modules/:node/jobs", authMidd, m.ModuleStoreHandler.Queue)
-	r.GET("/api/v1/settings/modules/jobs/:id/logs", authMidd, m.ModuleStoreHandler.GetJobLogs)
-	r.GET("/api/v1/settings/modules/jobs/:id/events", authMidd, m.ModuleStoreHandler.JobEventsStream)
-	r.GET("/api/v1/settings/modules/sync-overview", authMidd, m.ModuleStoreHandler.GetSyncOverview)
-	r.PUT("/api/v1/settings/modules/:name/desired", authMidd, m.ModuleStoreHandler.SetDesired)
-	r.POST("/api/v1/settings/modules/sync", authMidd, m.ModuleStoreHandler.TriggerSync)
-
 
 	// Middleware chặn sớm mọi request không dùng header Authorization chuẩn (tránh lộ token trong query string hoặc cookie)
 	requireOperatorHeader := func(c *gin.Context) {
@@ -81,25 +75,6 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 		}
 		c.Next()
 	}
-
-	// Node Sync cho Module Store
-	r.POST("/api/v1/module-sync/:node/poll", authMidd, requireOperatorHeader, m.ModuleStoreHandler.Poll)
-	r.POST("/api/v1/module-sync/:node/report", authMidd, requireOperatorHeader, m.ModuleStoreHandler.Report)
-	r.POST("/api/v1/module-sync/:node/jobs/:id/log", authMidd, requireOperatorHeader, m.ModuleStoreHandler.AppendLog)
-
-	// Backward compatibility aliases
-	r.GET("/api/v1/settings/dependencies", authMidd, m.ModuleStoreHandler.List)
-	r.POST("/api/v1/settings/dependencies/:node/jobs", authMidd, m.ModuleStoreHandler.Queue)
-	r.GET("/api/v1/settings/dependencies/jobs/:id/logs", authMidd, m.ModuleStoreHandler.GetJobLogs)
-	r.GET("/api/v1/settings/dependencies/jobs/:id/events", authMidd, m.ModuleStoreHandler.JobEventsStream)
-	r.GET("/api/v1/settings/dependencies/sync-overview", authMidd, m.ModuleStoreHandler.GetSyncOverview)
-	r.PUT("/api/v1/settings/dependencies/:name/desired", authMidd, m.ModuleStoreHandler.SetDesired)
-	r.POST("/api/v1/settings/dependencies/sync", authMidd, m.ModuleStoreHandler.TriggerSync)
-	r.POST("/api/v1/dependency-sync/:node/poll", authMidd, requireOperatorHeader, m.ModuleStoreHandler.Poll)
-
-	r.POST("/api/v1/dependency-sync/:node/report", authMidd, requireOperatorHeader, m.ModuleStoreHandler.Report)
-	r.POST("/api/v1/dependency-sync/:node/jobs/:id/log", authMidd, requireOperatorHeader, m.ModuleStoreHandler.AppendLog)
-
 
 	// Quản lý Domain API
 	r.GET("/api/v1/domain-routing/:node", authMidd, m.DomainRoutingHandler.Desired)
