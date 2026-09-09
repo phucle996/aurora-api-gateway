@@ -11,7 +11,7 @@ import {
   Lock,
 } from 'lucide-react';
 import QRCode from 'qrcode';
-import { securityApi, AuthProviderItem, SecurityOverview } from '../../../lib/api';
+import { securityApi, AuthProviderItem, SecurityOverview } from '../../../../../lib/api';
 
 export function SecuritySettingsSection() {
   const [loading, setLoading] = useState(true);

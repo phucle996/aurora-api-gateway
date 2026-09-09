@@ -1,12 +1,12 @@
-import { DependenciesSettingsSection } from './sections/DependenciesSettingsSection';
 import React, { useState } from 'react';
-import { SettingsHeader, type SettingsTab } from './sections/SettingsHeader';
-import { GeneralSettingsSection } from './sections/GeneralSettingsSection';
-import { SecuritySettingsSection } from './sections/SecuritySettingsSection';
-import { NotificationsSettingsSection } from './sections/NotificationsSettingsSection';
-import { LoggingSettingsSection } from './sections/LoggingSettingsSection';
-import { BackupRestoreSettingsSection } from './sections/BackupRestoreSettingsSection';
-import { IntegrationsSettingsSection } from './sections/IntegrationsSettingsSection';
+import { SettingsHeader, type SettingsTab } from './components/SettingsHeader';
+import { GeneralTab } from './tabs/general/GeneralTab';
+import { ModuleStoreTab } from './tabs/module-store/ModuleStoreTab';
+import { SecurityTab } from './tabs/security/SecurityTab';
+import { NotificationsTab } from './tabs/notifications/NotificationsTab';
+import { IntegrationsTab } from './tabs/integrations/IntegrationsTab';
+import { LoggingTab } from './tabs/logging/LoggingTab';
+import { BackupRestoreTab } from './tabs/backup-restore/BackupRestoreTab';
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('General');
@@ -19,40 +19,14 @@ export default function SettingsPage() {
         onTabChange={(tab) => setActiveTab(tab)}
       />
 
-      {/* Settings Grid Content */}
-      {activeTab === 'General' && (
-        <div className="space-y-6 w-full">
-          <GeneralSettingsSection />
-        </div>
-      )}
-
-      {activeTab === 'Security' && (
-        <div className="space-y-6 w-full">
-          <SecuritySettingsSection />
-        </div>
-      )}
-
-      {activeTab === 'Notifications' && (
-        <div className="space-y-6 w-full">
-          <NotificationsSettingsSection />
-        </div>
-      )}
-
-      {activeTab === 'Dependencies' && <DependenciesSettingsSection />}
-
-      {activeTab === 'Integrations' && <IntegrationsSettingsSection />}
-
-      {activeTab === 'Logging' && (
-        <div className="space-y-6 w-full">
-          <LoggingSettingsSection />
-        </div>
-      )}
-
-      {activeTab === 'Backup & Restore' && (
-        <div className="space-y-6 w-full">
-          <BackupRestoreSettingsSection />
-        </div>
-      )}
+      {/* Tab Contents */}
+      {activeTab === 'General' && <GeneralTab />}
+      {activeTab === 'Dependencies' && <ModuleStoreTab />}
+      {activeTab === 'Security' && <SecurityTab />}
+      {activeTab === 'Notifications' && <NotificationsTab />}
+      {activeTab === 'Integrations' && <IntegrationsTab />}
+      {activeTab === 'Logging' && <LoggingTab />}
+      {activeTab === 'Backup & Restore' && <BackupRestoreTab />}
     </div>
   );
 }

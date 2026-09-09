@@ -23,7 +23,7 @@ import {
   NotificationChannelItem,
   NotificationRuleItem,
   NotificationChannelId,
-} from '../../../lib/api';
+} from '../../../../../lib/api';
 
 export function NotificationsSettingsSection() {
   const [loading, setLoading] = useState(true);

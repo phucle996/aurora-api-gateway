@@ -12,7 +12,7 @@ export interface CatalogModule {
   summary: string;
   iconName: string;
   directivesExample: string;
-  action?: 'install_brotli' | 'check';
+  action?: string;
   isDynamic: boolean;
   docUrl?: string;
 }
@@ -127,6 +127,7 @@ gzip_proxied any;`,
     directivesExample: `zstd on;
 zstd_comp_level 3;
 zstd_types application/json application/xml text/plain;`,
+    action: 'install_zstd',
     isDynamic: true,
   },
   {
@@ -159,6 +160,7 @@ zstd_types application/json application/xml text/plain;`,
     deny all;
     proxy_cache_purge cache_zone $1$is_args$args;
 }`,
+    action: 'install_cache_purge',
     isDynamic: true,
   },
   {
@@ -175,6 +177,7 @@ zstd_types application/json application/xml text/plain;`,
     directivesExample: `pagespeed on;
 pagespeed FileCachePath /var/cache/ngx_pagespeed;
 pagespeed RewriteLevel CoreFilters;`,
+    action: 'install_pagespeed',
     isDynamic: true,
   },
   {
@@ -209,6 +212,7 @@ proxy_set_header Range $slice_range;`,
     directivesExample: `aurora_waf on;
 aurora_waf_mode enforce;
 aurora_waf_policy /var/lib/aurora-policy/active-policy.json;`,
+    action: 'install_aurora_waf',
     isDynamic: true,
   },
   {
@@ -228,6 +232,7 @@ aurora_waf_policy /var/lib/aurora-policy/active-policy.json;`,
 if ($geoip2_data_country_code ~ (RU|CN|KP)) {
     return 403 "Access denied from your region";
 }`,
+    action: 'install_geoip2',
     isDynamic: true,
   },
   {
@@ -244,6 +249,7 @@ if ($geoip2_data_country_code ~ (RU|CN|KP)) {
     directivesExample: `more_clear_headers Server;
 more_set_headers "X-Security-Protection: Aurora-WAF";
 more_set_headers "X-Frame-Options: SAMEORIGIN";`,
+    action: 'install_headers_more',
     isDynamic: true,
   },
   {
@@ -330,6 +336,7 @@ location = /auth-verify {
     iconName: 'ShieldCheck',
     directivesExample: `modsecurity on;
 modsecurity_rules_file /etc/nginx/modsec/main.conf;`,
+    action: 'install_modsecurity',
     isDynamic: true,
   },
 
@@ -350,6 +357,7 @@ location /status {
     vhost_traffic_status_display;
     vhost_traffic_status_display_format prometheus;
 }`,
+    action: 'install_vts',
     isDynamic: true,
   },
   {
@@ -394,6 +402,7 @@ server {
         proxy_pass http://backend;
     }
 }`,
+    action: 'install_opentelemetry',
     isDynamic: true,
     docUrl: 'https://github.com/nginxinc/nginx-otel',
   },
@@ -503,6 +512,7 @@ server {
         js_content telemetry.exportCustomMetrics;
     }
 }`,
+    action: 'install_njs',
     isDynamic: true,
     docUrl: 'https://nginx.org/en/docs/njs/',
   },
@@ -534,6 +544,7 @@ location = /nginx_status {
 #   - job_name: nginx
 #     static_configs:
 #       - targets: ['node-01:9113']`,
+    action: 'install_prometheus_exporter',
     isDynamic: true,
     docUrl: 'https://github.com/nginxinc/nginx-prometheus-exporter',
   },
@@ -634,6 +645,7 @@ location = /nginx_status {
         ngx.say("Hello from Lua inside NGINX!")
     }
 }`,
+    action: 'install_lua',
     isDynamic: true,
   },
   {
@@ -650,6 +662,7 @@ location = /nginx_status {
     directivesExample: `location /health-echo {
     echo "Aurora WAF Cluster Online";
 }`,
+    action: 'install_echo',
     isDynamic: true,
   },
   {
@@ -718,6 +731,7 @@ sub_filter_types text/html text/css;`,
     directivesExample: `fancyindex on;
 fancyindex_exact_size off;
 fancyindex_header "/theme/header.html";`,
+    action: 'install_fancyindex',
     isDynamic: true,
   },
 ];
