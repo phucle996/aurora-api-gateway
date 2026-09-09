@@ -40,18 +40,11 @@ export function DashboardRecentEvents() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {events.map((evt, idx) => (
-              <tr key={idx} className="hover:bg-muted/50 transition-colors">
-                <td className="py-1.5 text-muted-foreground">{evt.time}</td>
-                <td className="py-1.5">
-                  <span className={`inline-flex items-center px-1.5 py-0.5 border text-[10px] rounded-xs font-bold ${evt.color}`}>
-                    {evt.type}
-                  </span>
-                </td>
-                <td className="py-1.5 text-foreground">{evt.ip}</td>
-                <td className="py-1.5 text-primary font-mono">{evt.path}</td>
-              </tr>
-            ))}
+            <tr>
+              <td colSpan={4} className="py-8 text-center text-muted-foreground font-sans">
+                No recent security events recorded.
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>

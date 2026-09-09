@@ -53,9 +53,5 @@ INSERT OR IGNORE INTO backup_settings (
     s3_access_key, s3_secret_key, s3_prefix, s3_retention_days, last_backup_at, last_backup_status, last_backup_destination
 ) VALUES (
     1, 1, '0 2 * * *', 0, 'https://s3.ap-southeast-1.amazonaws.com', 'aurora-waf-backups', 'ap-southeast-1',
-    '', '', 'backups/', 30, strftime('%Y-%m-%dT%H:%M:%fZ','now', '-1 day'), 'success', 'local'
+    '', '', 'backups/', 30, '', 'none', 'local'
 );
-
--- Seed initial sample history entry
-INSERT OR IGNORE INTO backup_history (id, filename, destination, size_bytes, status, error_message, created_at) VALUES
-('bk_init_snapshot', 'aurora-waf-backup-initial.db', 'local', 204800, 'success', '', strftime('%Y-%m-%dT%H:%M:%fZ','now', '-1 day'));

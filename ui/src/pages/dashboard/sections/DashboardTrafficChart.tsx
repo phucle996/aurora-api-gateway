@@ -39,27 +39,16 @@ export function DashboardTrafficChart() {
         <div className="flex items-center">
           {/* Y Axis */}
           <div className="flex flex-col justify-between h-44 text-[10px] font-sans tabular-nums text-muted-foreground pr-2 select-none">
-            <span>400K</span>
-            <span>300K</span>
-            <span>200K</span>
-            <span>100K</span>
+            <span>100</span>
+            <span>75</span>
+            <span>50</span>
+            <span>25</span>
             <span>0</span>
           </div>
 
           {/* SVG Canvas */}
-          <div className="flex-1 h-44 relative">
+          <div className="flex-1 h-44 relative flex items-center justify-center">
             <svg className="w-full h-full" viewBox="0 0 500 150" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="allowedGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--chart-allowed)" stopOpacity="0.4" />
-                  <stop offset="100%" stopColor="var(--chart-allowed)" stopOpacity="0.0" />
-                </linearGradient>
-                <linearGradient id="blockedGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--chart-blocked)" stopOpacity="0.4" />
-                  <stop offset="100%" stopColor="var(--chart-blocked)" stopOpacity="0.0" />
-                </linearGradient>
-              </defs>
-
               {/* Grid Lines */}
               <line x1="0" y1="0" x2="500" y2="0" stroke="var(--border)" strokeDasharray="3 3" />
               <line x1="0" y1="37.5" x2="500" y2="37.5" stroke="var(--border)" strokeDasharray="3 3" />
@@ -67,30 +56,19 @@ export function DashboardTrafficChart() {
               <line x1="0" y1="112.5" x2="500" y2="112.5" stroke="var(--border)" strokeDasharray="3 3" />
               <line x1="0" y1="150" x2="500" y2="150" stroke="var(--border)" />
 
-              {/* Allowed Area & Line */}
-              <path
-                d="M0,130 Q40,120 80,105 T160,85 T240,40 T320,70 T400,60 T500,80 L500,150 L0,150 Z"
-                fill="url(#allowedGrad)"
-              />
-              <path
-                d="M0,130 Q40,120 80,105 T160,85 T240,40 T320,70 T400,60 T500,80"
-                fill="none"
-                stroke="var(--chart-allowed)"
-                strokeWidth="2.5"
-              />
-
-              {/* Blocked Area & Line */}
-              <path
-                d="M0,145 Q40,142 80,140 T160,135 T240,120 T320,130 T400,125 T500,135 L500,150 L0,150 Z"
-                fill="url(#blockedGrad)"
-              />
-              <path
-                d="M0,145 Q40,142 80,140 T160,135 T240,120 T320,130 T400,125 T500,135"
-                fill="none"
-                stroke="var(--chart-blocked)"
-                strokeWidth="2"
-              />
+              {/* Baseline at 0 */}
+              <line x1="0" y1="149" x2="500" y2="149" stroke="var(--chart-allowed)" strokeWidth="2" strokeDasharray="4 4" />
             </svg>
+
+            {/* Empty State Overlay */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4">
+              <span className="text-xs font-semibold text-foreground font-sans">
+                Awaiting Traffic Data
+              </span>
+              <span className="text-[11px] text-muted-foreground font-sans mt-0.5 max-w-sm">
+                Real-time traffic throughput and block ratios will appear here as HTTP requests are processed.
+              </span>
+            </div>
           </div>
         </div>
 
@@ -107,3 +85,4 @@ export function DashboardTrafficChart() {
     </div>
   );
 }
+

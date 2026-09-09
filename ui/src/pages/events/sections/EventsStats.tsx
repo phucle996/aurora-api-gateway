@@ -1,7 +1,17 @@
 import React from 'react';
-import { FileText, Shield, Eye, AlertTriangle, ArrowUp } from 'lucide-react';
+import { FileText, Shield, Eye, AlertTriangle } from 'lucide-react';
+import type { EventItem } from './EventsTable';
 
-export function EventsStats() {
+interface EventsStatsProps {
+  events?: EventItem[];
+}
+
+export function EventsStats({ events = [] }: EventsStatsProps) {
+  const total = events.length;
+  const blocked = events.filter((e) => e.action === 'BLOCK').length;
+  const logged = events.filter((e) => e.action === 'LOG').length;
+  const critical = events.filter((e) => e.severity === 'Critical').length;
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 font-sans">
       {/* Total Events */}
@@ -13,11 +23,10 @@ export function EventsStats() {
           <FileText className="w-4 h-4 text-slate-400 dark:text-slate-500" />
         </div>
         <div className="text-2xl font-bold text-slate-900 dark:text-white font-sans tabular-nums tracking-tight mt-1.5">
-          18.4K
+          {total}
         </div>
-        <div className="mt-2.5 flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-sans">
-          <ArrowUp className="w-3.5 h-3.5" />
-          <span>+12% vs. last 24h</span>
+        <div className="mt-2.5 flex items-center gap-1.5 text-xs text-muted-foreground font-sans">
+          <span>{total > 0 ? `${total} security events logged` : 'No events recorded'}</span>
         </div>
       </div>
 
@@ -30,11 +39,10 @@ export function EventsStats() {
           <Shield className="w-4 h-4 text-slate-400 dark:text-slate-500" />
         </div>
         <div className="text-2xl font-bold text-slate-900 dark:text-white font-sans tabular-nums tracking-tight mt-1.5">
-          2.1K
+          {blocked}
         </div>
-        <div className="mt-2.5 flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-sans">
-          <ArrowUp className="w-3.5 h-3.5" />
-          <span>+8% vs. last 24h</span>
+        <div className="mt-2.5 flex items-center gap-1.5 text-xs text-muted-foreground font-sans">
+          <span>{blocked > 0 ? `${blocked} threat requests dropped` : 'No blocked requests'}</span>
         </div>
       </div>
 
@@ -47,11 +55,10 @@ export function EventsStats() {
           <Eye className="w-4 h-4 text-slate-400 dark:text-slate-500" />
         </div>
         <div className="text-2xl font-bold text-slate-900 dark:text-white font-sans tabular-nums tracking-tight mt-1.5">
-          14.8K
+          {logged}
         </div>
-        <div className="mt-2.5 flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-sans">
-          <ArrowUp className="w-3.5 h-3.5" />
-          <span>+15% vs. last 24h</span>
+        <div className="mt-2.5 flex items-center gap-1.5 text-xs text-muted-foreground font-sans">
+          <span>{logged > 0 ? `${logged} monitored events recorded` : 'No logged events'}</span>
         </div>
       </div>
 
@@ -64,13 +71,13 @@ export function EventsStats() {
           <AlertTriangle className="w-4 h-4 text-rose-500 dark:text-rose-400" />
         </div>
         <div className="text-2xl font-bold text-rose-600 dark:text-rose-400 font-sans tabular-nums tracking-tight mt-1.5">
-          127
+          {critical}
         </div>
-        <div className="mt-2.5 flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-sans">
-          <ArrowUp className="w-3.5 h-3.5" />
-          <span>+3% vs. last 24h</span>
+        <div className="mt-2.5 flex items-center gap-1.5 text-xs text-muted-foreground font-sans">
+          <span>{critical > 0 ? `${critical} urgent threat anomalies` : 'No critical alerts'}</span>
         </div>
       </div>
     </div>
   );
 }
+

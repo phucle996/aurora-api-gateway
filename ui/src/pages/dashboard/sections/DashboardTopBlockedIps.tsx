@@ -36,23 +36,11 @@ export function DashboardTopBlockedIps() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {ips.map((item) => (
-              <tr key={item.ip} className="hover:bg-muted/50 transition-colors">
-                <td className="py-2 text-foreground font-bold">{item.ip}</td>
-                <td className="py-2 text-muted-foreground">{item.requests}</td>
-                <td className="py-2 text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <span className="text-destructive font-semibold">{item.blockRate}%</span>
-                    <div className="w-16 h-1.5 bg-muted overflow-hidden rounded-full">
-                      <div
-                        className="h-full bg-destructive"
-                        style={{ width: `${item.blockRate}%` }}
-                      />
-                    </div>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            <tr>
+              <td colSpan={3} className="py-8 text-center text-muted-foreground">
+                No blocked source IPs recorded in this period.
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
