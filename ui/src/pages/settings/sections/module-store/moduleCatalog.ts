@@ -370,6 +370,203 @@ location /status {
 }`,
     isDynamic: false,
   },
+  {
+    id: 'opentelemetry',
+    name: 'OpenTelemetry Distributed Tracing',
+    packageName: 'ngx_http_opentelemetry_module',
+    aliases: ['opentelemetry', 'otel', 'ngx_http_opentelemetry_module', 'ngx_otel_module'],
+    category: 'observability',
+    version: '0.1.0',
+    author: 'NGINX / CNCF',
+    summary: 'Distributed tracing chuẩn OTLP — tự động tạo Trace ID, Span và Context Propagation cho mọi request.',
+    description: 'Tích hợp OpenTelemetry trực tiếp vào NGINX, tự động sinh trace/span cho mỗi request HTTP và truyền context (W3C Trace Context, B3) sang các upstream microservices. Xuất dữ liệu tracing qua gRPC/HTTP OTLP tới Jaeger, Zipkin, Tempo hoặc bất kỳ backend nào hỗ trợ OTLP.',
+    iconName: 'Activity',
+    directivesExample: `otel_exporter {
+    endpoint localhost:4317;
+}
+otel_service_name "aurora-waf-nginx";
+otel_trace on;
+
+server {
+    location / {
+        otel_trace_context propagate;
+        otel_span_name "\$request_method \$uri";
+        proxy_pass http://backend;
+    }
+}`,
+    isDynamic: true,
+    docUrl: 'https://github.com/nginxinc/nginx-otel',
+  },
+  {
+    id: 'http_log_module',
+    name: 'Access Log (JSON / Conditional)',
+    packageName: 'ngx_http_log_module',
+    aliases: ['http_log_module', 'access_log', 'log'],
+    category: 'observability',
+    version: 'Built-in',
+    author: 'NGINX Core',
+    summary: 'Ghi log truy cập chi tiết với định dạng tùy biến JSON, hỗ trợ conditional logging và buffer.',
+    description: 'Module logging cốt lõi của NGINX cho phép định nghĩa log format tùy biến (JSON structured logs), ghi log có điều kiện (chỉ log lỗi 4xx/5xx), buffer để tối ưu I/O, và gửi log qua syslog tới ELK/Loki/Fluentd.',
+    iconName: 'FileText',
+    directivesExample: `log_format json_combined escape=json
+  '{'
+    '"time":"\$time_iso8601",'
+    '"remote_addr":"\$remote_addr",'
+    '"request":"\$request",'
+    '"status":\$status,'
+    '"body_bytes_sent":\$body_bytes_sent,'
+    '"request_time":\$request_time,'
+    '"upstream_response_time":"\$upstream_response_time",'
+    '"http_user_agent":"\$http_user_agent",'
+    '"trace_id":"\$otel_trace_id"'
+  '}';
+
+access_log /var/log/nginx/access.json json_combined buffer=64k flush=5s;
+access_log syslog:server=loki:1514,tag=nginx json_combined;`,
+    isDynamic: false,
+  },
+  {
+    id: 'http_mirror_module',
+    name: 'Traffic Mirror (Shadow Testing)',
+    packageName: 'ngx_http_mirror_module',
+    aliases: ['http_mirror_module', 'mirror'],
+    category: 'observability',
+    version: 'Built-in',
+    author: 'NGINX Core',
+    summary: 'Nhân bản (mirror) 100% lưu lượng thật sang dịch vụ phân tích hoặc shadow environment.',
+    description: 'Gửi bản sao của mọi request HTTP tới một endpoint phụ (shadow backend) mà không ảnh hưởng đến response trả về client. Lý tưởng cho việc kiểm thử phiên bản mới, phân tích traffic pattern, hoặc gửi dữ liệu sang hệ thống IDS/WAF thử nghiệm.',
+    iconName: 'Share2',
+    directivesExample: `location / {
+    mirror /mirror_backend;
+    mirror_request_body on;
+    proxy_pass http://production_upstream;
+}
+
+location = /mirror_backend {
+    internal;
+    proxy_pass http://shadow_analysis_service\$request_uri;
+}`,
+    isDynamic: false,
+  },
+  {
+    id: 'stream_log_module',
+    name: 'Stream L4 Access Log',
+    packageName: 'ngx_stream_log_module',
+    aliases: ['stream_log_module', 'stream_log'],
+    category: 'observability',
+    version: 'Built-in',
+    author: 'NGINX Core',
+    summary: 'Ghi log kết nối TCP/UDP Layer 4 chi tiết cho Stream proxy — bytes, duration, upstream status.',
+    description: 'Ghi nhật ký cho mọi kết nối TCP/UDP đi qua stream block: thời gian kết nối, số bytes truyền nhận, trạng thái upstream và thời gian phản hồi. Hỗ trợ cùng định dạng log tùy biến và syslog như HTTP log module.',
+    iconName: 'Network',
+    directivesExample: `stream {
+    log_format stream_json escape=json
+      '{'
+        '"time":"\$time_iso8601",'
+        '"remote_addr":"\$remote_addr",'
+        '"protocol":"\$protocol",'
+        '"status":\$status,'
+        '"bytes_sent":\$bytes_sent,'
+        '"bytes_received":\$bytes_received,'
+        '"session_time":"\$session_time",'
+        '"upstream_addr":"\$upstream_addr"'
+      '}';
+
+    access_log /var/log/nginx/stream.json stream_json;
+}`,
+    isDynamic: false,
+  },
+  {
+    id: 'njs',
+    name: 'NGINX JavaScript (njs) Telemetry',
+    packageName: 'ngx_http_js_module',
+    aliases: ['njs', 'ngx_http_js_module', 'js_module', 'http_js_module'],
+    category: 'observability',
+    version: '0.8.9',
+    author: 'NGINX / F5',
+    summary: 'Scripting engine JavaScript ES6 cho NGINX — custom metrics, JWT decode, request enrichment.',
+    description: 'Thực thi mã JavaScript (ECMAScript 5.1+/ES6) trực tiếp bên trong NGINX để xử lý logic telemetry phức tạp: tính toán custom metrics, decode JWT token để ghi vào log, enrichment request headers với thông tin trace, hoặc tạo dynamic routing dựa trên nội dung request.',
+    iconName: 'Code2',
+    directivesExample: `js_import telemetry from /etc/nginx/njs/telemetry.js;
+
+server {
+    location / {
+        # Gắn request_id và timing vào header
+        js_set \$request_id telemetry.generateRequestId;
+        js_header_filter telemetry.addTimingHeaders;
+
+        add_header X-Request-ID \$request_id;
+        proxy_pass http://backend;
+    }
+
+    location /metrics/custom {
+        js_content telemetry.exportCustomMetrics;
+    }
+}`,
+    isDynamic: true,
+    docUrl: 'https://nginx.org/en/docs/njs/',
+  },
+  {
+    id: 'prometheus_exporter',
+    name: 'Prometheus NGINX Exporter',
+    packageName: 'nginx-prometheus-exporter',
+    aliases: ['prometheus', 'prometheus_exporter', 'nginx_exporter'],
+    category: 'observability',
+    version: '1.4.1',
+    author: 'NGINX / F5',
+    summary: 'Xuất toàn bộ metrics NGINX ra định dạng Prometheus — tích hợp Grafana dashboard sẵn.',
+    description: 'Sidecar exporter đọc dữ liệu từ stub_status hoặc NGINX Plus API và chuyển đổi sang Prometheus exposition format. Tích hợp sẵn với Grafana dashboard cộng đồng để giám sát connections, requests/sec, response codes và upstream health.',
+    iconName: 'BarChart3',
+    directivesExample: `# 1. Bật stub_status endpoint cho exporter đọc
+location = /nginx_status {
+    stub_status;
+    allow 127.0.0.1;
+    deny all;
+}
+
+# 2. Chạy exporter sidecar (docker/systemd)
+# nginx-prometheus-exporter \\
+#   -nginx.scrape-uri=http://127.0.0.1/nginx_status \\
+#   -web.listen-address=:9113
+
+# 3. Prometheus scrape config
+# scrape_configs:
+#   - job_name: nginx
+#     static_configs:
+#       - targets: ['node-01:9113']`,
+    isDynamic: true,
+    docUrl: 'https://github.com/nginxinc/nginx-prometheus-exporter',
+  },
+  {
+    id: 'upstream_hc',
+    name: 'Upstream Active Health Check',
+    packageName: 'ngx_http_upstream_hc_module',
+    aliases: ['upstream_hc', 'health_check', 'ngx_http_upstream_hc_module'],
+    category: 'observability',
+    version: 'NGINX Plus / OSS Patch',
+    author: 'NGINX Core',
+    summary: 'Kiểm tra sức khỏe backend chủ động (Active Probe) — tự động loại bỏ upstream lỗi khỏi pool.',
+    description: 'Gửi request kiểm tra sức khỏe định kỳ đến từng upstream backend, tự động đánh dấu server down/up và loại bỏ khỏi load balancing pool. Trong NGINX OSS, sử dụng passive health check qua max_fails và fail_timeout.',
+    iconName: 'Activity',
+    directivesExample: `upstream backend {
+    zone backend_zone 64k;
+    server 10.0.0.1:8080 max_fails=3 fail_timeout=30s;
+    server 10.0.0.2:8080 max_fails=3 fail_timeout=30s;
+
+    # Passive health check (NGINX OSS)
+    # Server bị đánh dấu down sau 3 lần thất bại
+    # và sẽ được thử lại sau 30 giây
+}
+
+# Active health check (NGINX Plus hoặc bản patch)
+# location / {
+#     proxy_pass http://backend;
+#     health_check interval=5s fails=3 passes=2;
+#     health_check_timeout 3s;
+# }`,
+    isDynamic: false,
+    docUrl: 'https://nginx.org/en/docs/http/ngx_http_upstream_hc_module.html',
+  },
 
   // --- ROUTING & STREAM (LAYER 4) ---
   {
