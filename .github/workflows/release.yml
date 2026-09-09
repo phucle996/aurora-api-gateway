@@ -53,11 +53,14 @@ jobs:
       - name: Build aurora-compile (Rust compiler binary)
         run: cargo build --locked --release -p aurora-engine --bin aurora-compile
 
-      # ── NGINX dynamic modules (all supported versions) ─────────────────────
-      - name: Build NGINX WAF modules for all supported versions
-        run: bash scripts/build-nginx-module.sh
+      - name: Build aurora-agent (Rust node agent)
+        run: cargo build --locked --release -p aurora-agent
 
-      - name: Build NGINX 1.30.4 runtime for Docker bundling
+      # ── NGINX 1.30.4 runtime and WAF dynamic module ────────────────────────
+      - name: Build NGINX 1.30.4 WAF module
+        run: bash scripts/build-nginx-module.sh 1.30.4
+
+      - name: Build NGINX 1.30.4 runtime
         run: |
           cd build/nginx-source/nginx-1.30.4
           make -j$(nproc)
@@ -124,19 +127,18 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           DIST="aurora-waf-${VERSION}-linux-amd64"
-          mkdir -p "dist/${DIST}/bin" "dist/${DIST}/modules" "dist/${DIST}/deploy"
+          mkdir -p "dist/${DIST}/bin" "dist/${DIST}/modules" "dist/${DIST}/deploy" "dist/${DIST}/nginx-runtime"
 
           # Binaries
           cp build/aurora-controller             "dist/${DIST}/bin/"
           cp target/release/aurora-compile       "dist/${DIST}/bin/"
+          cp target/release/aurora-agent         "dist/${DIST}/bin/"
 
-          # NGINX dynamic modules (one per supported version)
-          cp build/modules/ngx_http_aurora_waf_module-*.so "dist/${DIST}/modules/"
-          cp scripts/nginx-versions.txt "dist/${DIST}/modules/supported-versions.txt"
+          # NGINX 1.30.4 runtime and WAF dynamic module
+          cp -rf build/nginx-runtime/*           "dist/${DIST}/nginx-runtime/"
+          cp build/modules/ngx_http_aurora_waf_module.so "dist/${DIST}/modules/"
 
-          # Node deploy scripts (for bare-metal agent setup)
-          cp deploy/docker/domain-routing-agent.sh  "dist/${DIST}/deploy/"
-          cp deploy/docker/node-dependencies.sh     "dist/${DIST}/deploy/"
+          # Node deploy templates
           cp deploy/docker/nginx-node.conf.template "dist/${DIST}/deploy/"
 
           # Self-contained installer (downloads release package or uses local bundle, generates systemd units)
@@ -198,8 +200,9 @@ jobs:
 
       - name: Build all required artifacts
         run: |
-          # Rust compiler
+          # Rust compiler & node agent
           cargo build --locked --release -p aurora-engine --bin aurora-compile
+          cargo build --locked --release -p aurora-agent
 
           # NGINX module
           make module

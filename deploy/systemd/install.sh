@@ -355,6 +355,19 @@ fi
 echo "==> Installing Aurora WAF binaries..."
 install -m 755 "${PAYLOAD_DIR}/bin/aurora-controller" /usr/local/bin/aurora-controller
 install -m 755 "${PAYLOAD_DIR}/bin/aurora-compile"    /usr/local/bin/aurora-compile
+if [ -f "${PAYLOAD_DIR}/bin/aurora-agent" ]; then
+  install -m 755 "${PAYLOAD_DIR}/bin/aurora-agent"    /usr/local/bin/aurora-agent
+fi
+
+# ── Dataplane Appliance Runtime (NGINX 1.30.4 + WAF Module) ────────────────────
+if [ -d "${PAYLOAD_DIR}/nginx-runtime" ]; then
+  echo "==> Installing Aurora Dataplane NGINX 1.30.4 runtime into /opt/aurora/nginx..."
+  mkdir -p /opt/aurora/nginx /opt/modules /var/lib/aurora-policy /var/lib/aurora-routing
+  cp -rf "${PAYLOAD_DIR}/nginx-runtime/"* /opt/aurora/nginx/
+  if [ -f "${PAYLOAD_DIR}/modules/ngx_http_aurora_waf_module.so" ]; then
+    install -m 755 "${PAYLOAD_DIR}/modules/ngx_http_aurora_waf_module.so" /opt/modules/ngx_http_aurora_waf_module.so
+  fi
+fi
 
 # ── NGINX module ───────────────────────────────────────────────────────────────
 NGINX_CONF="/etc/nginx/nginx.conf"
@@ -448,11 +461,32 @@ LimitNOFILE=65535
 WantedBy=multi-user.target
 UNIT_EOF
 
-# ── Generate Data Plane (NGINX WAF Node) systemd unit ─────────────────────────
-UNIT_NGINX_BIN="${SELECTED_NGINX:-/usr/sbin/nginx}"
-UNIT_NGINX_CONF="${NGINX_CONF:-/etc/nginx/nginx.conf}"
+# ── Generate Dataplane Appliance systemd unit (aurora-waf-node) ───────────────
+if [ -f /usr/local/bin/aurora-agent ]; then
+  NGINX_APPLIANCE_BIN="/opt/aurora/nginx/usr/sbin/nginx"
+  [ -x "$NGINX_APPLIANCE_BIN" ] || NGINX_APPLIANCE_BIN="${SELECTED_NGINX:-/usr/sbin/nginx}"
 
-echo "==> Generating aurora-waf-nginx.service..."
+  echo "==> Generating aurora-waf-node.service (Dataplane Appliance Supervisor)..."
+  cat > /etc/systemd/system/aurora-waf-node.service << UNIT_EOF
+[Unit]
+Description=Aurora WAF Dataplane Appliance Node
+Documentation=https://github.com/phucle996/aurora-waf
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+EnvironmentFile=-/etc/aurora-waf/node.env
+ExecStart=/usr/local/bin/aurora-agent --nginx-bin ${NGINX_APPLIANCE_BIN} --nginx-conf /etc/aurora-waf/nginx.conf
+Restart=always
+RestartSec=3s
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+UNIT_EOF
+fi
 cat > /etc/systemd/system/aurora-waf-nginx.service << UNIT_EOF
 [Unit]
 Description=Aurora WAF NGINX Data Plane Node

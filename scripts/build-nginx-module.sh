@@ -67,35 +67,20 @@ build_module_for_version() {
     printf 'Built %s\n' "$out"
 }
 
-# Determine which versions to build.
-requested_version="${1:-${NGINX_VERSION:-}}"
+# Build standard NGINX 1.30.4 by default
+requested_version="${1:-${NGINX_VERSION:-1.30.4}}"
 
-if [ -n "$requested_version" ]; then
-    # Build for a single requested version.
-    sha=$(grep "^${requested_version} " "$aurora_versions" | awk '{print $2}')
-    if [ -z "$sha" ]; then
-        echo "Error: NGINX ${requested_version} not found in $(basename "$aurora_versions")." >&2
-        echo "Supported versions:" >&2
-        awk '{print "  " $1}' "$aurora_versions" >&2
-        exit 1
-    fi
-    build_module_for_version "$requested_version" "$sha"
-
-    # Symlink the default module name for backward compatibility.
-    ln -sf "ngx_http_aurora_waf_module-${requested_version}.so" \
-        "$aurora_root/build/modules/ngx_http_aurora_waf_module.so"
-else
-    # Build for all supported versions.
-    while IFS=' ' read -r ver sha; do
-        [[ "$ver" =~ ^#.*$ || -z "$ver" ]] && continue
-        build_module_for_version "$ver" "$sha"
-    done < "$aurora_versions"
-
-    # Symlink the latest version as the default.
-    latest=$(tail -1 "$aurora_versions" | awk '{print $1}')
-    ln -sf "ngx_http_aurora_waf_module-${latest}.so" \
-        "$aurora_root/build/modules/ngx_http_aurora_waf_module.so"
+sha=$(grep "^${requested_version} " "$aurora_versions" | awk '{print $2}')
+if [ -z "$sha" ]; then
+    echo "Error: NGINX ${requested_version} not found in $(basename "$aurora_versions")." >&2
+    exit 1
 fi
+build_module_for_version "$requested_version" "$sha"
+
+# Output standard module name
+cp -f "$aurora_root/build/modules/ngx_http_aurora_waf_module-${requested_version}.so" \
+    "$aurora_root/build/modules/ngx_http_aurora_waf_module.so"
+
 
 echo "==> All module builds complete."
 ls -lh "$aurora_root/build/modules/"*.so
