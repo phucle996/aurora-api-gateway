@@ -1,5 +1,5 @@
 use super::PushExporter;
-use crate::metrics::collector::NodeMetrics;
+use crate::extension::metrics::collector::NodeMetrics;
 use anyhow::Result;
 use std::time::Duration;
 use tracing::debug;

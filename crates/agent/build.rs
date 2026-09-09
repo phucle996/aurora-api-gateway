@@ -22,6 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "../../proto/sync/v1/upstreams.proto",
                 "../../proto/sync/v1/routing.proto",
                 "../../proto/sync/v1/modules.proto",
+                "../../proto/sync/v1/spec.proto",
             ],
             &["../../proto"],
         )?;

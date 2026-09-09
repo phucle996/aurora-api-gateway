@@ -13,8 +13,6 @@ use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 
-pub const DEFAULT_STUB_STATUS_URL: &str = "http://127.0.0.1:80/stub_status";
-
 pub struct MetricsManager {
     collector: Arc<MetricsCollector>,
     stub_status_url: String,
@@ -24,7 +22,7 @@ pub struct MetricsManager {
 
 impl Default for MetricsManager {
     fn default() -> Self {
-        Self::new(DEFAULT_STUB_STATUS_URL)
+        Self::new("")
     }
 }
 
@@ -38,6 +36,7 @@ impl MetricsManager {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_stub_status_url(mut self, url: impl Into<String>) -> Self {
         self.stub_status_url = url.into();
         self
@@ -197,7 +196,7 @@ mod tests {
     #[test]
     fn test_metrics_manager_builder() {
         let mgr = MetricsManager::default();
-        assert_eq!(mgr.stub_status_url, DEFAULT_STUB_STATUS_URL);
+        assert_eq!(mgr.stub_status_url, "");
 
         let custom = MetricsManager::new("http://127.0.0.1:8080/stub")
             .with_stub_status_url("http://127.0.0.1:9090/stub_status");

@@ -46,12 +46,8 @@ pub struct Config {
     #[arg(long = "metrics-otlp-interval", env = "METRICS_OTLP_INTERVAL", default_value_t = 15)]
     pub metrics_otlp_interval_secs: u64,
 
-    #[arg(
-        long = "nginx-stub-status-url",
-        env = "NGINX_STUB_STATUS_URL",
-        default_value = "http://127.0.0.1:80/stub_status"
-    )]
-    pub nginx_stub_status_url: String,
+    #[arg(long = "nginx-stub-status-url", env = "NGINX_STUB_STATUS_URL")]
+    pub nginx_stub_status_url: Option<String>,
 
     #[arg(long, env = "NO_NGINX", default_value_t = false)]
     pub no_nginx: bool,
@@ -150,7 +146,7 @@ mod tests {
         assert!(!cfg.metrics_prometheus);
         assert!(cfg.metrics_otlp_endpoint.is_none());
         assert_eq!(cfg.metrics_otlp_interval_secs, 15);
-        assert_eq!(cfg.nginx_stub_status_url, "http://127.0.0.1:80/stub_status");
+        assert_eq!(cfg.nginx_stub_status_url, None);
         assert!(!cfg.no_nginx);
         cfg.validate();
     }
@@ -177,7 +173,7 @@ mod tests {
         assert!(cfg.metrics_prometheus);
         assert_eq!(cfg.metrics_otlp_endpoint.as_deref(), Some("http://otel-collector:4317"));
         assert_eq!(cfg.metrics_otlp_interval_secs, 30);
-        assert_eq!(cfg.nginx_stub_status_url, "http://127.0.0.1:8080/stub_status");
+        assert_eq!(cfg.nginx_stub_status_url.as_deref(), Some("http://127.0.0.1:8080/stub_status"));
     }
 
     #[test]
@@ -204,7 +200,7 @@ mod tests {
             metrics_prometheus: false,
             metrics_otlp_endpoint: None,
             metrics_otlp_interval_secs: 15,
-            nginx_stub_status_url: "http://127.0.0.1:80/stub_status".to_string(),
+            nginx_stub_status_url: None,
             no_nginx: false,
             grpc_url: None,
         };
@@ -229,7 +225,7 @@ mod tests {
             metrics_prometheus: false,
             metrics_otlp_endpoint: None,
             metrics_otlp_interval_secs: 15,
-            nginx_stub_status_url: "http://127.0.0.1:80/stub_status".to_string(),
+            nginx_stub_status_url: None,
             no_nginx: false,
             grpc_url: None,
         };
@@ -253,7 +249,7 @@ mod tests {
             metrics_prometheus: false,
             metrics_otlp_endpoint: None,
             metrics_otlp_interval_secs: 15,
-            nginx_stub_status_url: "http://127.0.0.1:80/stub_status".to_string(),
+            nginx_stub_status_url: None,
             no_nginx: false,
             grpc_url: None,
         };

@@ -1,11 +1,12 @@
 use crate::config::Config;
+use crate::extension::ExtensionDispatcher;
 use crate::grpc::GrpcClient;
-use crate::metrics;
 use crate::nginx::NginxManager;
 use crate::sync;
 use anyhow::Result;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 
@@ -114,22 +115,39 @@ impl App {
             sync::modules::run_modules_sync_loop(c4, cl4, n4).await;
         });
 
-        // Initialize Metrics Manager with pull and push exporters
-        let node_id_arc = Arc::new(self.cfg.node_id.clone());
-        let metrics_port = self.cfg.metrics_port;
-        let prometheus_enabled = self.cfg.metrics_prometheus;
-        let otlp_endpoint = self.cfg.metrics_otlp_endpoint.clone().unwrap_or_default();
-        let otlp_enabled = !otlp_endpoint.trim().is_empty();
-        let otlp_interval = self.cfg.metrics_otlp_interval_secs;
-        let metrics_shutdown = shutdown.clone();
+        // Initialize Extension Dispatcher
+        let dispatcher = Arc::new(Mutex::new(ExtensionDispatcher::new(Arc::new(
+            self.cfg.node_id.clone(),
+        ))));
 
-        let stub_status_url = self.cfg.nginx_stub_status_url.clone();
+        // Baseline initialization from CLI flags (if any) until first spec sync
+        let initial_spec = crate::spec::ExtensionsSpec {
+            metrics: Some(crate::spec::MetricsExtensionSpec {
+                enabled: self.cfg.metrics_prometheus || self.cfg.metrics_otlp_endpoint.is_some(),
+                port: self.cfg.metrics_port,
+                stub_status_url: self.cfg.nginx_stub_status_url.clone(),
+                prometheus: Some(crate::spec::PrometheusSpec {
+                    enabled: self.cfg.metrics_prometheus,
+                    path: "/metrics".to_string(),
+                }),
+                otlp: self.cfg.metrics_otlp_endpoint.as_ref().map(|ep| crate::spec::OtlpSpec {
+                    enabled: true,
+                    endpoint: ep.clone(),
+                    interval_secs: self.cfg.metrics_otlp_interval_secs,
+                }),
+            }),
+        };
+        dispatcher.lock().await.apply_spec(&initial_spec).await;
+
+        // Spawn Unified SpecSync runner
+        let spec_sync = Arc::new(sync::spec::SpecSyncRunner::new(
+            (*self.cfg).clone(),
+            self.nginx.clone(),
+            dispatcher.clone(),
+        ));
+        let spec_shutdown = shutdown.clone();
         tokio::spawn(async move {
-            let manager = metrics::MetricsManager::new(stub_status_url)
-                .with_pull_exporter(Arc::new(metrics::PrometheusExporter::new(prometheus_enabled)))
-                .with_push_exporter(Arc::new(metrics::OtlpExporter::new(otlp_enabled, otlp_endpoint, otlp_interval)));
-
-            manager.run(metrics_port, node_id_arc, metrics_shutdown).await;
+            spec_sync.run(spec_shutdown).await;
         });
 
         // Spawn Watchdog loop
@@ -152,6 +170,7 @@ impl App {
         shutdown.cancelled().await;
 
         info!("Shutdown signal received. Stopping Aurora Dataplane Agent...");
+        dispatcher.lock().await.shutdown_all().await;
         if !self.cfg.no_nginx {
             self.nginx.stop().await;
         }

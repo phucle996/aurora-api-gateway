@@ -32,6 +32,8 @@ RUN if [ -f /opt/nginx/usr/local/nginx/sbin/nginx ] && [ ! -f /opt/nginx/usr/sbi
     && printf 'Aurora demo backend: allowed.\n' > /usr/share/aurora-demo/ok \
     && printf 'Aurora demo backend: this file must not be served in enforce mode.\n' > /usr/share/aurora-demo/__aurora_blocked
 
+ENV NGINX_STUB_STATUS_URL="http://127.0.0.1:80/stub_status"
+
 EXPOSE 80 9145
 
 ENTRYPOINT ["/entrypoint.sh"]
