@@ -9,7 +9,6 @@ import {
   Download,
   Terminal,
   AlertCircle,
-  Filter,
   Package,
 } from 'lucide-react';
 import { MODULE_CATALOG, type CatalogModule, type ModuleCategory } from './module-store/moduleCatalog';
@@ -30,6 +29,26 @@ interface DependencyNode {
   job_action: string;
   job_state: string;
   job_message: string;
+}
+
+function checkIsModuleLoaded(mod: CatalogModule, nodeModules?: Array<{ name: string; loaded: boolean }>): boolean {
+  if (!nodeModules) return false;
+  return nodeModules.some((m) => {
+    if (!m.loaded) return false;
+    if (m.name === mod.id || m.name === mod.packageName) return true;
+    if (mod.aliases && mod.aliases.includes(m.name)) return true;
+    return false;
+  });
+}
+
+function getModuleEvidence(mod: CatalogModule, nodeModules?: Array<{ name: string; loaded: boolean; source: string }>): string | undefined {
+  if (!nodeModules) return undefined;
+  const match = nodeModules.find((m) => {
+    if (m.name === mod.id || m.name === mod.packageName) return true;
+    if (mod.aliases && mod.aliases.includes(m.name)) return true;
+    return false;
+  });
+  return match?.source;
 }
 
 export function DependenciesSettingsSection() {
@@ -96,21 +115,23 @@ export function DependenciesSettingsSection() {
     // Check if there are extra modules reported by NGINX not in predefined catalog
     currentNode.modules.forEach((mod) => {
       const exists = catalog.some(
-        (c) => c.id === mod.name || c.packageName === mod.name || c.id === mod.name.replace(/^ngx_http_/, '').replace(/_module$/, '')
+        (c) => c.id === mod.name || c.packageName === mod.name || (c.aliases && c.aliases.includes(mod.name))
       );
-      if (!exists && !mod.name.startsWith('http_')) {
+      if (!exists && !mod.name.startsWith('mail_') && !mod.name.startsWith('stream_realip') && !mod.name.startsWith('stream_ssl_module')) {
+        const cleanName = mod.name.replace(/^ngx_http_/, '').replace(/^http_/, '').replace(/_module$/, '');
         catalog.push({
           id: mod.name,
-          name: `NGINX ${mod.name}`,
+          name: `NGINX ${cleanName.charAt(0).toUpperCase() + cleanName.slice(1)}`,
           packageName: mod.name,
+          aliases: [mod.name],
           category: 'utilities',
-          version: '1.0',
-          author: 'Third-party / Custom',
-          summary: `Module ${mod.name} nạp từ cấu hình runtime.`,
+          version: 'Built-in',
+          author: 'NGINX Core',
+          summary: `Module ${mod.name} nạp từ cấu hình runtime NGINX.`,
           description: `Module NGINX được phát hiện và báo cáo tự động từ node ${currentNode.node_id}. Nguồn: ${mod.source}`,
-          iconName: 'Code2',
-          directivesExample: `# Module nạp tự động qua cấu hình NGINX`,
-          isDynamic: true,
+          iconName: 'Layers',
+          directivesExample: `# Module được biên dịch và nạp tự động qua runtime NGINX`,
+          isDynamic: mod.source !== 'nginx build',
         });
       }
     });
@@ -126,15 +147,7 @@ export function DependenciesSettingsSection() {
       }
 
       // Determine if loaded
-      const isLoaded = Boolean(
-        currentNode?.modules.some((m) => {
-          if (m.name === mod.id || m.name === mod.packageName) return m.loaded;
-          if (mod.id === 'brotli' && m.name === 'brotli') return m.loaded;
-          if (mod.id === 'gzip' && m.name === 'gzip') return m.loaded;
-          if (mod.id === 'http2_upstream' && m.name === 'http2_upstream') return m.loaded;
-          return false;
-        })
-      );
+      const isLoaded = checkIsModuleLoaded(mod, currentNode?.modules);
 
       // Status filter
       if (statusFilter === 'loaded' && !isLoaded) return false;
@@ -147,7 +160,8 @@ export function DependenciesSettingsSection() {
         const matchDesc = mod.description.toLowerCase().includes(q);
         const matchPkg = mod.packageName.toLowerCase().includes(q);
         const matchAuthor = mod.author.toLowerCase().includes(q);
-        if (!matchName && !matchDesc && !matchPkg && !matchAuthor) return false;
+        const matchAlias = mod.aliases?.some((a) => a.toLowerCase().includes(q));
+        if (!matchName && !matchDesc && !matchPkg && !matchAuthor && !matchAlias) return false;
       }
 
       return true;
@@ -157,17 +171,9 @@ export function DependenciesSettingsSection() {
   // Statistics
   const stats = useMemo(() => {
     if (!currentNode) {
-      return { total: MODULE_CATALOG.length, loaded: 0, available: MODULE_CATALOG.length };
+      return { total: allModules.length, loaded: 0, available: allModules.length };
     }
-    const loadedCount = allModules.filter((mod) =>
-      currentNode.modules.some((m) => {
-        if (m.name === mod.id || m.name === mod.packageName) return m.loaded;
-        if (mod.id === 'brotli' && m.name === 'brotli') return m.loaded;
-        if (mod.id === 'gzip' && m.name === 'gzip') return m.loaded;
-        if (mod.id === 'http2_upstream' && m.name === 'http2_upstream') return m.loaded;
-        return false;
-      })
-    ).length;
+    const loadedCount = allModules.filter((mod) => checkIsModuleLoaded(mod, currentNode.modules)).length;
 
     return {
       total: allModules.length,
@@ -207,7 +213,7 @@ export function DependenciesSettingsSection() {
               </h2>
             </div>
             <p className="text-xs text-muted-foreground mt-1 max-w-2xl leading-relaxed">
-              Quản lý và cài đặt các module NGINX mở rộng chỉ với 1-click theo phong cách aaPanel. Hệ thống tự động xác thực toàn vẹn SHA256, kiểm tra cú pháp và kích hoạt Zero-downtime Reload.
+              Hệ thống quản lý module NGINX toàn diện: từ giao thức <strong>HTTP/3 QUIC (UDP)</strong>, HTTP/2, bộ nén Brotli/Zstd, cho đến các module bảo mật GeoIP2, Headers More và L4 Stream Proxy theo phong cách aaPanel.
             </p>
           </div>
 
@@ -331,10 +337,11 @@ export function DependenciesSettingsSection() {
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
           {[
             { key: 'all', label: 'Tất cả' },
-            { key: 'performance', label: 'Tối ưu & Nén' },
+            { key: 'performance', label: 'HTTP/3 & Tối ưu nén' },
             { key: 'security', label: 'Bảo mật & WAF' },
             { key: 'observability', label: 'Giám sát & Traffic' },
-            { key: 'utilities', label: 'Định tuyến & Tiện ích' },
+            { key: 'routing', label: 'Định tuyến L4 Proxy' },
+            { key: 'utilities', label: 'Tiện ích & Media' },
           ].map((cat) => (
             <button
               key={cat.key}
@@ -371,7 +378,7 @@ export function DependenciesSettingsSection() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tìm kiếm module..."
+              placeholder="Tìm kiếm module (HTTP/3, Brotli, GeoIP2...)..."
               className="w-full bg-background border border-input pl-8 pr-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground rounded-xs focus:outline-none focus:border-primary font-sans"
             />
           </div>
@@ -412,19 +419,8 @@ export function DependenciesSettingsSection() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredModules.map((module) => {
-            const isLoaded = Boolean(
-              currentNode?.modules.some((m) => {
-                if (m.name === module.id || m.name === module.packageName) return m.loaded;
-                if (module.id === 'brotli' && m.name === 'brotli') return m.loaded;
-                if (module.id === 'gzip' && m.name === 'gzip') return m.loaded;
-                if (module.id === 'http2_upstream' && m.name === 'http2_upstream') return m.loaded;
-                return false;
-              })
-            );
-
-            const evidence = currentNode?.modules.find(
-              (m) => m.name === module.id || m.name === module.packageName || (module.id === 'brotli' && m.name === 'brotli')
-            )?.source;
+            const isLoaded = checkIsModuleLoaded(module, currentNode?.modules);
+            const evidence = getModuleEvidence(module, currentNode?.modules);
 
             const isAvailable = Boolean(
               module.action === 'install_brotli' ? currentNode?.installable && currentNode?.fresh : true
@@ -460,20 +456,8 @@ export function DependenciesSettingsSection() {
       {detailModule && (
         <ModuleDetailModal
           module={detailModule}
-          isLoaded={Boolean(
-            currentNode?.modules.some((m) => {
-              if (m.name === detailModule.id || m.name === detailModule.packageName) return m.loaded;
-              if (detailModule.id === 'brotli' && m.name === 'brotli') return m.loaded;
-              if (detailModule.id === 'gzip' && m.name === 'gzip') return m.loaded;
-              if (detailModule.id === 'http2_upstream' && m.name === 'http2_upstream') return m.loaded;
-              return false;
-            })
-          )}
-          evidenceSource={
-            currentNode?.modules.find(
-              (m) => m.name === detailModule.id || m.name === detailModule.packageName || (detailModule.id === 'brotli' && m.name === 'brotli')
-            )?.source
-          }
+          isLoaded={checkIsModuleLoaded(detailModule, currentNode?.modules)}
+          evidenceSource={getModuleEvidence(detailModule, currentNode?.modules)}
           onClose={() => setDetailModule(null)}
           onInstall={
             detailModule.action && currentNode

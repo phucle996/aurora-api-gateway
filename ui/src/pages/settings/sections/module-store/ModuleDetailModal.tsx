@@ -15,6 +15,17 @@ import {
   CheckCircle2,
   AlertCircle,
   ExternalLink,
+  Network,
+  Lock,
+  Layers,
+  Sparkles,
+  Share2,
+  KeyRound,
+  Activity,
+  FileText,
+  FileVideo,
+  RefreshCw,
+  Film,
 } from 'lucide-react';
 import type { CatalogModule } from './moduleCatalog';
 
@@ -38,6 +49,17 @@ const ICONS: Record<string, React.ReactNode> = {
   Cpu: <Cpu className="w-6 h-6 text-rose-500" />,
   FolderTree: <FolderTree className="w-6 h-6 text-indigo-400" />,
   Code2: <Code2 className="w-6 h-6 text-teal-400" />,
+  Network: <Network className="w-6 h-6 text-sky-500" />,
+  Lock: <Lock className="w-6 h-6 text-emerald-500" />,
+  Layers: <Layers className="w-6 h-6 text-amber-500" />,
+  Sparkles: <Sparkles className="w-6 h-6 text-purple-400" />,
+  Share2: <Share2 className="w-6 h-6 text-cyan-400" />,
+  KeyRound: <KeyRound className="w-6 h-6 text-amber-400" />,
+  Activity: <Activity className="w-6 h-6 text-rose-400" />,
+  FileText: <FileText className="w-6 h-6 text-blue-400" />,
+  FileVideo: <FileVideo className="w-6 h-6 text-indigo-400" />,
+  RefreshCw: <RefreshCw className="w-6 h-6 text-teal-400" />,
+  Film: <Film className="w-6 h-6 text-amber-500" />,
 };
 
 export function ModuleDetailModal({

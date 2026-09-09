@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   Zap,
   Minimize2,
@@ -13,6 +12,17 @@ import {
   Download,
   RotateCw,
   Info,
+  Network,
+  Lock,
+  Layers,
+  Sparkles,
+  Share2,
+  KeyRound,
+  Activity,
+  FileText,
+  FileVideo,
+  RefreshCw,
+  Film,
 } from 'lucide-react';
 import type { CatalogModule } from './moduleCatalog';
 
@@ -36,13 +46,25 @@ const ICONS: Record<string, React.ReactNode> = {
   Cpu: <Cpu className="w-5 h-5 text-rose-500" />,
   FolderTree: <FolderTree className="w-5 h-5 text-indigo-400" />,
   Code2: <Code2 className="w-5 h-5 text-teal-400" />,
+  Network: <Network className="w-5 h-5 text-sky-500" />,
+  Lock: <Lock className="w-5 h-5 text-emerald-500" />,
+  Layers: <Layers className="w-5 h-5 text-amber-500" />,
+  Sparkles: <Sparkles className="w-5 h-5 text-purple-400" />,
+  Share2: <Share2 className="w-5 h-5 text-cyan-400" />,
+  KeyRound: <KeyRound className="w-5 h-5 text-amber-400" />,
+  Activity: <Activity className="w-5 h-5 text-rose-400" />,
+  FileText: <FileText className="w-5 h-5 text-blue-400" />,
+  FileVideo: <FileVideo className="w-5 h-5 text-indigo-400" />,
+  RefreshCw: <RefreshCw className="w-5 h-5 text-teal-400" />,
+  Film: <Film className="w-5 h-5 text-amber-500" />,
 };
 
 const CATEGORY_NAMES: Record<string, string> = {
-  performance: 'Tối ưu & Nén',
+  performance: 'HTTP/3 & Tối ưu',
   security: 'Bảo mật & WAF',
   observability: 'Giám sát & Traffic',
-  utilities: 'Định tuyến & Tiện ích',
+  routing: 'Định tuyến & L4 Proxy',
+  utilities: 'Tiện ích & Media',
 };
 
 export function ModuleStoreCard({
