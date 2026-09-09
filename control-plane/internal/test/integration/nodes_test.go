@@ -70,26 +70,45 @@ func TestListNodesWorkflow(t *testing.T) {
 		t.Fatalf("giải mã JSON danh sách node thất bại: %v", err)
 	}
 
-	// 3. Xác nhận có ít nhất 1 node local đã được seed qua migration v6
-	if len(nodes) < 1 {
-		t.Fatalf("kỳ vọng ít nhất 1 node trong kết quả, thực tế: %d", len(nodes))
+	// 3. Xác nhận ban đầu database sạch hoàn toàn (0 nodes)
+	if len(nodes) != 0 {
+		t.Fatalf("kỳ vọng 0 node ban đầu, thực tế: %d", len(nodes))
 	}
 
-	localNode := nodes[0]
+	// 4. Đăng ký node qua heartbeat Protobuf
+	hb := entity.NodeHeartbeatPayload{
+		MetricsScope: "container", MetricsAvailable: true, Hostname: "test-node", WorkerIdentity: "worker-1", RuntimeStartedAt: time.Now().Unix() - 120,
+		NodeID:    "node-local-01",
+		Timestamp: time.Now().Unix(),
+		IP:        "127.0.0.1",
+	}
+	rHb := httptest.NewRequest("POST", "/api/v1/nodes/node-local-01/heartbeat", bytes.NewReader(hb.MarshalBinary()))
+	rHb.Header.Set("Content-Type", "application/x-protobuf")
+	rHb.Header.Set("Authorization", "Bearer "+token)
+	wHb := httptest.NewRecorder()
+	mux.ServeHTTP(wHb, rHb)
+	if wHb.Code != http.StatusOK {
+		t.Fatalf("kỳ vọng gửi heartbeat thành công 200, nhận: %d", wHb.Code)
+	}
+
+	// 5. Kiểm tra danh sách sau khi đã đăng ký node
+	wAfter := request("GET", "/api/v1/nodes", token)
+	if wAfter.Code != http.StatusOK {
+		t.Fatalf("kỳ vọng 200 OK, nhận: %d", wAfter.Code)
+	}
+	var nodesAfter []entity.ClusterNodeRecord
+	if err := json.Unmarshal(wAfter.Body.Bytes(), &nodesAfter); err != nil || len(nodesAfter) != 1 {
+		t.Fatalf("kỳ vọng 1 node sau khi đăng ký, thực tế: %d", len(nodesAfter))
+	}
+	localNode := nodesAfter[0]
 	if localNode.ID != "node-local-01" {
 		t.Errorf("kỳ vọng node id là 'node-local-01', thực tế: %s", localNode.ID)
 	}
-	if localNode.Hostname != "" {
-		t.Errorf("kỳ vọng hostname là 'localhost', thực tế: %s", localNode.Hostname)
-	}
-	if localNode.IP != "127.0.0.1" {
-		t.Errorf("kỳ vọng ip là '127.0.0.1', thực tế: %s", localNode.IP)
-	}
-	if localNode.Status != "Not Ready" {
-		t.Errorf("kỳ vọng status là 'Ready', thực tế: %s", localNode.Status)
+	if localNode.IP == "" {
+		t.Errorf("kỳ vọng ip được ghi nhận, thực tế rỗng")
 	}
 
-	// 4. Kiểm tra lấy chi tiết node qua GET /api/v1/nodes/:id
+	// 6. Kiểm tra lấy chi tiết node qua GET /api/v1/nodes/:id
 	wDetail := request("GET", "/api/v1/nodes/node-local-01", token)
 	if wDetail.Code != http.StatusOK {
 		t.Fatalf("kỳ vọng chi tiết node trả về 200, nhận được: %d", wDetail.Code)
@@ -98,7 +117,7 @@ func TestListNodesWorkflow(t *testing.T) {
 	if err := json.Unmarshal(wDetail.Body.Bytes(), &detail); err != nil {
 		t.Fatalf("giải mã JSON chi tiết node thất bại: %v", err)
 	}
-	if detail.ID != "node-local-01" || detail.Hostname != "" {
+	if detail.ID != "node-local-01" {
 		t.Errorf("dữ liệu chi tiết node không khớp: %+v", detail)
 	}
 

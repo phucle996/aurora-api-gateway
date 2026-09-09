@@ -14,6 +14,9 @@ if [ -z "${AUTH_TOKEN:-}" ]; then
   fi
 fi
 export HEARTBEAT_INTERVAL="${HEARTBEAT_INTERVAL:-5}"
+export AURORA_SERVER_URL="${CONTROLLER_URL}"
+export AURORA_NODE_ID="${NODE_ID}"
+export AURORA_AUTH_TOKEN="${AUTH_TOKEN}"
 
 echo "[Aurora Node: ${NODE_ID}] Cấu hình kết nối tới Controller: ${CONTROLLER_URL} (Heartbeat: ${HEARTBEAT_INTERVAL}s)..."
 

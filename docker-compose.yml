@@ -20,9 +20,7 @@ services:
       start_period: 2s
 
   node:
-    build:
-      context: .
-      dockerfile: deploy/docker/Dockerfile.node
+    image: aurora-waf-node-01:latest
     container_name: aurora-node
     environment:
       - CONTROLLER_URL=http://controller:8080
@@ -34,6 +32,8 @@ services:
     volumes:
       - node-policy:/var/lib/aurora-policy
       - node-routing:/var/lib/aurora-routing
+      - ./deploy/docker/entrypoint-node.sh:/entrypoint.sh:ro
+      - ./deploy/docker/nginx-node.conf.template:/etc/nginx/nginx-node.conf.template:ro
     depends_on:
       controller:
         condition: service_healthy

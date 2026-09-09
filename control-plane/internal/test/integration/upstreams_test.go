@@ -35,6 +35,7 @@ func upstreamsFixture(t *testing.T) http.Handler {
 	t.Cleanup(func() { pools.Close() })
 
 	router := gin.New()
+	pools.Writer.Exec("INSERT INTO cluster_nodes (id, name, hostname, ip, role, status, version, sync_status, join_method, certificate) VALUES ('node-local-01', 'node-local-01', '', '127.0.0.1', 'Edge Node', 'Ready', '0.4.1', 'In Sync', 'Unknown', 'Unknown')")
 	module := app.NewModule(pools.Writer, pools.Reader, config.Config{CompilerPath: os.Getenv("AURORA_TEST_COMPILER")})
 	app.RegisterRoutes(router, module, "upstreams-test-token-at-least-32-bytes")
 	return router

@@ -13,9 +13,7 @@ VALUES (
     'admin'
 );
 
--- Seed local cluster node
-INSERT OR IGNORE INTO cluster_nodes (id, name, hostname, ip, role, status, version, sync_status, join_method, certificate)
-VALUES ('node-local-01', 'node-local-01', '', '127.0.0.1', 'Edge Node', 'Ready', '0.4.1', 'In Sync', 'Unknown', 'Unknown');
+
 
 -- Seed system settings
 INSERT OR IGNORE INTO system_settings (key, value) VALUES

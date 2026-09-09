@@ -3,6 +3,9 @@ include /var/lib/aurora-routing/dependencies/current/modules.conf;
 env NODE_ROLE;
 env AURORA_METRICS_SCOPE;
 env NODE_VERSION;
+env AURORA_SERVER_URL;
+env AURORA_NODE_ID;
+env AURORA_AUTH_TOKEN;
 worker_processes 2;
 worker_rlimit_nofile 65535;
 pid /var/run/nginx.pid;
@@ -17,6 +20,11 @@ http {
     include /var/lib/aurora-routing/dependencies/current/http.conf;
     http2 on;
     include /etc/nginx/access-trusted-proxies.conf;
+
+    aurora_waf_controller ${CONTROLLER_URL};
+    aurora_waf_node_id ${NODE_ID};
+    aurora_waf_token ${AUTH_TOKEN};
+    aurora_waf_heartbeat_interval ${HEARTBEAT_INTERVAL};
 
     real_ip_header X-Real-IP;
     real_ip_recursive off;
