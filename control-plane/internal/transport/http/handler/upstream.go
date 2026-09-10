@@ -721,7 +721,7 @@ func (h *UpstreamHandler) Delete(c *gin.Context) {
 			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "delete upstream timed out"})
 			return
 		}
-		if strings.Contains(err.Error(), "still referenced by domains") {
+		if strings.Contains(err.Error(), "still referenced by routes") || strings.Contains(err.Error(), "still referenced by domains") {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}

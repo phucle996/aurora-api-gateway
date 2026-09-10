@@ -26,3 +26,9 @@ var Seeds string
 //
 //go:embed 0005_extension_schemas.sql
 var ExtensionSchemas string
+
+// RoutingAndCertificates establishes dedicated authority tables for Routing and SSL Certificates.
+//
+//go:embed 0006_routing_and_certificates.sql
+var RoutingAndCertificates string
+

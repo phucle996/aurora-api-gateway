@@ -33,8 +33,8 @@ type Module struct {
 	NodeHandler          *handler.NodeHandler
 	AnalyticsHandler     *handler.AnalyticsHandler
 	AnalyticsService     port.AnalyticsService
-	DomainHandler        *handler.DomainHandler
-	DomainRoutingHandler *handler.DomainRoutingHandler
+	RouteHandler         *handler.RouteHandler
+	CertificateHandler   *handler.CertificateHandler
 	UpstreamHandler      *handler.UpstreamHandler
 	SystemHandler        *handler.SystemHandler
 	SecurityHandler      *handler.SecurityHandler
@@ -80,17 +80,17 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	accessSvc := service.NewAccessService(accessRepo, cfg.CompilerPath, specTrigger)
 	accessHdr := handler.NewAccessHandler(accessSvc)
 
-	domainRepo := repository.NewDomainRepository(writerDB, readerDB)
-	domainSvc := service.NewDomainService(domainRepo, specTrigger)
-	domainHdr := handler.NewDomainHandler(domainSvc)
-
-	domainRoutingRepo := repository.NewDomainRoutingRepository(readerDB)
-	domainRoutingSvc := service.NewDomainRoutingService(domainRoutingRepo)
-	domainRoutingHdr := handler.NewDomainRoutingHandler(domainRoutingSvc)
-
 	upstreamRepo := repository.NewUpstreamRepository(writerDB, readerDB)
 	upstreamSvc := service.NewUpstreamService(upstreamRepo, specTrigger)
 	upstreamHdr := handler.NewUpstreamHandler(upstreamSvc)
+
+	routeRepo := repository.NewRouteRepository(writerDB)
+	routeSvc := service.NewRoutingService(routeRepo, specTrigger)
+	routeHdr := handler.NewRouteHandler(routeSvc)
+
+	certRepo := repository.NewSQLiteCertificateRepository(writerDB)
+	certSvc := service.NewCertificateService(certRepo, specTrigger)
+	certHdr := handler.NewCertificateHandler(certSvc)
 
 	analyticsRepo := repository.NewAnalyticsRepository(writerDB)
 	metricsCfg, _ := analyticsRepo.GetMetricsConfig(context.Background())
@@ -150,8 +150,8 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 		NodeHandler:          nodeHdr,
 		AnalyticsHandler:     analyticsHdr,
 		AnalyticsService:     analyticsSvc,
-		DomainHandler:        domainHdr,
-		DomainRoutingHandler: domainRoutingHdr,
+		RouteHandler:         routeHdr,
+		CertificateHandler:   certHdr,
 		UpstreamHandler:      upstreamHdr,
 		SystemHandler:        systemHdr,
 		SecurityHandler:      securityHdr,

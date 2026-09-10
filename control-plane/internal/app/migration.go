@@ -27,7 +27,7 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return err
 	}
-	if version > 5 {
+	if version > 6 {
 		return fmt.Errorf("unsupported database schema version %d", version)
 	}
 	if version < 1 {
@@ -74,6 +74,14 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 			return fmt.Errorf("extension schemas: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version) VALUES(5)"); err != nil {
+			return err
+		}
+	}
+	if version < 6 {
+		if _, err := tx.ExecContext(ctx, migrations.RoutingAndCertificates); err != nil {
+			return fmt.Errorf("routing and certificates schema: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version) VALUES(6)"); err != nil {
 			return err
 		}
 	}

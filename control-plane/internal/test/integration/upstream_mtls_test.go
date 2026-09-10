@@ -88,12 +88,5 @@ func TestUpstreamMTLSCredentials(t *testing.T) {
 	if unchanged["version"].(float64) != 2 {
 		t.Fatal("rejected changes mutated version")
 	}
-	// Query-string operator credentials must never authorize secret bundle downloads.
-	r := httptest.NewRequest("GET", "/api/v1/domain-routing/node-01/bundle?token=upstreams-test-token-at-least-32-bytes", nil)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, r)
-	if w.Code != 403 {
-		t.Fatalf("query-token bundle access: %d", w.Code)
-	}
 	call("DELETE", path, nil, 200)
 }

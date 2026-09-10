@@ -83,22 +83,24 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 	}
 	out.UpstreamsConf = upstreamConf
 
-	// 3. Fetch Domain routing records
+	// 3. Fetch Routing records from routes table
 	const routingQuery = `
 	SELECT 
-		coalesce(d.id, 0),
-		coalesce(d.domain, ''),
-		coalesce(d.status, ''),
-		coalesce(d.upstream, ''),
-		coalesce(u.algorithm, d.upstream_algorithm),
+		coalesce(r.rowid, 0),
+		coalesce(r.host, ''),
+		coalesce(r.path, '/'),
+		case when r.enabled = 1 then 'Active' else 'Inactive' end,
+		coalesce(r.upstream_name, ''),
+		coalesce(u.algorithm, 'round_robin'),
 		coalesce(u.servers_json, ''),
 		coalesce(u.transport_json, ''),
 		coalesce(u.internal_ssl_json, ''),
 		coalesce(u.probes_json, '[]'),
 		coalesce(u.dynamic_dns, 0)
-	FROM domains d
-	LEFT JOIN upstreams u ON u.name = d.upstream
-	ORDER BY d.id
+	FROM routes r
+	LEFT JOIN upstreams u ON u.name = r.upstream_name
+	WHERE r.enabled = 1
+	ORDER BY r.priority DESC, r.created_at
 	`
 	rows, err := r.reader.QueryContext(ctx, routingQuery)
 	if err != nil {
@@ -113,6 +115,7 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 		if err := rows.Scan(
 			&rec.ID,
 			&rec.Host,
+			&rec.Path,
 			&rec.Status,
 			&rec.Target,
 			&algorithm,
@@ -151,6 +154,9 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 				ext.Enabled = enabledInt == 1
 				extensions = append(extensions, ext)
 			}
+		}
+		if err := extRows.Err(); err != nil {
+			return nil, fmt.Errorf("iterate extensions: %w", err)
 		}
 		out.Extensions = extensions
 	}

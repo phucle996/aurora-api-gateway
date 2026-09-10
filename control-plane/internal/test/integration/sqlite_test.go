@@ -51,8 +51,12 @@ func TestSQLiteRestartAndConnectionSettings(t *testing.T) {
 		t.Fatalf("value = %q, err = %v", value, err)
 	}
 	var count int
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil || count != 5 {
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil || count != 6 {
 		t.Fatalf("migration count = %d, err = %v", count, err)
+	}
+	var routesTableCount int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('routes', 'ssl_certificates')").Scan(&routesTableCount); err != nil || routesTableCount != 2 {
+		t.Fatalf("expected routes and ssl_certificates tables, got count = %d, err = %v", routesTableCount, err)
 	}
 	// Force replacement connections to verify per-connection settings survive churn.
 	db.SetMaxIdleConns(0)

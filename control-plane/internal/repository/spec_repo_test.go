@@ -20,6 +20,9 @@ func setupSpecTestDB(t *testing.T) *sql.DB {
 	if _, err := db.Exec(migrations.Tables); err != nil {
 		t.Fatalf("failed to execute migrations: %v", err)
 	}
+	if _, err := db.Exec(migrations.RoutingAndCertificates); err != nil {
+		t.Fatalf("failed to execute routing & certificates migrations: %v", err)
+	}
 	if _, err := db.Exec(migrations.Seeds); err != nil {
 		t.Fatalf("failed to execute seeds: %v", err)
 	}
@@ -44,9 +47,9 @@ func setupSpecTestDB(t *testing.T) *sql.DB {
 		VALUES (30, 'digest-ups', 'upstream app { server 10.0.1.1:8080; }
 ');
 
-		-- Seed Domain routing
-		INSERT INTO domains (id, domain, root_domain, status, upstream)
-		VALUES (1, 'service.local', 'service.local', 'Active', 'app');
+		-- Seed Route
+		INSERT INTO routes (id, name, host, path, upstream_name, enabled)
+		VALUES ('rt_1', 'service.local', 'service.local', '/', 'app', 1);
 	`)
 	if err != nil {
 		t.Fatalf("failed to seed test db: %v", err)

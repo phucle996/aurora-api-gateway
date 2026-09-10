@@ -193,11 +193,15 @@ func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*Spec, 
 				if d.Host == "" {
 					continue
 				}
+				path := d.Path
+				if path == "" {
+					path = "/"
+				}
 				domains = append(domains, DomainRoutingSpec{
 					Host: d.Host,
 					Locations: []LocationRoutingSpec{
 						{
-							Path:     "/",
+							Path:     path,
 							Upstream: d.Target,
 						},
 					},

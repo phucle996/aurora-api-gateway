@@ -1,9 +1,6 @@
 package app
 
 import (
-	"crypto/sha256"
-	"crypto/subtle"
-	"net/http"
 	"time"
 
 	"aurora-waf.local/control-plane/internal/transport/http/middleware"
@@ -29,9 +26,9 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	loginLimiter := middleware.NewLoginRateLimiter(5, time.Minute)
 
 	// Route auth public — gọi để lấy token rồi mới gọi các route protected
-	r.POST("/api/v1/auth/login", loginLimiter.Handler(), m.AuthHandler.Login) // Đăng nhập, trả về JWT
+	r.POST("/api/v1/auth/login", loginLimiter.Handler(), m.AuthHandler.Login)                     // Đăng nhập, trả về JWT
 	r.POST("/api/v1/auth/2fa/login-verify", loginLimiter.Handler(), m.AuthHandler.Verify2FALogin) // Xác thực 2FA OTP bước 2
-	r.POST("/api/v1/auth/logout", m.AuthHandler.Logout)                       // Xoá cookie JWT
+	r.POST("/api/v1/auth/logout", m.AuthHandler.Logout)                                           // Xoá cookie JWT
 
 	// authMidd kiểm tra JWT từ cả cookie HttpOnly lẫn Authorization header.
 	// Nếu thiếu hoặc sai token, middleware trả về 401 và dừng request luôn.
@@ -72,26 +69,20 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	r.GET("/api/v1/auth/me", authMidd, m.AuthHandler.Me)         // Thông tin user hiện tại
 	r.GET("/api/v1/system/info", authMidd, m.SystemHandler.Info) // Thông tin runtime hệ thống thực tế
 
-	// Middleware chặn sớm mọi request không dùng header Authorization chuẩn (tránh lộ token trong query string hoặc cookie)
-	requireOperatorHeader := func(c *gin.Context) {
-		expected := sha256.Sum256([]byte("Bearer " + token))
-		actual := sha256.Sum256([]byte(c.GetHeader("Authorization")))
-		if token == "" || subtle.ConstantTimeCompare(expected[:], actual[:]) != 1 {
-			c.AbortWithStatus(http.StatusForbidden)
-			return
-		}
-		c.Next()
-	}
+	// Quản lý Routing API
+	r.GET("/api/v1/routes", authMidd, m.RouteHandler.List)
+	r.POST("/api/v1/routes", authMidd, m.RouteHandler.Create)
+	r.GET("/api/v1/routes/:id", authMidd, m.RouteHandler.GetByID)
+	r.PUT("/api/v1/routes/:id", authMidd, m.RouteHandler.Update)
+	r.DELETE("/api/v1/routes/:id", authMidd, m.RouteHandler.Delete)
+	r.PUT("/api/v1/routes/:id/status", authMidd, m.RouteHandler.ToggleStatus)
 
-	// Quản lý Domain API
-	r.GET("/api/v1/domain-routing/:node", authMidd, m.DomainRoutingHandler.Desired)
-	r.GET("/api/v1/domain-routing/:node/bundle", authMidd, requireOperatorHeader, m.DomainRoutingHandler.Bundle)
-	r.GET("/api/v1/domains", authMidd, m.DomainHandler.List)            // Danh sách domain (filter, phân trang, stats)
-	r.GET("/api/v1/domains/catalog", authMidd, m.DomainHandler.Catalog) // Danh mục domain phục vụ target scope & dropdown
-	r.POST("/api/v1/domains", authMidd, m.DomainHandler.Create)         // Tạo mới domain
-	r.GET("/api/v1/domains/:id", authMidd, m.DomainHandler.GetByID)     // Lấy chi tiết domain
-	r.PUT("/api/v1/domains/:id", authMidd, m.DomainHandler.Update)      // Cập nhật domain
-	r.DELETE("/api/v1/domains/:id", authMidd, m.DomainHandler.Delete)   // Xoá domain
+	// Quản lý Certificates API
+	r.GET("/api/v1/certificates", authMidd, m.CertificateHandler.List)
+	r.POST("/api/v1/certificates", authMidd, m.CertificateHandler.Create)
+	r.GET("/api/v1/certificates/:id", authMidd, m.CertificateHandler.GetByID)
+	r.PUT("/api/v1/certificates/:id", authMidd, m.CertificateHandler.Update)
+	r.DELETE("/api/v1/certificates/:id", authMidd, m.CertificateHandler.Delete)
 
 	// Quản lý Upstream API & Node Sync
 	r.POST("/api/v1/upstreams", authMidd, m.UpstreamHandler.Create)           // Tạo mới upstream pool
@@ -123,15 +114,15 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	r.GET("/api/v1/rule-releases/:id", authMidd, m.RuleHandler.ReleaseDetail) // Trạng thái release
 
 	// Quản lý Cluster Nodes (danh sách và trạng thái các NGINX data plane nodes)
-	r.GET("/api/v1/events/stream", authMidd, m.NodeHandler.EventsStream)                 // Server-Sent Events (SSE) realtime metrics & liveness stream
-	r.GET("/api/v1/nodes", authMidd, m.NodeHandler.List)                                 // Danh sách nodes trong cluster
-	r.GET("/api/v1/nodes/rolling-status", authMidd, m.NodeHandler.GetRollingStatus)      // Trạng thái tiến trình rolling reload
-	r.POST("/api/v1/nodes/rolling-reload", authMidd, m.NodeHandler.RollingReload)        // Kích hoạt rolling reload tuần tự
-	r.GET("/api/v1/nodes/:id", authMidd, m.NodeHandler.GetByID)                          // Chi tiết 1 node
-	r.GET("/api/v1/nodes/:id/config", authMidd, m.NodeHandler.GetConfig)                 // Kéo file cấu hình thực tế từ container node
-	r.POST("/api/v1/nodes/:id/reload", authMidd, m.NodeHandler.ReloadNode)               // Đặt lệnh reload cho 1 node
-	r.POST("/api/v1/nodes/:id/heartbeat", authMidd, m.NodeHandler.Heartbeat)             // Heartbeat telemetry đẩy từ Node (Protobuf binary)
-	r.GET("/api/v1/nodes/:id/sync-history", authMidd, m.NodeHandler.GetSyncLogs)         // Lịch sử đồng bộ thực tế của node
+	r.GET("/api/v1/events/stream", authMidd, m.NodeHandler.EventsStream)            // Server-Sent Events (SSE) realtime metrics & liveness stream
+	r.GET("/api/v1/nodes", authMidd, m.NodeHandler.List)                            // Danh sách nodes trong cluster
+	r.GET("/api/v1/nodes/rolling-status", authMidd, m.NodeHandler.GetRollingStatus) // Trạng thái tiến trình rolling reload
+	r.POST("/api/v1/nodes/rolling-reload", authMidd, m.NodeHandler.RollingReload)   // Kích hoạt rolling reload tuần tự
+	r.GET("/api/v1/nodes/:id", authMidd, m.NodeHandler.GetByID)                     // Chi tiết 1 node
+	r.GET("/api/v1/nodes/:id/config", authMidd, m.NodeHandler.GetConfig)            // Kéo file cấu hình thực tế từ container node
+	r.POST("/api/v1/nodes/:id/reload", authMidd, m.NodeHandler.ReloadNode)          // Đặt lệnh reload cho 1 node
+	r.POST("/api/v1/nodes/:id/heartbeat", authMidd, m.NodeHandler.Heartbeat)        // Heartbeat telemetry đẩy từ Node (Protobuf binary)
+	r.GET("/api/v1/nodes/:id/sync-history", authMidd, m.NodeHandler.GetSyncLogs)    // Lịch sử đồng bộ thực tế của node
 
 	// Phân tích số liệu chuyên sâu & Analytics Explorer (Grafana Inline)
 	r.POST("/api/v1/analytics/query", authMidd, m.AnalyticsHandler.Query)

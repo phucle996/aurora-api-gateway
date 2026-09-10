@@ -234,18 +234,18 @@ func (r *UpstreamRepository) Update(
 		return nil, fmt.Errorf("update upstream: %w", err)
 	}
 
-	// 3. Nếu tên upstream thay đổi, cập nhật các domain đang tham chiếu
+	// 3. Nếu tên upstream thay đổi, cập nhật các route đang tham chiếu
 	if oldName != cmd.Name {
-		const updateDomainsSQL = `UPDATE domains SET upstream = ? WHERE upstream = ?;`
-		if _, err := tx.ExecContext(ctx, updateDomainsSQL, cmd.Name, oldName); err != nil {
-			return nil, fmt.Errorf("cập nhật tham chiếu domain: %w", err)
+		const updateRoutesSQL = `UPDATE routes SET upstream_name = ? WHERE upstream_name = ?;`
+		if _, err := tx.ExecContext(ctx, updateRoutesSQL, cmd.Name, oldName); err != nil {
+			return nil, fmt.Errorf("cập nhật tham chiếu route: %w", err)
 		}
 	}
 
-	// 4. Lấy số lượng domain đang liên kết
+	// 4. Lấy số lượng route đang liên kết
 	var boundCount int
-	const countDomainsSQL = `SELECT COUNT(*) FROM domains WHERE upstream = ?;`
-	if err := tx.QueryRowContext(ctx, countDomainsSQL, cmd.Name).Scan(&boundCount); err != nil {
+	const countRoutesSQL = `SELECT COUNT(*) FROM routes WHERE upstream_name = ?;`
+	if err := tx.QueryRowContext(ctx, countRoutesSQL, cmd.Name).Scan(&boundCount); err != nil {
 		boundCount = 0
 	}
 
@@ -300,9 +300,9 @@ func (r *UpstreamRepository) GetByID(ctx context.Context, id int64) (*entity.Ups
 			COALESCE(d.bound_count, 0) AS bound_domains_count
 		FROM upstreams u
 		LEFT JOIN (
-			SELECT upstream, COUNT(*) AS bound_count
-			FROM domains
-			GROUP BY upstream
+			SELECT upstream_name AS upstream, COUNT(*) AS bound_count
+			FROM routes
+			GROUP BY upstream_name
 		) d ON d.upstream = u.name
 		WHERE u.id = ?
 	)
@@ -330,9 +330,9 @@ func (r *UpstreamRepository) GetByName(ctx context.Context, name string) (*entit
 			COALESCE(d.bound_count, 0) AS bound_domains_count
 		FROM upstreams u
 		LEFT JOIN (
-			SELECT upstream, COUNT(*) AS bound_count
-			FROM domains
-			GROUP BY upstream
+			SELECT upstream_name AS upstream, COUNT(*) AS bound_count
+			FROM routes
+			GROUP BY upstream_name
 		) d ON d.upstream = u.name
 		WHERE u.name = ?
 	)
@@ -374,9 +374,9 @@ func (r *UpstreamRepository) List(ctx context.Context, query entity.ListUpstream
 			COALESCE(d.bound_count, 0) AS bound_domains_count
 		FROM upstreams u
 		LEFT JOIN (
-			SELECT upstream, COUNT(*) AS bound_count
-			FROM domains
-			GROUP BY upstream
+			SELECT upstream_name AS upstream, COUNT(*) AS bound_count
+			FROM routes
+			GROUP BY upstream_name
 		) d ON d.upstream = u.name
 		WHERE (? = '' OR u.name LIKE ? OR u.description LIKE ? OR u.external_fqdn LIKE ?)
 		  AND (? = '' OR u.architecture_type = ?)
@@ -549,11 +549,11 @@ func (r *UpstreamRepository) Delete(ctx context.Context, id int64, generatedConf
 	}
 
 	var bound bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM domains WHERE upstream = ?)`, name).Scan(&bound); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM routes WHERE upstream_name = ?)`, name).Scan(&bound); err != nil {
 		return err
 	}
 	if bound {
-		return fmt.Errorf("upstream is still referenced by domains; rebind or delete those domains first")
+		return fmt.Errorf("upstream is still referenced by routes; rebind or delete those routes first")
 	}
 	// 2. Xóa upstream
 	const deleteSQL = `DELETE FROM upstreams WHERE id = ?;`

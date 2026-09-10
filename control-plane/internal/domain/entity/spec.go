@@ -35,6 +35,7 @@ type ClusterSpecRelease struct {
 type SpecRoutingRecord struct {
 	ID            int64
 	Host          string
+	Path          string
 	Status        string
 	Target        string
 	Algorithm     string
