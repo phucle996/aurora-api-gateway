@@ -33,12 +33,12 @@ export function ExtensionStats({
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
       {/* 1. Total Extensions */}
-      <div className="bg-card/75 backdrop-blur-xs border border-border/70 rounded-lg p-4 flex flex-col justify-between shadow-xs">
+      <div className="group bg-card/75 backdrop-blur-xs border border-border/70 rounded-lg p-4 flex flex-col justify-between shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md hover:border-border">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
             Total Catalog
           </span>
-          <div className="p-1.5 rounded-md bg-primary/10 text-primary">
+          <div className="p-1.5 rounded-md bg-primary/10 text-primary transition-transform duration-300 group-hover:scale-110">
             <Blocks className="w-4 h-4" />
           </div>
         </div>
@@ -46,19 +46,22 @@ export function ExtensionStats({
           <span className="text-2xl font-bold tracking-tight text-foreground">{stats.total}</span>
           <span className="text-xs text-muted-foreground font-medium">plugins in 11 groups</span>
         </div>
-        <div className="mt-2 text-[11px] text-muted-foreground/80 flex items-center gap-1.5">
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          Dynamic declarative synchronization
+        <div className="mt-2 text-[11px] text-muted-foreground/80 flex items-center gap-2">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+          </span>
+          <span>Dynamic declarative synchronization</span>
         </div>
       </div>
 
       {/* 2. Active / Enabled */}
-      <div className="bg-card/75 backdrop-blur-xs border border-border/70 rounded-lg p-4 flex flex-col justify-between shadow-xs">
+      <div className="group bg-card/75 backdrop-blur-xs border border-border/70 rounded-lg p-4 flex flex-col justify-between shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md hover:border-emerald-500/30">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
             Active / Enabled
           </span>
-          <div className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-500">
+          <div className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-500 transition-transform duration-300 group-hover:scale-110">
             <CheckCircle2 className="w-4 h-4" />
           </div>
         </div>
@@ -70,19 +73,19 @@ export function ExtensionStats({
         </div>
         <div className="mt-2 w-full bg-muted/60 rounded-full h-1.5 overflow-hidden">
           <div
-            className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500"
+            className="bg-gradient-to-r from-emerald-500 to-teal-400 h-1.5 rounded-full transition-all duration-700 ease-out"
             style={{ width: `${activePercent}%` }}
           />
         </div>
       </div>
 
       {/* 3. Inactive / Standby */}
-      <div className="bg-card/75 backdrop-blur-xs border border-border/70 rounded-lg p-4 flex flex-col justify-between shadow-xs">
+      <div className="group bg-card/75 backdrop-blur-xs border border-border/70 rounded-lg p-4 flex flex-col justify-between shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md hover:border-border">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
             Available / Standby
           </span>
-          <div className="p-1.5 rounded-md bg-muted text-muted-foreground">
+          <div className="p-1.5 rounded-md bg-muted text-muted-foreground transition-transform duration-300 group-hover:scale-110">
             <ShieldAlert className="w-4 h-4 opacity-70" />
           </div>
         </div>
@@ -98,7 +101,7 @@ export function ExtensionStats({
       </div>
 
       {/* 4. Ecosystem Breakdown (Interactive chips) */}
-      <div className="bg-card/75 backdrop-blur-xs border border-border/70 rounded-lg p-4 flex flex-col justify-between shadow-xs">
+      <div className="group bg-card/75 backdrop-blur-xs border border-border/70 rounded-lg p-4 flex flex-col justify-between shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md hover:border-border">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
             Ecosystem Breakdown
@@ -115,9 +118,9 @@ export function ExtensionStats({
                 key={catKey}
                 type="button"
                 onClick={() => onSelectCategory && onSelectCategory(catKey)}
-                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-xs font-medium cursor-pointer transition-all border ${
+                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-xs font-medium cursor-pointer transition-all duration-200 border hover:scale-105 active:scale-95 ${
                   isSelected
-                    ? `${meta.badgeClass} ring-1 ring-primary font-bold shadow-2xs`
+                    ? `${meta.badgeClass} ring-1 ring-primary font-bold shadow-xs scale-105`
                     : `${meta.badgeClass} opacity-85 hover:opacity-100`
                 }`}
                 title={`Filter by ${meta.label}`}

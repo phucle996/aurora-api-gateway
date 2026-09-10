@@ -98,15 +98,15 @@ export function ExtensionConfigModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
       <div
-        className="bg-card border border-border rounded-lg shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        className="bg-card border border-border rounded-lg shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-3 duration-200 ease-out"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
         <div className="px-5 py-4 border-b border-border flex items-center justify-between bg-muted/20">
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-md ${meta?.iconBgClass || 'bg-primary/10 text-primary'}`}>
+            <div className={`p-2 rounded-md ${meta?.iconBgClass || 'bg-primary/10 text-primary'} transition-transform duration-200 hover:scale-105`}>
               <ExtensionIcon id={extension.id} category={extension.category} className="w-5 h-5" />
             </div>
             <div>
@@ -129,7 +129,7 @@ export function ExtensionConfigModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer"
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-all duration-200 hover:rotate-90 hover:scale-110 active:scale-95 cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -147,7 +147,7 @@ export function ExtensionConfigModal({
                 <button
                   type="button"
                   onClick={handleLoadTemplate}
-                  className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted px-2 py-1 rounded-sm border border-border/60 transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted px-2 py-1 rounded-sm border border-border/60 transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer"
                   title="Load recommended default template for this extension"
                 >
                   <FileCode className="w-3 h-3 text-primary" />
@@ -157,7 +157,7 @@ export function ExtensionConfigModal({
               <button
                 type="button"
                 onClick={handleFormat}
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted px-2 py-1 rounded-sm border border-border/60 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted px-2 py-1 rounded-sm border border-border/60 transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer"
                 title="Format and validate JSON indentation"
               >
                 <Wand2 className="w-3 h-3" />
@@ -166,7 +166,7 @@ export function ExtensionConfigModal({
               <button
                 type="button"
                 onClick={handleReset}
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted px-2 py-1 rounded-sm border border-border/60 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted px-2 py-1 rounded-sm border border-border/60 transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer"
                 title="Reset to saved configuration"
               >
                 <RotateCcw className="w-3 h-3" />
@@ -184,14 +184,14 @@ export function ExtensionConfigModal({
                 setConfigText(e.target.value);
                 if (jsonError) setJsonError(null);
               }}
-              className="w-full font-mono text-xs bg-muted/20 border border-border/80 rounded-md p-3.5 text-foreground leading-relaxed focus:outline-none focus:ring-1 focus:ring-primary transition-all resize-y"
+              className="w-full font-mono text-xs bg-muted/20 border border-border/80 rounded-md p-3.5 text-foreground leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200 resize-y"
               spellCheck={false}
             />
           </div>
 
           {/* Syntax Error Alert */}
           {jsonError && (
-            <div className="p-3 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-500/40 rounded-sm flex items-center gap-2 text-xs text-rose-700 dark:text-rose-400 animate-in fade-in duration-150">
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-500/40 rounded-sm flex items-center gap-2 text-xs text-rose-700 dark:text-rose-400 animate-in fade-in slide-in-from-top-1 duration-150">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{jsonError}</span>
             </div>
@@ -211,8 +211,10 @@ export function ExtensionConfigModal({
         <div className="px-5 py-3.5 border-t border-border bg-muted/20 flex items-center justify-between">
           <div className="flex items-center gap-2">
             {saveSuccess && (
-              <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium animate-in fade-in">
-                <Check className="w-4 h-4" />
+              <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium animate-in fade-in zoom-in-95 duration-200">
+                <span className="p-0.5 rounded-full bg-emerald-500/10 text-emerald-500">
+                  <Check className="w-3.5 h-3.5" />
+                </span>
                 <span>Config saved successfully</span>
               </span>
             )}
@@ -221,7 +223,7 @@ export function ExtensionConfigModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-3.5 py-1.5 rounded-sm border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+              className="px-3.5 py-1.5 rounded-sm border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-all duration-150 active:scale-95 cursor-pointer"
             >
               Cancel
             </button>
@@ -229,12 +231,20 @@ export function ExtensionConfigModal({
               type="button"
               disabled={isSaving}
               onClick={handleSave}
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-sm bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
+              className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-sm text-xs font-semibold transition-all duration-200 shadow-xs cursor-pointer disabled:opacity-50 active:scale-95 ${saveSuccess
+                ? 'bg-emerald-600 text-white scale-102'
+                : 'bg-primary text-primary-foreground hover:bg-primary/90 hover:scale-102'
+                }`}
             >
               {isSaving ? (
                 <>
                   <RotateCw className="w-3.5 h-3.5 animate-spin" />
                   <span>Saving...</span>
+                </>
+              ) : saveSuccess ? (
+                <>
+                  <Check className="w-3.5 h-3.5 animate-bounce" />
+                  <span>Saved</span>
                 </>
               ) : (
                 <>

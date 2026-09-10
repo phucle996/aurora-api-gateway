@@ -9,6 +9,7 @@ interface ExtensionCardProps {
   onToggle: (id: string, enabled: boolean) => void;
   onConfigure: (ext: ExtensionItem) => void;
   isToggling?: boolean;
+  index?: number;
 }
 
 export function ExtensionCard({
@@ -16,6 +17,7 @@ export function ExtensionCard({
   onToggle,
   onConfigure,
   isToggling = false,
+  index = 0,
 }: ExtensionCardProps) {
   const meta = CATEGORIES_META[extension.category as keyof typeof CATEGORIES_META] || {
     label: extension.category,
@@ -24,29 +26,45 @@ export function ExtensionCard({
     borderClass: 'border-border',
   };
 
+  const delayMs = Math.min(index * 25, 400);
+
   return (
     <div
-      className={`group relative bg-card/85 backdrop-blur-xs border rounded-lg p-4 flex flex-col justify-between transition-all duration-200 hover:shadow-md ${
+      style={{ animationDelay: `${delayMs}ms` }}
+      className={`group relative bg-card/85 backdrop-blur-xs border rounded-lg p-4 flex flex-col justify-between transition-all duration-300 ease-out will-change-transform animate-ext-fade-in hover:-translate-y-1 hover:shadow-lg ${
         extension.enabled
-          ? 'border-primary/40 shadow-xs ring-1 ring-primary/10'
-          : 'border-border/70 opacity-85 hover:opacity-100 hover:border-border'
+          ? 'border-primary/40 shadow-xs ring-1 ring-primary/10 hover:border-primary/70 hover:shadow-primary/10'
+          : 'border-border/70 opacity-85 hover:opacity-100 hover:border-border hover:shadow-muted/20'
       }`}
     >
+      {/* Top glowing accent line when active */}
+      {extension.enabled && (
+        <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-transparent via-emerald-500/80 to-transparent rounded-t-lg transition-opacity duration-300" />
+      )}
+
       {/* Top row: Icon + Title + Status Switch */}
       <div>
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div
-              className={`p-2.5 rounded-lg ${meta.iconBgClass} transition-transform duration-200 group-hover:scale-105 shrink-0 shadow-2xs`}
+              className={`p-2.5 rounded-lg ${meta.iconBgClass} transition-all duration-300 ease-out group-hover:scale-110 group-hover:rotate-3 shrink-0 shadow-2xs`}
             >
-              <ExtensionIcon id={extension.id} category={extension.category} className="w-5 h-5" />
+              <ExtensionIcon id={extension.id} category={extension.category} className="w-5 h-5 transition-transform duration-300" />
             </div>
             <div className="min-w-0">
-              <h3 className="font-semibold text-sm text-foreground truncate" title={extension.name}>
-                {extension.name}
-              </h3>
+              <div className="flex items-center gap-1.5">
+                <h3 className="font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors duration-200" title={extension.name}>
+                  {extension.name}
+                </h3>
+                {extension.enabled && (
+                  <span className="relative flex h-2 w-2 shrink-0" title="Active">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-1.5 mt-1">
-                <span className="font-mono text-[10px] text-muted-foreground bg-muted/70 px-1.5 py-0.5 rounded-xs">
+                <span className="font-mono text-[10px] text-muted-foreground bg-muted/70 px-1.5 py-0.5 rounded-xs transition-colors group-hover:bg-muted">
                   {extension.id}
                 </span>
                 <span className="text-[10px] text-muted-foreground/80 font-mono">
@@ -67,12 +85,12 @@ export function ExtensionCard({
                 aria-checked={extension.enabled}
                 title={extension.enabled ? 'Click to disable' : 'Click to enable'}
                 onClick={() => onToggle(extension.id, !extension.enabled)}
-                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-1 focus:ring-primary ${
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-300 ease-in-out hover:scale-105 active:scale-95 focus:outline-none focus:ring-1 focus:ring-primary ${
                   extension.enabled ? 'bg-emerald-500 shadow-xs' : 'bg-muted/80'
                 }`}
               >
                 <span
-                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
                     extension.enabled ? 'translate-x-4' : 'translate-x-0'
                   }`}
                 />
@@ -83,7 +101,7 @@ export function ExtensionCard({
 
         {/* Description */}
         <p
-          className="mt-3 text-xs text-muted-foreground line-clamp-2 leading-relaxed h-8"
+          className="mt-3 text-xs text-muted-foreground line-clamp-2 leading-relaxed h-8 transition-colors group-hover:text-foreground/80"
           title={extension.description}
         >
           {extension.description}
@@ -97,7 +115,7 @@ export function ExtensionCard({
               {extension.tags.slice(0, 3).map((tag) => (
                 <span
                   key={tag}
-                  className="text-[9px] text-muted-foreground/70 bg-muted/40 px-1.5 py-0.2 rounded-xs whitespace-nowrap font-mono"
+                  className="text-[9px] text-muted-foreground/70 bg-muted/40 px-1.5 py-0.2 rounded-xs whitespace-nowrap font-mono hover:bg-muted transition-colors duration-150"
                 >
                   #{tag}
                 </span>
@@ -116,7 +134,7 @@ export function ExtensionCard({
       <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between gap-2 text-xs">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span
-            className={`px-2 py-0.5 rounded-full text-[10px] font-medium border uppercase tracking-wider ${meta.badgeClass}`}
+            className={`px-2 py-0.5 rounded-full text-[10px] font-medium border uppercase tracking-wider transition-transform duration-200 group-hover:scale-105 ${meta.badgeClass}`}
           >
             {meta.label}
           </span>
@@ -125,7 +143,7 @@ export function ExtensionCard({
               Core
             </span>
           ) : (
-            <span className="px-1.5 py-0.5 rounded-xs text-[10px] bg-primary/10 text-primary font-mono">
+            <span className="px-1.5 py-0.5 rounded-xs text-[10px] bg-primary/10 text-primary font-mono animate-pulse">
               Custom
             </span>
           )}
@@ -134,12 +152,13 @@ export function ExtensionCard({
         <button
           type="button"
           onClick={() => onConfigure(extension)}
-          className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 px-2 py-1 rounded-sm transition-colors cursor-pointer border border-border/40 hover:border-border"
+          className="group/btn inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/80 active:scale-95 px-2 py-1 rounded-sm transition-all duration-200 cursor-pointer border border-border/40 hover:border-border shadow-2xs"
         >
-          <Settings2 className="w-3.5 h-3.5" />
+          <Settings2 className="w-3.5 h-3.5 transition-transform duration-300 group-hover/btn:rotate-45" />
           <span>Config</span>
         </button>
       </div>
     </div>
   );
 }
+

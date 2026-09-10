@@ -430,3 +430,62 @@ html.light,
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Extension Hub Animations */
+@keyframes extFadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes extGlowPulse {
+  0%, 100% {
+    opacity: 0.4;
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+  }
+  50% {
+    opacity: 0.9;
+    box-shadow: 0 0 10px 2px rgba(16, 185, 129, 0.25);
+  }
+}
+
+@keyframes extFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes extPulseSubtle {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.85;
+  }
+}
+
+.animate-ext-fade-in {
+  animation: extFadeInUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-ext-float {
+  animation: extFloat 3s ease-in-out infinite;
+}
+
+.animate-ext-glow {
+  animation: extGlowPulse 2.5s ease-in-out infinite;
+}
+
+.animate-ext-pulse {
+  animation: extPulseSubtle 2s ease-in-out infinite;
+}

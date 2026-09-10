@@ -107,19 +107,19 @@ export function ExtensionFilters({
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         {/* Search input */}
         <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />
           <input
             type="text"
             placeholder="Search by plugin name, ID, category, or tag (#jwt, #waf, #ai)..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full pl-9 pr-8 py-2 bg-card border border-border/80 rounded-md text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary transition-all shadow-2xs"
+            className="w-full pl-9 pr-8 py-2 bg-card border border-border/80 rounded-md text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200 shadow-2xs"
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => onSearchChange('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer p-0.5"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer p-0.5 hover:scale-110 active:scale-90 transition-transform duration-150"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -133,7 +133,7 @@ export function ExtensionFilters({
             <button
               type="button"
               onClick={() => onStatusFilterChange('all')}
-              className={`px-2.5 py-1 rounded-sm transition-colors cursor-pointer font-medium ${
+              className={`px-2.5 py-1 rounded-sm transition-all duration-200 active:scale-95 cursor-pointer font-medium ${
                 statusFilter === 'all'
                   ? 'bg-card text-foreground shadow-xs'
                   : 'text-muted-foreground hover:text-foreground'
@@ -144,9 +144,9 @@ export function ExtensionFilters({
             <button
               type="button"
               onClick={() => onStatusFilterChange('enabled')}
-              className={`px-2.5 py-1 rounded-sm transition-colors cursor-pointer font-medium ${
+              className={`px-2.5 py-1 rounded-sm transition-all duration-200 active:scale-95 cursor-pointer font-medium ${
                 statusFilter === 'enabled'
-                  ? 'bg-card text-emerald-600 dark:text-emerald-400 shadow-xs'
+                  ? 'bg-card text-emerald-600 dark:text-emerald-400 shadow-xs font-semibold'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
@@ -155,7 +155,7 @@ export function ExtensionFilters({
             <button
               type="button"
               onClick={() => onStatusFilterChange('disabled')}
-              className={`px-2.5 py-1 rounded-sm transition-colors cursor-pointer font-medium ${
+              className={`px-2.5 py-1 rounded-sm transition-all duration-200 active:scale-95 cursor-pointer font-medium ${
                 statusFilter === 'disabled'
                   ? 'bg-card text-foreground shadow-xs'
                   : 'text-muted-foreground hover:text-foreground'
@@ -171,7 +171,7 @@ export function ExtensionFilters({
               type="button"
               title="Card Grid View"
               onClick={() => onViewModeChange('grid')}
-              className={`p-1.5 rounded-sm transition-colors cursor-pointer ${
+              className={`p-1.5 rounded-sm transition-all duration-200 active:scale-90 cursor-pointer ${
                 viewMode === 'grid'
                   ? 'bg-card text-primary shadow-xs'
                   : 'text-muted-foreground hover:text-foreground'
@@ -183,7 +183,7 @@ export function ExtensionFilters({
               type="button"
               title="Table View"
               onClick={() => onViewModeChange('table')}
-              className={`p-1.5 rounded-sm transition-colors cursor-pointer ${
+              className={`p-1.5 rounded-sm transition-all duration-200 active:scale-90 cursor-pointer ${
                 viewMode === 'table'
                   ? 'bg-card text-primary shadow-xs'
                   : 'text-muted-foreground hover:text-foreground'
@@ -209,19 +209,21 @@ export function ExtensionFilters({
               key={cat.id}
               type="button"
               onClick={() => onCategoryChange(cat.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border whitespace-nowrap transition-all cursor-pointer ${
+              className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-full border whitespace-nowrap transition-all duration-200 cursor-pointer hover:scale-105 active:scale-95 ${
                 isSelected
-                  ? 'border-primary bg-primary/10 text-primary font-semibold shadow-xs ring-1 ring-primary/20'
+                  ? 'border-primary bg-primary/10 text-primary font-semibold shadow-xs ring-1 ring-primary/20 scale-102'
                   : 'border-border/70 bg-card/70 text-muted-foreground hover:text-foreground hover:border-border'
               }`}
             >
-              {cat.icon}
+              <span className="transition-transform duration-200 group-hover:scale-110">
+                {cat.icon}
+              </span>
               <span>{cat.label}</span>
               <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono transition-colors duration-200 ${
                   isSelected
                     ? 'bg-primary text-primary-foreground font-bold'
-                    : 'bg-muted text-muted-foreground'
+                    : 'bg-muted text-muted-foreground group-hover:bg-muted/80'
                 }`}
               >
                 {count}
