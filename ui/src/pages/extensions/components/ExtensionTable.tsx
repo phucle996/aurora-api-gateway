@@ -41,8 +41,10 @@ export function ExtensionTable({
               return (
                 <tr
                   key={ext.id}
-                  className={`group hover:bg-muted/40 transition-colors duration-200 ${!ext.enabled ? 'opacity-80 hover:opacity-100' : ''
-                    }`}
+                  onClick={() => onConfigure(ext)}
+                  className={`group hover:bg-muted/40 transition-colors duration-200 cursor-pointer ${
+                    !ext.enabled ? 'opacity-80 hover:opacity-100' : ''
+                  }`}
                 >
                   {/* Extension Name & ID */}
                   <td className="py-3 px-4">
@@ -52,7 +54,9 @@ export function ExtensionTable({
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="font-semibold text-foreground flex items-center gap-2">
-                          <span className="truncate group-hover:text-primary transition-colors duration-150">{ext.name}</span>
+                          <span className="truncate group-hover:text-primary transition-colors duration-150">
+                            {ext.name}
+                          </span>
                           <span className="font-mono text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-none shrink-0">
                             {ext.id}
                           </span>
@@ -90,7 +94,7 @@ export function ExtensionTable({
                   </td>
 
                   {/* Status Toggle */}
-                  <td className="py-3 px-4 whitespace-nowrap">
+                  <td className="py-3 px-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-2">
                       {isToggling ? (
                         <RotateCw className="w-4 h-4 animate-spin text-primary" />
@@ -99,37 +103,39 @@ export function ExtensionTable({
                           type="button"
                           role="switch"
                           aria-checked={ext.enabled}
-                          onClick={() => onToggle(ext.id, !ext.enabled)}
-                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-300 ease-in-out hover:scale-105 active:scale-95 focus:outline-none focus:ring-1 focus:ring-primary ${ext.enabled ? 'bg-emerald-500 shadow-xs' : 'bg-muted/80'
-                            }`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggle(ext.id, !ext.enabled);
+                          }}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-300 ease-in-out hover:scale-105 active:scale-95 focus:outline-none focus:ring-1 focus:ring-primary ${
+                            ext.enabled ? 'bg-emerald-500 shadow-xs' : 'bg-muted/80'
+                          }`}
                         >
                           <span
-                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${ext.enabled ? 'translate-x-4' : 'translate-x-0'
-                              }`}
+                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+                              ext.enabled ? 'translate-x-4' : 'translate-x-0'
+                            }`}
                           />
                         </button>
                       )}
                       <span
-                        className={`text-[11px] font-medium transition-colors duration-200 ${ext.enabled
+                        className={`text-[11px] font-medium transition-colors duration-200 ${
+                          ext.enabled
                             ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
                             : 'text-muted-foreground'
-                          }`}
+                        }`}
                       >
                         {ext.enabled ? 'Active' : 'Disabled'}
                       </span>
                     </div>
                   </td>
 
-                  {/* Actions */}
+                  {/* Actions: View cue */}
                   <td className="py-3 px-4 text-right whitespace-nowrap">
-                    <button
-                      type="button"
-                      onClick={() => onConfigure(ext)}
-                      className="group/btn inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted/80 px-2.5 py-1 rounded-sm transition-all duration-150 active:scale-95 cursor-pointer border border-border/60 shadow-2xs"
-                    >
-                      <Settings2 className="w-3.5 h-3.5 transition-transform duration-300 group-hover/btn:rotate-45" />
-                      <span>Configure</span>
-                    </button>
+                    <span className="text-xs text-muted-foreground group-hover:text-primary transition-colors flex items-center justify-end gap-1 font-medium">
+                      <span>Mở</span>
+                      <span>→</span>
+                    </span>
                   </td>
                 </tr>
               );

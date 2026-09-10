@@ -258,4 +258,3 @@ func (r *SpecSyncRepository) PublishSpecRelease(ctx context.Context, release ent
 	out.Actor = actor
 	return &out, nil
 }
-

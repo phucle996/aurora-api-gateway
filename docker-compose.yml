@@ -10,10 +10,8 @@ services:
     ports:
       - "8080:8080"
       - "9090:9090"
-      - "5140:5140/udp"
     environment:
       - AURORA_GRPC_ADDR=0.0.0.0:9090
-      - AURORA_RATE_LIMIT_UDP=0.0.0.0:5140
       - AURORA_JWT_SECRET=aurora-api-gateway-jwt-secret-docker-compose-dev-key
     volumes:
       - controller-data:/data

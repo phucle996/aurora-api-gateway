@@ -45,13 +45,16 @@ export function ExtensionCard({
       {/* Top row: Icon + Title + Status Switch */}
       <div>
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
+          <div
+            onClick={() => onConfigure(extension)}
+            className="flex items-center gap-3 min-w-0 cursor-pointer flex-1"
+          >
             <div
               className={`p-2.5 rounded-lg ${meta.iconBgClass} transition-all duration-300 ease-out group-hover:scale-110 group-hover:rotate-3 shrink-0 shadow-2xs`}
             >
               <ExtensionIcon id={extension.id} category={extension.category} className="w-5 h-5 transition-transform duration-300" />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
                 <h3 className="font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors duration-200" title={extension.name}>
                   {extension.name}
@@ -75,7 +78,7 @@ export function ExtensionCard({
           </div>
 
           {/* Switch toggle */}
-          <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+          <div className="flex items-center gap-1.5 shrink-0 pt-0.5" onClick={(e) => e.stopPropagation()}>
             {isToggling ? (
               <RotateCw className="w-4 h-4 animate-spin text-primary" />
             ) : (
@@ -84,7 +87,10 @@ export function ExtensionCard({
                 role="switch"
                 aria-checked={extension.enabled}
                 title={extension.enabled ? 'Click to disable' : 'Click to enable'}
-                onClick={() => onToggle(extension.id, !extension.enabled)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggle(extension.id, !extension.enabled);
+                }}
                 className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-300 ease-in-out hover:scale-105 active:scale-95 focus:outline-none focus:ring-1 focus:ring-primary ${
                   extension.enabled ? 'bg-emerald-500 shadow-xs' : 'bg-muted/80'
                 }`}
@@ -101,7 +107,8 @@ export function ExtensionCard({
 
         {/* Description */}
         <p
-          className="mt-3 text-xs text-muted-foreground line-clamp-2 leading-relaxed h-8 transition-colors group-hover:text-foreground/80"
+          onClick={() => onConfigure(extension)}
+          className="mt-3 text-xs text-muted-foreground line-clamp-2 leading-relaxed h-8 transition-colors group-hover:text-foreground/80 cursor-pointer"
           title={extension.description}
         >
           {extension.description}
@@ -109,7 +116,7 @@ export function ExtensionCard({
 
         {/* Tags preview if any */}
         {extension.tags && extension.tags.length > 0 && (
-          <div className="mt-2.5 flex items-center gap-1 overflow-hidden">
+          <div className="mt-2.5 flex items-center gap-1 overflow-hidden" onClick={() => onConfigure(extension)}>
             <Tag className="w-3 h-3 text-muted-foreground/60 shrink-0" />
             <div className="flex items-center gap-1 overflow-x-hidden">
               {extension.tags.slice(0, 3).map((tag) => (
@@ -130,8 +137,11 @@ export function ExtensionCard({
         )}
       </div>
 
-      {/* Footer: Category & Built-in badge + Configure button */}
-      <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between gap-2 text-xs">
+      {/* Footer: Category & Built-in badge + Click action cue */}
+      <div
+        onClick={() => onConfigure(extension)}
+        className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between gap-2 text-xs cursor-pointer group-hover:bg-muted/10 -mx-4 -mb-4 px-4 pb-4 rounded-b-lg transition-colors"
+      >
         <div className="flex items-center gap-1.5 flex-wrap">
           <span
             className={`px-2 py-0.5 rounded-none text-[10px] font-medium border uppercase tracking-wider transition-transform duration-200 group-hover:scale-105 ${meta.badgeClass}`}
@@ -149,14 +159,10 @@ export function ExtensionCard({
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={() => onConfigure(extension)}
-          className="group/btn inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/80 active:scale-95 px-2 py-1 rounded-sm transition-all duration-200 cursor-pointer border border-border/40 hover:border-border shadow-2xs"
-        >
-          <Settings2 className="w-3.5 h-3.5 transition-transform duration-300 group-hover/btn:rotate-45" />
-          <span>Config</span>
-        </button>
+        <span className="text-[11px] font-medium text-muted-foreground/80 group-hover:text-primary transition-colors flex items-center gap-1">
+          <span>Chi tiết & Rules</span>
+          <span className="text-xs transition-transform duration-200 group-hover:translate-x-0.5">→</span>
+        </span>
       </div>
     </div>
   );

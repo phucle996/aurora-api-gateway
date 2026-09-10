@@ -346,6 +346,7 @@ export default function ExtensionsPage() {
         extension={configuringExt}
         onClose={() => setConfiguringExt(null)}
         onSave={handleSaveConfig}
+        onToggleStatus={handleToggleStatus}
       />
     </div>
   );
