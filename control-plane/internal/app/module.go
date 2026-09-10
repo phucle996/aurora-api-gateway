@@ -38,7 +38,6 @@ type Module struct {
 	DomainRoutingHandler *handler.DomainRoutingHandler
 	UpstreamHandler      *handler.UpstreamHandler
 	RateLimitHandler     *handler.RateLimitHandler
-	RateLimitCollector   *provider.RateLimitCollector
 	SystemHandler        *handler.SystemHandler
 	SecurityHandler      *handler.SecurityHandler
 	NotificationHandler  *handler.NotificationHandler
@@ -102,20 +101,12 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	}
 
 	rateLimitRepo := repository.NewRateLimitRepository(writerDB, readerDB)
-	rateLimitMetricsProvider := provider.NewDynamicRateLimitMetricsProvider(analyticsRepo, rateLimitRepo)
-	rateLimitSvc := service.NewRateLimitService(rateLimitRepo, rateLimitMetricsProvider)
-	rateLimitCollector := provider.NewRateLimitCollector(rateLimitSvc, cfg.RateLimitUDPAddr)
-	rateLimitHdr := handler.NewRateLimitHandler(rateLimitSvc, rateLimitCollector)
-	if metricsCfg.Mode == "disabled" {
-		rateLimitCollector.SetEnabled(false)
-	}
+	rateLimitSvc := service.NewRateLimitService(rateLimitRepo)
+	rateLimitHdr := handler.NewRateLimitHandler(rateLimitSvc)
 
 	nodeRepo := repository.NewNodeRepository(writerDB)
 	extensionRepo := repository.NewExtensionRepository(writerDB, readerDB)
 	analyticsSvc := service.NewAnalyticsService(analyticsRepo, nodeRepo, extensionRepo)
-	analyticsSvc.RegisterConfigListener(func(mCfg entity.MetricsIntegrationConfig) {
-		rateLimitCollector.SetEnabled(mCfg.Mode != "disabled")
-	})
 	eventHub := provider.NewEventHub()
 	nodeSvc := service.NewNodeService(nodeRepo, analyticsSvc, eventHub)
 	nodeHdr := handler.NewNodeHandler(nodeSvc)
@@ -170,7 +161,6 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 		DomainRoutingHandler: domainRoutingHdr,
 		UpstreamHandler:      upstreamHdr,
 		RateLimitHandler:     rateLimitHdr,
-		RateLimitCollector:   rateLimitCollector,
 		SystemHandler:        systemHdr,
 		SecurityHandler:      securityHdr,
 		NotificationHandler:  notificationHdr,

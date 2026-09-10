@@ -21,21 +21,14 @@ const (
 	rateLimitChangeTimeout = 10 * time.Second // Dành cho Create, Update, Delete rule
 )
 
-// RateLimitCollectorPort defines flush and toggle operations for the rate limit metrics collector.
-type RateLimitCollectorPort interface {
-	Flush(ctx context.Context)
-	SetEnabled(enabled bool)
-}
-
 // RateLimitHandler handles rate limiting configuration and metrics endpoints.
 type RateLimitHandler struct {
-	service   port.RateLimitService
-	collector RateLimitCollectorPort
+	service port.RateLimitService
 }
 
 // NewRateLimitHandler creates a new RateLimitHandler instance.
-func NewRateLimitHandler(s port.RateLimitService, c RateLimitCollectorPort) *RateLimitHandler {
-	return &RateLimitHandler{service: s, collector: c}
+func NewRateLimitHandler(s port.RateLimitService) *RateLimitHandler {
+	return &RateLimitHandler{service: s}
 }
 
 // Create creates a new rate limit rule.
@@ -545,28 +538,17 @@ func (h *RateLimitHandler) GetMetrics(c *gin.Context) {
 	})
 }
 
-// Flush flushes memory-buffered rate limit metrics to SQLite.
+// Flush flushes memory-buffered rate limit metrics (no-op, collector deprecated).
 func (h *RateLimitHandler) Flush(c *gin.Context) {
-	if h.collector != nil {
-		ctx, cancel := context.WithTimeout(c.Request.Context(), rateLimitQueryTimeout)
-		defer cancel()
-		h.collector.Flush(ctx)
-	}
 	c.JSON(http.StatusOK, gin.H{"message": "Rate limit metrics flushed"})
 }
 
-// EnableCollector enables rate limit metric collection.
+// EnableCollector enables rate limit metric collection (no-op, collector deprecated).
 func (h *RateLimitHandler) EnableCollector(c *gin.Context) {
-	if h.collector != nil {
-		h.collector.SetEnabled(true)
-	}
 	c.JSON(http.StatusOK, gin.H{"enabled": true})
 }
 
-// DisableCollector disables rate limit metric collection.
+// DisableCollector disables rate limit metric collection (no-op, collector deprecated).
 func (h *RateLimitHandler) DisableCollector(c *gin.Context) {
-	if h.collector != nil {
-		h.collector.SetEnabled(false)
-	}
 	c.JSON(http.StatusOK, gin.H{"enabled": false})
 }

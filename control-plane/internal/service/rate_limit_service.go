@@ -6,23 +6,17 @@ import (
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	"aurora-waf.local/control-plane/internal/domain/repo"
 	port "aurora-waf.local/control-plane/internal/domain/service"
-	"aurora-waf.local/control-plane/internal/provider"
 )
 
 // RateLimitService triển khai các nghiệp vụ Rate Limit Rule theo port.RateLimitService.
 type RateLimitService struct {
-	repo     repo.RateLimitRepository
-	provider provider.RateLimitMetricsProvider
+	repo repo.RateLimitRepository
 }
 
-// NewRateLimitService khởi tạo service với repository và metrics provider tương ứng.
-func NewRateLimitService(r repo.RateLimitRepository, p provider.RateLimitMetricsProvider) port.RateLimitService {
-	if p == nil {
-		p = provider.NewStandaloneRateLimitProvider(r)
-	}
+// NewRateLimitService khởi tạo service quản lý cấu hình Rate Limiting.
+func NewRateLimitService(r repo.RateLimitRepository) port.RateLimitService {
 	return &RateLimitService{
-		repo:     r,
-		provider: p,
+		repo: r,
 	}
 }
 
@@ -51,23 +45,23 @@ func (s *RateLimitService) DeleteRateLimitRule(ctx context.Context, id int64) er
 	return s.repo.Delete(ctx, id)
 }
 
-// GetStats lấy tổng quan số liệu thống kê Rate Limiting từ provider.
+// GetStats lấy tổng quan số liệu thống kê Rate Limiting từ repository.
 func (s *RateLimitService) GetStats(ctx context.Context) (*entity.RateLimitStatsSummary, error) {
-	summary, err := s.provider.GetStats(ctx)
+	summary, err := s.repo.GetStats(ctx)
 	if err != nil {
 		return nil, err
 	}
-	summary.Mode = s.provider.Mode()
+	summary.Mode = "active"
 	return summary, nil
 }
 
-// GetMetrics lấy dữ liệu biểu đồ và top endpoints theo range và sort từ provider.
+// GetMetrics lấy dữ liệu biểu đồ và top endpoints theo range và sort từ repository.
 func (s *RateLimitService) GetMetrics(ctx context.Context, timeRange string, sortBy string) (*entity.RateLimitMetricsResult, error) {
-	result, err := s.provider.GetMetrics(ctx, timeRange, sortBy)
+	result, err := s.repo.GetMetrics(ctx, timeRange, sortBy)
 	if err != nil {
 		return nil, err
 	}
-	result.Mode = s.provider.Mode()
+	result.Mode = "active"
 	return result, nil
 }
 

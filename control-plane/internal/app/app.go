@@ -32,7 +32,6 @@ type App struct {
 	grpcServer         *grpcserver.Server
 	grpcLis            net.Listener
 	metrics            port.MetricsService
-	collector          *provider.RateLimitCollector
 	backupScheduler    *service.BackupScheduler
 	notificationWorker *service.NotificationWorker
 	specScheduler      *provider.SpecScheduler
@@ -114,7 +113,6 @@ func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
 	}
 	router.NoRoute(gin.WrapH(ui))
 
-	module.RateLimitCollector.Start(context.Background())
 	module.BackupScheduler.Start(context.Background())
 	if module.NotificationWorker != nil {
 		module.NotificationWorker.Start(context.Background())
@@ -160,7 +158,6 @@ func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
 		grpcServer:         grpcSrv,
 		grpcLis:            grpcLis,
 		metrics:            module.MetricsService,
-		collector:          module.RateLimitCollector,
 		backupScheduler:    module.BackupScheduler,
 		notificationWorker: module.NotificationWorker,
 		specScheduler:      module.SpecScheduler,
@@ -208,9 +205,6 @@ func (a *App) Close() error {
 	}
 	if a.backupScheduler != nil {
 		a.backupScheduler.Stop()
-	}
-	if a.collector != nil {
-		a.collector.Stop()
 	}
 	if a.notificationWorker != nil {
 		a.notificationWorker.Stop()
