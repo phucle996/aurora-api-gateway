@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ExtensionItem } from '../types';
 import { ExtensionIcon } from './ExtensionIcon';
 import { EXTENSIONS_CATALOG, CATEGORIES_META } from '../data/catalog';
-import { X, Check, AlertCircle, Wand2, RotateCcw, Save, RotateCw, FileCode } from 'lucide-react';
+import { X, Check, AlertCircle, Wand2, RotateCcw, Save, RotateCw, FileCode, Copy } from 'lucide-react';
 
 interface ExtensionConfigModalProps {
   extension: ExtensionItem | null;
@@ -19,6 +19,8 @@ export function ExtensionConfigModal({
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [copied, setCopied] = useState(false);
+
 
   const catalogEntry = extension
     ? EXTENSIONS_CATALOG.find((c) => c.id === extension.id)
@@ -72,6 +74,14 @@ export function ExtensionConfigModal({
         setConfigText(catalogEntry.config_json);
       }
       setJsonError(null);
+    }
+  };
+
+  const handleCopy = () => {
+    if (configText) {
+      void navigator.clipboard.writeText(configText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
   };
 
@@ -162,6 +172,15 @@ export function ExtensionConfigModal({
               >
                 <Wand2 className="w-3 h-3" />
                 <span>Format JSON</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted px-2 py-1 rounded-sm border border-border/60 transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer"
+                title="Copy configuration JSON to clipboard"
+              >
+                {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                <span>{copied ? 'Copied' : 'Copy JSON'}</span>
               </button>
               <button
                 type="button"

@@ -134,7 +134,18 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: true,
     is_builtin: true,
     tags: ['waf', 'security', 'inspection', 'core', 'owasp'],
-    config_json: JSON.stringify({ mode: 'enforce', anomaly_threshold: 5, paranoia_level: 1, block_status: 403 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "mode": "enforce",
+  "anomaly_threshold": 5,
+  "paranoia_level": 1,
+  "block_status": 403,
+  "max_body_inspection_size_kb": 128,
+  "inspect_query_params": true,
+  "inspect_request_headers": true,
+  "inspect_request_body": true,
+  "inspect_response_body": false
+}, null, 2),
   },
   {
     id: 'sqli-protection',
@@ -145,7 +156,20 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: true,
     is_builtin: true,
     tags: ['sqli', 'database', 'security', 'injection'],
-    config_json: JSON.stringify({ enabled: true, sensitivity: 'high', detect_blind: true, detect_stacked: true }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "sensitivity": "high",
+  "detect_blind": true,
+  "detect_stacked": true,
+  "detect_time_based": true,
+  "detect_union_select": true,
+  "inspect_cookies": true,
+  "allowed_sql_keywords": [
+    "SELECT",
+    "FROM"
+  ],
+  "action": "block"
+}, null, 2),
   },
   {
     id: 'xss-protection',
@@ -156,7 +180,15 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: true,
     is_builtin: true,
     tags: ['xss', 'html', 'javascript', 'sanitization'],
-    config_json: JSON.stringify({ enabled: true, strip_tags: false, block_inline_events: true, inspect_attributes: true }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "strip_tags": false,
+  "block_inline_events": true,
+  "inspect_attributes": true,
+  "dom_xss_protection": true,
+  "html_entities_decode": true,
+  "action": "block"
+}, null, 2),
   },
   {
     id: 'command-injection-protection',
@@ -167,7 +199,23 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: true,
     is_builtin: true,
     tags: ['rce', 'command-injection', 'bash', 'shell'],
-    config_json: JSON.stringify({ enabled: true, block_pipes: true, block_backticks: true, block_system_binaries: true }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "block_pipes": true,
+  "block_backticks": true,
+  "block_subshells": true,
+  "block_system_binaries": true,
+  "inspected_commands": [
+    "bash",
+    "sh",
+    "curl",
+    "wget",
+    "nc",
+    "cat",
+    "powershell"
+  ],
+  "action": "block"
+}, null, 2),
   },
   {
     id: 'path-traversal-protection',
@@ -178,7 +226,19 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: true,
     is_builtin: true,
     tags: ['lfi', 'path-traversal', 'filesystem', 'dot-dot-slash'],
-    config_json: JSON.stringify({ enabled: true, strict_uri_decoding: true, block_null_bytes: true }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "strict_uri_decoding": true,
+  "block_null_bytes": true,
+  "max_directory_depth": 10,
+  "blocked_patterns": [
+    "../",
+    "..\\",
+    "%2e%2e%2f",
+    "%252e%252e%252f"
+  ],
+  "action": "block"
+}, null, 2),
   },
   {
     id: 'ssrf-protection',
@@ -189,7 +249,23 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: true,
     is_builtin: true,
     tags: ['ssrf', 'cloud-metadata', 'aws', 'gcp', 'private-ip'],
-    config_json: JSON.stringify({ enabled: true, block_private_networks: true, block_link_local: true, block_cloud_metadata: true }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "block_private_networks": true,
+  "block_link_local": true,
+  "block_cloud_metadata": true,
+  "blocked_ip_ranges": [
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16",
+    "169.254.169.254/32",
+    "127.0.0.0/8"
+  ],
+  "allowed_target_hosts": [
+    "api.trusted-partner.com"
+  ],
+  "action": "block"
+}, null, 2),
   },
   {
     id: 'rce-protection',
@@ -200,7 +276,15 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: true,
     is_builtin: true,
     tags: ['rce', 'deserialization', 'java', 'spring', 'ognl'],
-    config_json: JSON.stringify({ enabled: true, inspect_deserialization: true, block_java_gadgets: true }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "inspect_deserialization": true,
+  "block_java_gadgets": true,
+  "block_php_serialization": true,
+  "block_ognl_expressions": true,
+  "block_spel_expressions": true,
+  "action": "block"
+}, null, 2),
   },
   {
     id: 'protocol-anomaly',
@@ -211,7 +295,19 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: true,
     is_builtin: true,
     tags: ['smuggling', 'rfc', 'protocol', 'headers'],
-    config_json: JSON.stringify({ enabled: true, strict_rfc_headers: true, block_http_smuggling: true, max_header_size_kb: 32 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "strict_rfc_headers": true,
+  "block_http_smuggling": true,
+  "max_header_size_kb": 32,
+  "max_headers_count": 100,
+  "disallow_duplicate_headers": [
+    "Content-Length",
+    "Host",
+    "Transfer-Encoding"
+  ],
+  "enforce_uri_length_limit": 8192
+}, null, 2),
   },
   {
     id: 'bot-detection',
@@ -222,7 +318,35 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['bot', 'crawler', 'scraper', 'anti-bot'],
-    config_json: JSON.stringify({ enabled: true, mode: 'challenge', challenge_type: 'js', bypass_verified_bots: true }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "mode": "challenge",
+  "challenge_type": "js",
+  "challenge_ttl_seconds": 1800,
+  "bypass_verified_bots": true,
+  "verified_bot_categories": [
+    "search_engine",
+    "uptime_monitor",
+    "social_media"
+  ],
+  "allow_user_agents": [
+    "Googlebot",
+    "Bingbot",
+    "DuckDuckBot"
+  ],
+  "deny_user_agents": [
+    "*python-requests*",
+    "*curl*",
+    "*libwww-perl*",
+    "*Scrapy*",
+    "*Go-http-client*"
+  ],
+  "rate_limit_suspicious": {
+    "enabled": true,
+    "requests_per_minute": 60,
+    "action": "captcha"
+  }
+}, null, 2),
   },
   {
     id: 'ip-reputation',
@@ -233,7 +357,20 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['threat-intel', 'reputation', 'abuseipdb', 'blocklist'],
-    config_json: JSON.stringify({ min_confidence: 80, cache_ttl_secs: 3600, action: 'block', sync_interval_mins: 60 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "min_confidence": 80,
+  "cache_ttl_secs": 3600,
+  "action": "block",
+  "providers": [
+    "abuseipdb",
+    "alienvault_otx"
+  ],
+  "sync_interval_mins": 60,
+  "whitelist_cidrs": [
+    "127.0.0.1/32"
+  ]
+}, null, 2),
   },
   {
     id: 'credential-stuffing',
@@ -244,7 +381,20 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['credential-stuffing', 'brute-force', 'login', 'account-takeover'],
-    config_json: JSON.stringify({ max_attempts: 5, window_secs: 60, lockout_secs: 300, target_endpoints: ['/api/v1/login', '/login'] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "max_attempts": 5,
+  "window_secs": 60,
+  "lockout_secs": 300,
+  "track_by": "ip_and_username",
+  "username_field": "username",
+  "target_endpoints": [
+    "/api/v1/auth/login",
+    "/api/v1/login",
+    "/oauth/token"
+  ],
+  "action": "block"
+}, null, 2),
   },
   {
     id: 'scanner-detection',
@@ -255,7 +405,21 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: true,
     is_builtin: true,
     tags: ['scanner', 'sqlmap', 'nikto', 'burp', 'fingerprint'],
-    config_json: JSON.stringify({ enabled: true, block_known_scanners: true, tar_pit_delay_ms: 0 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "block_known_scanners": true,
+  "known_scanners": [
+    "nikto",
+    "sqlmap",
+    "nessus",
+    "acunetix",
+    "nmap",
+    "wpscan",
+    "zaproxy"
+  ],
+  "tar_pit_delay_ms": 0,
+  "auto_blacklist_duration_secs": 86400
+}, null, 2),
   },
   {
     id: 'sensitive-data-detection',
@@ -266,7 +430,19 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['dlp', 'pii', 'compliance', 'redaction', 'credit-card'],
-    config_json: JSON.stringify({ mask_credit_cards: true, mask_ssn: true, mask_api_keys: true, replacement: '[REDACTED]' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "mask_credit_cards": true,
+  "mask_ssn": true,
+  "mask_api_keys": true,
+  "mask_jwt_tokens": true,
+  "replacement": "[REDACTED]",
+  "inspect_content_types": [
+    "application/json",
+    "text/plain",
+    "text/html"
+  ]
+}, null, 2),
   },
   {
     id: 'custom-waf-rules',
@@ -277,7 +453,21 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['custom-rules', 'regex', 'filter', 'expressions'],
-    config_json: JSON.stringify({ rules: [], default_action: 'block' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "default_action": "pass",
+  "rules": [
+    {
+      "id": "block-admin-external",
+      "name": "Block external access to internal admin endpoints",
+      "field": "uri",
+      "operator": "regex_match",
+      "pattern": "^/admin/(.*)",
+      "action": "block",
+      "status": 403
+    }
+  ]
+}, null, 2),
   },
   {
     id: 'owasp-crs',
@@ -288,7 +478,18 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: true,
     is_builtin: true,
     tags: ['owasp', 'crs', 'coraza', 'top-10'],
-    config_json: JSON.stringify({ rule_level: 2, paranoia_level: 1, anomaly_threshold: 5, allow_body_inspection: true }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "rule_level": 2,
+  "paranoia_level": 1,
+  "inbound_anomaly_threshold": 5,
+  "outbound_anomaly_threshold": 4,
+  "allow_body_inspection": true,
+  "disabled_rule_ids": [
+    920350,
+    942100
+  ]
+}, null, 2),
   },
 
   // 2. Authentication (12)
@@ -301,7 +502,17 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['basic-auth', 'rfc7617', 'password', 'htpasswd'],
-    config_json: JSON.stringify({ realm: 'Restricted Area', users: [] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "realm": "Restricted Area",
+  "hide_credentials": true,
+  "users": [
+    {
+      "username": "api_admin",
+      "password_hash": "$2a$12$e8Mr8G7n3pU0yN4p567890abcdefghijklmnopqrstuv"
+    }
+  ]
+}, null, 2),
   },
   {
     id: 'key-auth',
@@ -312,7 +523,24 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['api-key', 'auth', 'x-api-key', 'token'],
-    config_json: JSON.stringify({ header_name: 'X-API-Key', query_param: '', keys: [] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "header_names": [
+    "X-API-Key",
+    "apikey"
+  ],
+  "query_param_names": [
+    "api_key"
+  ],
+  "hide_credentials": true,
+  "keys": [
+    {
+      "key": "ak_live_a1b2c3d4e5f67890",
+      "client_id": "mobile_app_prod",
+      "rate_limit_tier": "tier_standard"
+    }
+  ]
+}, null, 2),
   },
   {
     id: 'jwt-auth',
@@ -323,7 +551,28 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['jwt', 'oauth', 'jwks', 'rs256', 'bearer'],
-    config_json: JSON.stringify({ jwks_url: '', issuer: '', audience: '', cookie_name: 'access_token', header_name: 'Authorization' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "header_name": "Authorization",
+  "header_prefix": "Bearer",
+  "cookie_name": "access_token",
+  "jwks_url": "https://auth.example.com/.well-known/jwks.json",
+  "issuer": "https://auth.example.com/",
+  "audience": "https://api.example.com",
+  "algorithms": [
+    "RS256",
+    "ES256"
+  ],
+  "verify_expiry": true,
+  "claims_to_verify": {
+    "iss": "https://auth.example.com/"
+  },
+  "forward_claims": [
+    "sub",
+    "email",
+    "roles"
+  ]
+}, null, 2),
   },
   {
     id: 'hmac-auth',
@@ -334,7 +583,19 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['hmac', 'sha256', 'webhook', 'signature'],
-    config_json: JSON.stringify({ secret: '', algorithm: 'sha256', header_name: 'X-HMAC-Signature' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "header_name": "X-HMAC-Signature",
+  "algorithm": "sha256",
+  "secret": "your_hmac_shared_secret_key_32_chars",
+  "clock_skew_seconds": 300,
+  "signed_headers": [
+    "date",
+    "host",
+    "content-type",
+    "digest"
+  ]
+}, null, 2),
   },
   {
     id: 'oauth2-auth',
@@ -345,7 +606,19 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['oauth2', 'introspection', 'tokens', 'clients'],
-    config_json: JSON.stringify({ introspection_endpoint: '', client_id: '', client_secret: '' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "introspection_endpoint": "https://auth.example.com/oauth/v2/introspect",
+  "client_id": "gateway_client_id",
+  "client_secret": "gateway_client_secret",
+  "token_type_hint": "access_token",
+  "cache_tokens": true,
+  "cache_ttl_secs": 300,
+  "scopes_required": [
+    "read",
+    "write"
+  ]
+}, null, 2),
   },
   {
     id: 'openid-connect',
@@ -356,7 +629,20 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['oidc', 'sso', 'keycloak', 'okta', 'auth0'],
-    config_json: JSON.stringify({ discovery_url: '', client_id: '', client_secret: '', redirect_uri: '/callback' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "discovery_url": "https://accounts.google.com/.well-known/openid-configuration",
+  "client_id": "oauth_client_id.apps.googleusercontent.com",
+  "client_secret": "oauth_client_secret",
+  "redirect_uri": "/callback",
+  "scopes": [
+    "openid",
+    "profile",
+    "email"
+  ],
+  "session_cookie_name": "aurora_oidc_session",
+  "bearer_only": false
+}, null, 2),
   },
   {
     id: 'mtls-auth',
@@ -367,7 +653,19 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['mtls', 'x509', 'certificates', 'zero-trust'],
-    config_json: JSON.stringify({ ca_cert: '', verify_depth: 3, require_client_cert: true }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "ca_cert": "-----BEGIN CERTIFICATE-----\nMIIDXTCCAkWgAwIBAgIJAL9...\n-----END CERTIFICATE-----",
+  "verify_depth": 3,
+  "require_client_cert": true,
+  "allowed_common_names": [
+    "*.internal.corp",
+    "client-node-01"
+  ],
+  "san_dns_match": [
+    "internal.corp"
+  ]
+}, null, 2),
   },
   {
     id: 'ldap-auth',
@@ -378,7 +676,16 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['ldap', 'active-directory', 'enterprise'],
-    config_json: JSON.stringify({ server: 'ldap://127.0.0.1:389', base_dn: 'dc=example,dc=org', bind_dn: '', bind_password: '' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "server": "ldaps://ldap.example.com:636",
+  "base_dn": "ou=users,dc=example,dc=org",
+  "bind_dn": "cn=admin,dc=example,dc=org",
+  "bind_password": "ldap_admin_secret",
+  "attribute": "sAMAccountName",
+  "start_tls": true,
+  "verify_ldap_cert": true
+}, null, 2),
   },
   {
     id: 'saml-auth',
@@ -389,7 +696,13 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['saml', 'saml2', 'sso', 'xml'],
-    config_json: JSON.stringify({ idp_metadata_url: '', sp_entity_id: '', assertion_consumer_url: '/saml/acs' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "idp_metadata_url": "https://idp.example.com/app/exk123/sso/saml/metadata",
+  "sp_entity_id": "https://api.gateway.example.com",
+  "assertion_consumer_url": "/saml/acs",
+  "nameid_format": "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"
+}, null, 2),
   },
   {
     id: 'forward-auth',
@@ -400,7 +713,22 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['forward-auth', 'auth-service', 'delegation'],
-    config_json: JSON.stringify({ auth_url: 'http://127.0.0.1:9000/verify', request_headers: ['Authorization', 'Cookie'], response_headers: ['X-User-Id'] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "auth_url": "http://127.0.0.1:9000/api/v1/verify",
+  "request_method": "GET",
+  "request_headers": [
+    "Authorization",
+    "Cookie",
+    "X-Forwarded-For"
+  ],
+  "response_headers_to_forward": [
+    "X-User-Id",
+    "X-User-Email",
+    "X-User-Roles"
+  ],
+  "timeout_ms": 2000
+}, null, 2),
   },
   {
     id: 'session-auth',
@@ -411,7 +739,15 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['session', 'cookie', 'redis', 'stateful'],
-    config_json: JSON.stringify({ cookie_name: 'aurora_session', redis_url: 'redis://127.0.0.1:6379', ttl_secs: 86400 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "cookie_name": "aurora_session",
+  "redis_url": "redis://127.0.0.1:6379/1",
+  "ttl_secs": 86400,
+  "sliding_expiration": true,
+  "secure_cookie": true,
+  "same_site": "Lax"
+}, null, 2),
   },
   {
     id: 'multi-auth',
@@ -422,7 +758,15 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['mfa', 'multi-auth', 'chain', 'fallback'],
-    config_json: JSON.stringify({ strategies: ['jwt-auth', 'key-auth'], mode: 'any' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "mode": "any",
+  "strategies": [
+    "jwt-auth",
+    "key-auth"
+  ],
+  "error_response_status": 401
+}, null, 2),
   },
 
   // 3. Authorization & Security (12)
@@ -435,7 +779,19 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['acl', 'access-control', 'permissions'],
-    config_json: JSON.stringify({ whitelist: [], blacklist: [] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "whitelist": [
+    "developers",
+    "admins",
+    "internal-services"
+  ],
+  "blacklist": [
+    "banned-users",
+    "suspended-accounts"
+  ],
+  "hide_consumer_header": true
+}, null, 2),
   },
   {
     id: 'rbac',
@@ -446,7 +802,25 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['rbac', 'roles', 'permissions', 'authorization'],
-    config_json: JSON.stringify({ roles: {}, default_role: 'guest' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "default_role": "guest",
+  "roles": {
+    "admin": [
+      "read:*",
+      "write:*",
+      "delete:*"
+    ],
+    "member": [
+      "read:public",
+      "write:comments"
+    ],
+    "guest": [
+      "read:public"
+    ]
+  },
+  "role_claim_path": "roles"
+}, null, 2),
   },
   {
     id: 'opa-authz',
@@ -457,7 +831,15 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['opa', 'rego', 'policy-as-code'],
-    config_json: JSON.stringify({ opa_url: 'http://127.0.0.1:8181/v1/data/http/authz', policy_path: 'http.authz.allow' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "opa_url": "http://127.0.0.1:8181/v1/data/http/authz",
+  "policy_path": "http.authz.allow",
+  "include_request_body": false,
+  "timeout_ms": 500,
+  "allow_status_code": 200,
+  "deny_status_code": 403
+}, null, 2),
   },
   {
     id: 'ip-restriction',
@@ -468,7 +850,19 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['ip', 'cidr', 'whitelist', 'blacklist', 'firewall'],
-    config_json: JSON.stringify({ whitelist: [], blacklist: ['0.0.0.0/8'] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "whitelist": [
+    "10.0.0.0/8",
+    "192.168.1.0/24"
+  ],
+  "blacklist": [
+    "0.0.0.0/8",
+    "100.64.0.0/10"
+  ],
+  "status_code": 403,
+  "message": "Access restricted by client IP policy"
+}, null, 2),
   },
   {
     id: 'geo-restriction',
@@ -479,7 +873,22 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['geoip', 'geofencing', 'countries', 'maxmind'],
-    config_json: JSON.stringify({ database_path: '/var/lib/aurora/GeoLite2-City.mmdb', block_countries: ['KP', 'IR'], allow_countries: [] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "database_path": "/var/lib/aurora/GeoLite2-City.mmdb",
+  "block_countries": [
+    "KP",
+    "IR"
+  ],
+  "allow_countries": [
+    "VN",
+    "US",
+    "SG",
+    "JP"
+  ],
+  "block_action": "deny",
+  "status_code": 403
+}, null, 2),
   },
   {
     id: 'user-agent-restriction',
@@ -490,7 +899,22 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['user-agent', 'scraper', 'crawler'],
-    config_json: JSON.stringify({ block_empty: true, blocked_patterns: ['*sqlmap*', '*nikto*', '*curl*'], whitelist_patterns: [] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "block_empty": true,
+  "blocked_patterns": [
+    "*sqlmap*",
+    "*nikto*",
+    "*curl*",
+    "*wget*",
+    "*python*"
+  ],
+  "whitelist_patterns": [
+    "*Googlebot*",
+    "*AuroraHealthCheck*"
+  ],
+  "status_code": 403
+}, null, 2),
   },
   {
     id: 'referer-restriction',
@@ -501,7 +925,19 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['referer', 'hotlinking', 'anti-scrape'],
-    config_json: JSON.stringify({ allowed_domains: ['*'], allow_empty: true, block_action: 'forbidden' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "allow_empty": true,
+  "allowed_domains": [
+    "*.example.com",
+    "example.com",
+    "partner.io"
+  ],
+  "blocked_domains": [
+    "*.bad-hotlinking-site.com"
+  ],
+  "block_action": "forbidden"
+}, null, 2),
   },
   {
     id: 'cors',
@@ -512,7 +948,33 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['cors', 'headers', 'origins', 'preflight'],
-    config_json: JSON.stringify({ allow_origins: ['*'], allow_methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allow_headers: ['*'], allow_credentials: true, max_age: 86400 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "allow_origins": [
+    "https://example.com",
+    "https://app.example.com"
+  ],
+  "allow_methods": [
+    "GET",
+    "POST",
+    "PUT",
+    "DELETE",
+    "PATCH",
+    "OPTIONS"
+  ],
+  "allow_headers": [
+    "Authorization",
+    "Content-Type",
+    "X-API-Key",
+    "X-Request-ID"
+  ],
+  "expose_headers": [
+    "X-Total-Count",
+    "Content-Disposition"
+  ],
+  "allow_credentials": true,
+  "max_age": 86400
+}, null, 2),
   },
   {
     id: 'csrf-protection',
@@ -523,7 +985,19 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['csrf', 'double-submit', 'cookie', 'tokens'],
-    config_json: JSON.stringify({ cookie_name: 'aurora_csrf', header_name: 'X-CSRF-Token', token_ttl_secs: 7200 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "cookie_name": "aurora_csrf",
+  "header_name": "X-CSRF-Token",
+  "token_ttl_secs": 7200,
+  "safe_methods": [
+    "GET",
+    "HEAD",
+    "OPTIONS"
+  ],
+  "same_site": "Strict",
+  "secure": true
+}, null, 2),
   },
   {
     id: 'api-schema-validator',
@@ -534,7 +1008,14 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['openapi', 'json-schema', 'validator'],
-    config_json: JSON.stringify({ schema_url: '', validate_request_body: true, validate_responses: false }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "schema_url": "https://api.example.com/openapi.json",
+  "validate_request_body": true,
+  "validate_query_parameters": true,
+  "validate_responses": false,
+  "rejection_status": 400
+}, null, 2),
   },
   {
     id: 'request-signature',
@@ -545,7 +1026,15 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['sigv4', 'aws', 'cryptography', 'signing'],
-    config_json: JSON.stringify({ service_name: 'execute-api', region: 'us-east-1', key_id: '', secret_key: '' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "service_name": "execute-api",
+  "region": "us-east-1",
+  "signature_version": "v4",
+  "key_id": "AKIAIOSFODNN7EXAMPLE",
+  "secret_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+  "clock_tolerance_secs": 300
+}, null, 2),
   },
   {
     id: 'consumer-restriction',
@@ -556,7 +1045,23 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['consumers', 'tiers', 'subscription', 'api-plans'],
-    config_json: JSON.stringify({ allowed_consumers: [], tier_requirements: { '/api/v1/pro': ['pro', 'enterprise'] } }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "allowed_consumers": [
+    "mobile-app",
+    "web-dashboard",
+    "enterprise-partner"
+  ],
+  "tier_requirements": {
+    "/api/v1/pro/*": [
+      "pro",
+      "enterprise"
+    ],
+    "/api/v1/enterprise/*": [
+      "enterprise"
+    ]
+  }
+}, null, 2),
   },
 
   // 4. Traffic Control (14)
@@ -569,7 +1074,15 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['rate-limit', 'token-bucket', 'traffic', 'burst'],
-    config_json: JSON.stringify({ rate: 100, burst: 200, period_secs: 1 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "rate": 100,
+  "burst": 200,
+  "period_secs": 1,
+  "limit_by": "ip",
+  "rejected_code": 429,
+  "rejected_message": "Too Many Requests"
+}, null, 2),
   },
   {
     id: 'rate-limit-local',
@@ -580,7 +1093,13 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['rate-limit', 'in-memory', 'low-latency'],
-    config_json: JSON.stringify({ capacity: 1000, refill_rate: 100 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "capacity": 1000,
+  "refill_rate": 100,
+  "key": "remote_addr",
+  "rejected_code": 429
+}, null, 2),
   },
   {
     id: 'rate-limit-distributed',
@@ -591,7 +1110,15 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['redis', 'sliding-window', 'distributed'],
-    config_json: JSON.stringify({ redis_url: 'redis://127.0.0.1:6379', limit: 1000, window_secs: 60 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "redis_url": "redis://127.0.0.1:6379/0",
+  "limit": 1000,
+  "window_secs": 60,
+  "key_type": "ip",
+  "sync_interval_ms": 100,
+  "rejected_code": 429
+}, null, 2),
   },
   {
     id: 'connection-limit',
@@ -602,7 +1129,12 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['connections', 'slowloris', 'tcp', 'concurrency'],
-    config_json: JSON.stringify({ max_connections_per_ip: 50, burst: 10 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "max_connections_per_ip": 50,
+  "burst": 10,
+  "rejected_code": 503
+}, null, 2),
   },
   {
     id: 'bandwidth-limit',
@@ -613,7 +1145,12 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['bandwidth', 'shaping', 'egress', 'download'],
-    config_json: JSON.stringify({ rate_kb_per_sec: 1024, burst_kb: 2048 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "rate_kb_per_sec": 1024,
+  "burst_kb": 2048,
+  "limit_by": "ip"
+}, null, 2),
   },
   {
     id: 'request-size-limit',
@@ -624,7 +1161,12 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['payload', 'body-size', 'dos-prevention'],
-    config_json: JSON.stringify({ max_body_bytes: 10485760, response_status: 413 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "max_body_bytes": 10485760,
+  "response_status": 413,
+  "response_message": "Payload Too Large"
+}, null, 2),
   },
   {
     id: 'traffic-split',
@@ -635,7 +1177,19 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['traffic-split', 'weight', 'load-balancing'],
-    config_json: JSON.stringify({ splits: [{ upstream: 'backend_v1', weight: 90 }, { upstream: 'backend_v2', weight: 10 }] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "splits": [
+    {
+      "upstream": "backend_v1",
+      "weight": 90
+    },
+    {
+      "upstream": "backend_v2",
+      "weight": 10
+    }
+  ]
+}, null, 2),
   },
   {
     id: 'canary-release',
@@ -646,7 +1200,17 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['canary', 'deployment', 'ab-testing'],
-    config_json: JSON.stringify({ canary_upstream: 'app_canary', weight_percentage: 10, cookie_override: 'canary_user', header_override: 'X-Canary' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "canary_upstream": "app_canary",
+  "weight_percentage": 10,
+  "cookie_override": "canary_user",
+  "header_override": "X-Canary",
+  "header_values": [
+    "always",
+    "beta"
+  ]
+}, null, 2),
   },
   {
     id: 'blue-green',
@@ -657,7 +1221,13 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['blue-green', 'zero-downtime', 'deployment'],
-    config_json: JSON.stringify({ active_slot: 'blue', blue_upstream: 'app_blue', green_upstream: 'app_green' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "active_slot": "blue",
+  "blue_upstream": "app_blue",
+  "green_upstream": "app_green",
+  "switch_header": "X-Deploy-Slot"
+}, null, 2),
   },
   {
     id: 'request-mirror',
@@ -668,7 +1238,12 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['mirroring', 'shadow', 'audit'],
-    config_json: JSON.stringify({ mirror_upstream: 'shadow_backend', sample_percentage: 100 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "mirror_upstream": "shadow_backend",
+  "sample_percentage": 100,
+  "ignore_mirror_errors": true
+}, null, 2),
   },
   {
     id: 'traffic-shadow',
@@ -679,7 +1254,12 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['dark-traffic', 'load-testing', 'replay'],
-    config_json: JSON.stringify({ replay_upstream: 'testing_backend', ignore_responses: true }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "replay_upstream": "testing_backend",
+  "ignore_responses": true,
+  "sample_rate": 0.1
+}, null, 2),
   },
   {
     id: 'priority-routing',
@@ -690,7 +1270,16 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['vip', 'priority', 'qos', 'enterprise'],
-    config_json: JSON.stringify({ header_name: 'X-Customer-Tier', high_priority_values: ['enterprise', 'vip'] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "header_name": "X-Customer-Tier",
+  "high_priority_values": [
+    "enterprise",
+    "vip"
+  ],
+  "low_priority_queue_capacity": 500,
+  "timeout_ms": 3000
+}, null, 2),
   },
   {
     id: 'maintenance-mode',
@@ -701,7 +1290,13 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['maintenance', '503', 'downtime-page'],
-    config_json: JSON.stringify({ enabled: false, status_code: 503, bypass_header: 'X-Maintenance-Bypass', retry_after_secs: 300 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": false,
+  "status_code": 503,
+  "bypass_header": "X-Maintenance-Bypass",
+  "retry_after_secs": 300,
+  "message": "Service undergoing planned maintenance. Please retry in a few moments."
+}, null, 2),
   },
   {
     id: 'request-termination',
@@ -712,7 +1307,15 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['termination', 'mock', 'short-circuit'],
-    config_json: JSON.stringify({ status_code: 200, body: '{"status":"mocked"}', headers: { 'Content-Type': 'application/json' } }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "status_code": 200,
+  "body": "{\"status\":\"mocked\",\"message\":\"Early terminated by gateway policy\"}",
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Mock-Source": "Aurora-Gateway"
+  }
+}, null, 2),
   },
 
   // 5. Request Transformation (10)
@@ -725,7 +1328,17 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['headers', 'mutation', 'proxy-headers'],
-    config_json: JSON.stringify({ add_headers: { 'X-Forwarded-By': 'Aurora' }, remove_headers: ['X-Internal-Token'] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "add_headers": {
+    "X-Forwarded-By": "Aurora-API-Gateway",
+    "X-Gateway-Env": "production"
+  },
+  "remove_headers": [
+    "X-Internal-Token",
+    "X-Powered-By"
+  ]
+}, null, 2),
   },
   {
     id: 'request-query-transform',
@@ -736,7 +1349,18 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['query', 'url-params', 'transform'],
-    config_json: JSON.stringify({ add_params: { ref: 'waf' }, remove_params: ['debug', 'token'] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "add_params": {
+    "ref": "aurora_gateway",
+    "version": "v1"
+  },
+  "remove_params": [
+    "debug",
+    "internal_token",
+    "trace_bypass"
+  ]
+}, null, 2),
   },
   {
     id: 'request-body-transform',
@@ -747,7 +1371,18 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['body', 'payload', 'template', 'json'],
-    config_json: JSON.stringify({ template: '{}', content_type: 'application/json' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "content_type": "application/json",
+  "add_fields": {
+    "injected_by": "gateway",
+    "region": "ap-southeast-1"
+  },
+  "remove_fields": [
+    "deprecated_param",
+    "internal_secret"
+  ]
+}, null, 2),
   },
   {
     id: 'uri-rewrite',
@@ -758,7 +1393,15 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['uri', 'rewrite', 'regex', 'prefix'],
-    config_json: JSON.stringify({ rules: [{ pattern: '^/v1/(.*)', replacement: '/v2/$1' }] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "rules": [
+    {
+      "pattern": "^/api/v1/(.*)",
+      "replacement": "/v2/$1"
+    }
+  ]
+}, null, 2),
   },
   {
     id: 'host-rewrite',
@@ -769,7 +1412,12 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['host', 'sni', 'vhost', 'tls'],
-    config_json: JSON.stringify({ override_host: 'internal.origin.local', override_sni: true }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "override_host": "internal.origin.local",
+  "override_sni": true,
+  "preserve_original_host_header": "X-Forwarded-Host"
+}, null, 2),
   },
   {
     id: 'method-rewrite',
@@ -780,7 +1428,14 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['methods', 'verbs', 'override', 'post-to-put'],
-    config_json: JSON.stringify({ allow_header_override: true, map: { PATCH: 'POST' } }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "allow_header_override": true,
+  "override_header_name": "X-HTTP-Method-Override",
+  "map": {
+    "PATCH": "POST"
+  }
+}, null, 2),
   },
   {
     id: 'json-transform',
@@ -791,7 +1446,11 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['jq', 'jslt', 'json', 'structure'],
-    config_json: JSON.stringify({ expression: '.data | {id: .user_id, name: .display_name}' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "expression": ".data | { id: .user_id, name: .display_name, email: .email_address }",
+  "fail_on_empty": false
+}, null, 2),
   },
   {
     id: 'xml-json-transform',
@@ -802,7 +1461,12 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['xml', 'json', 'soap', 'converter'],
-    config_json: JSON.stringify({ direction: 'xml_to_json', root_element: 'request' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "direction": "xml_to_json",
+  "root_element": "request",
+  "strip_namespaces": true
+}, null, 2),
   },
   {
     id: 'grpc-transcode',
@@ -813,7 +1477,18 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['grpc', 'protobuf', 'transcoding', 'rest-to-grpc'],
-    config_json: JSON.stringify({ proto_descriptor: '/var/lib/aurora/protos/services.desc', services: ['UserPortal'] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "proto_descriptor": "/var/lib/aurora/protos/services.desc",
+  "services": [
+    "user.v1.UserService",
+    "order.v1.OrderService"
+  ],
+  "print_options": {
+    "add_whitespace": true,
+    "always_print_primitive_fields": true
+  }
+}, null, 2),
   },
   {
     id: 'graphql-rest-transform',
@@ -824,7 +1499,14 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['graphql', 'rest', 'adapter', 'query'],
-    config_json: JSON.stringify({ graphql_endpoint: 'http://127.0.0.1:4000/graphql', query_template: 'query { user(id: $id) { name } }' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "graphql_endpoint": "http://127.0.0.1:4000/graphql",
+  "query_template": "query GetUser($id: ID!) { user(id: $id) { id name email } }",
+  "variables_mapping": {
+    "id": "params.id"
+  }
+}, null, 2),
   },
 
   // 6. Response Transformation (8)
@@ -837,7 +1519,20 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['security-headers', 'hsts', 'csp', 'x-frame-options'],
-    config_json: JSON.stringify({ add_headers: { 'X-Frame-Options': 'DENY', 'Strict-Transport-Security': 'max-age=31536000' }, remove_headers: ['Server', 'X-Powered-By'] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "add_headers": {
+    "X-Frame-Options": "DENY",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin"
+  },
+  "remove_headers": [
+    "Server",
+    "X-Powered-By",
+    "X-AspNet-Version"
+  ]
+}, null, 2),
   },
   {
     id: 'response-body-transform',
@@ -848,7 +1543,15 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['sub_filter', 'injection', 'replacer'],
-    config_json: JSON.stringify({ replacements: [{ find: 'http://api.internal', replace: 'https://api.public.com' }] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "replacements": [
+    {
+      "find": "http://api.internal.local",
+      "replace": "https://api.example.com"
+    }
+  ]
+}, null, 2),
   },
   {
     id: 'response-rewrite',
@@ -859,7 +1562,15 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['status-code', 'rewrite', '502-to-503'],
-    config_json: JSON.stringify({ status_code_map: { '502': 503 }, override_body_on_status: { '503': '{"error":"service_unavailable"}' } }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "status_code_map": {
+    "502": 503
+  },
+  "override_body_on_status": {
+    "503": "{\"code\":\"SERVICE_UNAVAILABLE\",\"message\":\"The upstream server is temporarily restarting.\"}"
+  }
+}, null, 2),
   },
   {
     id: 'response-mask',
@@ -870,7 +1581,13 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['masking', 'pii', 'pci-dss', 'credit-card'],
-    config_json: JSON.stringify({ mask_credit_cards: true, mask_emails: true, replacement: '[CONFIDENTIAL]' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "mask_credit_cards": true,
+  "mask_emails": true,
+  "mask_phone_numbers": true,
+  "replacement": "[CONFIDENTIAL]"
+}, null, 2),
   },
   {
     id: 'json-filter',
@@ -881,7 +1598,23 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['json', 'fields', 'filter', 'privacy'],
-    config_json: JSON.stringify({ excluded_fields: ['internal_notes', 'hashed_password', 'salary'] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "excluded_fields": [
+    "internal_notes",
+    "hashed_password",
+    "salary",
+    "ssn"
+  ],
+  "allowed_scopes": {
+    "admin": [
+      "*"
+    ],
+    "user": [
+      "public_*"
+    ]
+  }
+}, null, 2),
   },
   {
     id: 'compression-gzip',
@@ -892,7 +1625,18 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['gzip', 'compression', 'bandwidth'],
-    config_json: JSON.stringify({ level: 6, min_length: 1024, types: ['text/html', 'application/json', 'application/javascript', 'text/css'] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "level": 6,
+  "min_length": 1024,
+  "types": [
+    "text/html",
+    "application/json",
+    "application/javascript",
+    "text/css",
+    "application/xml"
+  ]
+}, null, 2),
   },
   {
     id: 'compression-brotli',
@@ -903,7 +1647,18 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['brotli', 'br', 'high-ratio', 'compression'],
-    config_json: JSON.stringify({ quality: 6, min_length: 1024, types: ['text/html', 'application/json', 'application/javascript', 'text/css'] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "quality": 6,
+  "min_length": 1024,
+  "types": [
+    "text/html",
+    "application/json",
+    "application/javascript",
+    "text/css",
+    "application/xml"
+  ]
+}, null, 2),
   },
   {
     id: 'error-transform',
@@ -914,7 +1669,12 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['rfc7807', 'problem-details', 'errors', 'standard'],
-    config_json: JSON.stringify({ enabled: true, type_uri_base: 'https://example.com/probs/' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "type_uri_base": "https://api.example.com/errors/",
+  "include_debug_info": false,
+  "rfc7807_standard": true
+}, null, 2),
   },
 
   // 7. Observability (12)
@@ -927,7 +1687,20 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: true,
     is_builtin: true,
     tags: ['prometheus', 'metrics', 'otlp', 'telemetry'],
-    config_json: JSON.stringify({ enabled: true, port: 9145, stub_status_url: 'http://127.0.0.1:80/stub_status', prometheus: { enabled: true, path: '/metrics' }, otlp: { enabled: false, endpoint: '', interval_secs: 15 } }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "port": 9145,
+  "stub_status_url": "http://127.0.0.1:80/stub_status",
+  "prometheus": {
+    "enabled": true,
+    "path": "/metrics"
+  },
+  "otlp": {
+    "enabled": false,
+    "endpoint": "",
+    "interval_secs": 15
+  }
+}, null, 2),
   },
   {
     id: 'opentelemetry',
@@ -938,7 +1711,14 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['otel', 'tracing', 'jaeger', 'tempo', 'w3c'],
-    config_json: JSON.stringify({ sampling_rate: 0.05, endpoint: 'http://127.0.0.1:4317', service_name: 'aurora-dataplane' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "endpoint": "http://127.0.0.1:4317",
+  "protocol": "grpc",
+  "service_name": "aurora-gateway",
+  "sampling_rate": 0.05,
+  "propagation_format": "w3c"
+}, null, 2),
   },
   {
     id: 'zipkin',
@@ -949,7 +1729,12 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['zipkin', 'b3', 'spans', 'traces'],
-    config_json: JSON.stringify({ endpoint: 'http://127.0.0.1:9411/api/v2/spans', sample_rate: 0.1 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "endpoint": "http://127.0.0.1:9411/api/v2/spans",
+  "sample_rate": 0.1,
+  "b3_header_propagation": true
+}, null, 2),
   },
   {
     id: 'datadog',
@@ -960,7 +1745,17 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['datadog', 'statsd', 'apm', 'dogstatsd'],
-    config_json: JSON.stringify({ statsd_host: '127.0.0.1', statsd_port: 8125, sample_rate: 1.0, tags: ['env:production', 'service:aurora-waf'] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "statsd_host": "127.0.0.1",
+  "statsd_port": 8125,
+  "sample_rate": 1,
+  "tags": [
+    "env:production",
+    "service:aurora-gateway",
+    "cluster:primary"
+  ]
+}, null, 2),
   },
   {
     id: 'access-log',
@@ -971,7 +1766,18 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['logging', 'json', 'ring-buffer', 'access-log'],
-    config_json: JSON.stringify({ format: 'json', output: '/var/log/aurora/access.log', buffer_size: 1024, flush_interval_ms: 500 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "format": "json",
+  "output": "/var/log/aurora/access.log",
+  "buffer_size": 1024,
+  "flush_interval_ms": 500,
+  "include_headers": [
+    "Host",
+    "User-Agent",
+    "X-Request-ID"
+  ]
+}, null, 2),
   },
   {
     id: 'http-logger',
@@ -982,7 +1788,14 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['http-log', 'rest', 'collector'],
-    config_json: JSON.stringify({ endpoint: 'http://127.0.0.1:8088/logs', batch_size: 100, flush_interval_secs: 5 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "endpoint": "http://127.0.0.1:8088/logs",
+  "method": "POST",
+  "batch_size": 100,
+  "flush_interval_secs": 5,
+  "timeout_ms": 3000
+}, null, 2),
   },
   {
     id: 'syslog-logger',
@@ -993,7 +1806,14 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['syslog', 'rfc5424', 'udp', 'tcp'],
-    config_json: JSON.stringify({ host: '127.0.0.1', port: 514, facility: 'local0', protocol: 'udp' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "host": "127.0.0.1",
+  "port": 514,
+  "facility": "local0",
+  "protocol": "udp",
+  "tag": "aurora-gateway"
+}, null, 2),
   },
   {
     id: 'kafka-logger',
@@ -1004,7 +1824,15 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['kafka', 'streaming', 'events', 'producer'],
-    config_json: JSON.stringify({ brokers: ['127.0.0.1:9092'], topic: 'aurora-access-logs', compression: 'gzip' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "brokers": [
+    "127.0.0.1:9092"
+  ],
+  "topic": "aurora-access-logs",
+  "compression": "gzip",
+  "producer_acks": "all"
+}, null, 2),
   },
   {
     id: 'loki-logger',
@@ -1015,7 +1843,15 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['loki', 'grafana', 'streams'],
-    config_json: JSON.stringify({ endpoint: 'http://127.0.0.1:3100/loki/api/v1/push', tenant_id: '', labels: { job: 'aurora-waf' } }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "endpoint": "http://127.0.0.1:3100/loki/api/v1/push",
+  "tenant_id": "tenant_prod",
+  "labels": {
+    "job": "aurora-api-gateway",
+    "env": "production"
+  }
+}, null, 2),
   },
   {
     id: 'elasticsearch-logger',
@@ -1026,7 +1862,16 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['elasticsearch', 'opensearch', 'bulk', 'indexing'],
-    config_json: JSON.stringify({ endpoint: 'http://127.0.0.1:9200', index: 'aurora-logs-%Y.%m.%d', batch_size: 200 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "endpoint": "http://127.0.0.1:9200",
+  "index": "aurora-logs-%Y.%m.%d",
+  "batch_size": 200,
+  "auth": {
+    "username": "elastic",
+    "password": "changeme"
+  }
+}, null, 2),
   },
   {
     id: 'request-id',
@@ -1037,7 +1882,13 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['request-id', 'uuid', 'tracing', 'correlation'],
-    config_json: JSON.stringify({ header_name: 'X-Request-ID', generate_if_missing: true, format: 'uuid4', preserve_incoming: true }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "header_name": "X-Request-ID",
+  "generate_if_missing": true,
+  "format": "uuid4",
+  "preserve_incoming": true
+}, null, 2),
   },
   {
     id: 'audit-log',
@@ -1048,7 +1899,12 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: true,
     is_builtin: true,
     tags: ['audit', 'compliance', 'security', 'tamper-proof'],
-    config_json: JSON.stringify({ output: '/var/log/aurora/audit.log', hash_chain: true }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "output": "/var/log/aurora/audit.log",
+  "hash_chain": true,
+  "log_mutations_only": true
+}, null, 2),
   },
 
   // 8. Resilience & Upstream (10)
@@ -1061,7 +1917,13 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['circuit-breaker', 'resilience', 'isolation', '5xx'],
-    config_json: JSON.stringify({ error_threshold_percentage: 50, minimum_requests: 20, recovery_timeout_secs: 30 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "error_threshold_percentage": 50,
+  "minimum_requests": 20,
+  "recovery_timeout_secs": 30,
+  "half_open_success_threshold": 5
+}, null, 2),
   },
   {
     id: 'retry-policy',
@@ -1072,7 +1934,18 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['retry', 'backoff', 'resilience', '502'],
-    config_json: JSON.stringify({ retries: 3, backoff_base_ms: 100, retry_on: ['http_502', 'http_503', 'http_504'] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "retries": 3,
+  "backoff_base_ms": 100,
+  "max_backoff_ms": 1000,
+  "retry_on": [
+    "http_502",
+    "http_503",
+    "http_504",
+    "connect_failure"
+  ]
+}, null, 2),
   },
   {
     id: 'timeout-policy',
@@ -1083,7 +1956,12 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['timeouts', 'connect', 'read', 'resource-leak'],
-    config_json: JSON.stringify({ connect_timeout_ms: 2000, read_timeout_ms: 10000, write_timeout_ms: 10000 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "connect_timeout_ms": 2000,
+  "read_timeout_ms": 10000,
+  "write_timeout_ms": 10000
+}, null, 2),
   },
   {
     id: 'outlier-detection',
@@ -1094,7 +1972,13 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['outlier', 'ejection', 'anomalies'],
-    config_json: JSON.stringify({ consecutive_5xx: 5, ejection_duration_secs: 30, max_ejection_percent: 50 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "consecutive_5xx": 5,
+  "ejection_duration_secs": 30,
+  "max_ejection_percent": 50,
+  "enforce_interval_secs": 10
+}, null, 2),
   },
   {
     id: 'active-health-check',
@@ -1105,7 +1989,18 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['health-check', 'probes', 'synthetic'],
-    config_json: JSON.stringify({ path: '/healthz', interval_secs: 10, timeout_secs: 2, healthy_threshold: 2, unhealthy_threshold: 3 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "path": "/healthz",
+  "interval_secs": 10,
+  "timeout_secs": 2,
+  "healthy_threshold": 2,
+  "unhealthy_threshold": 3,
+  "expected_statuses": [
+    200,
+    204
+  ]
+}, null, 2),
   },
   {
     id: 'passive-health-check',
@@ -1116,7 +2011,17 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['passive-health', 'fails', 'fail-timeout'],
-    config_json: JSON.stringify({ max_fails: 3, fail_timeout_secs: 10 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "max_fails": 3,
+  "fail_timeout_secs": 10,
+  "unhealthy_statuses": [
+    500,
+    502,
+    503,
+    504
+  ]
+}, null, 2),
   },
   {
     id: 'fallback-upstream',
@@ -1127,7 +2032,17 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['fallback', 'disaster-recovery', 'failover'],
-    config_json: JSON.stringify({ primary_upstream: 'backend_primary', fallback_upstream: 'backend_dr' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "primary_upstream": "backend_primary",
+  "fallback_upstream": "backend_dr",
+  "trigger_on_status": [
+    500,
+    502,
+    503,
+    504
+  ]
+}, null, 2),
   },
   {
     id: 'hedged-request',
@@ -1138,7 +2053,11 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['hedged', 'tail-latency', 'speculative', 'p99'],
-    config_json: JSON.stringify({ hedged_delay_ms: 150, max_hedged_attempts: 2 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "hedged_delay_ms": 150,
+  "max_hedged_attempts": 2
+}, null, 2),
   },
   {
     id: 'upstream-affinity',
@@ -1149,7 +2068,13 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['affinity', 'sticky-cookie', 'session'],
-    config_json: JSON.stringify({ cookie_name: 'AURORA_STICKY', ttl_secs: 3600, hash_strategy: 'ip_hash' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "cookie_name": "AURORA_STICKY",
+  "ttl_secs": 3600,
+  "hash_strategy": "ip_hash",
+  "failover": "next_node"
+}, null, 2),
   },
   {
     id: 'adaptive-concurrency',
@@ -1160,7 +2085,13 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['concurrency', 'gradient', 'backpressure'],
-    config_json: JSON.stringify({ min_concurrency: 10, max_concurrency: 1000, target_rtt_ms: 50 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "min_concurrency": 10,
+  "max_concurrency": 1000,
+  "target_rtt_ms": 50,
+  "gradient_smoothing": 0.2
+}, null, 2),
   },
 
   // 9. Cache & Content (8)
@@ -1173,7 +2104,17 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['caching', 'proxy-cache', 'stale-while-revalidate'],
-    config_json: JSON.stringify({ cache_size_mb: 512, default_ttl_secs: 60, stale_while_revalidate: true, methods: ['GET', 'HEAD'] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "cache_size_mb": 512,
+  "default_ttl_secs": 60,
+  "stale_while_revalidate": true,
+  "methods": [
+    "GET",
+    "HEAD"
+  ],
+  "cache_key": "$scheme$request_method$host$request_uri"
+}, null, 2),
   },
   {
     id: 'redis-cache',
@@ -1184,7 +2125,13 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['redis', 'distributed-cache', 'kv'],
-    config_json: JSON.stringify({ redis_url: 'redis://127.0.0.1:6379', default_ttl_secs: 300, key_prefix: 'aurora:cache:' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "redis_url": "redis://127.0.0.1:6379/2",
+  "default_ttl_secs": 300,
+  "key_prefix": "aurora:cache:",
+  "compress_payloads": true
+}, null, 2),
   },
   {
     id: 'cache-purge',
@@ -1195,7 +2142,15 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['purge', 'invalidation', 'cache-clear'],
-    config_json: JSON.stringify({ allowed_ips: ['127.0.0.1', '10.0.0.0/8'], purge_key_header: 'X-Purge-Key' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "allowed_ips": [
+    "127.0.0.1",
+    "10.0.0.0/8"
+  ],
+  "purge_key_header": "X-Purge-Key",
+  "purge_method": "PURGE"
+}, null, 2),
   },
   {
     id: 'etag',
@@ -1206,7 +2161,11 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['etag', '304', 'cache-validation'],
-    config_json: JSON.stringify({ weak: true, algorithm: 'sha256' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "weak": true,
+  "algorithm": "sha256"
+}, null, 2),
   },
   {
     id: 'conditional-request',
@@ -1217,7 +2176,12 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['conditional', 'if-match', 'if-modified-since'],
-    config_json: JSON.stringify({ enabled: true }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "evaluate_if_match": true,
+  "evaluate_if_none_match": true,
+  "evaluate_if_modified_since": true
+}, null, 2),
   },
   {
     id: 'static-response',
@@ -1228,7 +2192,15 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['static', 'html', 'mock', 'assets'],
-    config_json: JSON.stringify({ root_dir: '/var/www/static', autoindex: false }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "root_dir": "/var/www/static",
+  "autoindex": false,
+  "index_files": [
+    "index.html",
+    "index.htm"
+  ]
+}, null, 2),
   },
   {
     id: 'mock-response',
@@ -1239,7 +2211,15 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['mock', 'testing', 'stubs'],
-    config_json: JSON.stringify({ routes: { '/api/mock': { status: 200, body: '{"hello":"world"}' } } }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "routes": {
+    "/api/v1/mock/ping": {
+      "status": 200,
+      "body": "{\"status\":\"ok\",\"service\":\"mock\"}"
+    }
+  }
+}, null, 2),
   },
   {
     id: 'response-buffering',
@@ -1250,7 +2230,12 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['buffering', 'streaming', 'sse', 'grpc'],
-    config_json: JSON.stringify({ buffer_size_kb: 64, disable_for_sse: true, disable_for_grpc: true }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "buffer_size_kb": 64,
+  "disable_for_sse": true,
+  "disable_for_grpc": true
+}, null, 2),
   },
 
   // 10. Integration & Runtime (8)
@@ -1263,7 +2248,14 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['aws', 'lambda', 'serverless', 'sigv4'],
-    config_json: JSON.stringify({ region: 'us-east-1', function_name: '', qualifier: '$LATEST' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "region": "us-east-1",
+  "function_name": "process-api-request",
+  "qualifier": "$LATEST",
+  "invocation_type": "RequestResponse",
+  "timeout_ms": 3000
+}, null, 2),
   },
   {
     id: 'azure-functions',
@@ -1274,7 +2266,12 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['azure', 'serverless', 'functions'],
-    config_json: JSON.stringify({ app_name: '', function_name: '', auth_code: '' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "app_name": "my-azure-function-app",
+  "function_name": "handler",
+  "auth_code": "secret_azure_function_host_key"
+}, null, 2),
   },
   {
     id: 'webhook',
@@ -1285,7 +2282,16 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['webhook', 'events', 'alerts'],
-    config_json: JSON.stringify({ url: 'https://api.example.com/alerts', events: ['attack_blocked', 'cert_expiring'] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "url": "https://api.example.com/webhooks/security-alerts",
+  "events": [
+    "attack_blocked",
+    "rate_limit_exceeded",
+    "cert_expiring"
+  ],
+  "secret": "webhook_signature_secret_key"
+}, null, 2),
   },
   {
     id: 'serverless-pre-function',
@@ -1296,7 +2302,11 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['lua', 'javascript', 'pre-function', 'scripting'],
-    config_json: JSON.stringify({ runtime: 'lua', script: '-- enter script here\nreturn 0' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "runtime": "lua",
+  "script": "-- Execute before request routing\nlocal headers = ngx.req.get_headers()\nif not headers[\"X-Custom-Auth\"] then\n  ngx.exit(401)\nend"
+}, null, 2),
   },
   {
     id: 'serverless-post-function',
@@ -1307,7 +2317,11 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['lua', 'javascript', 'post-function', 'scripting'],
-    config_json: JSON.stringify({ runtime: 'lua', script: '-- enter script here\nreturn 0' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "runtime": "lua",
+  "script": "-- Execute after receiving upstream response\nngx.header[\"X-Processed-Time\"] = ngx.now()"
+}, null, 2),
   },
   {
     id: 'external-plugin',
@@ -1318,7 +2332,12 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['grpc', 'ipc', 'unix-socket', 'custom-plugin'],
-    config_json: JSON.stringify({ socket_path: '/var/run/aurora/plugin.sock', timeout_ms: 50 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "socket_path": "/var/run/aurora/plugin.sock",
+  "timeout_ms": 50,
+  "fail_open": false
+}, null, 2),
   },
   {
     id: 'kafka-proxy',
@@ -1329,7 +2348,12 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['kafka', 'rest-gateway', 'streaming'],
-    config_json: JSON.stringify({ bootstrap_servers: '127.0.0.1:9092', default_topic: 'events' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "bootstrap_servers": "127.0.0.1:9092",
+  "default_topic": "api-events",
+  "key_header": "X-Partition-Key"
+}, null, 2),
   },
   {
     id: 'mqtt-proxy',
@@ -1340,7 +2364,12 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['mqtt', 'iot', 'websocket', 'broker'],
-    config_json: JSON.stringify({ broker_url: 'tcp://127.0.0.1:1883', client_id: 'aurora-gateway' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "broker_url": "tcp://127.0.0.1:1883",
+  "client_id": "aurora-gateway-edge",
+  "topic_prefix": "telemetry/"
+}, null, 2),
   },
 
   // 11. AI Gateway (6)
@@ -1353,7 +2382,24 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['llm', 'openai', 'anthropic', 'claude', 'bedrock', 'ai-proxy'],
-    config_json: JSON.stringify({ default_provider: 'openai', providers: { openai: { base_url: 'https://api.openai.com/v1', api_key: '' } } }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "default_provider": "openai",
+  "providers": {
+    "openai": {
+      "base_url": "https://api.openai.com/v1",
+      "model": "gpt-4o",
+      "api_key": "sk-proj-sample_openai_key_placeholder",
+      "timeout_ms": 30000
+    },
+    "anthropic": {
+      "base_url": "https://api.anthropic.com/v1",
+      "model": "claude-3-5-sonnet-20241022",
+      "api_key": "sk-ant-sample_anthropic_key_placeholder",
+      "timeout_ms": 30000
+    }
+  }
+}, null, 2),
   },
   {
     id: 'ai-multi-provider',
@@ -1364,7 +2410,17 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['ai', 'multi-provider', 'failover', 'load-balancer'],
-    config_json: JSON.stringify({ failover: true, providers: ['openai', 'anthropic', 'bedrock'] }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "failover": true,
+  "providers": [
+    "openai",
+    "anthropic",
+    "bedrock"
+  ],
+  "retry_count": 2,
+  "timeout_ms": 30000
+}, null, 2),
   },
   {
     id: 'ai-token-rate-limit',
@@ -1375,7 +2431,13 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['ai', 'tokens', 'cost-control', 'tpm', 'rpm'],
-    config_json: JSON.stringify({ tokens_per_minute: 60000, cost_limit_usd_per_day: 50.0 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "tokens_per_minute": 60000,
+  "requests_per_minute": 500,
+  "cost_limit_usd_per_day": 50,
+  "limit_by": "consumer_id"
+}, null, 2),
   },
   {
     id: 'ai-prompt-guard',
@@ -1386,7 +2448,14 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['ai', 'prompt-injection', 'jailbreak', 'llm-security'],
-    config_json: JSON.stringify({ detect_jailbreak: true, detect_pii: true, action: 'block' }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "detect_jailbreak": true,
+  "detect_pii": true,
+  "detect_prompt_injection": true,
+  "action": "block",
+  "rejected_response": "Prompt rejected: adversarial content or policy violation detected"
+}, null, 2),
   },
   {
     id: 'ai-semantic-cache',
@@ -1397,7 +2466,14 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['ai', 'semantic-cache', 'embeddings', 'vector'],
-    config_json: JSON.stringify({ similarity_threshold: 0.92, embedding_model: 'text-embedding-3-small', ttl_secs: 86400 }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "similarity_threshold": 0.92,
+  "embedding_model": "text-embedding-3-small",
+  "embedding_provider": "openai",
+  "ttl_secs": 86400,
+  "max_cached_entries": 10000
+}, null, 2),
   },
   {
     id: 'ai-content-moderation',
@@ -1408,6 +2484,13 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     enabled: false,
     is_builtin: true,
     tags: ['ai', 'moderation', 'safety', 'toxicity', 'pii'],
-    config_json: JSON.stringify({ block_hate: true, block_violence: true, block_sexual: true, mask_pii: true }, null, 2),
+    config_json: JSON.stringify({
+  "enabled": true,
+  "block_hate": true,
+  "block_violence": true,
+  "block_sexual": true,
+  "mask_pii": true,
+  "rejection_status": 400
+}, null, 2),
   },
 ];
