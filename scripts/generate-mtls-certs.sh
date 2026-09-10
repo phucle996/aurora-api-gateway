@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Aurora WAF - Script khởi tạo bộ chứng chỉ mTLS nội bộ (Mutual TLS)
+# Aurora API Gateway - Script khởi tạo bộ chứng chỉ mTLS nội bộ (Mutual TLS)
 #
 # Tạo 3 thành phần PKI:
 # 1. Internal Root CA (ca.crt, ca.key) - Cơ quan ký chứng chỉ nội bộ.

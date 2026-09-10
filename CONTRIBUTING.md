@@ -1,6 +1,6 @@
-# Contributing to Aurora WAF
+# Contributing to Aurora API Gateway
 
-Thank you for your interest in contributing to Aurora WAF! We welcome bug reports, feature proposals, documentation improvements, and pull requests from the community.
+Thank you for your interest in contributing to Aurora API Gateway! We welcome bug reports, feature proposals, documentation improvements, and pull requests from the community.
 
 By participating, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md).
 
@@ -109,6 +109,6 @@ Before opening a PR, ensure code adheres to standard formatting:
 
 ## Licensing & Developer Certificate of Origin (DCO)
 
-All contributions to Aurora WAF are made under the **Apache License, Version 2.0** (see [LICENSE](LICENSE)).
+All contributions to Aurora API Gateway are made under the **Apache License, Version 2.0** (see [LICENSE](LICENSE)).
 
 By submitting a pull request, you confirm that you have the right to submit the work and agree that your contributions are licensed under Apache 2.0.

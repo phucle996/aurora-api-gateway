@@ -600,7 +600,7 @@ func (s *UpstreamService) ReportSyncStatus(ctx context.Context, nodeID string, r
 // GenerateNginxUpstreamsConf sinh nội dung file active-upstreams.conf cho NGINX.
 func GenerateNginxUpstreamsConf(upstreams []entity.UpstreamItem) string {
 	var sb strings.Builder
-	sb.WriteString("# Auto-generated Aurora WAF Upstreams Configuration\n")
+	sb.WriteString("# Auto-generated Aurora API Gateway Upstreams Configuration\n")
 	sb.WriteString("# Do not edit manually - managed by Aurora Control-Plane\n\n")
 
 	for _, u := range upstreams {

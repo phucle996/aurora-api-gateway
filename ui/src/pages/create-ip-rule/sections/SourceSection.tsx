@@ -294,7 +294,7 @@ export function SourceSection({
                   <span>No country datasets imported yet</span>
                 </p>
                 <p className="text-[11px] text-amber-500">
-                  In Aurora WAF, country rules require pre-imported CIDR-to-Country mappings. Please import a dataset before saving this rule.{' '}
+                  In Aurora API Gateway, country rules require pre-imported CIDR-to-Country mappings. Please import a dataset before saving this rule.{' '}
                   <Link to="/ip-access?tab=datasets" className="underline font-bold">
                     Import Dataset →
                   </Link>
@@ -354,7 +354,7 @@ export function SourceSection({
                   <span>No ASN datasets imported yet</span>
                 </p>
                 <p className="text-[11px] text-amber-500">
-                  In Aurora WAF, ASN rules require pre-imported CIDR-to-ASN mappings.{' '}
+                  In Aurora API Gateway, ASN rules require pre-imported CIDR-to-ASN mappings.{' '}
                   <Link to="/ip-access?tab=datasets" className="underline font-bold">
                     Import Dataset →
                   </Link>

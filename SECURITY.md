@@ -1,6 +1,6 @@
 # Security Policy
 
-The Aurora WAF team takes security and reliability extremely seriously. Aurora WAF operates as an in-line reverse proxy and security inspection engine; ensuring the security, isolation, and robustness of the data plane and control plane is our highest priority.
+The Aurora API Gateway team takes security and reliability extremely seriously. Aurora API Gateway operates as an in-line reverse proxy and security inspection engine; ensuring the security, isolation, and robustness of the data plane and control plane is our highest priority.
 
 ## Supported Versions
 
@@ -17,7 +17,7 @@ Only the latest active development versions receive security updates.
 
 **Please DO NOT report security vulnerabilities through public GitHub issues or discussions.**
 
-If you discover a security vulnerability in Aurora WAF, report it privately using one of the following channels:
+If you discover a security vulnerability in Aurora API Gateway, report it privately using one of the following channels:
 
 1. **GitHub Private Vulnerability Reporting (Recommended)**:
    Navigate to the **Security** tab of this repository, select **Advisories**, and click **Report a vulnerability**. This creates a confidential advisory between you and the project maintainers.
@@ -31,7 +31,7 @@ To help us triage and resolve the issue quickly, include:
 - **Component affected**: Rust Engine (`crates/engine`), C ABI FFI (`crates/ffi`), NGINX Module (`adapters/nginx`), Go Control Plane (`control-plane`), or Management Console (`ui`).
 - **Description**: Clear description of the vulnerability and its potential impact.
 - **Proof of Concept (PoC)**: Minimal reproduction steps, request payload, or test case. Please sanitize any proprietary or confidential data.
-- **Version/Environment**: Aurora WAF commit hash or version, OS, NGINX version, and compiler versions.
+- **Version/Environment**: Aurora API Gateway commit hash or version, OS, NGINX version, and compiler versions.
 
 ---
 
@@ -46,7 +46,7 @@ To help us triage and resolve the issue quickly, include:
 
 ## Security Architecture & Invariants
 
-Aurora WAF is built on key security invariants:
+Aurora API Gateway is built on key security invariants:
 
 1. **Zero-Allocation Data Plane**:
    - The Rust engine (`crates/engine`) inspects requests in the NGINX access phase with zero unnecessary heap allocations.

@@ -17,15 +17,15 @@ export function DashboardMetrics() {
   const [systemInfo, setSystemInfo] = useState<any>(null);
 
   useEffect(() => {
-    nodesApi.list().then(setNodes).catch(() => {});
-    systemApi.getInfo().then(setSystemInfo).catch(() => {});
+    nodesApi.list().then(setNodes).catch(() => { });
+    systemApi.getInfo().then(setSystemInfo).catch(() => { });
     const token = getAuthToken();
     fetch('/api/v1/rules/stats', {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then(res => res.ok ? res.json() : null)
       .then(data => { if (data) setRulesStats(data); })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const totalNodes = nodes.length;
@@ -157,7 +157,7 @@ export function DashboardMetrics() {
           </div>
           <div className="text-[10px] font-sans text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-1">
             <span className="w-1.5 h-1.5 bg-emerald-500 inline-block rounded-full" />
-            <span>{systemInfo?.product || 'Aurora WAF'} ({systemInfo?.version || '0.4.2'})</span>
+            <span>{systemInfo?.product || 'Aurora API Gateway'} ({systemInfo?.version || '0.4.2'})</span>
           </div>
         </div>
         <div className="h-1.5 w-full bg-muted mt-3 rounded-full overflow-hidden">

@@ -273,7 +273,7 @@ export function ChannelSetupModal({
                     type="text"
                     value={setupConfig.username || ''}
                     onChange={(e) => setSetupConfig({ ...setupConfig, username: e.target.value })}
-                    placeholder="Aurora WAF Bot"
+                    placeholder="Aurora API Gateway Bot"
                     className="w-full bg-background border border-input rounded px-3 py-1.5 text-foreground focus:outline-none focus:border-primary"
                   />
                 </div>

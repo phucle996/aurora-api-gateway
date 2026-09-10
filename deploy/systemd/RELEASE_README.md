@@ -1,4 +1,4 @@
-# Aurora WAF — Linux Systemd Release
+# Aurora API Gateway — Linux Systemd Release
 
 ## Quick Start
 
@@ -6,12 +6,12 @@
 
 Install latest release directly:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/phucle996/aurora-waf/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/phucle996/aurora-api-gateway/main/install.sh | sudo bash
 ```
 
 Or install a specific version (e.g. `v0.1.0`):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/phucle996/aurora-waf/main/install.sh | sudo bash -s -- -v v0.1.0
+curl -fsSL https://raw.githubusercontent.com/phucle996/aurora-api-gateway/main/install.sh | sudo bash -s -- -v v0.1.0
 ```
 
 ### 2. Local Installation from Release Tarball

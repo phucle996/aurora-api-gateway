@@ -1,8 +1,8 @@
 package entity
 
 // ClusterNodeRecord là flat projection đại diện cho một node NGINX Data Plane
-// trong cluster Aurora WAF.
-// Tuân thủ quy tắc kiến trúc Aurora WAF: Flat entity, không lồng ghép đối tượng phức tạp,
+// trong cluster Aurora API Gateway.
+// Tuân thủ quy tắc kiến trúc Aurora API Gateway: Flat entity, không lồng ghép đối tượng phức tạp,
 // tách bạch giữa dữ liệu bền vững (SQLite) và telemetry tức thời (In-Memory/OS).
 type ClusterNodeRecord struct {
 	MetricsScope           string

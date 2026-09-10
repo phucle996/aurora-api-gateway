@@ -78,7 +78,7 @@ export function LoginInfoCards() {
           >
             <div className="flex items-center gap-2">
               <BookOpen className="w-3.5 h-3.5 text-muted-foreground" />
-              <span>Aurora WAF Admin Guide</span>
+              <span>Aurora API Gateway Admin Guide</span>
             </div>
             <ExternalLink className="w-3 h-3 text-muted-foreground" />
           </a>

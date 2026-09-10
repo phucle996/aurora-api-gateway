@@ -4,7 +4,7 @@ use std::path::PathBuf;
 #[derive(Parser, Debug, Clone)]
 #[command(
     name = "aurora-agent",
-    about = "Aurora WAF Dataplane Supervisor and Node Agent"
+    about = "Aurora API Gateway Dataplane Supervisor and Node Agent"
 )]
 pub struct Config {
     #[arg(long, env = "CONTROLLER_URL")]

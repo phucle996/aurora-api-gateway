@@ -1,4 +1,4 @@
-# Aurora WAF Roadmap
+# Aurora API Gateway Roadmap
 
 Date created: 2026-09-05. Structure **Stage → Phase → Task**. `[x]` means there is an
 existing implementation artifact/documentation; `[ ]` indicates incomplete. A Stage is only

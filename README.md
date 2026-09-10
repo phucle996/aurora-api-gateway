@@ -1,4 +1,4 @@
-# Aurora WAF
+# Aurora API Gateway
 
 <div align="center">
 
@@ -8,7 +8,7 @@
 [![React](https://img.shields.io/badge/React-18.x%20%7C%20TypeScript-61DAFB.svg)](https://react.dev/)
 [![NGINX](https://img.shields.io/badge/NGINX-Dynamic%20Module%20(C%20ABI%20v3)-009639.svg)](https://nginx.org/)
 
-**An enterprise-grade, high-performance Web Application Firewall for NGINX.**  
+**An enterprise-grade, high-performance API Gateway with Integrated WAF for NGINX.**  
 Engineered with a **zero-allocation Rust runtime**, **native C dynamic module adapter**,  
 **distributed Go control plane**, and an intuitive **React management console**.
 
@@ -20,7 +20,7 @@ Engineered with a **zero-allocation Rust runtime**, **native C dynamic module ad
 
 ## 🌟 Overview
 
-**Aurora WAF** provides robust, low-latency protection for modern web infrastructure without compromising throughput. Built to overcome the memory and speed limitations of Lua-based WAFs, Aurora WAF separates policy preparation and control-plane orchestration from high-speed request evaluation on the data-plane hot path.
+**Aurora API Gateway** provides robust, low-latency API traffic orchestration and real-time security protection for modern web infrastructure without compromising throughput. Built to overcome the memory and speed limitations of Lua-based proxies and WAFs, Aurora API Gateway separates policy preparation and control-plane orchestration from high-speed request evaluation on the data-plane hot path.
 
 - **Zero-Allocation Data Plane**: The Rust core engine inspects requests in the NGINX access phase with zero unnecessary heap allocations.
 - **Fail-Safe Resilience**: Worker nodes cache compiled rules and routing configurations locally, continuing to inspect and forward traffic even during complete control-plane outages.
@@ -30,7 +30,7 @@ Engineered with a **zero-allocation Rust runtime**, **native C dynamic module ad
 
 ## 🏗️ Architecture
 
-Aurora WAF is organized into four decoupled layers:
+Aurora API Gateway is organized into four decoupled layers:
 
 ```
                           ┌────────────────────────┐
@@ -114,26 +114,26 @@ Aurora WAF is organized into four decoupled layers:
 
 ### Standalone Linux / Systemd (One-Line Installer)
 
-Install Aurora WAF (Control Plane + NGINX dynamic modules) on any Linux server:
+Install Aurora API Gateway (Control Plane + NGINX dynamic modules) on any Linux server:
 
 ```bash
 # Install latest release
-curl -fsSL https://raw.githubusercontent.com/phucle996/aurora-waf/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/phucle996/aurora-api-gateway/main/install.sh | sudo bash
 
 # Or install a specific version
-curl -fsSL https://raw.githubusercontent.com/phucle996/aurora-waf/main/install.sh | sudo bash -s -- -v v0.1.0
+curl -fsSL https://raw.githubusercontent.com/phucle996/aurora-api-gateway/main/install.sh | sudo bash -s -- -v v0.1.0
 ```
 
 The script automatically detects your installed NGINX version, matches the appropriate pre-compiled WAF module, configures systemd units, and starts the service.
 
 ### Running with Docker Compose
 
-The fastest way to test Aurora WAF with a complete multi-node cluster and load balancer is via Docker Compose:
+The fastest way to test Aurora API Gateway with a complete multi-node cluster and load balancer is via Docker Compose:
 
 ```bash
 # Clone the repository
-git clone https://github.com/phucle996/aurora-waf.git
-cd aurora-waf
+git clone https://github.com/phucle996/aurora-api-gateway.git
+cd aurora-api-gateway
 
 # Start controller, 2 WAF worker nodes, and fronting load balancer
 docker compose up -d
@@ -228,10 +228,10 @@ For instructions on reporting security vulnerabilities, please refer to our **[S
 
 ## 📄 License
 
-Aurora WAF is licensed under the **[Apache License, Version 2.0](LICENSE)**.
+Aurora API Gateway is licensed under the **[Apache License, Version 2.0](LICENSE)**.
 
 ```
-Copyright 2026 Aurora WAF Authors
+Copyright 2026 Aurora API Gateway Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

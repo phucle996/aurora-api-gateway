@@ -54,7 +54,7 @@ if [ ! -f /var/lib/aurora-policy/active-access.json ] || ! grep -q '"generation"
 fi
 
 if [ ! -f /var/lib/aurora-policy/active-upstreams.conf ]; then
-    printf '%s\n' '# Aurora WAF initial active upstreams' > /var/lib/aurora-policy/active-upstreams.conf
+    printf '%s\n' '# Aurora API Gateway initial active upstreams' > /var/lib/aurora-policy/active-upstreams.conf
 fi
 
 chown -R nginx:nginx /var/lib/aurora-policy

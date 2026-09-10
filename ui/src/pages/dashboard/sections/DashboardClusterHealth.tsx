@@ -7,7 +7,7 @@ export function DashboardClusterHealth() {
   const [info, setInfo] = useState<SystemInfo | null>(null);
 
   useEffect(() => {
-    systemApi.getInfo().then(setInfo).catch(() => {});
+    systemApi.getInfo().then(setInfo).catch(() => { });
   }, []);
 
   const nodesReady = info?.nodes_ready ?? 0;
@@ -53,7 +53,7 @@ export function DashboardClusterHealth() {
         <div className="flex justify-between py-1 border-b border-border">
           <span className="text-muted-foreground">Control Plane</span>
           <span className="text-foreground font-semibold">
-            {info?.product || 'Aurora WAF'} ({info?.version || '0.4.2'})
+            {info?.product || 'Aurora API Gateway'} ({info?.version || '0.4.2'})
           </span>
         </div>
 

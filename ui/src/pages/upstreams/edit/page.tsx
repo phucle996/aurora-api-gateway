@@ -124,18 +124,16 @@ function CertUploadInput({
           <button
             type="button"
             onClick={() => setTab('upload')}
-            className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
-              tab === 'upload' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
-            }`}
+            className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${tab === 'upload' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
+              }`}
           >
             Upload File
           </button>
           <button
             type="button"
             onClick={() => setTab('paste')}
-            className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
-              tab === 'paste' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
-            }`}
+            className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${tab === 'paste' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
+              }`}
           >
             Paste Text
           </button>
@@ -147,13 +145,12 @@ function CertUploadInput({
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          className={`border-2 border-dashed rounded-xl p-4 transition-all duration-150 text-center ${
-            isDragging
+          className={`border-2 border-dashed rounded-xl p-4 transition-all duration-150 text-center ${isDragging
               ? 'border-primary bg-primary/5 scale-[0.99]'
               : value
-              ? 'border-primary/40 bg-primary/5'
-              : 'border-border hover:border-primary/50 bg-background/50 hover:bg-muted/30'
-          }`}
+                ? 'border-primary/40 bg-primary/5'
+                : 'border-border hover:border-primary/50 bg-background/50 hover:bg-muted/30'
+            }`}
         >
           <input
             ref={fileInputRef}
@@ -674,11 +671,10 @@ export default function EditUpstreamPage() {
                     <div
                       key={item.key}
                       onClick={() => setType(item.key as UpstreamType)}
-                      className={`p-3.5 rounded-xl border transition-all duration-150 cursor-pointer text-left ${
-                        selected
+                      className={`p-3.5 rounded-xl border transition-all duration-150 cursor-pointer text-left ${selected
                           ? 'border-primary bg-primary/5 ring-1 ring-primary'
                           : 'border-border hover:border-primary/40 bg-background/50 hover:bg-muted/30'
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-xs font-bold text-foreground">{item.title}</span>
@@ -722,11 +718,10 @@ export default function EditUpstreamPage() {
                         <div
                           key={alg.key}
                           onClick={() => setAlgorithm(alg.key as BalancingAlgorithm)}
-                          className={`p-3 rounded-lg border text-left cursor-pointer transition-colors ${
-                            active
+                          className={`p-3 rounded-lg border text-left cursor-pointer transition-colors ${active
                               ? 'border-primary bg-primary/5 ring-1 ring-primary'
                               : 'border-border bg-background hover:bg-muted/40'
-                          }`}
+                            }`}
                         >
                           <div className="text-xs font-semibold text-foreground">{alg.name}</div>
                           <div className="text-[10px] text-muted-foreground mt-0.5">{alg.desc}</div>
@@ -876,7 +871,7 @@ export default function EditUpstreamPage() {
                   <div>
                     <h2 className="text-sm font-semibold text-card-foreground">3. Internal SSL & Backend TLS (NGINX ➔ Backend)</h2>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Encrypted connection between Aurora WAF and internal origin servers.
+                      Encrypted connection between Aurora API Gateway and internal origin servers.
                     </p>
                   </div>
                 </div>
@@ -1097,8 +1092,8 @@ export default function EditUpstreamPage() {
                 </select>
               </label>
               {requestCompression !== 'none' && <div className="grid grid-cols-2 gap-4">
-                <label className="text-xs">Minimum body/message size (bytes)<input aria-label="Compression minimum bytes" type="number" min="0" max="1048576" value={compressionMinBytes} onChange={e=>setCompressionMinBytes(Number(e.target.value))} className="block w-full border border-input bg-background rounded p-2" /></label>
-                <label className="text-xs">Compression level (1–9)<input aria-label="Compression level" type="number" min="1" max="9" value={compressionLevel} onChange={e=>setCompressionLevel(Number(e.target.value))} className="block w-full border border-input bg-background rounded p-2" /></label>
+                <label className="text-xs">Minimum body/message size (bytes)<input aria-label="Compression minimum bytes" type="number" min="0" max="1048576" value={compressionMinBytes} onChange={e => setCompressionMinBytes(Number(e.target.value))} className="block w-full border border-input bg-background rounded p-2" /></label>
+                <label className="text-xs">Compression level (1–9)<input aria-label="Compression level" type="number" min="1" max="9" value={compressionLevel} onChange={e => setCompressionLevel(Number(e.target.value))} className="block w-full border border-input bg-background rounded p-2" /></label>
               </div>}
             </div>
 
@@ -1120,11 +1115,10 @@ export default function EditUpstreamPage() {
                         key={ver}
                         disabled={ver === 'HTTP/3'}
                         onClick={() => setHttpVersion(ver as any)}
-                        className={`p-2.5 rounded-lg border text-center cursor-pointer text-xs font-mono font-medium transition-colors ${
-                          httpVersion === ver
+                        className={`p-2.5 rounded-lg border text-center cursor-pointer text-xs font-mono font-medium transition-colors ${httpVersion === ver
                             ? 'border-primary bg-primary/5 text-primary ring-1 ring-primary'
                             : 'border-border bg-background text-foreground hover:bg-muted/40'
-                        }`}
+                          }`}
                       >
                         {ver}
                       </button>
@@ -1244,9 +1238,8 @@ export default function EditUpstreamPage() {
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-muted-foreground text-[11px]">Internal TLS (to BE)</span>
                     <span
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                        internalSslEnabled ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
-                      }`}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${internalSslEnabled ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+                        }`}
                     >
                       {internalSslEnabled ? 'Enabled' : 'Disabled'}
                     </span>
@@ -1314,7 +1307,7 @@ export default function EditUpstreamPage() {
                   <span>Backend transport configuration</span>
                 </div>
                 <pre className="p-2.5 bg-muted/60 rounded-lg text-[10px] font-mono text-muted-foreground overflow-x-auto leading-relaxed border border-border">
-{JSON.stringify({protocol: httpVersion, grpc: enableGrpc, requestCompression, compressionMinBytes, compressionLevel, dynamicDns, tls: internalSslEnabled, verifyOrigin: verifyCert, sni: sniHost, mtls: mTLS, keepAliveConnections}, null, 2)}
+                  {JSON.stringify({ protocol: httpVersion, grpc: enableGrpc, requestCompression, compressionMinBytes, compressionLevel, dynamicDns, tls: internalSslEnabled, verifyOrigin: verifyCert, sni: sniHost, mtls: mTLS, keepAliveConnections }, null, 2)}
                 </pre>
               </div>
             </div>

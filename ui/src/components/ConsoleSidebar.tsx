@@ -169,13 +169,13 @@ export function ConsoleSidebar({
             className={`flex items-center gap-2.5 transition-colors min-w-0 ${
               collapsed ? 'w-full justify-center' : ''
             }`}
-            title="Aurora WAF Cloud Console"
+            title="Aurora API Gateway Cloud Console"
           >
             <img src={logoImg} alt="Aurora Logo" className="w-8 h-8 object-contain shrink-0" />
             {!collapsed && (
               <div className="flex flex-col min-w-0">
                 <span className="font-bold text-foreground text-sm tracking-wider uppercase truncate">
-                  Aurora WAF
+                  Aurora API Gateway
                 </span>
                 <span className="text-[10px] text-muted-foreground font-sans tracking-wide uppercase truncate">
                   Cloud Console

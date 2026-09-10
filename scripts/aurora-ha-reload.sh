@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Aurora WAF - High Availability (HA) Zero-Downtime Rolling Reload Script
+# Aurora API Gateway - High Availability (HA) Zero-Downtime Rolling Reload Script
 # Sử dụng kỹ thuật NGINX USR2 + WINCH + QUIT để chuyển giao kết nối (Connection Draining)
 set -euo pipefail
 

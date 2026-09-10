@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Aurora WAF Linux installer.
+# Aurora API Gateway Linux installer.
 # Automatically downloads release package (latest or specified -v version),
 # detects NGINX installations, installs modules, generates systemd units, and starts services.
 set -euo pipefail
@@ -12,11 +12,11 @@ NGINX_CHOICE=""
 
 usage() {
   cat << 'EOF'
-Aurora WAF Linux Installer
+Aurora API Gateway Linux Installer
 
 Usage:
   install.sh [OPTIONS]
-  curl -fsSL https://raw.githubusercontent.com/phucle996/aurora-waf/main/install.sh | sudo bash -s -- [OPTIONS]
+  curl -fsSL https://raw.githubusercontent.com/phucle996/aurora-api-gateway/main/install.sh | sudo bash -s -- [OPTIONS]
 
 Options:
   -v, --version <tag>     Release version to install (e.g. v0.1.0 or 0.1.0). Default: latest
@@ -90,9 +90,9 @@ else
   TARGET_TAG=""
   if [ "$VERSION" = "latest" ]; then
     echo "==> Fetching latest release version from GitHub..."
-    TARGET_TAG=$(curl -sIL -o /dev/null -w '%{url_effective}' "https://github.com/phucle996/aurora-waf/releases/latest" 2>/dev/null | sed -E 's|.*/tag/||' || true)
+    TARGET_TAG=$(curl -sIL -o /dev/null -w '%{url_effective}' "https://github.com/phucle996/aurora-api-gateway/releases/latest" 2>/dev/null | sed -E 's|.*/tag/||' || true)
     if [ -z "$TARGET_TAG" ] || [ "$TARGET_TAG" = "latest" ]; then
-      TARGET_TAG=$(curl -sSL "https://api.github.com/repos/phucle996/aurora-waf/releases/latest" 2>/dev/null | grep -m1 '"tag_name":' | cut -d '"' -f 4 || true)
+      TARGET_TAG=$(curl -sSL "https://api.github.com/repos/phucle996/aurora-api-gateway/releases/latest" 2>/dev/null | grep -m1 '"tag_name":' | cut -d '"' -f 4 || true)
     fi
     if [ -z "$TARGET_TAG" ]; then
       echo "Error: Could not resolve latest release tag from GitHub." >&2
@@ -108,12 +108,12 @@ else
 
   RAW_VER="${TARGET_TAG#v}"
   ARCHIVE_NAME="aurora-waf-${RAW_VER}-linux-amd64.tar.gz"
-  DOWNLOAD_URL="https://github.com/phucle996/aurora-waf/releases/download/${TARGET_TAG}/${ARCHIVE_NAME}"
+  DOWNLOAD_URL="https://github.com/phucle996/aurora-api-gateway/releases/download/${TARGET_TAG}/${ARCHIVE_NAME}"
   SHA256_URL="${DOWNLOAD_URL}.sha256"
 
   TMP_DIR=$(mktemp -d /tmp/aurora-install.XXXXXX)
 
-  echo "==> Downloading Aurora WAF release ${TARGET_TAG}..."
+  echo "==> Downloading Aurora API Gateway release ${TARGET_TAG}..."
   echo "    Source: ${DOWNLOAD_URL}"
   if ! curl -fSL --progress-bar -o "${TMP_DIR}/${ARCHIVE_NAME}" "${DOWNLOAD_URL}"; then
     echo "Error: Failed to download release from ${DOWNLOAD_URL}" >&2
@@ -214,7 +214,7 @@ show_nginx_info() {
 
 echo ""
 echo "========================================"
-echo "  Aurora WAF Installer"
+echo "  Aurora API Gateway Installer"
 echo "========================================"
 echo ""
 
@@ -335,7 +335,7 @@ if [ ! -f /etc/aurora-waf/controller.env ]; then
   echo "==> Generating production secrets in /etc/aurora-waf/controller.env..."
   JWT_SECRET=$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | od -A n -v -t x1 | tr -d ' \n')
   cat > /etc/aurora-waf/controller.env << ENV_EOF
-# Aurora WAF Controller Environment
+# Aurora API Gateway Controller Environment
 AURORA_ENV=production
 AURORA_JWT_SECRET=${JWT_SECRET}
 ENV_EOF
@@ -355,7 +355,7 @@ if [ ! -f /etc/aurora-waf/node.env ]; then
   echo "==> Generating default node environment in /etc/aurora-waf/node.env..."
   NODE_ID="node-$(openssl rand -hex 4 2>/dev/null || head -c 4 /dev/urandom | od -A n -v -t x1 | tr -d ' \n')"
   cat > /etc/aurora-waf/node.env << NODE_ENV_EOF
-# Aurora WAF Node Environment
+# Aurora API Gateway Node Environment
 NODE_ID=${NODE_ID}
 CONTROLLER_URL=http://127.0.0.1:8080
 AUTH_TOKEN=
@@ -365,7 +365,7 @@ NODE_ENV_EOF
 fi
 
 # ── Binaries ───────────────────────────────────────────────────────────────────
-echo "==> Installing Aurora WAF binaries..."
+echo "==> Installing Aurora API Gateway binaries..."
 install -m 755 "${PAYLOAD_DIR}/bin/aurora-controller" /usr/local/bin/aurora-controller
 install -m 755 "${PAYLOAD_DIR}/bin/aurora-compile"    /usr/local/bin/aurora-compile
 if [ -f "${PAYLOAD_DIR}/bin/aurora-agent" ]; then
@@ -429,8 +429,8 @@ fi
 echo "==> Generating aurora-waf-controller.service..."
 cat > /etc/systemd/system/aurora-waf-controller.service << 'UNIT_EOF'
 [Unit]
-Description=Aurora WAF Control Plane Service
-Documentation=https://github.com/phucle996/aurora-waf
+Description=Aurora API Gateway Control Plane Service
+Documentation=https://github.com/phucle996/aurora-api-gateway
 After=network-online.target
 Wants=network-online.target
 
@@ -482,8 +482,8 @@ if [ -f /usr/local/bin/aurora-agent ]; then
   echo "==> Generating aurora-waf-node.service (Dataplane Appliance Supervisor)..."
   cat > /etc/systemd/system/aurora-waf-node.service << UNIT_EOF
 [Unit]
-Description=Aurora WAF Dataplane Appliance Node
-Documentation=https://github.com/phucle996/aurora-waf
+Description=Aurora API Gateway Dataplane Appliance Node
+Documentation=https://github.com/phucle996/aurora-api-gateway
 After=network-online.target
 Wants=network-online.target
 
@@ -503,8 +503,8 @@ UNIT_EOF
 fi
 cat > /etc/systemd/system/aurora-waf-nginx.service << UNIT_EOF
 [Unit]
-Description=Aurora WAF NGINX Data Plane Node
-Documentation=https://github.com/phucle996/aurora-waf
+Description=Aurora API Gateway NGINX Data Plane Node
+Documentation=https://github.com/phucle996/aurora-api-gateway
 After=network-online.target
 Wants=network-online.target
 
@@ -513,10 +513,17 @@ Environment="AURORA_METRICS_SCOPE=host"
 Type=forking
 PIDFile=/run/aurora-waf/nginx.pid
 
-Environment="NODE_ID=node-01"
-Environment="CONTROL_PLANE_URL=https://control-plane.internal:8080"
-Environment="POLICY_DEST=/etc/aurora-waf/active-policy.json"
-Environment="CERTS_DIR=/etc/aurora-waf/certs"
+StateDirectory=aurora-waf
+ConfigurationDirectory=aurora-waf
+ConfigurationDirectoryMode=0755
+RuntimeDirectory=aurora-waf
+RuntimeDirectoryMode=0755
+
+Environment="POLICY_DEST=${POLICY_DEST}"
+Environment="CONTROL_PLANE_URL=${CONTROL_PLANE_URL}"
+Environment="NODE_ID=${NODE_ID}"
+Environment="CERTS_DIR=${CERTS_DIR}"
+Environment="AUTH_TOKEN=${AUTH_TOKEN}"
 Environment="NGINX_CONF=${UNIT_NGINX_CONF}"
 EnvironmentFile=-/etc/aurora-waf/node.env
 
@@ -524,7 +531,7 @@ ExecStartPre=/usr/bin/bash -c '\\
     set -euo pipefail; \\
     mkdir -p \$(dirname "\$POLICY_DEST") /run/aurora-waf; \\
     if [ ! -f "\$POLICY_DEST" ]; then \\
-        echo "[Aurora WAF] Initializing baseline policy..."; \\
+        echo "[Aurora API Gateway] Initializing baseline policy..."; \\
         printf "{\\n  \\"schema_version\\": 1,\\n  \\"block_paths\\": [\\n    \\"/blocked\\",\\n    \\"/__aurora_blocked\\"\\n  ]\\n}\\n" > "\$POLICY_DEST"; \\
         chmod 600 "\$POLICY_DEST"; \\
     fi; \\
@@ -546,10 +553,10 @@ ExecStartPre=/usr/bin/bash -c '\\
         if [ "\$HTTP_CODE" -eq 200 ] && [ -s "\$TMP_FILE" ]; then \\
             mv -f "\$TMP_FILE" "\$POLICY_DEST"; \\
             chmod 600 "\$POLICY_DEST"; \\
-            echo "[Aurora WAF] Policy synced from controller."; \\
+            echo "[Aurora API Gateway] Policy synced from controller."; \\
         else \\
             rm -f "\$TMP_FILE"; \\
-            echo "[Aurora WAF] Cannot sync policy (HTTP \$HTTP_CODE), using existing policy."; \\
+            echo "[Aurora API Gateway] Cannot sync policy (HTTP \$HTTP_CODE), using existing policy."; \\
         fi; \\
     fi'
 
@@ -575,12 +582,12 @@ if systemctl is-system-running &>/dev/null || [ -d /run/systemd/system ]; then
 
   echo ""
   echo "========================================"
-  echo "  Aurora WAF Control Plane is running!"
+  echo "  Aurora API Gateway Control Plane is running!"
   echo "========================================"
 else
   echo ""
   echo "========================================"
-  echo "  Aurora WAF installed successfully!"
+  echo "  Aurora API Gateway installed successfully!"
   echo "========================================"
   echo "  Notice: systemd is not booted as PID 1. Skipping live service activation."
   echo "  Systemd units have been installed to /etc/systemd/system/."

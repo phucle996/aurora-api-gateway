@@ -184,7 +184,7 @@ func (s *backupService) RestoreSnapshot(ctx context.Context, fileBytes []byte) (
 	}
 	defer os.Remove(tempDB)
 
-	// Kiểm tra tính toàn vẹn với PRAGMA integrity_check và xác thực bảng Aurora WAF
+	// Kiểm tra tính toàn vẹn với PRAGMA integrity_check và xác thực bảng Aurora API Gateway
 	verifyDB, err := sql.Open("sqlite", tempDB)
 	if err != nil {
 		return nil, fmt.Errorf("không thể mở file snapshot kiểm tra: %w", err)
@@ -200,7 +200,7 @@ func (s *backupService) RestoreSnapshot(ctx context.Context, fileBytes []byte) (
 	_ = verifyDB.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='schema_migrations'").Scan(&hasMigrations)
 	_ = verifyDB.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='users'").Scan(&hasUsers)
 	if hasMigrations == 0 || hasUsers == 0 {
-		return nil, errors.New("tệp backup không chứa dữ liệu Aurora WAF hợp lệ (thiếu bảng schema_migrations hoặc users)")
+		return nil, errors.New("tệp backup không chứa dữ liệu Aurora API Gateway hợp lệ (thiếu bảng schema_migrations hoặc users)")
 	}
 
 	var tableCount int
@@ -270,7 +270,7 @@ func (s *backupService) RestoreSnapshot(ctx context.Context, fileBytes []byte) (
 
 	return &entity.RestoreResult{
 		Success:        true,
-		Message:        fmt.Sprintf("Khôi phục cơ sở dữ liệu Aurora WAF thành công! (%d bảng dữ liệu, schema v%d)", tableCount, schemaVersion),
+		Message:        fmt.Sprintf("Khôi phục cơ sở dữ liệu Aurora API Gateway thành công! (%d bảng dữ liệu, schema v%d)", tableCount, schemaVersion),
 		RestoredTables: tableCount,
 	}, nil
 }

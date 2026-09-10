@@ -4,7 +4,7 @@ export function LoginFooter() {
   return (
     <footer className="w-full px-8 py-5 flex flex-col sm:flex-row items-center justify-between text-xs text-muted-foreground gap-4 z-10">
       <div className="flex items-center gap-2">
-        <span>Aurora WAF Console</span>
+        <span>Aurora API Gateway Console</span>
         <span className="text-muted-foreground/70">v2024.11.3</span>
       </div>
 

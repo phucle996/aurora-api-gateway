@@ -58,7 +58,7 @@ impl App {
 
         let default_upstreams = cfg.policy_dir.join("active-upstreams.conf");
         if !default_upstreams.exists() {
-            let _ = tokio::fs::write(&default_upstreams, "# Aurora WAF initial upstreams\n").await;
+            let _ = tokio::fs::write(&default_upstreams, "# Aurora API Gateway initial upstreams\n").await;
         }
 
         // 3. Initialize NGINX Manager

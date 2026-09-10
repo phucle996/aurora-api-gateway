@@ -25,7 +25,7 @@ func TestEmbeddedConsoleBoundaries(t *testing.T) {
 		if r.Code != tc.code {
 			t.Errorf("%s %s: %d", tc.method, tc.path, r.Code)
 		}
-		if tc.code == 200 && tc.method == "GET" && !strings.Contains(r.Body.String(), "Aurora WAF") {
+		if tc.code == 200 && tc.method == "GET" && !strings.Contains(r.Body.String(), "Aurora API Gateway") {
 			t.Error("missing embedded UI")
 		}
 		if tc.method == "HEAD" && r.Body.Len() != 0 {

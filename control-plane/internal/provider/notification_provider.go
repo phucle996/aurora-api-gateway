@@ -155,7 +155,7 @@ func (p *notificationProvider) testSlackChannel(cfg map[string]interface{}) (err
 	}
 
 	payload := map[string]interface{}{
-		"text": "🔔 [Aurora WAF] Kiểm thử gửi thông báo thành công từ console quản trị!",
+		"text": "🔔 [Aurora API Gateway] Kiểm thử gửi thông báo thành công từ console quản trị!",
 	}
 	body, _ := json.Marshal(payload)
 
@@ -189,7 +189,7 @@ func (p *notificationProvider) sendSlack(ctx context.Context, cfg map[string]int
 		severityEmoji = "🚨"
 	}
 
-	text := fmt.Sprintf("%s *[Aurora WAF Alert - %s]* %s\n> %s\n_Nguồn: %s_",
+	text := fmt.Sprintf("%s *[Aurora API Gateway Alert - %s]* %s\n> %s\n_Nguồn: %s_",
 		severityEmoji, strings.ToUpper(alert.Severity), alert.Title, alert.Message, alert.Source)
 
 	body, _ := json.Marshal(map[string]interface{}{
@@ -218,31 +218,35 @@ func (p *notificationProvider) sendSlack(ctx context.Context, cfg map[string]int
 
 func (p *notificationProvider) testTelegramChannel(cfg map[string]interface{}) (error, string) {
 	botToken, _ := cfg["bot_token"].(string)
-	chatID, _ := cfg["chat_id"].(string)
 	if botToken == "" {
-		return errors.New("vui lòng cung cấp Telegram Bot API Token"), ""
+		return errors.New("vui lòng cung cấp Telegram Bot Token"), ""
 	}
 
 	if isDummyToken(botToken) {
-		return nil, "Xác thực Telegram Bot Token hợp lệ (Dummy Token)"
+		return nil, "Cú pháp Telegram Bot Token hợp lệ"
 	}
 
-	reqURL := fmt.Sprintf("https://api.telegram.org/bot%s/getMe", botToken)
-	resp, err := p.client.Get(reqURL)
+	checkURL := fmt.Sprintf("https://api.telegram.org/bot%s/getMe", botToken)
+	resp, err := p.client.Get(checkURL)
 	if err != nil {
-		return fmt.Errorf("lỗi kết nối máy chủ Telegram: %w", err), ""
+		return fmt.Errorf("không thể kết nối tới Telegram API: %w", err), ""
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("Bot Token không hợp lệ (Telegram HTTP %d)", resp.StatusCode), ""
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("Telegram Bot Token không hợp lệ (mã phản hồi HTTP %d)", resp.StatusCode), ""
+	}
+
+	chatID, _ := cfg["chat_id"].(string)
+	if isDummyToken(chatID) {
+		return nil, "Cú pháp Telegram Bot Token và Chat ID hợp lệ"
 	}
 
 	if chatID != "" {
 		msgURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", botToken)
 		msgBody, _ := json.Marshal(map[string]interface{}{
 			"chat_id": chatID,
-			"text":    "🔔 [Aurora WAF] Kiểm thử tin nhắn Telegram từ Console quản trị.",
+			"text":    "🔔 [Aurora API Gateway] Kiểm thử tin nhắn Telegram từ Console quản trị.",
 		})
 		_, _ = p.client.Post(msgURL, "application/json", bytes.NewBuffer(msgBody))
 	}
@@ -257,7 +261,7 @@ func (p *notificationProvider) sendTelegram(ctx context.Context, cfg map[string]
 		return nil
 	}
 
-	text := fmt.Sprintf("🚨 <b>[Aurora WAF Alert - %s]</b>\n<b>%s</b>\n%s\n<i>Nguồn: %s</i>",
+	text := fmt.Sprintf("🚨 <b>[Aurora API Gateway Alert - %s]</b>\n<b>%s</b>\n%s\n<i>Nguồn: %s</i>",
 		strings.ToUpper(alert.Severity), alert.Title, alert.Message, alert.Source)
 
 	msgURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", botToken)
@@ -302,7 +306,7 @@ func (p *notificationProvider) testDiscordChannel(cfg map[string]interface{}) (e
 	}
 
 	payload := map[string]interface{}{
-		"content": "🔔 **[Aurora WAF Alert]** Kết nối Discord Webhook đã được xác thực thành công.",
+		"content": "🔔 **[Aurora API Gateway Alert]** Kết nối Discord Webhook đã được xác thực thành công.",
 	}
 	body, _ := json.Marshal(payload)
 
@@ -344,7 +348,7 @@ func (p *notificationProvider) sendDiscord(ctx context.Context, cfg map[string]i
 					{"name": "Quy tắc", "value": alert.RuleID, "inline": true},
 				},
 				"footer": map[string]interface{}{
-					"text": "Aurora WAF Alert System",
+					"text": "Aurora API Gateway Alert System",
 				},
 			},
 		},
@@ -392,10 +396,10 @@ func (p *notificationProvider) testCustomWebhookChannel(cfg map[string]interface
 
 	payload := map[string]interface{}{
 		"event":       "test_ping",
-		"system":      "Aurora WAF",
+		"system":      "Aurora API Gateway",
 		"timestamp":   time.Now().UTC().Format(time.RFC3339),
 		"severity":    "info",
-		"description": "Test ping verification from Aurora WAF console",
+		"description": "Test ping verification from Aurora API Gateway console",
 	}
 	body, _ := json.Marshal(payload)
 

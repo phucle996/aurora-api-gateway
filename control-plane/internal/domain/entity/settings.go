@@ -1,7 +1,7 @@
 package entity
 
 // MetricsIntegrationConfig định nghĩa cấu hình tích hợp nguồn giám sát số liệu (Telemetry).
-// Tuân thủ kiến trúc Aurora WAF: Flat entity thuần túy trong tầng Domain, tách biệt khỏi transport metadata.
+// Tuân thủ kiến trúc Aurora API Gateway: Flat entity thuần túy trong tầng Domain, tách biệt khỏi transport metadata.
 type MetricsIntegrationConfig struct {
 	Mode          string // "standalone" | "prometheus" | "disabled"
 	PrometheusURL string // Ví dụ: "http://127.0.0.1:9090"

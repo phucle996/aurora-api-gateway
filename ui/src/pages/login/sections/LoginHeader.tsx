@@ -7,12 +7,12 @@ export function LoginHeader() {
       <div className="flex items-center gap-3">
         <img
           src={logoImg}
-          alt="Aurora WAF Logo"
+          alt="Aurora API Gateway Logo"
           className="w-8 h-8 object-contain shrink-0"
         />
         <div className="flex flex-col">
           <span className="font-bold text-foreground text-sm tracking-wider uppercase font-sans">
-            Aurora WAF
+            Aurora API Gateway
           </span>
           <span className="text-[10px] text-muted-foreground font-sans tracking-wide uppercase">
             Cloud Console

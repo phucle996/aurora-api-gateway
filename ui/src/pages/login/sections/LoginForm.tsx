@@ -133,7 +133,7 @@ export function LoginForm() {
             </span>
           </div>
           <h1 className="text-2xl font-bold text-foreground tracking-tight mt-1 font-sans">
-            {requires2FA ? 'Security Verification' : 'Sign in to Aurora WAF'}
+            {requires2FA ? 'Security Verification' : 'Sign in to Aurora API Gateway'}
           </h1>
           <p className="text-xs text-muted-foreground mt-1 font-sans">
             {requires2FA
@@ -332,7 +332,7 @@ export function LoginForm() {
       <div className="mt-8 pt-4 border-t border-border flex items-center gap-2 text-muted-foreground text-xs">
         <ShieldCheck className="w-4 h-4 text-primary shrink-0" />
         <span>
-          Protected by Aurora WAF Enterprise Security Engine.
+          Protected by Aurora API Gateway Enterprise Security Engine.
         </span>
       </div>
     </div>

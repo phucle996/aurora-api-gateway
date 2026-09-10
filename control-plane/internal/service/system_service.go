@@ -60,7 +60,7 @@ func (s *SystemService) GetSystemInfo(ctx context.Context) (*entity.SystemInfo, 
 	}
 
 	return &entity.SystemInfo{
-		Product:              "AURORA WAF",
+		Product:              "AURORA API GATEWAY",
 		Version:              s.cfg.Version,
 		Build:                fmt.Sprintf("%s · %s", s.cfg.BuildTime, runtime.Version()),
 		GoVersion:            runtime.Version(),

@@ -79,7 +79,7 @@ export function DeleteRuleDialog({
               </div>
               <p className="text-muted-foreground text-[11px] leading-relaxed">
                 This will permanently delete the rule{' '}
-                <strong className="text-foreground font-mono">{ruleName}</strong> from Aurora WAF.
+                <strong className="text-foreground font-mono">{ruleName}</strong> from Aurora API Gateway.
                 Traffic previously matched by this rule will no longer be inspected or blocked by it.
               </p>
             </div>
