@@ -32,3 +32,7 @@ CREATE INDEX IF NOT EXISTS idx_extensions_enabled ON extensions(enabled);
 CREATE UNIQUE INDEX IF NOT EXISTS module_job_active ON module_jobs(node_id) WHERE state IN ('pending','running');
 CREATE INDEX IF NOT EXISTS module_job_latest ON module_jobs(node_id,id DESC);
 
+-- Cluster spec releases indexes
+CREATE INDEX IF NOT EXISTS idx_cluster_spec_releases_digest ON cluster_spec_releases(digest);
+
+

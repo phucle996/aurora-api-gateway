@@ -44,13 +44,13 @@ func TestExtensionRepository_List(t *testing.T) {
 	}
 
 	// 2. Filter by category
-	secExts, err := repo.List(ctx, entity.ListExtensionsQuery{Category: "security"})
+	secExts, err := repo.List(ctx, entity.ListExtensionsQuery{Category: "security_engine"})
 	if err != nil {
-		t.Fatalf("List category security failed: %v", err)
+		t.Fatalf("List category security_engine failed: %v", err)
 	}
 	for _, ext := range secExts {
-		if ext.Category != "security" {
-			t.Errorf("expected category security, got %s", ext.Category)
+		if ext.Category != "security_engine" {
+			t.Errorf("expected category security_engine, got %s", ext.Category)
 		}
 	}
 

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ExtensionItem } from '../types';
 import { ExtensionIcon } from './ExtensionIcon';
-import { X, Check, AlertCircle, Wand2, RotateCcw, Save, RotateCw } from 'lucide-react';
+import { EXTENSIONS_CATALOG, CATEGORIES_META } from '../data/catalog';
+import { X, Check, AlertCircle, Wand2, RotateCcw, Save, RotateCw, FileCode } from 'lucide-react';
 
 interface ExtensionConfigModalProps {
   extension: ExtensionItem | null;
@@ -18,6 +19,14 @@ export function ExtensionConfigModal({
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const catalogEntry = extension
+    ? EXTENSIONS_CATALOG.find((c) => c.id === extension.id)
+    : null;
+
+  const meta = extension
+    ? CATEGORIES_META[extension.category as keyof typeof CATEGORIES_META]
+    : null;
 
   useEffect(() => {
     if (extension) {
@@ -54,6 +63,18 @@ export function ExtensionConfigModal({
     setJsonError(null);
   };
 
+  const handleLoadTemplate = () => {
+    if (catalogEntry && catalogEntry.config_json) {
+      try {
+        const parsed = JSON.parse(catalogEntry.config_json);
+        setConfigText(JSON.stringify(parsed, null, 2));
+      } catch {
+        setConfigText(catalogEntry.config_json);
+      }
+      setJsonError(null);
+    }
+  };
+
   const handleSave = async () => {
     try {
       // Validate JSON
@@ -85,7 +106,7 @@ export function ExtensionConfigModal({
         {/* Modal Header */}
         <div className="px-5 py-4 border-b border-border flex items-center justify-between bg-muted/20">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-md bg-primary/10 text-primary">
+            <div className={`p-2 rounded-md ${meta?.iconBgClass || 'bg-primary/10 text-primary'}`}>
               <ExtensionIcon id={extension.id} category={extension.category} className="w-5 h-5" />
             </div>
             <div>
@@ -94,6 +115,13 @@ export function ExtensionConfigModal({
                 <span className="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.2 rounded-xs">
                   {extension.id}
                 </span>
+                {meta && (
+                  <span
+                    className={`px-2 py-0.2 rounded-full text-[10px] font-medium border uppercase tracking-wider ${meta.badgeClass}`}
+                  >
+                    {meta.label}
+                  </span>
+                )}
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">{extension.description}</p>
             </div>
@@ -115,6 +143,17 @@ export function ExtensionConfigModal({
               Extension Configuration (JSON)
             </label>
             <div className="flex items-center gap-2">
+              {catalogEntry && (
+                <button
+                  type="button"
+                  onClick={handleLoadTemplate}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted px-2 py-1 rounded-sm border border-border/60 transition-colors cursor-pointer"
+                  title="Load recommended default template for this extension"
+                >
+                  <FileCode className="w-3 h-3 text-primary" />
+                  <span>Default Template</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleFormat}
@@ -160,10 +199,10 @@ export function ExtensionConfigModal({
 
           {/* Info note */}
           <div className="p-3 bg-muted/30 border border-border/60 rounded-sm text-[11px] text-muted-foreground space-y-1">
-            <span className="font-semibold text-foreground">Declarative Synchronization:</span>
+            <span className="font-semibold text-foreground">Declarative Cluster Sync:</span>
             <p>
-              Changes are committed to SQLite authority and compiled dynamically into the NodeSpec
-              YAML manifest during next agent sync cycle.
+              Configuration changes are recorded in SQLite authority and compiled directly into the
+              deterministic YAML manifest during next node polling cycle.
             </p>
           </div>
         </div>

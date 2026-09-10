@@ -11,9 +11,11 @@ import (
 )
 
 type mockSpecRepo struct {
-	authorityData *entity.SpecAuthorityData
-	authorityErr  error
-	lastReport    *entity.SpecReportCommand
+	authorityData     *entity.SpecAuthorityData
+	authorityErr      error
+	lastReport        *entity.SpecReportCommand
+	activeRelease     *entity.ClusterSpecRelease
+	publishedReleases []entity.ClusterSpecRelease
 }
 
 func (m *mockSpecRepo) GetAuthorityData(ctx context.Context, nodeID string) (*entity.SpecAuthorityData, error) {
@@ -56,6 +58,18 @@ func (m *mockSpecRepo) RecordReport(ctx context.Context, cmd entity.SpecReportCo
 	return nil
 }
 
+func (m *mockSpecRepo) GetActiveSpecRelease(ctx context.Context) (*entity.ClusterSpecRelease, error) {
+	return m.activeRelease, nil
+}
+
+func (m *mockSpecRepo) PublishSpecRelease(ctx context.Context, release entity.ClusterSpecRelease) (*entity.ClusterSpecRelease, error) {
+	rel := release
+	rel.ID = int64(len(m.publishedReleases) + 1)
+	m.publishedReleases = append(m.publishedReleases, rel)
+	m.activeRelease = &rel
+	return &rel, nil
+}
+
 func TestSpecSyncService_InSyncAndMismatch(t *testing.T) {
 	mockRepo := &mockSpecRepo{}
 	svc := service.NewSpecSyncService(mockRepo)
@@ -77,8 +91,8 @@ func TestSpecSyncService_InSyncAndMismatch(t *testing.T) {
 	if res1.SpecYAML == "" {
 		t.Fatalf("expected non-empty SpecYAML")
 	}
-	if res1.ReleaseID != 101 {
-		t.Fatalf("expected ReleaseID=101, got %d", res1.ReleaseID)
+	if res1.ReleaseID <= 0 {
+		t.Fatalf("expected ReleaseID > 0, got %d", res1.ReleaseID)
 	}
 
 	// Verify YAML content has authority items

@@ -6,10 +6,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/url"
 	"regexp"
 	"strings"
-	"time"
 
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	"aurora-waf.local/control-plane/internal/domain/repo"
@@ -32,34 +32,28 @@ func NewSpecSyncService(repo repo.SpecSyncRepository) *SpecSyncService {
 	}
 }
 
-func (s *SpecSyncService) SyncSpec(ctx context.Context, q entity.SpecSyncQuery) (*entity.SpecSyncResult, error) {
-	if q.NodeID == "" {
-		return nil, fmt.Errorf("node_id is required")
+func (s *SpecSyncService) compileDocument(auth *entity.SpecAuthorityData) (*entity.NodeSpecDocument, string, string, error) {
+	releaseID := int64(1)
+	if auth != nil {
+		if auth.WAFReleaseID > 0 {
+			releaseID = auth.WAFReleaseID
+		} else if auth.AccessReleaseID > 0 {
+			releaseID = auth.AccessReleaseID
+		}
 	}
 
 	doc := entity.NodeSpecDocument{
 		Version:     1,
-		ReleaseID:   time.Now().Unix(),
-		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
-		NodeID:      q.NodeID,
+		ReleaseID:   releaseID,
+		GeneratedAt: "2026-01-01T00:00:00Z",
+		NodeID:      "cluster",
 		Extensions:  make(map[string]map[string]interface{}),
 		WAF: entity.WAFSpec{
 			Mode: "enforce",
 		},
 	}
 
-	if s.repo != nil {
-		auth, err := s.repo.GetAuthorityData(ctx, q.NodeID)
-		if err != nil {
-			return nil, err
-		}
-
-		if auth.WAFReleaseID > 0 {
-			doc.ReleaseID = auth.WAFReleaseID
-		} else if auth.AccessReleaseID > 0 {
-			doc.ReleaseID = auth.AccessReleaseID
-		}
-
+	if auth != nil {
 		if len(auth.WAFPayload) > 0 {
 			doc.WAF.RawJSON = string(auth.WAFPayload)
 		}
@@ -80,7 +74,18 @@ func (s *SpecSyncService) SyncSpec(ctx context.Context, q entity.SpecSyncQuery) 
 				var cfg map[string]interface{}
 				if err := json.Unmarshal([]byte(ext.ConfigJSON), &cfg); err == nil {
 					cfg["enabled"] = ext.Enabled
-					extensionsMap[ext.ID] = cfg
+					cleaned, ok := cleanJSONFloats(cfg).(map[string]interface{})
+					if ok {
+						extensionsMap[ext.ID] = cleaned
+						if ext.ID == "prometheus" {
+							extensionsMap["metrics"] = cleaned
+						}
+					} else {
+						extensionsMap[ext.ID] = cfg
+						if ext.ID == "prometheus" {
+							extensionsMap["metrics"] = cfg
+						}
+					}
 				}
 			}
 			if len(extensionsMap) > 0 {
@@ -89,30 +94,107 @@ func (s *SpecSyncService) SyncSpec(ctx context.Context, q entity.SpecSyncQuery) 
 		}
 	}
 
-	// Serialize doc to YAML
 	yamlBytes, err := yaml.Marshal(doc)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal node spec YAML: %w", err)
+		return nil, "", "", fmt.Errorf("failed to marshal node spec YAML: %w", err)
 	}
 
 	h := sha256.Sum256(yamlBytes)
 	hashStr := hex.EncodeToString(h[:])
 
-	if q.CurrentHash != "" && q.CurrentHash == hashStr {
-		// In sync! 0 bytes YAML payload
+	return &doc, string(yamlBytes), hashStr, nil
+}
+
+func (s *SpecSyncService) CompileAndPublishSpec(ctx context.Context, actor, summary string) (*entity.ClusterSpecRelease, error) {
+	if s.repo == nil {
+		return nil, fmt.Errorf("repository is nil")
+	}
+
+	auth, err := s.repo.GetAuthorityData(ctx, "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get authority data: %w", err)
+	}
+
+	_, yamlStr, digest, err := s.compileDocument(auth)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.repo.PublishSpecRelease(ctx, entity.ClusterSpecRelease{
+		Digest:        digest,
+		SpecYAML:      yamlStr,
+		Actor:         actor,
+		ChangeSummary: summary,
+	})
+}
+
+func (s *SpecSyncService) SyncSpec(ctx context.Context, q entity.SpecSyncQuery) (*entity.SpecSyncResult, error) {
+	if q.NodeID == "" {
+		return nil, fmt.Errorf("node_id is required")
+	}
+
+	var auth *entity.SpecAuthorityData
+	if s.repo != nil {
+		var err error
+		auth, err = s.repo.GetAuthorityData(ctx, q.NodeID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	doc, yamlStr, calculatedHash, err := s.compileDocument(auth)
+	if err != nil {
+		return nil, err
+	}
+
+	if s.repo == nil {
+		if q.CurrentHash != "" && q.CurrentHash == calculatedHash {
+			return &entity.SpecSyncResult{
+				InSync:    true,
+				ReleaseID: doc.ReleaseID,
+				Hash:      calculatedHash,
+				SpecYAML:  "",
+			}, nil
+		}
+		return &entity.SpecSyncResult{
+			InSync:    false,
+			ReleaseID: doc.ReleaseID,
+			Hash:      calculatedHash,
+			SpecYAML:  yamlStr,
+		}, nil
+	}
+
+	active, err := s.repo.GetActiveSpecRelease(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active spec release: %w", err)
+	}
+
+	if active == nil || active.Digest != calculatedHash {
+		active, err = s.repo.PublishSpecRelease(ctx, entity.ClusterSpecRelease{
+			Digest:        calculatedHash,
+			SpecYAML:      yamlStr,
+			Actor:         "system",
+			ChangeSummary: "Cluster NodeSpec synchronization snapshot",
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to publish spec release: %w", err)
+		}
+	}
+
+	if q.CurrentHash != "" && q.CurrentHash == active.Digest {
 		return &entity.SpecSyncResult{
 			InSync:    true,
-			ReleaseID: doc.ReleaseID,
-			Hash:      hashStr,
+			ReleaseID: active.ID,
+			Hash:      active.Digest,
 			SpecYAML:  "",
 		}, nil
 	}
 
 	return &entity.SpecSyncResult{
 		InSync:    false,
-		ReleaseID: doc.ReleaseID,
-		Hash:      hashStr,
-		SpecYAML:  string(yamlBytes),
+		ReleaseID: active.ID,
+		Hash:      active.Digest,
+		SpecYAML:  active.SpecYAML,
 	}, nil
 }
 
@@ -326,3 +408,28 @@ func (s *SpecSyncService) renderRoutingConfig(records []entity.SpecRoutingRecord
 	fmt.Fprintf(&config, "server { listen 127.0.0.1:9082; location = /routing-digest { return 200 '%s'; } }\n", digest)
 	return "# routing-digest: " + digest + "\n" + config.String(), nil
 }
+
+func cleanJSONFloats(v interface{}) interface{} {
+	switch val := v.(type) {
+	case map[string]interface{}:
+		res := make(map[string]interface{}, len(val))
+		for k, v2 := range val {
+			res[k] = cleanJSONFloats(v2)
+		}
+		return res
+	case []interface{}:
+		res := make([]interface{}, len(val))
+		for i, v2 := range val {
+			res[i] = cleanJSONFloats(v2)
+		}
+		return res
+	case float64:
+		if val == math.Trunc(val) && !math.IsNaN(val) && !math.IsInf(val, 0) {
+			return int64(val)
+		}
+		return val
+	default:
+		return val
+	}
+}
+

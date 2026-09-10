@@ -5,11 +5,17 @@ import {
   X,
   LayoutGrid,
   List,
-  Shield,
-  Activity,
-  ArrowLeftRight,
-  Cpu,
+  ShieldAlert,
+  ShieldCheck,
   Lock,
+  Sliders,
+  ArrowRightLeft,
+  Sparkles,
+  Activity,
+  HeartPulse,
+  Database,
+  Cpu,
+  Bot,
   Layers,
 } from 'lucide-react';
 
@@ -37,24 +43,66 @@ export function ExtensionFilters({
   categoryCounts,
 }: ExtensionFiltersProps) {
   const categories: { id: ExtensionCategory; label: string; icon: React.ReactNode }[] = [
-    { id: 'all', label: 'All Categories', icon: <Layers className="w-3.5 h-3.5" /> },
-    { id: 'security', label: 'Security', icon: <Shield className="w-3.5 h-3.5 text-rose-500" /> },
+    { id: 'all', label: 'All', icon: <Layers className="w-3.5 h-3.5" /> },
+    {
+      id: 'security_engine',
+      label: 'Security Engine',
+      icon: <ShieldAlert className="w-3.5 h-3.5 text-rose-500" />,
+    },
+    {
+      id: 'authentication',
+      label: 'Authentication',
+      icon: <Lock className="w-3.5 h-3.5 text-indigo-500" />,
+    },
+    {
+      id: 'authorization_security',
+      label: 'Authz & Security',
+      icon: <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />,
+    },
+    {
+      id: 'traffic_control',
+      label: 'Traffic Control',
+      icon: <Sliders className="w-3.5 h-3.5 text-amber-500" />,
+    },
+    {
+      id: 'request_transformation',
+      label: 'Request Transform',
+      icon: <ArrowRightLeft className="w-3.5 h-3.5 text-violet-500" />,
+    },
+    {
+      id: 'response_transformation',
+      label: 'Response Transform',
+      icon: <Sparkles className="w-3.5 h-3.5 text-fuchsia-500" />,
+    },
     {
       id: 'observability',
       label: 'Observability',
       icon: <Activity className="w-3.5 h-3.5 text-cyan-500" />,
     },
     {
-      id: 'traffic',
-      label: 'Traffic & Proxy',
-      icon: <ArrowLeftRight className="w-3.5 h-3.5 text-amber-500" />,
+      id: 'resilience_upstream',
+      label: 'Resilience',
+      icon: <HeartPulse className="w-3.5 h-3.5 text-yellow-500" />,
     },
-    { id: 'auth', label: 'Auth & Access', icon: <Lock className="w-3.5 h-3.5 text-indigo-500" /> },
-    { id: 'runtime', label: 'Runtime & Wasm', icon: <Cpu className="w-3.5 h-3.5 text-purple-500" /> },
+    {
+      id: 'cache_content',
+      label: 'Cache & Content',
+      icon: <Database className="w-3.5 h-3.5 text-sky-500" />,
+    },
+    {
+      id: 'integration_runtime',
+      label: 'Integration & Runtime',
+      icon: <Cpu className="w-3.5 h-3.5 text-purple-500" />,
+    },
+    {
+      id: 'ai_gateway',
+      label: 'AI Gateway',
+      icon: <Bot className="w-3.5 h-3.5 text-teal-500" />,
+    },
   ];
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3.5">
       {/* Top search & status & view mode row */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         {/* Search input */}
@@ -62,10 +110,10 @@ export function ExtensionFilters({
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Search extensions by name, ID, or description..."
+            placeholder="Search by plugin name, ID, category, or tag (#jwt, #waf, #ai)..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full pl-9 pr-8 py-2 bg-card border border-border/80 rounded-md text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+            className="w-full pl-9 pr-8 py-2 bg-card border border-border/80 rounded-md text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary transition-all shadow-2xs"
           />
           {searchQuery && (
             <button
@@ -81,7 +129,7 @@ export function ExtensionFilters({
         {/* Status Filter & View Toggle */}
         <div className="flex items-center gap-2 self-end sm:self-auto">
           {/* Status Filter Segment */}
-          <div className="inline-flex rounded-md border border-border/80 bg-muted/30 p-0.5 text-xs">
+          <div className="inline-flex rounded-md border border-border/80 bg-muted/30 p-0.5 text-xs shadow-2xs">
             <button
               type="button"
               onClick={() => onStatusFilterChange('all')}
@@ -118,7 +166,7 @@ export function ExtensionFilters({
           </div>
 
           {/* View Mode Toggle */}
-          <div className="inline-flex rounded-md border border-border/80 bg-muted/30 p-0.5 text-xs">
+          <div className="inline-flex rounded-md border border-border/80 bg-muted/30 p-0.5 text-xs shadow-2xs">
             <button
               type="button"
               title="Card Grid View"
@@ -147,8 +195,8 @@ export function ExtensionFilters({
         </div>
       </div>
 
-      {/* Category Pills Navigation */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+      {/* Category Pills Navigation (Horizontal scroll) */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
         {categories.map((cat) => {
           const isSelected = selectedCategory === cat.id;
           const count =
@@ -163,8 +211,8 @@ export function ExtensionFilters({
               onClick={() => onCategoryChange(cat.id)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border whitespace-nowrap transition-all cursor-pointer ${
                 isSelected
-                  ? 'border-primary bg-primary/10 text-primary font-semibold shadow-2xs'
-                  : 'border-border/70 bg-card/60 text-muted-foreground hover:text-foreground hover:border-border'
+                  ? 'border-primary bg-primary/10 text-primary font-semibold shadow-xs ring-1 ring-primary/20'
+                  : 'border-border/70 bg-card/70 text-muted-foreground hover:text-foreground hover:border-border'
               }`}
             >
               {cat.icon}

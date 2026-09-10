@@ -9,4 +9,6 @@ import (
 type SpecSyncService interface {
 	SyncSpec(ctx context.Context, q entity.SpecSyncQuery) (*entity.SpecSyncResult, error)
 	ReportSpec(ctx context.Context, cmd entity.SpecReportCommand) error
+	CompileAndPublishSpec(ctx context.Context, actor, summary string) (*entity.ClusterSpecRelease, error)
 }
+

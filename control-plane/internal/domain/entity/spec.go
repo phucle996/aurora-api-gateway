@@ -20,6 +20,17 @@ type SpecReportCommand struct {
 	Message   string
 }
 
+// ClusterSpecRelease represents an immutable compiled release of the cluster NodeSpec.
+type ClusterSpecRelease struct {
+	ID            int64  `json:"id"`
+	Digest        string `json:"digest"`
+	SpecYAML      string `json:"spec_yaml"`
+	Actor         string `json:"actor"`
+	ChangeSummary string `json:"change_summary"`
+	CreatedAt     string `json:"created_at"`
+}
+
+
 // SpecRoutingRecord is the spec sync workflow's flat projection for domain routing rules.
 type SpecRoutingRecord struct {
 	ID            int64

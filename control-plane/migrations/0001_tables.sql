@@ -463,7 +463,7 @@ CREATE TABLE IF NOT EXISTS origin_observations (
 CREATE TABLE IF NOT EXISTS extensions (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
-    category TEXT NOT NULL CHECK(category IN ('observability', 'security', 'auth', 'traffic', 'runtime')),
+    category TEXT NOT NULL CHECK(category IN ('security_engine', 'authentication', 'authorization_security', 'traffic_control', 'request_transformation', 'response_transformation', 'observability', 'resilience_upstream', 'cache_content', 'integration_runtime', 'ai_gateway', 'security', 'auth', 'traffic', 'runtime')),
     description TEXT NOT NULL DEFAULT '',
     version TEXT NOT NULL DEFAULT '1.0.0',
     enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0, 1)),
@@ -504,5 +504,21 @@ CREATE TABLE IF NOT EXISTS module_desired_state (
     updated_at INTEGER NOT NULL,
     updated_by TEXT NOT NULL
 );
+
+-- Cluster NodeSpec snapshot releases and head
+CREATE TABLE IF NOT EXISTS cluster_spec_releases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    digest TEXT NOT NULL UNIQUE,
+    spec_yaml TEXT NOT NULL,
+    actor TEXT NOT NULL DEFAULT 'system',
+    change_summary TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS cluster_spec_head (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    release_id INTEGER NOT NULL REFERENCES cluster_spec_releases(id)
+);
+
 
 

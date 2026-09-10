@@ -1,7 +1,8 @@
 import React from 'react';
 import { ExtensionItem } from '../types';
 import { ExtensionIcon } from './ExtensionIcon';
-import { Settings2, RotateCw } from 'lucide-react';
+import { CATEGORIES_META } from '../data/catalog';
+import { Settings2, RotateCw, Tag } from 'lucide-react';
 
 interface ExtensionCardProps {
   extension: ExtensionItem;
@@ -16,38 +17,19 @@ export function ExtensionCard({
   onConfigure,
   isToggling = false,
 }: ExtensionCardProps) {
-  const categoryTheme = {
-    security: {
-      bg: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20',
-      iconBg: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
-    },
-    observability: {
-      bg: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20',
-      iconBg: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400',
-    },
-    traffic: {
-      bg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
-      iconBg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-    },
-    auth: {
-      bg: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20',
-      iconBg: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400',
-    },
-    runtime: {
-      bg: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
-      iconBg: 'bg-purple-500/10 text-purple-600 dark:text-purple-400',
-    },
-  }[extension.category] || {
-    bg: 'bg-muted text-muted-foreground border-border',
-    iconBg: 'bg-muted text-muted-foreground',
+  const meta = CATEGORIES_META[extension.category as keyof typeof CATEGORIES_META] || {
+    label: extension.category,
+    badgeClass: 'bg-muted text-muted-foreground border-border',
+    iconBgClass: 'bg-muted text-muted-foreground',
+    borderClass: 'border-border',
   };
 
   return (
     <div
-      className={`group relative bg-card/80 backdrop-blur-xs border rounded-md p-4 flex flex-col justify-between transition-all duration-200 hover:shadow-sm ${
+      className={`group relative bg-card/85 backdrop-blur-xs border rounded-lg p-4 flex flex-col justify-between transition-all duration-200 hover:shadow-md ${
         extension.enabled
-          ? 'border-border/90 shadow-2xs'
-          : 'border-border/60 opacity-80 hover:opacity-100'
+          ? 'border-primary/40 shadow-xs ring-1 ring-primary/10'
+          : 'border-border/70 opacity-85 hover:opacity-100 hover:border-border'
       }`}
     >
       {/* Top row: Icon + Title + Status Switch */}
@@ -55,7 +37,7 @@ export function ExtensionCard({
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div
-              className={`p-2 rounded-md ${categoryTheme.iconBg} transition-transform group-hover:scale-105 shrink-0`}
+              className={`p-2.5 rounded-lg ${meta.iconBgClass} transition-transform duration-200 group-hover:scale-105 shrink-0 shadow-2xs`}
             >
               <ExtensionIcon id={extension.id} category={extension.category} className="w-5 h-5" />
             </div>
@@ -63,8 +45,8 @@ export function ExtensionCard({
               <h3 className="font-semibold text-sm text-foreground truncate" title={extension.name}>
                 {extension.name}
               </h3>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="font-mono text-[10px] text-muted-foreground bg-muted/60 px-1.5 py-0.2 rounded-xs">
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="font-mono text-[10px] text-muted-foreground bg-muted/70 px-1.5 py-0.5 rounded-xs">
                   {extension.id}
                 </span>
                 <span className="text-[10px] text-muted-foreground/80 font-mono">
@@ -75,9 +57,9 @@ export function ExtensionCard({
           </div>
 
           {/* Switch toggle */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
             {isToggling ? (
-              <RotateCw className="w-4 h-4 animate-spin text-muted-foreground" />
+              <RotateCw className="w-4 h-4 animate-spin text-primary" />
             ) : (
               <button
                 type="button"
@@ -86,7 +68,7 @@ export function ExtensionCard({
                 title={extension.enabled ? 'Click to disable' : 'Click to enable'}
                 onClick={() => onToggle(extension.id, !extension.enabled)}
                 className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-1 focus:ring-primary ${
-                  extension.enabled ? 'bg-emerald-500' : 'bg-muted/80'
+                  extension.enabled ? 'bg-emerald-500 shadow-xs' : 'bg-muted/80'
                 }`}
               >
                 <span
@@ -106,18 +88,40 @@ export function ExtensionCard({
         >
           {extension.description}
         </p>
+
+        {/* Tags preview if any */}
+        {extension.tags && extension.tags.length > 0 && (
+          <div className="mt-2.5 flex items-center gap-1 overflow-hidden">
+            <Tag className="w-3 h-3 text-muted-foreground/60 shrink-0" />
+            <div className="flex items-center gap-1 overflow-x-hidden">
+              {extension.tags.slice(0, 3).map((tag) => (
+                <span
+                  key={tag}
+                  className="text-[9px] text-muted-foreground/70 bg-muted/40 px-1.5 py-0.2 rounded-xs whitespace-nowrap font-mono"
+                >
+                  #{tag}
+                </span>
+              ))}
+              {extension.tags.length > 3 && (
+                <span className="text-[9px] text-muted-foreground/50 font-mono">
+                  +{extension.tags.length - 3}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Footer: Category & Built-in badge + Configure button */}
       <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between gap-2 text-xs">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span
-            className={`px-2 py-0.5 rounded-full text-[10px] font-medium border uppercase tracking-wider ${categoryTheme.bg}`}
+            className={`px-2 py-0.5 rounded-full text-[10px] font-medium border uppercase tracking-wider ${meta.badgeClass}`}
           >
-            {extension.category}
+            {meta.label}
           </span>
           {extension.is_builtin ? (
-            <span className="px-1.5 py-0.5 rounded-xs text-[10px] bg-muted text-muted-foreground font-mono">
+            <span className="px-1.5 py-0.5 rounded-xs text-[10px] bg-muted/80 text-muted-foreground font-mono">
               Core
             </span>
           ) : (
@@ -130,7 +134,7 @@ export function ExtensionCard({
         <button
           type="button"
           onClick={() => onConfigure(extension)}
-          className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 px-2 py-1 rounded-sm transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 px-2 py-1 rounded-sm transition-colors cursor-pointer border border-border/40 hover:border-border"
         >
           <Settings2 className="w-3.5 h-3.5" />
           <span>Config</span>

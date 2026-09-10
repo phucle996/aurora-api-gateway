@@ -11,4 +11,7 @@ import (
 type SpecSyncRepository interface {
 	GetAuthorityData(ctx context.Context, nodeID string) (*entity.SpecAuthorityData, error)
 	RecordReport(ctx context.Context, cmd entity.SpecReportCommand) error
+	GetActiveSpecRelease(ctx context.Context) (*entity.ClusterSpecRelease, error)
+	PublishSpecRelease(ctx context.Context, release entity.ClusterSpecRelease) (*entity.ClusterSpecRelease, error)
 }
+

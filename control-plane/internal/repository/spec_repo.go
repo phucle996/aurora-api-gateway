@@ -31,6 +31,9 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 	const authorityQuery = `
 	WITH node_auth AS (
 		SELECT id FROM cluster_nodes WHERE id = ?
+		UNION ALL
+		SELECT 'cluster' WHERE ? = '' OR ? = 'cluster'
+		LIMIT 1
 	)
 	SELECT 
 		n.id,
@@ -47,7 +50,7 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 
 	var id string
 	var wafPayload, accessPayload []byte
-	err := r.reader.QueryRowContext(ctx, authorityQuery, nodeID).Scan(
+	err := r.reader.QueryRowContext(ctx, authorityQuery, nodeID, nodeID, nodeID).Scan(
 		&id,
 		&out.WAFReleaseID,
 		&wafPayload,
@@ -175,3 +178,76 @@ func (r *SpecSyncRepository) RecordReport(ctx context.Context, cmd entity.SpecRe
 	}
 	return nil
 }
+
+func (r *SpecSyncRepository) GetActiveSpecRelease(ctx context.Context) (*entity.ClusterSpecRelease, error) {
+	const activeQuery = `
+	WITH active_spec AS (
+		SELECT release_id FROM cluster_spec_head WHERE singleton = 1
+	)
+	SELECT r.id, r.digest, r.spec_yaml, r.actor, r.change_summary, r.created_at
+	FROM active_spec h
+	JOIN cluster_spec_releases r ON r.id = h.release_id;
+	`
+	var out entity.ClusterSpecRelease
+	err := r.reader.QueryRowContext(ctx, activeQuery).Scan(
+		&out.ID,
+		&out.Digest,
+		&out.SpecYAML,
+		&out.Actor,
+		&out.ChangeSummary,
+		&out.CreatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("query active cluster spec release: %w", err)
+	}
+	return &out, nil
+}
+
+func (r *SpecSyncRepository) PublishSpecRelease(ctx context.Context, release entity.ClusterSpecRelease) (*entity.ClusterSpecRelease, error) {
+	tx, err := r.writer.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin publish spec tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	actor := release.Actor
+	if actor == "" {
+		actor = "system"
+	}
+
+	const insertReleaseSQL = `
+	INSERT INTO cluster_spec_releases (digest, spec_yaml, actor, change_summary)
+	VALUES (?, ?, ?, ?);
+	`
+	res, err := tx.ExecContext(ctx, insertReleaseSQL, release.Digest, release.SpecYAML, actor, release.ChangeSummary)
+	if err != nil {
+		return nil, fmt.Errorf("insert cluster spec release: %w", err)
+	}
+
+	id, err := res.LastInsertId()
+	if err != nil {
+		return nil, fmt.Errorf("get last insert id for cluster spec release: %w", err)
+	}
+
+	const upsertHeadSQL = `
+	INSERT INTO cluster_spec_head (singleton, release_id)
+	VALUES (1, ?)
+	ON CONFLICT(singleton) DO UPDATE SET release_id = excluded.release_id;
+	`
+	if _, err := tx.ExecContext(ctx, upsertHeadSQL, id); err != nil {
+		return nil, fmt.Errorf("update cluster spec head: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit publish spec tx: %w", err)
+	}
+
+	out := release
+	out.ID = id
+	out.Actor = actor
+	return &out, nil
+}
+
