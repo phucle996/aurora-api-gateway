@@ -173,3 +173,26 @@ func (r *sqliteExtensionRepository) UpdateConfig(ctx context.Context, cmd entity
 
 	return nil
 }
+
+func (r *sqliteExtensionRepository) UpdateSchema(ctx context.Context, cmd entity.UpdateExtensionSchemaCommand) error {
+	const query = `
+		UPDATE extensions
+		SET schema_json = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+		WHERE id = ?;
+	`
+
+	res, err := r.writer.ExecContext(ctx, query, cmd.SchemaJSON, cmd.ID)
+	if err != nil {
+		return fmt.Errorf("update extension schema failed: %w", err)
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check rows affected failed: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("extension not found: %s", cmd.ID)
+	}
+
+	return nil
+}

@@ -203,3 +203,55 @@ func (h *ExtensionHandler) UpdateConfig(c *gin.Context) {
 		"id":      id,
 	})
 }
+
+// UpdateSchema updates the schema of an extension.
+func (h *ExtensionHandler) UpdateSchema(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	id := strings.TrimSpace(c.Param("id"))
+
+	var req dto.UpdateExtensionSchemaRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid schema payload: " + err.Error()})
+		return
+	}
+
+	var schemaJSON string
+	if req.SchemaJSON != "" {
+		schemaJSON = req.SchemaJSON
+	} else if req.Schema != nil {
+		bytes, err := json.Marshal(req.Schema)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to serialize schema: " + err.Error()})
+			return
+		}
+		schemaJSON = string(bytes)
+	} else {
+		schemaJSON = "{}"
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), extensionActionTimeout)
+	defer cancel()
+
+	cmd := entity.UpdateExtensionSchemaCommand{
+		ID:         id,
+		SchemaJSON: schemaJSON,
+	}
+
+	if err := h.service.UpdateExtensionSchema(ctx, cmd); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "update extension schema timed out"})
+			return
+		}
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "extension schema updated successfully",
+		"id":      id,
+	})
+}

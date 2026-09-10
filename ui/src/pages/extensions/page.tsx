@@ -47,6 +47,7 @@ export default function ExtensionsPage() {
               ...catItem,
               enabled: live.enabled,
               config_json: live.config_json || catItem.config_json,
+              schema_json: live.schema_json || catItem.schema_json,
               version: live.version || catItem.version,
             };
           }

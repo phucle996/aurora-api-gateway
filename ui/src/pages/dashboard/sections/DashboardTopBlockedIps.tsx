@@ -18,7 +18,7 @@ export function DashboardTopBlockedIps() {
           Top Source IPs (Blocked)
         </span>
         <Link
-          to="/ip-access"
+          to="/rules"
           className="text-xs font-sans text-primary hover:underline transition-colors"
         >
           View All

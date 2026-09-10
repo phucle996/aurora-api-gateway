@@ -9,12 +9,8 @@ import RulesPage from './pages/rules/page';
 import CreateRulePage from './pages/create-rule/page';
 import EditRulePage from './pages/edit-rule/page';
 import RuleHistoryPage from './pages/rule-history/page';
-import CreateIpRulePage from './pages/create-ip-rule/page';
 import SecurityEventsPage from './pages/events/page';
 import AnalyticsPage from './pages/analytics/page';
-import IpAccessPage from './pages/ip-access/page';
-import DatasetEntriesPage from './pages/dataset-entries/page';
-import AddDatasetPage from './pages/add-dataset/page';
 import NodesPage from './pages/nodes/page';
 import ExtensionsPage from './pages/extensions/page';
 import SettingsPage from './pages/settings/page';
@@ -73,16 +69,11 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/policies/create" element={<CreatePolicyPage />} />
           <Route path="/create-policy" element={<CreatePolicyPage />} />
 
-          {/* IP & Access Control */}
-          <Route path="/ip-access" element={<IpAccessPage />} />
-          <Route path="/access-control" element={<IpAccessPage />} />
-          <Route path="/ip-access/create" element={<CreateIpRulePage />} />
-          <Route path="/access-control/create" element={<CreateIpRulePage />} />
-          <Route path="/ip-access/add" element={<CreateIpRulePage />} />
-          <Route path="/ip-access/datasets/new" element={<AddDatasetPage />} />
-          <Route path="/ip-access/datasets/:id" element={<DatasetEntriesPage />} />
-          <Route path="/ip-access/dataset/:id" element={<DatasetEntriesPage />} />
-          <Route path="/access-control/datasets/:id" element={<DatasetEntriesPage />} />
+          {/* IP & Access Control (Consolidated into Extensions Hub) */}
+          <Route path="/ip-access/*" element={<Navigate to="/extensions" replace />} />
+          <Route path="/ip-access" element={<Navigate to="/extensions" replace />} />
+          <Route path="/access-control/*" element={<Navigate to="/extensions" replace />} />
+          <Route path="/access-control" element={<Navigate to="/extensions" replace />} />
 
           {/* Cluster & Nodes */}
           <Route path="/nodes" element={<NodesPage />} />

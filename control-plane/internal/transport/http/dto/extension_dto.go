@@ -26,3 +26,9 @@ type UpdateExtensionConfigRequest struct {
 	ConfigJSON string `json:"config_json,omitempty"`
 	Config     any    `json:"config,omitempty"`
 }
+
+// UpdateExtensionSchemaRequest contains extension schema updates.
+type UpdateExtensionSchemaRequest struct {
+	SchemaJSON string `json:"schema_json,omitempty"`
+	Schema     any    `json:"schema,omitempty"`
+}

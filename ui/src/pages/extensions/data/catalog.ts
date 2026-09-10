@@ -340,12 +340,7 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     "*libwww-perl*",
     "*Scrapy*",
     "*Go-http-client*"
-  ],
-  "rate_limit_suspicious": {
-    "enabled": true,
-    "requests_per_minute": 60,
-    "action": "captcha"
-  }
+  ]
 }, null, 2),
   },
   {

@@ -21,3 +21,8 @@ var Triggers string
 //
 //go:embed 0004_seeds.sql
 var Seeds string
+
+// ExtensionSchemas establishes 1:1 render schemas for all extensions.
+//
+//go:embed 0005_extension_schemas.sql
+var ExtensionSchemas string

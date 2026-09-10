@@ -93,12 +93,7 @@ export const EXTENSION_DEFAULT_CONFIGS: Record<string, Record<string, any>> = {
     bypass_verified_bots: true,
     verified_bot_categories: ['search_engine', 'uptime_monitor', 'social_media'],
     allow_user_agents: ['Googlebot', 'Bingbot', 'DuckDuckBot'],
-    deny_user_agents: ['*python-requests*', '*curl*', '*libwww-perl*', '*Scrapy*', '*Go-http-client*'],
-    rate_limit_suspicious: {
-      enabled: true,
-      requests_per_minute: 60,
-      action: 'captcha'
-    }
+    deny_user_agents: ['*python-requests*', '*curl*', '*libwww-perl*', '*Scrapy*', '*Go-http-client*']
   },
   'ip-reputation': {
     enabled: true,

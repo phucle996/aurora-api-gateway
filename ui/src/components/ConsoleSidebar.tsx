@@ -7,7 +7,6 @@ import {
   ShieldAlert,
   Shield,
   Layers,
-  GlobeLock,
   Server,
   Settings,
   Blocks,
@@ -128,12 +127,6 @@ export function ConsoleSidebar({
       path: '/policies',
       aliases: ['/create-policy', '/policies/create'],
       icon: <Layers className="w-4 h-4 shrink-0" />,
-    },
-    {
-      label: 'IP & Access Control',
-      path: '/ip-access',
-      aliases: ['/access-control'],
-      icon: <GlobeLock className="w-4 h-4 shrink-0" />,
     },
     {
       label: 'NGINX / Nodes',

@@ -81,3 +81,22 @@ func (s *extensionService) UpdateExtensionConfig(ctx context.Context, cmd entity
 	s.notifyMutation()
 	return nil
 }
+
+func (s *extensionService) UpdateExtensionSchema(ctx context.Context, cmd entity.UpdateExtensionSchemaCommand) error {
+	cmd.ID = strings.TrimSpace(cmd.ID)
+	if cmd.ID == "" {
+		return fmt.Errorf("extension id cannot be empty")
+	}
+
+	schemaJSON := strings.TrimSpace(cmd.SchemaJSON)
+	if schemaJSON == "" {
+		schemaJSON = "{}"
+	}
+
+	if !json.Valid([]byte(schemaJSON)) {
+		return fmt.Errorf("invalid json for extension schema")
+	}
+	cmd.SchemaJSON = schemaJSON
+
+	return s.repo.UpdateSchema(ctx, cmd)
+}

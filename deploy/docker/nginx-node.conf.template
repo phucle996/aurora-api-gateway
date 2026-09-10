@@ -18,6 +18,7 @@ events {
 
 http {
     include /var/lib/aurora-routing/dependencies/current/http.conf;
+    include /var/lib/aurora-policy/active-extensions-http.conf;
     http2 on;
     include /etc/nginx/access-trusted-proxies.conf;
 
@@ -51,6 +52,7 @@ http {
 
         add_header X-Aurora-Node "${NODE_ID}" always;
         add_header X-Aurora-Generation $aurora_waf_generation always;
+        include /var/lib/aurora-policy/active-extensions.conf;
 
         default_type text/plain;
 

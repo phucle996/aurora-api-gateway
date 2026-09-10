@@ -32,3 +32,9 @@ type UpdateExtensionConfigCommand struct {
 	ID         string
 	ConfigJSON string
 }
+
+// UpdateExtensionSchemaCommand updates the schema JSON of an extension.
+type UpdateExtensionSchemaCommand struct {
+	ID         string
+	SchemaJSON string
+}

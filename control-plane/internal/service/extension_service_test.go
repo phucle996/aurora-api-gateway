@@ -13,6 +13,7 @@ type mockExtensionRepo struct {
 	getByIDFn      func(ctx context.Context, id string) (*entity.ExtensionRecord, error)
 	updateStatusFn func(ctx context.Context, cmd entity.UpdateExtensionStatusCommand) error
 	updateConfigFn func(ctx context.Context, cmd entity.UpdateExtensionConfigCommand) error
+	updateSchemaFn func(ctx context.Context, cmd entity.UpdateExtensionSchemaCommand) error
 }
 
 func (m *mockExtensionRepo) List(ctx context.Context, q entity.ListExtensionsQuery) ([]entity.ExtensionRecord, error) {
@@ -39,6 +40,13 @@ func (m *mockExtensionRepo) UpdateStatus(ctx context.Context, cmd entity.UpdateE
 func (m *mockExtensionRepo) UpdateConfig(ctx context.Context, cmd entity.UpdateExtensionConfigCommand) error {
 	if m.updateConfigFn != nil {
 		return m.updateConfigFn(ctx, cmd)
+	}
+	return nil
+}
+
+func (m *mockExtensionRepo) UpdateSchema(ctx context.Context, cmd entity.UpdateExtensionSchemaCommand) error {
+	if m.updateSchemaFn != nil {
+		return m.updateSchemaFn(ctx, cmd)
 	}
 	return nil
 }

@@ -19,6 +19,7 @@ type mockExtService struct {
 	getByIDFn      func(ctx context.Context, id string) (*entity.ExtensionRecord, error)
 	updateStatusFn func(ctx context.Context, cmd entity.UpdateExtensionStatusCommand) error
 	updateConfigFn func(ctx context.Context, cmd entity.UpdateExtensionConfigCommand) error
+	updateSchemaFn func(ctx context.Context, cmd entity.UpdateExtensionSchemaCommand) error
 }
 
 func (m *mockExtService) ListExtensions(ctx context.Context, q entity.ListExtensionsQuery) ([]entity.ExtensionRecord, error) {
@@ -49,6 +50,13 @@ func (m *mockExtService) UpdateExtensionConfig(ctx context.Context, cmd entity.U
 	return nil
 }
 
+func (m *mockExtService) UpdateExtensionSchema(ctx context.Context, cmd entity.UpdateExtensionSchemaCommand) error {
+	if m.updateSchemaFn != nil {
+		return m.updateSchemaFn(ctx, cmd)
+	}
+	return nil
+}
+
 func setupTestRouter(svc *mockExtService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -58,6 +66,7 @@ func setupTestRouter(svc *mockExtService) *gin.Engine {
 	r.GET("/api/v1/extensions/:id", h.GetByID)
 	r.PUT("/api/v1/extensions/:id/status", h.UpdateStatus)
 	r.PUT("/api/v1/extensions/:id/config", h.UpdateConfig)
+	r.PUT("/api/v1/extensions/:id/schema", h.UpdateSchema)
 
 	return r
 }

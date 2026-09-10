@@ -51,7 +51,17 @@ impl SpecSyncRunner {
             let hash = compute_sha256(raw.as_bytes());
             info!(hash = %hash, path = %self.spec_path.display(), "Loading baseline node-spec.yaml from disk");
             if let Ok(spec) = Spec::parse_yaml(&raw) {
-                let _ = materialize_nginx(&spec, &self.cfg.policy_dir, &self.cfg.routing_dir).await;
+                if let Ok(res) = materialize_nginx(&spec, &self.cfg.policy_dir, &self.cfg.routing_dir).await {
+                    if res.nginx_changed && !self.cfg.no_nginx {
+                        if let Err(err) = self.nginx.test_config(&self.cfg.nginx_conf).await {
+                            error!(error = %err, "NGINX config test failed on bootstrap! Skipping reload");
+                        } else if let Err(err) = self.nginx.reload().await {
+                            error!(error = %err, "Failed to reload NGINX on bootstrap");
+                        } else {
+                            info!("NGINX reloaded successfully on bootstrap");
+                        }
+                    }
+                }
                 self.dispatcher
                     .lock()
                     .await

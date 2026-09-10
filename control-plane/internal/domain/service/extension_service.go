@@ -12,4 +12,5 @@ type ExtensionService interface {
 	GetExtension(ctx context.Context, id string) (*entity.ExtensionRecord, error)
 	UpdateExtensionStatus(ctx context.Context, cmd entity.UpdateExtensionStatusCommand) error
 	UpdateExtensionConfig(ctx context.Context, cmd entity.UpdateExtensionConfigCommand) error
+	UpdateExtensionSchema(ctx context.Context, cmd entity.UpdateExtensionSchemaCommand) error
 }

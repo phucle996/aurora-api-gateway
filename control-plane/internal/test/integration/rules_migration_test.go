@@ -20,8 +20,9 @@ func TestTypedMigrationUpgradePreservesAuthority(t *testing.T) {
 		{name: "from-version-1", initVersion: 1, expectError: false},
 		{name: "from-version-2", initVersion: 2, expectError: false},
 		{name: "from-version-3", initVersion: 3, expectError: false},
-		{name: "from-version-4-idempotent", initVersion: 4, expectError: false},
-		{name: "unsupported-future-version", initVersion: 5, expectError: true},
+		{name: "from-version-4", initVersion: 4, expectError: false},
+		{name: "from-version-5-idempotent", initVersion: 5, expectError: false},
+		{name: "unsupported-future-version", initVersion: 6, expectError: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
@@ -51,6 +52,11 @@ func TestTypedMigrationUpgradePreservesAuthority(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			if tc.initVersion >= 5 {
+				if _, err = db.Exec(migrations.ExtensionSchemas); err != nil {
+					t.Fatal(err)
+				}
+			}
 			for v := 1; v <= tc.initVersion; v++ {
 				if _, err = db.Exec("INSERT INTO schema_migrations(version) VALUES(?)", v); err != nil {
 					t.Fatal(err)
@@ -77,8 +83,8 @@ func TestTypedMigrationUpgradePreservesAuthority(t *testing.T) {
 			if err = db.QueryRow("SELECT max(version) FROM schema_migrations").Scan(&version); err != nil {
 				t.Fatal(err)
 			}
-			if version != 4 {
-				t.Fatalf("expected max version 4, got %d", version)
+			if version != 5 {
+				t.Fatalf("expected max version 5, got %d", version)
 			}
 			if err = db.QueryRow("SELECT count(*) FROM rules WHERE name='preserved' AND path='/guard'").Scan(&count); err != nil || count != 1 {
 				t.Fatalf("expected preserved rule count 1, got %d (err: %v)", count, err)

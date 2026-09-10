@@ -61,6 +61,10 @@ if [ ! -f /var/lib/aurora-policy/active-extensions.conf ]; then
     printf '%s\n' '# Aurora API Gateway initial active extensions' > /var/lib/aurora-policy/active-extensions.conf
 fi
 
+if [ ! -f /var/lib/aurora-policy/active-extensions-http.conf ]; then
+    printf '%s\n' '# Aurora API Gateway initial active HTTP-level extensions' > /var/lib/aurora-policy/active-extensions-http.conf
+fi
+
 chown -R nginx:nginx /var/lib/aurora-policy
 chmod 700 /var/lib/aurora-policy
 
@@ -89,7 +93,12 @@ fi
 /extension-modules.sh init
 
 # Validate NGINX syntax
-/opt/nginx/usr/sbin/nginx -t -c /etc/nginx/nginx.conf
+if ! /opt/nginx/usr/sbin/nginx -t -c /etc/nginx/nginx.conf; then
+    echo "Warning: Stale NGINX configuration failed syntax check. Resetting active extensions to baseline..."
+    printf '%s\n' '# Aurora API Gateway initial active extensions' > /var/lib/aurora-policy/active-extensions.conf
+    printf '%s\n' '# Aurora API Gateway initial active HTTP-level extensions' > /var/lib/aurora-policy/active-extensions-http.conf
+    /opt/nginx/usr/sbin/nginx -t -c /etc/nginx/nginx.conf
+fi
 
 echo "[Aurora Node: ${NODE_ID}] Starting Aurora Dataplane Agent & NGINX supervisor..."
 exec /usr/local/bin/aurora-agent \
