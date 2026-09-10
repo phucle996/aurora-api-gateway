@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"math/rand"
 	"net/url"
 	"regexp"
 	"strings"
@@ -103,19 +102,6 @@ func (s *SpecScheduler) TriggerReconcile() {
 	case s.triggerCh <- struct{}{}:
 	default:
 	}
-}
-
-// calculateNextInterval returns a randomized tick duration incorporating jitter.
-func (s *SpecScheduler) calculateNextInterval() time.Duration {
-	if s.jitterFraction <= 0 {
-		return s.baseInterval
-	}
-	factor := 1.0 + s.jitterFraction*(rand.Float64()*2.0-1.0)
-	d := time.Duration(float64(s.baseInterval) * factor)
-	if d < 100*time.Millisecond {
-		d = 100 * time.Millisecond
-	}
-	return d
 }
 
 // runLoop executes the event-driven reconciliation loop.
@@ -223,17 +209,10 @@ func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*entity
 				var cfg map[string]interface{}
 				if err := json.Unmarshal([]byte(ext.ConfigJSON), &cfg); err == nil {
 					cfg["enabled"] = ext.Enabled
-					cleaned, ok := cleanJSONFloats(cfg).(map[string]interface{})
-					if ok {
+					if cleaned, ok := cleanJSONFloats(cfg).(map[string]interface{}); ok {
 						extensionsMap[ext.ID] = cleaned
-						if ext.ID == "prometheus" {
-							extensionsMap["metrics"] = cleaned
-						}
 					} else {
 						extensionsMap[ext.ID] = cfg
-						if ext.ID == "prometheus" {
-							extensionsMap["metrics"] = cfg
-						}
 					}
 				}
 			}

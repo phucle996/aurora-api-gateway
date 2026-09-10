@@ -23,7 +23,7 @@ impl ExtensionDispatcher {
 
     /// Apply declarative extension configurations from NodeSpec.
     pub async fn apply_spec(&mut self, spec: &ExtensionsSpec) {
-        self.dispatch_metrics(&spec.metrics).await;
+        self.dispatch_metrics(&spec.prometheus).await;
     }
 
     async fn dispatch_metrics(&mut self, metrics_spec: &Option<MetricsExtensionSpec>) {
@@ -125,7 +125,7 @@ mod tests {
         assert!(dispatcher.metrics_shutdown.is_none());
 
         // 2. Enable metrics
-        spec.metrics = Some(MetricsExtensionSpec {
+        spec.prometheus = Some(MetricsExtensionSpec {
             enabled: true,
             port: 19145,
             stub_status_url: None,
@@ -140,7 +140,7 @@ mod tests {
         assert!(dispatcher.metrics_shutdown.is_some());
 
         // 3. Disable metrics -> shuts down immediately
-        spec.metrics.as_mut().unwrap().enabled = false;
+        spec.prometheus.as_mut().unwrap().enabled = false;
         dispatcher.apply_spec(&spec).await;
         assert!(dispatcher.metrics_shutdown.is_none());
     }

@@ -50,8 +50,8 @@ impl NodeSpec {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct ExtensionsSpec {
-    #[serde(default)]
-    pub metrics: Option<MetricsExtensionSpec>,
+    #[serde(default, alias = "metrics")]
+    pub prometheus: Option<MetricsExtensionSpec>,
     #[serde(flatten, default)]
     pub dynamic: std::collections::HashMap<String, serde_yaml::Value>,
 }
@@ -249,8 +249,8 @@ routing:
         let spec = NodeSpec::parse_yaml(yaml).expect("parse yaml");
         assert_eq!(spec.release_id, 100);
         assert_eq!(spec.node_id, "node-01");
-        assert!(spec.extensions.metrics.is_some());
-        let metrics = spec.extensions.metrics.as_ref().unwrap();
+        assert!(spec.extensions.prometheus.is_some());
+        let metrics = spec.extensions.prometheus.as_ref().unwrap();
         assert!(metrics.enabled);
         assert_eq!(metrics.port, 9145);
         assert_eq!(

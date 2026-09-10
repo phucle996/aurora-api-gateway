@@ -102,8 +102,8 @@ func TestSpecScheduler_WarmupAndReconcile(t *testing.T) {
 	if !strings.Contains(active.SpecYAML, "test.local") {
 		t.Fatalf("expected spec YAML to contain test.local")
 	}
-	if !strings.Contains(active.SpecYAML, "metrics:") {
-		t.Fatalf("expected spec YAML to contain metrics alias for prometheus")
+	if !strings.Contains(active.SpecYAML, "prometheus:") {
+		t.Fatalf("expected spec YAML to contain prometheus")
 	}
 
 	// Calling Reconcile with unchanged authority should NOT publish a duplicate release

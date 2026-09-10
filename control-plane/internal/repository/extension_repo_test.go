@@ -73,12 +73,12 @@ func TestExtensionRepository_GetByID(t *testing.T) {
 	repo := repository.NewExtensionRepository(db, db)
 	ctx := context.Background()
 
-	// Existing extension (metrics is seeded)
-	ext, err := repo.GetByID(ctx, "metrics")
+	// Existing extension (prometheus is seeded)
+	ext, err := repo.GetByID(ctx, "prometheus")
 	if err != nil {
 		t.Fatalf("GetByID failed: %v", err)
 	}
-	if ext.ID != "metrics" || ext.Category != "observability" {
+	if ext.ID != "prometheus" || ext.Category != "observability" {
 		t.Errorf("unexpected extension: %+v", ext)
 	}
 
@@ -98,14 +98,14 @@ func TestExtensionRepository_UpdateStatusAndConfig(t *testing.T) {
 
 	// Toggle status
 	err := repo.UpdateStatus(ctx, entity.UpdateExtensionStatusCommand{
-		ID:      "metrics",
+		ID:      "prometheus",
 		Enabled: false,
 	})
 	if err != nil {
 		t.Fatalf("UpdateStatus failed: %v", err)
 	}
 
-	ext, err := repo.GetByID(ctx, "metrics")
+	ext, err := repo.GetByID(ctx, "prometheus")
 	if err != nil {
 		t.Fatalf("GetByID after update failed: %v", err)
 	}
@@ -116,14 +116,14 @@ func TestExtensionRepository_UpdateStatusAndConfig(t *testing.T) {
 	// Update config
 	newCfg := `{"enabled":false,"port":9999}`
 	err = repo.UpdateConfig(ctx, entity.UpdateExtensionConfigCommand{
-		ID:         "metrics",
+		ID:         "prometheus",
 		ConfigJSON: newCfg,
 	})
 	if err != nil {
 		t.Fatalf("UpdateConfig failed: %v", err)
 	}
 
-	ext, err = repo.GetByID(ctx, "metrics")
+	ext, err = repo.GetByID(ctx, "prometheus")
 	if err != nil {
 		t.Fatalf("GetByID after config update failed: %v", err)
 	}

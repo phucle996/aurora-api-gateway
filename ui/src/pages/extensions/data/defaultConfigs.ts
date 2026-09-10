@@ -631,21 +631,7 @@ export const EXTENSION_DEFAULT_CONFIGS: Record<string, Record<string, any>> = {
     rfc7807_standard: true
   },
 
-  // 7. Observability (13)
-  'metrics': {
-    enabled: true,
-    port: 9145,
-    stub_status_url: 'http://127.0.0.1:80/stub_status',
-    prometheus: {
-      enabled: true,
-      path: '/metrics'
-    },
-    otlp: {
-      enabled: false,
-      endpoint: 'http://127.0.0.1:4317',
-      interval_secs: 15
-    }
-  },
+  // 7. Observability (12)
   'prometheus': {
     enabled: true,
     port: 9145,
