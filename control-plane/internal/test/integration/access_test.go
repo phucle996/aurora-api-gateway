@@ -32,6 +32,7 @@ func TestAccessPublicationAuthorityReplayAndRecovery(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer pools.Close()
+	pools.Writer.Exec("INSERT INTO cluster_nodes (id, name, hostname, ip, role, status, version, sync_status, join_method, certificate) VALUES ('node-local-01', 'node-local-01', '', '127.0.0.1', 'Edge Node', 'Ready', '0.4.1', 'In Sync', 'Unknown', 'Unknown')")
 	m := app.NewModule(pools.Writer, pools.Reader, config.Config{CompilerPath: compiler})
 	defer m.AnalyticsService.Close()
 	router := gin.New()

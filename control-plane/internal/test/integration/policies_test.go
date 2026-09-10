@@ -40,7 +40,8 @@ func policyFixture(t *testing.T) (*sql.DB, http.Handler) {
 	r := gin.New()
 	app.RegisterRoutes(r, m, "policy-test-token")
 	_, err = pools.Writer.Exec(`INSERT INTO rules(id,version,name,description,rule_group,action,severity,score,priority,path,enabled) VALUES(1,1,'Protected','fixture','endpoint','block','high',5,10,'/private',1);
- INSERT INTO rule_revisions SELECT id,version,name,description,rule_group,action,severity,score,priority,path,enabled,updated_at,'fixture' FROM rules`)
+ INSERT INTO rule_revisions SELECT id,version,name,description,rule_group,action,severity,score,priority,path,enabled,updated_at,'fixture' FROM rules;
+ INSERT INTO cluster_nodes (id, name, hostname, ip, role, status, version, sync_status, join_method, certificate) VALUES ('node-local-01', 'node-local-01', '', '127.0.0.1', 'Edge Node', 'Ready', '0.4.1', 'In Sync', 'Unknown', 'Unknown');`)
 	if err != nil {
 		t.Fatal(err)
 	}
