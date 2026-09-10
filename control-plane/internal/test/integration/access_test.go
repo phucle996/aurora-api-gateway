@@ -33,7 +33,7 @@ func TestAccessPublicationAuthorityReplayAndRecovery(t *testing.T) {
 	}
 	defer pools.Close()
 	m := app.NewModule(pools.Writer, pools.Reader, config.Config{CompilerPath: compiler})
-	defer m.MetricsService.Close()
+	defer m.AnalyticsService.Close()
 	router := gin.New()
 	app.RegisterRoutes(router, m, "access-test-token")
 	request := func(method, url, key string, body any, token, origin string) *httptest.ResponseRecorder {

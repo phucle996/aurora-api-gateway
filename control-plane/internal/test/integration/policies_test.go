@@ -36,7 +36,7 @@ func policyFixture(t *testing.T) (*sql.DB, http.Handler) {
 		t.Fatal(err)
 	}
 	m := app.NewModule(pools.Writer, pools.Reader, config.Config{CompilerPath: os.Getenv("AURORA_TEST_COMPILER")})
-	t.Cleanup(func() { _ = m.MetricsService.Close(); _ = pools.Close() })
+	t.Cleanup(func() { _ = m.AnalyticsService.Close(); _ = pools.Close() })
 	r := gin.New()
 	app.RegisterRoutes(r, m, "policy-test-token")
 	_, err = pools.Writer.Exec(`INSERT INTO rules(id,version,name,description,rule_group,action,severity,score,priority,path,enabled) VALUES(1,1,'Protected','fixture','endpoint','block','high',5,10,'/private',1);

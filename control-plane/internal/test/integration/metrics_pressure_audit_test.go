@@ -54,7 +54,7 @@ func TestAuditMetricsConcurrentConfigDurableAuthority(t *testing.T) {
 	defer pools.Close()
 	durable := repository.NewAnalyticsRepository(pools.Writer)
 	gate := &metricsAuditSaveGate{AnalyticsRepository: durable, committed: make(chan struct{}), resume: make(chan struct{})}
-	s := service.NewMetricsService(gate, repository.NewNodeRepository(pools.Writer))
+	s := service.NewAnalyticsService(gate, repository.NewNodeRepository(pools.Writer))
 	first := make(chan error, 1)
 	go func() {
 		first <- s.SaveConfig(context.Background(), entity.MetricsIntegrationConfig{Mode: "standalone"})
@@ -113,7 +113,7 @@ func TestAuditMetricsStaleHeartbeatNotReady(t *testing.T) {
 	}
 	defer pools.Close()
 	nodeRepo := repository.NewNodeRepository(pools.Writer)
-	metrics := service.NewMetricsService(repository.NewAnalyticsRepository(pools.Writer), nodeRepo)
+	metrics := service.NewAnalyticsService(repository.NewAnalyticsRepository(pools.Writer), nodeRepo)
 	nodes := service.NewNodeService(nodeRepo, metrics, nil)
 	defer metrics.SaveConfig(context.Background(), entity.MetricsIntegrationConfig{Mode: "disabled"})
 	for _, mode := range []string{"disabled", "standalone", "prometheus"} {

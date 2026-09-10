@@ -31,7 +31,7 @@ type App struct {
 	server             *http.Server
 	grpcServer         *grpcserver.Server
 	grpcLis            net.Listener
-	metrics            port.MetricsService
+	analytics          port.AnalyticsService
 	backupScheduler    *service.BackupScheduler
 	notificationWorker *service.NotificationWorker
 	specScheduler      *provider.SpecScheduler
@@ -107,7 +107,7 @@ func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
 	// Gin rọi route chưa khớp sẽ có bắt được vào đây (SPA fallback).
 	ui, err := console.NewHandler()
 	if err != nil {
-		_ = module.MetricsService.Close()
+		_ = module.AnalyticsService.Close()
 		_ = pools.Close()
 		return nil, err
 	}
@@ -142,7 +142,7 @@ func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
 	})
 	grpcLis, err := net.Listen("tcp", cfg.GRPCAddr)
 	if err != nil {
-		_ = module.MetricsService.Close()
+		_ = module.AnalyticsService.Close()
 		_ = pools.Close()
 		return nil, fmt.Errorf("listen gRPC %s: %w", cfg.GRPCAddr, err)
 	}
@@ -157,7 +157,7 @@ func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
 		},
 		grpcServer:         grpcSrv,
 		grpcLis:            grpcLis,
-		metrics:            module.MetricsService,
+		analytics:          module.AnalyticsService,
 		backupScheduler:    module.BackupScheduler,
 		notificationWorker: module.NotificationWorker,
 		specScheduler:      module.SpecScheduler,
@@ -220,7 +220,7 @@ func (a *App) Close() error {
 		cancel()
 	}
 
-	return errors.Join(a.metrics.Close(), a.db.Close())
+	return errors.Join(a.analytics.Close(), a.db.Close())
 }
 
 func (a *App) Handler() http.Handler { return a.server.Handler }

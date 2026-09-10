@@ -33,7 +33,6 @@ type Module struct {
 	NodeHandler          *handler.NodeHandler
 	AnalyticsHandler     *handler.AnalyticsHandler
 	AnalyticsService     port.AnalyticsService
-	MetricsService       port.MetricsService
 	DomainHandler        *handler.DomainHandler
 	DomainRoutingHandler *handler.DomainRoutingHandler
 	UpstreamHandler      *handler.UpstreamHandler
@@ -151,7 +150,6 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 		NodeHandler:          nodeHdr,
 		AnalyticsHandler:     analyticsHdr,
 		AnalyticsService:     analyticsSvc,
-		MetricsService:       analyticsSvc,
 		DomainHandler:        domainHdr,
 		DomainRoutingHandler: domainRoutingHdr,
 		UpstreamHandler:      upstreamHdr,

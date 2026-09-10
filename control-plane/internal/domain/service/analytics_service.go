@@ -26,6 +26,3 @@ type AnalyticsService interface {
 	RegisterConfigListener(listener func(cfg entity.MetricsIntegrationConfig))
 	GetConfig(ctx context.Context) (*entity.MetricsIntegrationConfig, error)
 }
-
-// MetricsService giữ type alias cho AnalyticsService để tương thích ngược.
-type MetricsService = AnalyticsService

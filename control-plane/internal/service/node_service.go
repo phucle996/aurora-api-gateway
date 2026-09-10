@@ -45,9 +45,9 @@ type nodeLiveState struct {
 
 type nodeService struct {
 	heartbeatMu sync.Mutex
-	repo        repo.NodeRepository
-	metricsSvc  domainService.MetricsService
-	eventHub    provider.EventHub
+	repo         repo.NodeRepository
+	analyticsSvc domainService.AnalyticsService
+	eventHub     provider.EventHub
 
 	nodesMu sync.RWMutex
 	nodes   map[string]*nodeLiveState
@@ -57,10 +57,10 @@ type nodeService struct {
 }
 
 // NewNodeService khởi tạo service quản lý workflow Nodes.
-func NewNodeService(repo repo.NodeRepository, metricsSvc domainService.MetricsService, eventHub provider.EventHub) domainService.NodeService {
+func NewNodeService(repo repo.NodeRepository, analyticsSvc domainService.AnalyticsService, eventHub provider.EventHub) domainService.NodeService {
 	s := &nodeService{
 		repo:         repo,
-		metricsSvc:   metricsSvc,
+		analyticsSvc: analyticsSvc,
 		eventHub:     eventHub,
 		nodes:        make(map[string]*nodeLiveState),
 		pendingBeats: make(map[string]entity.NodeHeartbeatEvent),

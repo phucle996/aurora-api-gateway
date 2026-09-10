@@ -26,7 +26,7 @@ func (m *mockAnalyticsRepo) SaveMetricsConfig(ctx context.Context, cfg entity.Me
 	return nil
 }
 
-func TestMetricsServiceAnalyticsQueryAndCatalog(t *testing.T) {
+func TestAnalyticsServiceQueryAndCatalog(t *testing.T) {
 	mockProm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == "/api/v1/query" {
@@ -71,7 +71,7 @@ func TestMetricsServiceAnalyticsQueryAndCatalog(t *testing.T) {
 		},
 	}
 
-	svc := NewMetricsService(analyticsRepo, nil)
+	svc := NewAnalyticsService(analyticsRepo, nil)
 
 	// 1. GetCatalog
 	catalogResp, err := svc.GetCatalog(context.Background())

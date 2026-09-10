@@ -55,11 +55,6 @@ func NewAnalyticsService(analyticsRepo repo.AnalyticsRepository, nodeRepo repo.N
 	return s
 }
 
-// NewMetricsService là alias chuyển tiếp để tương thích ngược.
-func NewMetricsService(analyticsRepo repo.AnalyticsRepository, nodeRepo repo.NodeRepository, extRepo ...repo.ExtensionRepository) domainService.MetricsService {
-	return NewAnalyticsService(analyticsRepo, nodeRepo, extRepo...)
-}
-
 func (s *analyticsService) GetConfig(ctx context.Context) (*entity.MetricsIntegrationConfig, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
