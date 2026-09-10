@@ -14,12 +14,24 @@ import (
 )
 
 type DomainService struct {
-	repo repo.DomainRepository
+	repo       repo.DomainRepository
+	onMutation func()
 }
 
-func NewDomainService(r repo.DomainRepository) port.DomainService {
+func NewDomainService(r repo.DomainRepository, onMutation ...func()) port.DomainService {
+	var fn func()
+	if len(onMutation) > 0 {
+		fn = onMutation[0]
+	}
 	return &DomainService{
-		repo: r,
+		repo:       r,
+		onMutation: fn,
+	}
+}
+
+func (s *DomainService) notifyMutation() {
+	if s.onMutation != nil {
+		s.onMutation()
 	}
 }
 
@@ -97,6 +109,7 @@ func (s *DomainService) CreateDomain(ctx context.Context, cmd entity.CreateDomai
 	if err != nil {
 		return nil, err
 	}
+	s.notifyMutation()
 	return s.repo.GetByID(ctx, id)
 }
 
@@ -158,6 +171,7 @@ func (s *DomainService) UpdateDomain(ctx context.Context, id int64, cmd entity.U
 	if err := s.repo.Update(ctx, id, cmd); err != nil {
 		return nil, err
 	}
+	s.notifyMutation()
 	return s.repo.GetByID(ctx, id)
 }
 
@@ -165,5 +179,9 @@ func (s *DomainService) DeleteDomain(ctx context.Context, id int64) error {
 	if id <= 0 {
 		return fmt.Errorf("invalid domain id")
 	}
-	return s.repo.Delete(ctx, id)
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+	s.notifyMutation()
+	return nil
 }

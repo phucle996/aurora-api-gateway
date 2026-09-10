@@ -14,15 +14,21 @@ import (
 )
 
 type policyService struct {
-	repo     repo.PolicyRepository
-	compiler string
+	repo       repo.PolicyRepository
+	compiler   string
+	onMutation func()
 }
 
 // NewPolicyService khởi tạo service duy nhất quản lý toàn bộ nghiệp vụ Policy.
-func NewPolicyService(repo repo.PolicyRepository, compiler string) domainService.PolicyService {
+func NewPolicyService(repo repo.PolicyRepository, compiler string, onMutation ...func()) domainService.PolicyService {
+	var fn func()
+	if len(onMutation) > 0 {
+		fn = onMutation[0]
+	}
 	return &policyService{
-		repo:     repo,
-		compiler: compiler,
+		repo:       repo,
+		compiler:   compiler,
+		onMutation: fn,
 	}
 }
 
@@ -58,7 +64,7 @@ func (s *policyService) Publish(ctx context.Context, c entity.PublishPolicyComma
 	if s.compiler == "" {
 		return entity.PublishPolicyResult{}, taxonomy.ErrPublishUnavailable
 	}
-	return s.repo.PublishPolicy(ctx, c, func(ctx context.Context, payload []byte) error {
+	res, err := s.repo.PublishPolicy(ctx, c, func(ctx context.Context, payload []byte) error {
 		if len(payload) > 65536 {
 			return fmt.Errorf("%w: cluster exceeds 64 KiB runtime snapshot", taxonomy.ErrPolicyInvalid)
 		}
@@ -73,6 +79,10 @@ func (s *policyService) Publish(ctx context.Context, c entity.PublishPolicyComma
 		}
 		return nil
 	})
+	if err == nil && s.onMutation != nil {
+		s.onMutation()
+	}
+	return res, err
 }
 
 // Publication-local output limit is required at the untrusted subprocess boundary.

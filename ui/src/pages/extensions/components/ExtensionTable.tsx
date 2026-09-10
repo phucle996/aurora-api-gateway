@@ -23,11 +23,11 @@ export function ExtensionTable({
         <table className="w-full text-left text-xs">
           <thead className="bg-muted/40 border-b border-border text-muted-foreground uppercase font-mono text-[10px] tracking-wider">
             <tr>
-              <th className="py-3 px-4">Extension</th>
-              <th className="py-3 px-4">Group / Category</th>
-              <th className="py-3 px-4">Type & Version</th>
-              <th className="py-3 px-4">Status</th>
-              <th className="py-3 px-4 text-right">Actions</th>
+              <th className="py-3 px-4 w-5/12">Extension</th>
+              <th className="py-3 px-4 w-2/12">Group / Category</th>
+              <th className="py-3 px-4 w-2/12">Type & Version</th>
+              <th className="py-3 px-4 w-2/12">Status</th>
+              <th className="py-3 px-4 w-1/12 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
@@ -51,14 +51,14 @@ export function ExtensionTable({
                       <div className="p-2 rounded-md bg-muted/60 shrink-0 text-foreground">
                         <ExtensionIcon id={ext.id} category={ext.category} className="w-4 h-4" />
                       </div>
-                      <div className="min-w-0 max-w-sm sm:max-w-md">
+                      <div className="min-w-0 flex-1">
                         <div className="font-semibold text-foreground flex items-center gap-2">
                           <span className="truncate">{ext.name}</span>
-                          <span className="font-mono text-[10px] text-muted-foreground bg-muted px-1.5 py-0.2 rounded-xs">
+                          <span className="font-mono text-[10px] text-muted-foreground bg-muted px-1.5 py-0.2 rounded-xs shrink-0">
                             {ext.id}
                           </span>
                         </div>
-                        <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                        <p className="text-[11px] text-muted-foreground truncate mt-0.5" title={ext.description}>
                           {ext.description}
                         </p>
                       </div>

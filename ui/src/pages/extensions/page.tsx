@@ -204,7 +204,7 @@ export default function ExtensionsPage() {
     selectedCategory !== 'all' ? CATEGORIES_META[selectedCategory] : null;
 
   return (
-    <div className="p-6 w-full space-y-6 font-sans max-w-7xl mx-auto">
+    <div className="p-6 w-full space-y-6 font-sans">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
@@ -326,7 +326,7 @@ export default function ExtensionsPage() {
           </button>
         </div>
       ) : viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
           {filteredExtensions.map((ext) => (
             <ExtensionCard
               key={ext.id}

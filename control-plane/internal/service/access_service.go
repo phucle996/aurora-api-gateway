@@ -17,18 +17,24 @@ import (
 type accessService struct {
 	repo         domainrepo.AccessRepository
 	compilerPath string
+	onMutation   func()
 }
 
-// NewAccessService creates a new access service instance.
-func NewAccessService(repo domainrepo.AccessRepository, compilerPath string) domainsvc.AccessService {
+// NewAccessService creates a new access service instance with optional mutation callback.
+func NewAccessService(repo domainrepo.AccessRepository, compilerPath string, onMutation ...func()) domainsvc.AccessService {
+	var fn func()
+	if len(onMutation) > 0 {
+		fn = onMutation[0]
+	}
 	return &accessService{
 		repo:         repo,
 		compilerPath: compilerPath,
+		onMutation:   fn,
 	}
 }
 
 func (s *accessService) Change(ctx context.Context, c entity.AccessChangeCommand) (entity.AccessChangeResult, error) {
-	return s.repo.Change(ctx, c, func(ctx context.Context, payload []byte) error {
+	res, err := s.repo.Change(ctx, c, func(ctx context.Context, payload []byte) error {
 		if s.compilerPath == "" || len(payload) > 65536 {
 			return taxonomy.ErrAccessCompiler
 		}
@@ -49,6 +55,10 @@ func (s *accessService) Change(ctx context.Context, c entity.AccessChangeCommand
 		}
 		return nil
 	})
+	if err == nil && s.onMutation != nil {
+		s.onMutation()
+	}
+	return res, err
 }
 
 func (s *accessService) Read(ctx context.Context, q entity.AccessReadQuery) ([]entity.AccessReadItem, error) {

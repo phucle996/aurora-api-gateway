@@ -2,7 +2,6 @@ package service_test
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -22,35 +21,7 @@ func (m *mockSpecRepo) GetAuthorityData(ctx context.Context, nodeID string) (*en
 	if m.authorityErr != nil {
 		return nil, m.authorityErr
 	}
-	if m.authorityData != nil {
-		return m.authorityData, nil
-	}
-	return &entity.SpecAuthorityData{
-		NodeID:          nodeID,
-		WAFReleaseID:    101,
-		WAFPayload:      []byte(`{"rules":[{"id":1,"action":"block"}]}`),
-		AccessReleaseID: 102,
-		AccessPayload:   []byte(`{"ip_rules":[]}`),
-		UpstreamsConf:   "upstream backend { server 127.0.0.1:8080; }\n",
-		RoutingRecords: []entity.SpecRoutingRecord{
-			{
-				ID:        1,
-				Host:      "example.com",
-				Status:    "Active",
-				Target:    "http://backend",
-				Algorithm: "round_robin",
-			},
-		},
-		Extensions: []entity.SpecExtensionRecord{
-			{
-				ID:         "metrics",
-				Name:       "Prometheus & OTLP Telemetry",
-				Category:   "observability",
-				Enabled:    true,
-				ConfigJSON: `{"port":9145,"stub_status_url":"http://127.0.0.1:80/stub_status","prometheus":{"enabled":true,"path":"/metrics"}}`,
-			},
-		},
-	}, nil
+	return m.authorityData, nil
 }
 
 func (m *mockSpecRepo) RecordReport(ctx context.Context, cmd entity.SpecReportCommand) error {
@@ -71,10 +42,24 @@ func (m *mockSpecRepo) PublishSpecRelease(ctx context.Context, release entity.Cl
 }
 
 func TestSpecSyncService_InSyncAndMismatch(t *testing.T) {
-	mockRepo := &mockSpecRepo{}
+	mockRepo := &mockSpecRepo{
+		activeRelease: &entity.ClusterSpecRelease{
+			ID:     1,
+			Digest: "abcd1234efgh5678",
+			SpecYAML: `version: 1
+release_id: 1
+routing_conf: |
+  upstream backend { server 127.0.0.1:8080; }
+  server { server_name example.com; }
+extensions:
+  metrics:
+    port: 9145
+`,
+		},
+	}
 	svc := service.NewSpecSyncService(mockRepo)
 
-	// 1. Initial query with empty hash -> returns full YAML and InSync=false
+	// 1. Query with empty/mismatch hash -> returns full YAML and InSync=false
 	res1, err := svc.SyncSpec(context.Background(), entity.SpecSyncQuery{
 		NodeID:      "node-01",
 		CurrentHash: "",
@@ -85,14 +70,14 @@ func TestSpecSyncService_InSyncAndMismatch(t *testing.T) {
 	if res1.InSync {
 		t.Fatalf("expected InSync=false on first query")
 	}
-	if res1.Hash == "" {
-		t.Fatalf("expected non-empty hash")
+	if res1.Hash != "abcd1234efgh5678" {
+		t.Fatalf("expected hash 'abcd1234efgh5678', got %q", res1.Hash)
 	}
 	if res1.SpecYAML == "" {
 		t.Fatalf("expected non-empty SpecYAML")
 	}
-	if res1.ReleaseID <= 0 {
-		t.Fatalf("expected ReleaseID > 0, got %d", res1.ReleaseID)
+	if res1.ReleaseID != 1 {
+		t.Fatalf("expected ReleaseID=1, got %d", res1.ReleaseID)
 	}
 
 	// Verify YAML content has authority items
@@ -140,16 +125,14 @@ func TestSpecSyncService_InSyncAndMismatch(t *testing.T) {
 	}
 }
 
-func TestSpecSyncService_UnregisteredNode(t *testing.T) {
-	mockRepo := &mockSpecRepo{
-		authorityErr: fmt.Errorf("unregistered node: unknown-node"),
-	}
+func TestSpecSyncService_NodeIDRequired(t *testing.T) {
+	mockRepo := &mockSpecRepo{}
 	svc := service.NewSpecSyncService(mockRepo)
 
 	_, err := svc.SyncSpec(context.Background(), entity.SpecSyncQuery{
-		NodeID: "unknown-node",
+		NodeID: "",
 	})
 	if err == nil {
-		t.Fatalf("expected error for unregistered node")
+		t.Fatalf("expected error for empty node_id")
 	}
 }

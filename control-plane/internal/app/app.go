@@ -35,6 +35,7 @@ type App struct {
 	collector          *provider.RateLimitCollector
 	backupScheduler    *service.BackupScheduler
 	notificationWorker *service.NotificationWorker
+	specScheduler      *provider.SpecScheduler
 	checkpointDone     chan struct{}
 }
 
@@ -118,6 +119,9 @@ func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
 	if module.NotificationWorker != nil {
 		module.NotificationWorker.Start(context.Background())
 	}
+	if module.SpecScheduler != nil && module.SpecSyncRepo != nil {
+		module.SpecScheduler.Start(context.Background(), module.SpecSyncRepo)
+	}
 
 	// Khởi chạy goroutine duy trì WAL checkpoint định kỳ (mỗi 30 phút)
 	checkpointDone := make(chan struct{})
@@ -163,6 +167,7 @@ func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
 		collector:          module.RateLimitCollector,
 		backupScheduler:    module.BackupScheduler,
 		notificationWorker: module.NotificationWorker,
+		specScheduler:      module.SpecScheduler,
 		checkpointDone:     checkpointDone,
 	}, nil
 }
@@ -213,6 +218,9 @@ func (a *App) Close() error {
 	}
 	if a.notificationWorker != nil {
 		a.notificationWorker.Stop()
+	}
+	if a.specScheduler != nil {
+		a.specScheduler.Stop()
 	}
 
 	// Thực hiện TRUNCATE checkpoint để thu hồi toàn bộ dung lượng file WAL trước khi ngắt kết nối

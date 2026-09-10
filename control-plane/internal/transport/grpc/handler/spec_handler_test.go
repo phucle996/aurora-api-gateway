@@ -28,10 +28,6 @@ func (m *mockSpecService) ReportSpec(ctx context.Context, cmd entity.SpecReportC
 	return nil
 }
 
-func (m *mockSpecService) CompileAndPublishSpec(ctx context.Context, actor, summary string) (*entity.ClusterSpecRelease, error) {
-	return &entity.ClusterSpecRelease{ID: 1, Digest: "hash-123", SpecYAML: "version: 1"}, nil
-}
-
 
 func TestSpecSyncHandler_SyncSpec(t *testing.T) {
 	mockSvc := &mockSpecService{

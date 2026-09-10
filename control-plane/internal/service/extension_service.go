@@ -11,13 +11,25 @@ import (
 )
 
 type extensionService struct {
-	repo repo.ExtensionRepository
+	repo       repo.ExtensionRepository
+	onMutation func()
 }
 
-// NewExtensionService creates a new ExtensionService instance.
-func NewExtensionService(repo repo.ExtensionRepository) *extensionService {
+// NewExtensionService creates a new ExtensionService instance with optional mutation callback.
+func NewExtensionService(repo repo.ExtensionRepository, onMutation ...func()) *extensionService {
+	var fn func()
+	if len(onMutation) > 0 {
+		fn = onMutation[0]
+	}
 	return &extensionService{
-		repo: repo,
+		repo:       repo,
+		onMutation: fn,
+	}
+}
+
+func (s *extensionService) notifyMutation() {
+	if s.onMutation != nil {
+		s.onMutation()
 	}
 }
 
@@ -40,7 +52,11 @@ func (s *extensionService) UpdateExtensionStatus(ctx context.Context, cmd entity
 	if cmd.ID == "" {
 		return fmt.Errorf("extension id cannot be empty")
 	}
-	return s.repo.UpdateStatus(ctx, cmd)
+	if err := s.repo.UpdateStatus(ctx, cmd); err != nil {
+		return err
+	}
+	s.notifyMutation()
+	return nil
 }
 
 func (s *extensionService) UpdateExtensionConfig(ctx context.Context, cmd entity.UpdateExtensionConfigCommand) error {
@@ -59,5 +75,9 @@ func (s *extensionService) UpdateExtensionConfig(ctx context.Context, cmd entity
 	}
 	cmd.ConfigJSON = configJSON
 
-	return s.repo.UpdateConfig(ctx, cmd)
+	if err := s.repo.UpdateConfig(ctx, cmd); err != nil {
+		return err
+	}
+	s.notifyMutation()
+	return nil
 }

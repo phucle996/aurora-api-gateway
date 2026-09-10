@@ -6,6 +6,7 @@ import (
 
 	"aurora-waf.local/control-plane/internal/config"
 	"aurora-waf.local/control-plane/internal/domain/entity"
+	"aurora-waf.local/control-plane/internal/domain/repo"
 	port "aurora-waf.local/control-plane/internal/domain/service"
 	"aurora-waf.local/control-plane/internal/provider"
 	"aurora-waf.local/control-plane/internal/repository"
@@ -25,6 +26,8 @@ type Module struct {
 	GRPCDomainRoutingHandler *grpchandler.DomainRoutingSyncHandler
 	GRPCSpecSyncHandler      *grpchandler.SpecSyncHandler
 	SpecHandler              *handler.SpecHandler
+	SpecSyncRepo             repo.SpecSyncRepository
+	SpecScheduler            *provider.SpecScheduler
 	AccessHandler            *handler.AccessHandler
 	PolicyHandler            *handler.PolicyHandler
 	HealthcheckHandler       *handler.HealthcheckHandler
@@ -71,16 +74,20 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	ruleSvc := service.NewRuleService(ruleRepo, cfg.CompilerPath)
 	ruleHdr := handler.NewRuleHandler(ruleSvc)
 
+	specSyncRepo := repository.NewSpecSyncRepository(writerDB, readerDB)
+	specScheduler := provider.NewSpecScheduler(0, 0)
+	specTrigger := specScheduler.TriggerReconcile
+
 	policyRepo := repository.NewPolicyRepository(writerDB, readerDB)
-	policySvc := service.NewPolicyService(policyRepo, cfg.CompilerPath)
+	policySvc := service.NewPolicyService(policyRepo, cfg.CompilerPath, specTrigger)
 	policyHdr := handler.NewPolicyHandler(policySvc)
 
 	accessRepo := repository.NewAccessRepository(writerDB, readerDB)
-	accessSvc := service.NewAccessService(accessRepo, cfg.CompilerPath)
+	accessSvc := service.NewAccessService(accessRepo, cfg.CompilerPath, specTrigger)
 	accessHdr := handler.NewAccessHandler(accessSvc)
 
 	domainRepo := repository.NewDomainRepository(writerDB, readerDB)
-	domainSvc := service.NewDomainService(domainRepo)
+	domainSvc := service.NewDomainService(domainRepo, specTrigger)
 	domainHdr := handler.NewDomainHandler(domainSvc)
 
 	domainRoutingRepo := repository.NewDomainRoutingRepository(readerDB)
@@ -88,7 +95,7 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	domainRoutingHdr := handler.NewDomainRoutingHandler(domainRoutingSvc)
 
 	upstreamRepo := repository.NewUpstreamRepository(writerDB, readerDB)
-	upstreamSvc := service.NewUpstreamService(upstreamRepo)
+	upstreamSvc := service.NewUpstreamService(upstreamRepo, specTrigger)
 	upstreamHdr := handler.NewUpstreamHandler(upstreamSvc)
 
 	settingsRepo := repository.NewSettingsRepository(writerDB)
@@ -140,13 +147,12 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	grpcUpstreamHdr := grpchandler.NewUpstreamSyncHandler(upstreamSvc)
 	grpcRoutingHdr := grpchandler.NewDomainRoutingSyncHandler(domainRoutingSvc)
 
-	specSyncRepo := repository.NewSpecSyncRepository(writerDB, readerDB)
 	specSyncSvc := service.NewSpecSyncService(specSyncRepo)
 	grpcSpecHdr := grpchandler.NewSpecSyncHandler(specSyncSvc)
 	specHdr := handler.NewSpecHandler(specSyncSvc)
 
 	extensionRepo := repository.NewExtensionRepository(writerDB, readerDB)
-	extensionSvc := service.NewExtensionService(extensionRepo)
+	extensionSvc := service.NewExtensionService(extensionRepo, specTrigger)
 	extensionHdr := handler.NewExtensionHandler(extensionSvc)
 
 	return &Module{
@@ -157,6 +163,8 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 		GRPCDomainRoutingHandler: grpcRoutingHdr,
 		GRPCSpecSyncHandler:      grpcSpecHdr,
 		SpecHandler:              specHdr,
+		SpecSyncRepo:             specSyncRepo,
+		SpecScheduler:            specScheduler,
 		ExtensionHandler:         extensionHdr,
 		ExtensionService:         extensionSvc,
 		AccessHandler:            accessHdr,

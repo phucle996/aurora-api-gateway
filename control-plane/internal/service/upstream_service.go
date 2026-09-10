@@ -23,13 +23,25 @@ var validUpstreamNameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 // UpstreamService thực thi nghiệp vụ cho Upstream workflow.
 type UpstreamService struct {
-	repo repo.UpstreamRepository
+	repo       repo.UpstreamRepository
+	onMutation func()
 }
 
-// NewUpstreamService khởi tạo UpstreamService với repo tương ứng.
-func NewUpstreamService(r repo.UpstreamRepository) domainService.UpstreamService {
+// NewUpstreamService khởi tạo UpstreamService với repo tương ứng và mutation callback tùy chọn.
+func NewUpstreamService(r repo.UpstreamRepository, onMutation ...func()) domainService.UpstreamService {
+	var fn func()
+	if len(onMutation) > 0 {
+		fn = onMutation[0]
+	}
 	return &UpstreamService{
-		repo: r,
+		repo:       r,
+		onMutation: fn,
+	}
+}
+
+func (s *UpstreamService) notifyMutation() {
+	if s.onMutation != nil {
+		s.onMutation()
 	}
 }
 
@@ -254,6 +266,7 @@ func (s *UpstreamService) CreateUpstream(ctx context.Context, cmd entity.CreateU
 		return nil, fmt.Errorf("lưu upstream: %w", err)
 	}
 
+	s.notifyMutation()
 	return created, nil
 }
 
@@ -520,6 +533,7 @@ func (s *UpstreamService) UpdateUpstream(ctx context.Context, cmd entity.UpdateU
 		return nil, fmt.Errorf("cập nhật upstream: %w", err)
 	}
 
+	s.notifyMutation()
 	return updated, nil
 }
 
@@ -561,7 +575,11 @@ func (s *UpstreamService) DeleteUpstream(ctx context.Context, id int64) error {
 	digest := hex.EncodeToString(hasher.Sum(nil))
 
 	// 4. Xóa trong repo và ghi release snapshot
-	return s.repo.Delete(ctx, id, generatedConf, digest)
+	if err := s.repo.Delete(ctx, id, generatedConf, digest); err != nil {
+		return err
+	}
+	s.notifyMutation()
+	return nil
 }
 
 // ListUpstreams lấy danh sách upstreams theo bộ lọc.
