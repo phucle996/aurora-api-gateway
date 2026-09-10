@@ -35,6 +35,7 @@ services:
       - AUTH_TOKEN=71b268cadc82c2ecfff176c7dfd5c4ac77a0e6a3cd0ae3a7d87b1b9bb686b994
     ports:
       - "80:80"
+      - "443:443"
       - "8090:80"
       - "9145:9145"
     volumes:

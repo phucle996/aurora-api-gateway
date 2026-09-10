@@ -15,8 +15,7 @@ pub struct SpecSyncRunner {
     cfg: Config,
     nginx: Arc<NginxManager>,
     dispatcher: Arc<Mutex<ExtensionDispatcher>>,
-    grpc: Option<GrpcClient>,
-    client: reqwest::Client,
+    grpc: GrpcClient,
     spec_path: PathBuf,
     current_hash: Arc<Mutex<String>>,
 }
@@ -26,7 +25,7 @@ impl SpecSyncRunner {
         cfg: Config,
         nginx: Arc<NginxManager>,
         dispatcher: Arc<Mutex<ExtensionDispatcher>>,
-        grpc: Option<GrpcClient>,
+        grpc: GrpcClient,
     ) -> Self {
         let spec_path = cfg.policy_dir.join("node-spec.yaml");
         Self {
@@ -34,10 +33,6 @@ impl SpecSyncRunner {
             nginx,
             dispatcher,
             grpc,
-            client: reqwest::Client::builder()
-                .timeout(Duration::from_secs(10))
-                .build()
-                .unwrap_or_default(),
             spec_path,
             current_hash: Arc::new(Mutex::new(String::new())),
         }
@@ -51,7 +46,9 @@ impl SpecSyncRunner {
             let hash = compute_sha256(raw.as_bytes());
             info!(hash = %hash, path = %self.spec_path.display(), "Loading baseline node-spec.yaml from disk");
             if let Ok(spec) = Spec::parse_yaml(&raw) {
-                if let Ok(res) = materialize_nginx(&spec, &self.cfg.policy_dir, &self.cfg.routing_dir).await {
+                if let Ok(res) =
+                    materialize_nginx(&spec, &self.cfg.policy_dir, &self.cfg.routing_dir).await
+                {
                     if res.nginx_changed && !self.cfg.no_nginx {
                         if let Err(err) = self.nginx.test_config(&self.cfg.nginx_conf).await {
                             error!(error = %err, "NGINX config test failed on bootstrap! Skipping reload");
@@ -133,104 +130,46 @@ impl SpecSyncRunner {
         Ok(spec.release_id as i64)
     }
 
-    /// Single sync cycle: Try gRPC first, fallback to HTTP.
+    /// Single sync cycle: Pure gRPC spec sync, no HTTP fallback.
     pub async fn sync_once(&self) {
         let local_hash = self.current_hash.lock().await.clone();
 
-        // 1. Try gRPC Sync
-        if let Some(ref grpc) = self.grpc {
-            let handler = grpc.spec_handler();
-            match handler.sync_spec(&self.cfg.node_id, &local_hash).await {
-                Ok(res) => {
-                    if res.in_sync {
-                        debug!(hash = %local_hash, "NodeSpec is in sync via gRPC");
-                        return;
-                    }
-
-                    match self.apply_spec_content(&res.spec_yaml, &res.hash).await {
-                        Ok(release_id) => {
-                            let _ = handler
-                                .report_spec(
-                                    &self.cfg.node_id,
-                                    release_id,
-                                    &res.hash,
-                                    "in_sync",
-                                    "NodeSpec applied cleanly",
-                                )
-                                .await;
-                        }
-                        Err(err) => {
-                            error!(error = %err, "Failed to apply NodeSpec from gRPC");
-                            let _ = handler
-                                .report_spec(
-                                    &self.cfg.node_id,
-                                    res.release_id,
-                                    &res.hash,
-                                    "out_of_sync",
-                                    &err,
-                                )
-                                .await;
-                        }
-                    }
+        let handler = self.grpc.spec_handler();
+        match handler.sync_spec(&self.cfg.node_id, &local_hash).await {
+            Ok(res) => {
+                if res.in_sync {
+                    debug!(hash = %local_hash, "NodeSpec is in sync via gRPC");
                     return;
                 }
-                Err(e) => {
-                    debug!(error = %e, "gRPC sync_spec unavailable, attempting HTTP probe");
-                }
-            }
-        }
 
-        // 2. HTTP Fallback
-        let url = format!(
-            "{}/api/v1/sync/spec",
-            self.cfg.controller_url.trim_end_matches('/')
-        );
-
-        let resp = match self
-            .client
-            .get(&url)
-            .query(&[
-                ("node_id", &self.cfg.node_id),
-                ("current_hash", &local_hash),
-            ])
-            .header("Authorization", format!("Bearer {}", self.cfg.auth_token))
-            .header("X-Aurora-Node", &self.cfg.node_id)
-            .send()
-            .await
-        {
-            Ok(r) => r,
-            Err(e) => {
-                debug!(error = %e, "Unified spec sync HTTP probe failed (offline / retrying)");
-                return;
-            }
-        };
-
-        match resp.status() {
-            reqwest::StatusCode::NOT_MODIFIED => {
-                debug!(hash = %local_hash, "NodeSpec is up to date via HTTP (304 Not Modified)");
-            }
-            reqwest::StatusCode::OK => {
-                let hash_header = resp
-                    .headers()
-                    .get("X-Aurora-Spec-Hash")
-                    .and_then(|h| h.to_str().ok())
-                    .unwrap_or_default()
-                    .to_string();
-
-                let body = match resp.text().await {
-                    Ok(b) => b,
-                    Err(e) => {
-                        error!(error = %e, "Failed to read NodeSpec HTTP response body");
-                        return;
+                match self.apply_spec_content(&res.spec_yaml, &res.hash).await {
+                    Ok(release_id) => {
+                        let _ = handler
+                            .report_spec(
+                                &self.cfg.node_id,
+                                release_id,
+                                &res.hash,
+                                "in_sync",
+                                "NodeSpec applied cleanly",
+                            )
+                            .await;
                     }
-                };
-
-                if let Err(err) = self.apply_spec_content(&body, &hash_header).await {
-                    error!(error = %err, "Failed to apply NodeSpec from HTTP");
+                    Err(err) => {
+                        error!(error = %err, "Failed to apply NodeSpec from gRPC");
+                        let _ = handler
+                            .report_spec(
+                                &self.cfg.node_id,
+                                res.release_id,
+                                &res.hash,
+                                "out_of_sync",
+                                &err,
+                            )
+                            .await;
+                    }
                 }
             }
-            status => {
-                debug!(status = %status, "Controller returned non-200 status for HTTP spec sync probe");
+            Err(e) => {
+                debug!(error = %e, "gRPC sync_spec failed (offline / retrying)");
             }
         }
     }

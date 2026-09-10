@@ -33,6 +33,6 @@ RUN if [ -f /opt/nginx/usr/local/nginx/sbin/nginx ] && [ ! -f /opt/nginx/usr/sbi
 
 ENV NGINX_STUB_STATUS_URL="http://127.0.0.1:80/stub_status"
 
-EXPOSE 80 9145
+EXPOSE 80 443 9145
 
 ENTRYPOINT ["/entrypoint.sh"]

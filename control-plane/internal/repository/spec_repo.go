@@ -96,7 +96,11 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 		coalesce(u.transport_json, ''),
 		coalesce(u.internal_ssl_json, ''),
 		coalesce(u.probes_json, '[]'),
-		coalesce(u.dynamic_dns, 0)
+		coalesce(u.dynamic_dns, 0),
+		coalesce(r.strip_path, 0),
+		coalesce(r.websocket, 0),
+		coalesce(r.priority, 0),
+		coalesce(r.plugins_json, '{}')
 	FROM routes r
 	LEFT JOIN upstreams u ON u.name = r.upstream_name
 	WHERE r.enabled = 1
@@ -124,6 +128,10 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 			&rec.SSLJSON,
 			&rec.ProbesJSON,
 			&rec.DynamicDNS,
+			&rec.StripPath,
+			&rec.WebSocket,
+			&rec.Priority,
+			&rec.PluginsJSON,
 		); err != nil {
 			return nil, fmt.Errorf("scan routing record: %w", err)
 		}
@@ -137,7 +145,39 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 	}
 	out.RoutingRecords = records
 
-	// 4. Fetch Extensions catalog
+	// 4. Fetch Active SSL Certificates
+	const certificatesQuery = `
+	SELECT id, name, snis_json, cert_pem, key_pem, mtls_enabled, coalesce(client_ca_pem, ''), verify_depth
+	FROM ssl_certificates
+	WHERE enabled = 1
+	ORDER BY created_at DESC
+	`
+	certRows, err := r.reader.QueryContext(ctx, certificatesQuery)
+	if err == nil {
+		defer certRows.Close()
+		var certs []entity.SpecCertificateRecord
+		for certRows.Next() {
+			var cert entity.SpecCertificateRecord
+			if err := certRows.Scan(
+				&cert.ID,
+				&cert.Name,
+				&cert.SNIsJSON,
+				&cert.CertPEM,
+				&cert.KeyPEM,
+				&cert.MTLSEnabled,
+				&cert.ClientCAPEM,
+				&cert.VerifyDepth,
+			); err == nil {
+				certs = append(certs, cert)
+			}
+		}
+		if err := certRows.Err(); err != nil {
+			return nil, fmt.Errorf("iterate certificates: %w", err)
+		}
+		out.Certificates = certs
+	}
+
+	// 5. Fetch Extensions catalog
 	const extensionsQuery = `
 	SELECT id, name, category, enabled, config_json
 	FROM extensions

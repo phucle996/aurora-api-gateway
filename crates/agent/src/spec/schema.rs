@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::access::AccessSpec;
+use super::certificate::CertificateSpec;
 use super::extensions::ExtensionsSpec;
 use super::routing::RoutingSpec;
 use super::upstream::UpstreamSpec;
@@ -39,6 +40,9 @@ pub struct Spec {
 
     #[serde(default)]
     pub routing_conf: Option<String>,
+
+    #[serde(default)]
+    pub certificates: Vec<CertificateSpec>,
 }
 
 impl Spec {

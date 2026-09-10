@@ -188,7 +188,8 @@ func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*Spec, 
 		doc.UpstreamsConf = auth.UpstreamsConf
 
 		if len(auth.RoutingRecords) > 0 {
-			domains := make([]DomainRoutingSpec, 0, len(auth.RoutingRecords))
+			domainMap := make(map[string][]LocationRoutingSpec)
+			domainOrder := make([]string, 0)
 			for _, d := range auth.RoutingRecords {
 				if d.Host == "" {
 					continue
@@ -197,19 +198,50 @@ func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*Spec, 
 				if path == "" {
 					path = "/"
 				}
+				loc := LocationRoutingSpec{
+					Path:        path,
+					Upstream:    d.Target,
+					StripPath:   d.StripPath,
+					WebSocket:   d.WebSocket,
+					Priority:    d.Priority,
+					PluginsJSON: d.PluginsJSON,
+				}
+				if _, exists := domainMap[d.Host]; !exists {
+					domainOrder = append(domainOrder, d.Host)
+				}
+				domainMap[d.Host] = append(domainMap[d.Host], loc)
+			}
+			domains := make([]DomainRoutingSpec, 0, len(domainOrder))
+			for _, host := range domainOrder {
 				domains = append(domains, DomainRoutingSpec{
-					Host: d.Host,
-					Locations: []LocationRoutingSpec{
-						{
-							Path:     path,
-							Upstream: d.Target,
-						},
-					},
+					Host:      host,
+					Locations: domainMap[host],
 				})
 			}
 			if len(domains) > 0 {
 				doc.Routing = RoutingSpec{Domains: domains}
 			}
+		}
+
+		if len(auth.Certificates) > 0 {
+			certs := make([]CertificateSpec, 0, len(auth.Certificates))
+			for _, c := range auth.Certificates {
+				var snis []string
+				if err := json.Unmarshal([]byte(c.SNIsJSON), &snis); err != nil {
+					snis = []string{}
+				}
+				certs = append(certs, CertificateSpec{
+					ID:          c.ID,
+					Name:        c.Name,
+					SNIs:        snis,
+					CertPEM:     c.CertPEM,
+					KeyPEM:      c.KeyPEM,
+					MTLSEnabled: c.MTLSEnabled,
+					ClientCAPEM: c.ClientCAPEM,
+					VerifyDepth: c.VerifyDepth,
+				})
+			}
+			doc.Certificates = certs
 		}
 
 		if len(auth.Extensions) > 0 {
@@ -278,6 +310,7 @@ type Spec struct {
 	UpstreamsConf string                            `yaml:"upstreams_conf,omitempty" json:"upstreams_conf,omitempty"`
 	Routing       RoutingSpec                       `yaml:"routing,omitempty" json:"routing,omitempty"`
 	RoutingConf   string                            `yaml:"routing_conf,omitempty" json:"routing_conf,omitempty"`
+	Certificates  []CertificateSpec                 `yaml:"certificates,omitempty" json:"certificates,omitempty"`
 }
 
 type ExtensionsSpec struct {
@@ -333,6 +366,21 @@ type DomainRoutingSpec struct {
 }
 
 type LocationRoutingSpec struct {
-	Path     string `yaml:"path" json:"path"`
-	Upstream string `yaml:"upstream" json:"upstream"`
+	Path        string `yaml:"path" json:"path"`
+	Upstream    string `yaml:"upstream" json:"upstream"`
+	StripPath   bool   `yaml:"strip_path,omitempty" json:"strip_path,omitempty"`
+	WebSocket   bool   `yaml:"websocket,omitempty" json:"websocket,omitempty"`
+	Priority    int    `yaml:"priority,omitempty" json:"priority,omitempty"`
+	PluginsJSON string `yaml:"plugins_json,omitempty" json:"plugins_json,omitempty"`
+}
+
+type CertificateSpec struct {
+	ID          string   `yaml:"id" json:"id"`
+	Name        string   `yaml:"name" json:"name"`
+	SNIs        []string `yaml:"snis" json:"snis"`
+	CertPEM     string   `yaml:"cert_pem" json:"cert_pem"`
+	KeyPEM      string   `yaml:"key_pem" json:"key_pem"`
+	MTLSEnabled bool     `yaml:"mtls_enabled" json:"mtls_enabled"`
+	ClientCAPEM string   `yaml:"client_ca_pem,omitempty" json:"client_ca_pem,omitempty"`
+	VerifyDepth int      `yaml:"verify_depth,omitempty" json:"verify_depth,omitempty"`
 }

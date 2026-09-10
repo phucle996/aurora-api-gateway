@@ -17,4 +17,12 @@ pub struct DomainRoutingSpec {
 pub struct LocationRoutingSpec {
     pub path: String,
     pub upstream: String,
+    #[serde(default)]
+    pub strip_path: bool,
+    #[serde(default)]
+    pub websocket: bool,
+    #[serde(default)]
+    pub priority: i32,
+    #[serde(default)]
+    pub plugins_json: Option<String>,
 }

@@ -19,6 +19,7 @@ events {
 http {
     include /var/lib/aurora-routing/dependencies/current/http.conf;
     include /var/lib/aurora-policy/active-extensions-http.conf;
+    include /var/lib/aurora-policy/active-upstreams.conf;
     http2 on;
     include /etc/nginx/access-trusted-proxies.conf;
 

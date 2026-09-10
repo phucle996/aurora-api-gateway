@@ -44,6 +44,22 @@ type SpecRoutingRecord struct {
 	SSLJSON       string
 	ProbesJSON    string
 	DynamicDNS    bool
+	StripPath     bool
+	WebSocket     bool
+	Priority      int
+	PluginsJSON   string
+}
+
+// SpecCertificateRecord is the spec sync workflow's flat projection for active SSL certificates.
+type SpecCertificateRecord struct {
+	ID          string
+	Name        string
+	SNIsJSON    string
+	CertPEM     string
+	KeyPEM      string
+	MTLSEnabled bool
+	ClientCAPEM string
+	VerifyDepth int
 }
 
 // SpecExtensionRecord is the flat projection for an extension in the catalog.
@@ -64,5 +80,6 @@ type SpecAuthorityData struct {
 	AccessPayload   []byte
 	UpstreamsConf   string
 	RoutingRecords  []SpecRoutingRecord
+	Certificates    []SpecCertificateRecord
 	Extensions      []SpecExtensionRecord
 }

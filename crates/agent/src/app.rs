@@ -131,7 +131,7 @@ impl App {
             (*self.cfg).clone(),
             self.nginx.clone(),
             dispatcher.clone(),
-            Some(self.grpc_client.clone()),
+            self.grpc_client.clone(),
         ));
         let spec_shutdown = shutdown.clone();
         tokio::spawn(async move {
