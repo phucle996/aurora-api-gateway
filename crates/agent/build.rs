@@ -19,11 +19,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .compile_protos(
             &[
                 "../../proto/sync/v1/heartbeat.proto",
-                "../../proto/sync/v1/policy.proto",
-                "../../proto/sync/v1/access.proto",
-                "../../proto/sync/v1/upstreams.proto",
-                "../../proto/sync/v1/routing.proto",
-                "../../proto/sync/v1/modules.proto",
                 "../../proto/sync/v1/spec.proto",
             ],
             &["../../proto"],

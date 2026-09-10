@@ -139,12 +139,8 @@ func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
 	}()
 
 	grpcSrv := grpcserver.NewServer(cfg.GRPCAddr, token, grpcserver.Handlers{
-		Heartbeat:     module.GRPCHeartbeatHandler,
-		Policy:        module.GRPCPolicySyncHandler,
-		Access:        module.GRPCAccessSyncHandler,
-		Upstream:      module.GRPCUpstreamSyncHandler,
-		DomainRouting: module.GRPCDomainRoutingHandler,
-		Spec:          module.GRPCSpecSyncHandler,
+		Heartbeat: module.GRPCHeartbeatHandler,
+		Spec:      module.GRPCSpecSyncHandler,
 	})
 	grpcLis, err := net.Listen("tcp", cfg.GRPCAddr)
 	if err != nil {

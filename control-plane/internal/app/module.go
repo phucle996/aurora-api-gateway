@@ -19,38 +19,34 @@ import (
 // Nó được khởi tạo một lần duy nhất khi ứng dụng khởi động,
 // sau đó RegisterRoutes gắn các handler vào đúng URL tương ứng.
 type Module struct {
-	GRPCHeartbeatHandler     *grpchandler.HeartbeatHandler
-	GRPCPolicySyncHandler    *grpchandler.PolicySyncHandler
-	GRPCAccessSyncHandler    *grpchandler.AccessSyncHandler
-	GRPCUpstreamSyncHandler  *grpchandler.UpstreamSyncHandler
-	GRPCDomainRoutingHandler *grpchandler.DomainRoutingSyncHandler
-	GRPCSpecSyncHandler      *grpchandler.SpecSyncHandler
-	SpecHandler              *handler.SpecHandler
-	SpecSyncRepo             repo.SpecSyncRepository
-	SpecScheduler            *provider.SpecScheduler
-	AccessHandler            *handler.AccessHandler
-	PolicyHandler            *handler.PolicyHandler
-	HealthcheckHandler       *handler.HealthcheckHandler
-	AuthHandler              *handler.AuthHandler
-	AuthService              port.AuthService // Xác thực JWT — cần tham chiếu trong middleware
-	RuleHandler              *handler.RuleHandler
-	NodeHandler              *handler.NodeHandler
-	MetricsHandler           *handler.MetricsHandler
-	MetricsService           port.MetricsService
-	DomainHandler            *handler.DomainHandler
-	DomainRoutingHandler     *handler.DomainRoutingHandler
-	UpstreamHandler          *handler.UpstreamHandler
-	RateLimitHandler         *handler.RateLimitHandler
-	RateLimitCollector       *provider.RateLimitCollector
-	SystemHandler            *handler.SystemHandler
-	SecurityHandler          *handler.SecurityHandler
-	NotificationHandler      *handler.NotificationHandler
-	NotificationService      port.NotificationService
-	NotificationWorker       *service.NotificationWorker
-	BackupHandler            *handler.BackupHandler
-	BackupScheduler          *service.BackupScheduler
-	ExtensionHandler         *handler.ExtensionHandler
-	ExtensionService         port.ExtensionService
+	GRPCHeartbeatHandler *grpchandler.HeartbeatHandler
+	GRPCSpecSyncHandler  *grpchandler.SpecSyncHandler
+	SpecHandler          *handler.SpecHandler
+	SpecSyncRepo         repo.SpecSyncRepository
+	SpecScheduler        *provider.SpecScheduler
+	AccessHandler        *handler.AccessHandler
+	PolicyHandler        *handler.PolicyHandler
+	HealthcheckHandler   *handler.HealthcheckHandler
+	AuthHandler          *handler.AuthHandler
+	AuthService          port.AuthService // Xác thực JWT — cần tham chiếu trong middleware
+	RuleHandler          *handler.RuleHandler
+	NodeHandler          *handler.NodeHandler
+	MetricsHandler       *handler.MetricsHandler
+	MetricsService       port.MetricsService
+	DomainHandler        *handler.DomainHandler
+	DomainRoutingHandler *handler.DomainRoutingHandler
+	UpstreamHandler      *handler.UpstreamHandler
+	RateLimitHandler     *handler.RateLimitHandler
+	RateLimitCollector   *provider.RateLimitCollector
+	SystemHandler        *handler.SystemHandler
+	SecurityHandler      *handler.SecurityHandler
+	NotificationHandler  *handler.NotificationHandler
+	NotificationService  port.NotificationService
+	NotificationWorker   *service.NotificationWorker
+	BackupHandler        *handler.BackupHandler
+	BackupScheduler      *service.BackupScheduler
+	ExtensionHandler     *handler.ExtensionHandler
+	ExtensionService     port.ExtensionService
 }
 
 // NewModule khởi tạo toàn bộ chuỗi dependency của ứng dụng theo thứ tự:
@@ -142,10 +138,6 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	backupScheduler := service.NewBackupScheduler(backupSvc, backupRepo)
 
 	grpcHeartbeatHdr := grpchandler.NewHeartbeatHandler(nodeSvc)
-	grpcPolicyHdr := grpchandler.NewPolicySyncHandler(policySvc)
-	grpcAccessHdr := grpchandler.NewAccessSyncHandler(accessSvc)
-	grpcUpstreamHdr := grpchandler.NewUpstreamSyncHandler(upstreamSvc)
-	grpcRoutingHdr := grpchandler.NewDomainRoutingSyncHandler(domainRoutingSvc)
 
 	specSyncSvc := service.NewSpecSyncService(specSyncRepo)
 	grpcSpecHdr := grpchandler.NewSpecSyncHandler(specSyncSvc)
@@ -156,37 +148,33 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	extensionHdr := handler.NewExtensionHandler(extensionSvc)
 
 	return &Module{
-		GRPCHeartbeatHandler:     grpcHeartbeatHdr,
-		GRPCPolicySyncHandler:    grpcPolicyHdr,
-		GRPCAccessSyncHandler:    grpcAccessHdr,
-		GRPCUpstreamSyncHandler:  grpcUpstreamHdr,
-		GRPCDomainRoutingHandler: grpcRoutingHdr,
-		GRPCSpecSyncHandler:      grpcSpecHdr,
-		SpecHandler:              specHdr,
-		SpecSyncRepo:             specSyncRepo,
-		SpecScheduler:            specScheduler,
-		ExtensionHandler:         extensionHdr,
-		ExtensionService:         extensionSvc,
-		AccessHandler:            accessHdr,
-		PolicyHandler:            policyHdr,
-		HealthcheckHandler:       healthcheckHdr,
-		AuthHandler:              authHdr,
-		AuthService:              authSvc,
-		RuleHandler:              ruleHdr,
-		NodeHandler:              nodeHdr,
-		MetricsHandler:           metricsHdr,
-		MetricsService:           metricsSvc,
-		DomainHandler:            domainHdr,
-		DomainRoutingHandler:     domainRoutingHdr,
-		UpstreamHandler:          upstreamHdr,
-		RateLimitHandler:         rateLimitHdr,
-		RateLimitCollector:       rateLimitCollector,
-		SystemHandler:            systemHdr,
-		SecurityHandler:          securityHdr,
-		NotificationHandler:      notificationHdr,
-		NotificationService:      notificationSvc,
-		NotificationWorker:       notificationWorker,
-		BackupHandler:            backupHdr,
-		BackupScheduler:          backupScheduler,
+		GRPCHeartbeatHandler: grpcHeartbeatHdr,
+		GRPCSpecSyncHandler:  grpcSpecHdr,
+		SpecHandler:          specHdr,
+		SpecSyncRepo:         specSyncRepo,
+		SpecScheduler:        specScheduler,
+		ExtensionHandler:     extensionHdr,
+		ExtensionService:     extensionSvc,
+		AccessHandler:        accessHdr,
+		PolicyHandler:        policyHdr,
+		HealthcheckHandler:   healthcheckHdr,
+		AuthHandler:          authHdr,
+		AuthService:          authSvc,
+		RuleHandler:          ruleHdr,
+		NodeHandler:          nodeHdr,
+		MetricsHandler:       metricsHdr,
+		MetricsService:       metricsSvc,
+		DomainHandler:        domainHdr,
+		DomainRoutingHandler: domainRoutingHdr,
+		UpstreamHandler:      upstreamHdr,
+		RateLimitHandler:     rateLimitHdr,
+		RateLimitCollector:   rateLimitCollector,
+		SystemHandler:        systemHdr,
+		SecurityHandler:      securityHdr,
+		NotificationHandler:  notificationHdr,
+		NotificationService:  notificationSvc,
+		NotificationWorker:   notificationWorker,
+		BackupHandler:        backupHdr,
+		BackupScheduler:      backupScheduler,
 	}
 }

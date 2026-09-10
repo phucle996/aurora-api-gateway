@@ -15,12 +15,8 @@ type Server struct {
 }
 
 type Handlers struct {
-	Heartbeat     *handler.HeartbeatHandler
-	Policy        *handler.PolicySyncHandler
-	Access        *handler.AccessSyncHandler
-	Upstream      *handler.UpstreamSyncHandler
-	DomainRouting *handler.DomainRoutingSyncHandler
-	Spec          *handler.SpecSyncHandler
+	Heartbeat *handler.HeartbeatHandler
+	Spec      *handler.SpecSyncHandler
 }
 
 func NewServer(addr string, adminToken string, handlers Handlers) *Server {
@@ -31,18 +27,6 @@ func NewServer(addr string, adminToken string, handlers Handlers) *Server {
 	s := grpc.NewServer(opts...)
 	if handlers.Heartbeat != nil {
 		pb.RegisterHeartbeatServiceServer(s, handlers.Heartbeat)
-	}
-	if handlers.Policy != nil {
-		pb.RegisterPolicySyncServiceServer(s, handlers.Policy)
-	}
-	if handlers.Access != nil {
-		pb.RegisterAccessSyncServiceServer(s, handlers.Access)
-	}
-	if handlers.Upstream != nil {
-		pb.RegisterUpstreamSyncServiceServer(s, handlers.Upstream)
-	}
-	if handlers.DomainRouting != nil {
-		pb.RegisterDomainRoutingSyncServiceServer(s, handlers.DomainRouting)
 	}
 	if handlers.Spec != nil {
 		pb.RegisterSpecSyncServiceServer(s, handlers.Spec)
