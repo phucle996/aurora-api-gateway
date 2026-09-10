@@ -30,7 +30,11 @@ impl ExtensionDispatcher {
         let is_active = match metrics_spec {
             Some(m) if m.enabled => {
                 let prom_on = m.prometheus.as_ref().map(|p| p.enabled).unwrap_or(false);
-                let otlp_on = m.otlp.as_ref().map(|o| o.enabled && !o.endpoint.trim().is_empty()).unwrap_or(false);
+                let otlp_on = m
+                    .otlp
+                    .as_ref()
+                    .map(|o| o.enabled && !o.endpoint.trim().is_empty())
+                    .unwrap_or(false);
                 prom_on || otlp_on
             }
             _ => false,
@@ -67,7 +71,11 @@ impl ExtensionDispatcher {
         let prom_enabled = m.prometheus.as_ref().map(|p| p.enabled).unwrap_or(false);
 
         let (otlp_enabled, otlp_endpoint, otlp_interval) = if let Some(ref o) = m.otlp {
-            (o.enabled && !o.endpoint.trim().is_empty(), o.endpoint.clone(), o.interval_secs)
+            (
+                o.enabled && !o.endpoint.trim().is_empty(),
+                o.endpoint.clone(),
+                o.interval_secs,
+            )
         } else {
             (false, String::new(), 15)
         };
@@ -76,14 +84,21 @@ impl ExtensionDispatcher {
         tokio::spawn(async move {
             let manager = MetricsManager::new(stub_url)
                 .with_pull_exporter(Arc::new(PrometheusExporter::new(prom_enabled)))
-                .with_push_exporter(Arc::new(OtlpExporter::new(otlp_enabled, otlp_endpoint, otlp_interval)));
+                .with_push_exporter(Arc::new(OtlpExporter::new(
+                    otlp_enabled,
+                    otlp_endpoint,
+                    otlp_interval,
+                )));
 
             manager.run(port, node_id, metrics_shutdown_token).await;
         });
 
         self.metrics_shutdown = Some(shutdown);
         self.last_metrics_spec = Some(m.clone());
-        info!(port = port, "Extension 'metrics' successfully started/dispatched");
+        info!(
+            port = port,
+            "Extension 'metrics' successfully started/dispatched"
+        );
     }
 
     /// Shutdown all active running extensions.

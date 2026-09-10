@@ -3,7 +3,7 @@ use crate::extension::ExtensionDispatcher;
 use crate::grpc::GrpcClient;
 use crate::nginx::NginxManager;
 use crate::spec::materialize::materialize_nginx;
-use crate::spec::{compute_sha256, NodeSpec};
+use crate::spec::{NodeSpec, compute_sha256};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -52,7 +52,11 @@ impl SpecSyncRunner {
             info!(hash = %hash, path = %self.spec_path.display(), "Loading baseline node-spec.yaml from disk");
             if let Ok(spec) = NodeSpec::parse_yaml(&raw) {
                 let _ = materialize_nginx(&spec, &self.cfg.policy_dir, &self.cfg.routing_dir).await;
-                self.dispatcher.lock().await.apply_spec(&spec.extensions).await;
+                self.dispatcher
+                    .lock()
+                    .await
+                    .apply_spec(&spec.extensions)
+                    .await;
                 *self.current_hash.lock().await = hash;
             } else {
                 warn!("Failed to parse local node-spec.yaml, will wait for Controller sync");
@@ -70,11 +74,12 @@ impl SpecSyncRunner {
             ));
         }
 
-        let spec = NodeSpec::parse_yaml(body)
-            .map_err(|e| format!("YAML parse error: {}", e))?;
+        let spec = NodeSpec::parse_yaml(body).map_err(|e| format!("YAML parse error: {}", e))?;
 
         // 1. Write atomic node-spec.yaml
-        let tmp_path = self.spec_path.with_extension(format!("tmp.{}", std::process::id()));
+        let tmp_path = self
+            .spec_path
+            .with_extension(format!("tmp.{}", std::process::id()));
         tokio::fs::write(&tmp_path, body.as_bytes())
             .await
             .map_err(|e| format!("Failed to write temp spec: {}", e))?;
@@ -101,7 +106,11 @@ impl SpecSyncRunner {
         }
 
         // 3. Dispatch & Hot-reload Extensions
-        self.dispatcher.lock().await.apply_spec(&spec.extensions).await;
+        self.dispatcher
+            .lock()
+            .await
+            .apply_spec(&spec.extensions)
+            .await;
 
         // 4. Update local hash
         *self.current_hash.lock().await = calculated_hash.clone();
@@ -170,7 +179,10 @@ impl SpecSyncRunner {
         let resp = match self
             .client
             .get(&url)
-            .query(&[("node_id", &self.cfg.node_id), ("current_hash", &local_hash)])
+            .query(&[
+                ("node_id", &self.cfg.node_id),
+                ("current_hash", &local_hash),
+            ])
             .header("Authorization", format!("Bearer {}", self.cfg.auth_token))
             .header("X-Aurora-Node", &self.cfg.node_id)
             .send()

@@ -37,10 +37,15 @@ impl SpecGrpcHandler {
         // Validate response
         if !resp.in_sync {
             if resp.spec_yaml.trim().is_empty() {
-                return Err("Control Plane returned empty spec_yaml when in_sync is false".to_string());
+                return Err(
+                    "Control Plane returned empty spec_yaml when in_sync is false".to_string(),
+                );
             }
             if resp.hash.len() != 64 || !resp.hash.chars().all(|c| c.is_ascii_hexdigit()) {
-                return Err(format!("Invalid SHA-256 hash returned from Control Plane: {}", resp.hash));
+                return Err(format!(
+                    "Invalid SHA-256 hash returned from Control Plane: {}",
+                    resp.hash
+                ));
             }
         }
 

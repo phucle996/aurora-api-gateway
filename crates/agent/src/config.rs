@@ -2,7 +2,10 @@ use clap::Parser;
 use std::path::PathBuf;
 
 #[derive(Parser, Debug, Clone)]
-#[command(name = "aurora-agent", about = "Aurora WAF Dataplane Supervisor and Node Agent")]
+#[command(
+    name = "aurora-agent",
+    about = "Aurora WAF Dataplane Supervisor and Node Agent"
+)]
 pub struct Config {
     #[arg(long, env = "CONTROLLER_URL")]
     pub controller_url: String,
@@ -43,7 +46,11 @@ pub struct Config {
     #[arg(long, env = "METRICS_OTLP_ENDPOINT")]
     pub metrics_otlp_endpoint: Option<String>,
 
-    #[arg(long = "metrics-otlp-interval", env = "METRICS_OTLP_INTERVAL", default_value_t = 15)]
+    #[arg(
+        long = "metrics-otlp-interval",
+        env = "METRICS_OTLP_INTERVAL",
+        default_value_t = 15
+    )]
     pub metrics_otlp_interval_secs: u64,
 
     #[arg(long = "nginx-stub-status-url", env = "NGINX_STUB_STATUS_URL")]
@@ -64,10 +71,10 @@ impl Config {
     }
 
     pub fn grpc_endpoint(&self) -> String {
-        if let Some(ref url) = self.grpc_url {
-            if !url.trim().is_empty() {
-                return url.clone();
-            }
+        if let Some(ref url) = self.grpc_url
+            && !url.trim().is_empty()
+        {
+            return url.clone();
         }
 
         // Fallback from controller_url
@@ -84,28 +91,42 @@ impl Config {
 
     pub fn validate(&self) {
         if self.controller_url.trim().is_empty() {
-            panic!("FATAL: CONTROLLER_URL is missing or empty. Provide via --controller-url or CONTROLLER_URL env var.");
+            panic!(
+                "FATAL: CONTROLLER_URL is missing or empty. Provide via --controller-url or CONTROLLER_URL env var."
+            );
         }
         if self.node_id.trim().is_empty() {
             panic!("FATAL: NODE_ID is missing or empty. Provide via --node-id or NODE_ID env var.");
         }
         if self.auth_token.trim().is_empty() {
-            panic!("FATAL: AUTH_TOKEN is missing or empty. Provide via --auth-token or AUTH_TOKEN env var.");
+            panic!(
+                "FATAL: AUTH_TOKEN is missing or empty. Provide via --auth-token or AUTH_TOKEN env var."
+            );
         }
         if self.nginx_bin.as_os_str().is_empty() {
-            panic!("FATAL: NGINX_BIN is missing or empty. Provide via --nginx-bin or NGINX_BIN env var.");
+            panic!(
+                "FATAL: NGINX_BIN is missing or empty. Provide via --nginx-bin or NGINX_BIN env var."
+            );
         }
         if self.nginx_conf.as_os_str().is_empty() {
-            panic!("FATAL: NGINX_CONF is missing or empty. Provide via --nginx-conf or NGINX_CONF env var.");
+            panic!(
+                "FATAL: NGINX_CONF is missing or empty. Provide via --nginx-conf or NGINX_CONF env var."
+            );
         }
         if self.policy_dir.as_os_str().is_empty() {
-            panic!("FATAL: POLICY_DIR is missing or empty. Provide via --policy-dir or POLICY_DIR env var.");
+            panic!(
+                "FATAL: POLICY_DIR is missing or empty. Provide via --policy-dir or POLICY_DIR env var."
+            );
         }
         if self.routing_dir.as_os_str().is_empty() {
-            panic!("FATAL: ROUTING_DIR is missing or empty. Provide via --routing-dir or ROUTING_DIR env var.");
+            panic!(
+                "FATAL: ROUTING_DIR is missing or empty. Provide via --routing-dir or ROUTING_DIR env var."
+            );
         }
         if self.modules_dir.as_os_str().is_empty() {
-            panic!("FATAL: MODULES_DIR is missing or empty. Provide via --modules-dir or MODULES_DIR env var.");
+            panic!(
+                "FATAL: MODULES_DIR is missing or empty. Provide via --modules-dir or MODULES_DIR env var."
+            );
         }
     }
 }
@@ -155,25 +176,42 @@ mod tests {
     fn test_metrics_flags() {
         let cfg = Config::try_parse_from([
             "aurora-agent",
-            "--controller-url", "http://controller:8080",
-            "--node-id", "node-01",
-            "--auth-token", "secret-token",
-            "--nginx-bin", "/nginx",
-            "--nginx-conf", "/nginx.conf",
-            "--policy-dir", "/policy",
-            "--routing-dir", "/routing",
-            "--modules-dir", "/modules",
+            "--controller-url",
+            "http://controller:8080",
+            "--node-id",
+            "node-01",
+            "--auth-token",
+            "secret-token",
+            "--nginx-bin",
+            "/nginx",
+            "--nginx-conf",
+            "/nginx.conf",
+            "--policy-dir",
+            "/policy",
+            "--routing-dir",
+            "/routing",
+            "--modules-dir",
+            "/modules",
             "--metrics-prometheus",
-            "--metrics-otlp-endpoint", "http://otel-collector:4317",
-            "--metrics-otlp-interval", "30",
-            "--nginx-stub-status-url", "http://127.0.0.1:8080/stub_status",
+            "--metrics-otlp-endpoint",
+            "http://otel-collector:4317",
+            "--metrics-otlp-interval",
+            "30",
+            "--nginx-stub-status-url",
+            "http://127.0.0.1:8080/stub_status",
         ])
         .expect("parse config with metrics flags");
 
         assert!(cfg.metrics_prometheus);
-        assert_eq!(cfg.metrics_otlp_endpoint.as_deref(), Some("http://otel-collector:4317"));
+        assert_eq!(
+            cfg.metrics_otlp_endpoint.as_deref(),
+            Some("http://otel-collector:4317")
+        );
         assert_eq!(cfg.metrics_otlp_interval_secs, 30);
-        assert_eq!(cfg.nginx_stub_status_url.as_deref(), Some("http://127.0.0.1:8080/stub_status"));
+        assert_eq!(
+            cfg.nginx_stub_status_url.as_deref(),
+            Some("http://127.0.0.1:8080/stub_status")
+        );
     }
 
     #[test]

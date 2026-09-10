@@ -155,6 +155,8 @@ fn default_waf_mode() -> String {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct AccessSpec {
     #[serde(default)]
+    pub generation: Option<u64>,
+    #[serde(default)]
     pub rules: Vec<serde_json::Value>,
     #[serde(default)]
     pub raw_json: Option<String>,
@@ -251,7 +253,10 @@ routing:
         let metrics = spec.extensions.metrics.as_ref().unwrap();
         assert!(metrics.enabled);
         assert_eq!(metrics.port, 9145);
-        assert_eq!(metrics.stub_status_url.as_deref(), Some("http://127.0.0.1:80/stub_status"));
+        assert_eq!(
+            metrics.stub_status_url.as_deref(),
+            Some("http://127.0.0.1:80/stub_status")
+        );
         assert_eq!(spec.waf.block_paths.len(), 2);
         assert_eq!(spec.upstreams.len(), 1);
         assert_eq!(spec.routing.domains.len(), 1);

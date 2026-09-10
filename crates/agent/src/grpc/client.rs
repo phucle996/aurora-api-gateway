@@ -11,7 +11,10 @@ pub struct AuthInterceptor {
 }
 
 impl tonic::service::Interceptor for AuthInterceptor {
-    fn call(&mut self, mut request: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
+    fn call(
+        &mut self,
+        mut request: tonic::Request<()>,
+    ) -> Result<tonic::Request<()>, tonic::Status> {
         request
             .metadata_mut()
             .insert("authorization", self.token_header.clone());
@@ -33,11 +36,14 @@ impl GrpcClient {
         let channel = ep.connect_lazy();
 
         let token_val = format!("Bearer {}", token);
-        let token_header = token_val.parse().unwrap_or_else(|_| MetadataValue::from_static(""));
+        let token_header = token_val
+            .parse()
+            .unwrap_or_else(|_| MetadataValue::from_static(""));
 
         let interceptor = AuthInterceptor { token_header };
 
-        let heartbeat = HeartbeatServiceClient::with_interceptor(channel.clone(), interceptor.clone());
+        let heartbeat =
+            HeartbeatServiceClient::with_interceptor(channel.clone(), interceptor.clone());
         let spec = SpecSyncServiceClient::with_interceptor(channel, interceptor);
 
         Ok(Self { heartbeat, spec })

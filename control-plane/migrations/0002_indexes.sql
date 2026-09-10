@@ -27,3 +27,8 @@ CREATE INDEX IF NOT EXISTS idx_rl_endpoints_blocked ON rate_limit_endpoint_metri
 -- Extensions indexes
 CREATE INDEX IF NOT EXISTS idx_extensions_category ON extensions(category);
 CREATE INDEX IF NOT EXISTS idx_extensions_enabled ON extensions(enabled);
+
+-- Module jobs indexes
+CREATE UNIQUE INDEX IF NOT EXISTS module_job_active ON module_jobs(node_id) WHERE state IN ('pending','running');
+CREATE INDEX IF NOT EXISTS module_job_latest ON module_jobs(node_id,id DESC);
+

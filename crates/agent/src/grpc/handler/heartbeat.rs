@@ -13,10 +13,7 @@ impl HeartbeatGrpcHandler {
         Self { client }
     }
 
-    pub async fn send_heartbeat(
-        &self,
-        req: HeartbeatRequest,
-    ) -> Result<HeartbeatResponse, String> {
+    pub async fn send_heartbeat(&self, req: HeartbeatRequest) -> Result<HeartbeatResponse, String> {
         if req.node_id.is_empty() {
             return Err("node_id must not be empty".to_string());
         }

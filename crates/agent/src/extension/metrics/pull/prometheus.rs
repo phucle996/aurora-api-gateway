@@ -1,5 +1,5 @@
 use super::PullExporter;
-use crate::extension::metrics::collector::{format_prometheus, NodeMetrics};
+use crate::extension::metrics::collector::{NodeMetrics, format_prometheus};
 
 pub struct PrometheusExporter {
     enabled: bool,

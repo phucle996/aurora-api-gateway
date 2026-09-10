@@ -1,5 +1,7 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    if std::env::var("PROTOC").is_err() && let Ok(home) = std::env::var("HOME") {
+    if std::env::var("PROTOC").is_err()
+        && let Ok(home) = std::env::var("HOME")
+    {
         let user_protoc = format!("{}/.local/bin/protoc", home);
         if std::path::Path::new(&user_protoc).exists() {
             // Set PROTOC for tonic_build

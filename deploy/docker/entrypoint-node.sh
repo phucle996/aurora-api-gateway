@@ -37,7 +37,7 @@ chmod 644 /etc/nginx/aurora-config-view.conf
 # Policy directory survives container replacement in a per-node volume.
 umask 077
 mkdir -p /var/lib/aurora-policy
-if [ ! -f /var/lib/aurora-policy/active-policy.json ] || ! grep -q '"schema_version"' /var/lib/aurora-policy/active-policy.json 2>/dev/null; then
+if [ ! -f /var/lib/aurora-policy/active-policy.json ] || ! grep -q '"schema_version"' /var/lib/aurora-policy/active-policy.json 2>/dev/null || grep -q '"mode"' /var/lib/aurora-policy/active-policy.json 2>/dev/null; then
     cat <<EOF > /var/lib/aurora-policy/active-policy.json
 {
   "schema_version": 1,
@@ -49,7 +49,7 @@ if [ ! -f /var/lib/aurora-policy/active-policy.json ] || ! grep -q '"schema_vers
 EOF
 fi
 
-if [ ! -f /var/lib/aurora-policy/active-access.json ] || ! grep -q '"schema_version"' /var/lib/aurora-policy/active-access.json 2>/dev/null; then
+if [ ! -f /var/lib/aurora-policy/active-access.json ] || ! grep -q '"generation"' /var/lib/aurora-policy/active-access.json 2>/dev/null; then
     printf '%s' '{"schema_version":1,"generation":0,"rules":[]}' > /var/lib/aurora-policy/active-access.json
 fi
 

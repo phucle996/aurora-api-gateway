@@ -3,7 +3,7 @@ pub mod pull;
 pub mod push;
 
 #[allow(unused_imports)]
-pub use collector::{format_prometheus, parse_stub_status, MetricsCollector, NodeMetrics};
+pub use collector::{MetricsCollector, NodeMetrics, format_prometheus, parse_stub_status};
 pub use pull::{PrometheusExporter, PullExporter};
 pub use push::{OtlpExporter, PushExporter};
 
@@ -139,7 +139,7 @@ impl MetricsManager {
                                     let mut buf = [0u8; 1024];
                                     if let Ok(n) = socket.read(&mut buf).await {
                                         let req = String::from_utf8_lossy(&buf[..n]);
-                                        
+
                                         // Match request against registered pull exporters
                                         let mut matched_exporter = None;
                                         for p in registered_pulls.iter() {

@@ -38,17 +38,28 @@ pub async fn materialize_nginx(
     let policy_path = policy_dir.join("active-policy.json");
     let policy_json = if let Some(ref raw) = spec.waf.raw_json {
         raw.clone()
+    } else if !spec.waf.rules.is_empty() {
+        serde_json::to_string_pretty(&serde_json::json!({
+            "schema_version": 2,
+            "generation": spec.release_id,
+            "rules": spec.waf.rules,
+        }))?
     } else {
+        let block_paths = if spec.waf.block_paths.is_empty() {
+            vec!["/blocked".to_string(), "/__aurora_blocked".to_string()]
+        } else {
+            spec.waf.block_paths.clone()
+        };
         serde_json::to_string_pretty(&serde_json::json!({
             "schema_version": 1,
-            "release_id": spec.release_id,
-            "mode": spec.waf.mode,
-            "block_paths": spec.waf.block_paths,
-            "rules": spec.waf.rules,
+            "block_paths": block_paths,
         }))?
     };
     if atomic_write_if_changed(&policy_path, policy_json.as_bytes()).await? {
-        info!("Updated active-policy.json (release_id: {})", spec.release_id);
+        info!(
+            "Updated active-policy.json (release_id: {})",
+            spec.release_id
+        );
         changed = true;
     }
 
@@ -59,6 +70,7 @@ pub async fn materialize_nginx(
     } else {
         serde_json::to_string_pretty(&serde_json::json!({
             "schema_version": 1,
+            "generation": spec.access.generation.unwrap_or(0),
             "rules": spec.access.rules,
         }))?
     };
@@ -98,7 +110,10 @@ pub async fn materialize_nginx(
         for d in &spec.routing.domains {
             buf.push_str(&format!("server {{\n    listen 80;\n    server_name {};\n    include /etc/nginx/domain-waf.conf;\n", d.host));
             for loc in &d.locations {
-                buf.push_str(&format!("    location {} {{\n        proxy_pass http://{};\n    }}\n", loc.path, loc.upstream));
+                buf.push_str(&format!(
+                    "    location {} {{\n        proxy_pass http://{};\n    }}\n",
+                    loc.path, loc.upstream
+                ));
             }
             buf.push_str("}\n");
         }
@@ -122,24 +137,32 @@ mod tests {
 
     #[tokio::test]
     async fn test_materialize_nginx_files() {
-        let base_tmp = std::env::temp_dir().join(format!("aurora-spec-test-{}", std::process::id()));
+        let base_tmp =
+            std::env::temp_dir().join(format!("aurora-spec-test-{}", std::process::id()));
         let policy_dir = base_tmp.join("policy");
         let routing_dir = base_tmp.join("routing");
         let _ = tokio::fs::remove_dir_all(&base_tmp).await;
 
-        let mut spec = NodeSpec::default();
-        spec.release_id = 99;
-        spec.waf.mode = "enforce".to_string();
-        spec.waf.block_paths = vec!["/blocked".to_string()];
-        spec.upstreams.push(crate::spec::UpstreamSpec {
-            name: "backend".to_string(),
-            servers: vec![crate::spec::UpstreamServerSpec {
-                addr: "127.0.0.1:8080".to_string(),
-                weight: 2,
+        let spec = NodeSpec {
+            release_id: 99,
+            waf: crate::spec::WafSpec {
+                mode: "enforce".to_string(),
+                block_paths: vec!["/blocked".to_string()],
+                ..Default::default()
+            },
+            upstreams: vec![crate::spec::UpstreamSpec {
+                name: "backend".to_string(),
+                servers: vec![crate::spec::UpstreamServerSpec {
+                    addr: "127.0.0.1:8080".to_string(),
+                    weight: 2,
+                }],
             }],
-        });
+            ..Default::default()
+        };
 
-        let res = materialize_nginx(&spec, &policy_dir, &routing_dir).await.expect("materialize");
+        let res = materialize_nginx(&spec, &policy_dir, &routing_dir)
+            .await
+            .expect("materialize");
         assert!(res.nginx_changed);
 
         assert!(policy_dir.join("active-policy.json").exists());
@@ -147,12 +170,16 @@ mod tests {
         assert!(policy_dir.join("active-upstreams.conf").exists());
         assert!(routing_dir.join("active-domain-routing.conf").exists());
 
-        let up_conf = tokio::fs::read_to_string(policy_dir.join("active-upstreams.conf")).await.unwrap();
+        let up_conf = tokio::fs::read_to_string(policy_dir.join("active-upstreams.conf"))
+            .await
+            .unwrap();
         assert!(up_conf.contains("upstream backend"));
         assert!(up_conf.contains("server 127.0.0.1:8080 weight=2;"));
 
         // Second run with same spec should NOT report changed
-        let res2 = materialize_nginx(&spec, &policy_dir, &routing_dir).await.expect("materialize 2");
+        let res2 = materialize_nginx(&spec, &policy_dir, &routing_dir)
+            .await
+            .expect("materialize 2");
         assert!(!res2.nginx_changed);
     }
 }

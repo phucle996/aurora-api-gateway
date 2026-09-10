@@ -1,6 +1,6 @@
 use std::fs;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tracing::warn;
 
@@ -64,10 +64,7 @@ impl MetricsCollector {
         }
 
         // 2. Sample CPU
-        metrics.cpu_utilization = sample_cpu(
-            &self.state.last_cpu_total,
-            &self.state.last_cpu_idle,
-        );
+        metrics.cpu_utilization = sample_cpu(&self.state.last_cpu_total, &self.state.last_cpu_idle);
 
         // 3. Scrape NGINX stub_status
         if !stub_status_url.is_empty() {
@@ -96,10 +93,10 @@ impl MetricsCollector {
 }
 
 /// Parses NGINX ngx_http_stub_status_module exposition:
-/// Active connections: 291 
+/// Active connections: 291
 /// server accepts handled requests
-///  16630948 16630948 31070465 
-/// Reading: 6 Writing: 179 Waiting: 106 
+///  16630948 16630948 31070465
+/// Reading: 6 Writing: 179 Waiting: 106
 pub fn parse_stub_status(raw: &str, out: &mut NodeMetrics) {
     let lines: Vec<&str> = raw.lines().map(str::trim).collect();
     for line in lines {
@@ -167,17 +164,9 @@ pub fn sample_memory() -> Option<(u64, u64, f64)> {
 
     for line in meminfo.lines() {
         if line.starts_with("MemTotal:") {
-            total_kb = line
-                .split_whitespace()
-                .nth(1)?
-                .parse::<u64>()
-                .ok()?;
+            total_kb = line.split_whitespace().nth(1)?.parse::<u64>().ok()?;
         } else if line.starts_with("MemAvailable:") {
-            available_kb = line
-                .split_whitespace()
-                .nth(1)?
-                .parse::<u64>()
-                .ok()?;
+            available_kb = line.split_whitespace().nth(1)?.parse::<u64>().ok()?;
         }
     }
 
@@ -242,45 +231,79 @@ pub fn format_prometheus(node_id: &str, m: &NodeMetrics) -> String {
     // 1. Connection Gauges
     out.push_str("# HELP http_connections_active Number of active client connections\n");
     out.push_str("# TYPE http_connections_active gauge\n");
-    out.push_str(&format!("http_connections_active{{node_id=\"{}\"}} {}\n\n", node_id, m.active_connections));
+    out.push_str(&format!(
+        "http_connections_active{{node_id=\"{}\"}} {}\n\n",
+        node_id, m.active_connections
+    ));
 
     out.push_str("# HELP http_connections_reading Number of connections reading request headers\n");
     out.push_str("# TYPE http_connections_reading gauge\n");
-    out.push_str(&format!("http_connections_reading{{node_id=\"{}\"}} {}\n\n", node_id, m.connections_reading));
+    out.push_str(&format!(
+        "http_connections_reading{{node_id=\"{}\"}} {}\n\n",
+        node_id, m.connections_reading
+    ));
 
     out.push_str("# HELP http_connections_writing Number of connections writing response\n");
     out.push_str("# TYPE http_connections_writing gauge\n");
-    out.push_str(&format!("http_connections_writing{{node_id=\"{}\"}} {}\n\n", node_id, m.connections_writing));
+    out.push_str(&format!(
+        "http_connections_writing{{node_id=\"{}\"}} {}\n\n",
+        node_id, m.connections_writing
+    ));
 
     out.push_str("# HELP http_connections_waiting Number of idle keepalive connections\n");
     out.push_str("# TYPE http_connections_waiting gauge\n");
-    out.push_str(&format!("http_connections_waiting{{node_id=\"{}\"}} {}\n\n", node_id, m.connections_waiting));
+    out.push_str(&format!(
+        "http_connections_waiting{{node_id=\"{}\"}} {}\n\n",
+        node_id, m.connections_waiting
+    ));
 
     // 2. Connection and Request Counters
     out.push_str("# HELP http_connections_handled_total Total number of handled connections\n");
     out.push_str("# TYPE http_connections_handled_total counter\n");
-    out.push_str(&format!("http_connections_handled_total{{node_id=\"{}\"}} {}\n\n", node_id, m.connections_handled));
+    out.push_str(&format!(
+        "http_connections_handled_total{{node_id=\"{}\"}} {}\n\n",
+        node_id, m.connections_handled
+    ));
 
     out.push_str("# HELP http_requests_total Total number of HTTP requests processed\n");
     out.push_str("# TYPE http_requests_total counter\n");
-    out.push_str(&format!("http_requests_total{{node_id=\"{}\"}} {}\n\n", node_id, m.requests_total));
+    out.push_str(&format!(
+        "http_requests_total{{node_id=\"{}\"}} {}\n\n",
+        node_id, m.requests_total
+    ));
 
     // 3. System Utilization Gauges
-    out.push_str("# HELP system_cpu_utilization_ratio Current CPU utilization ratio (0.0 to 1.0)\n");
+    out.push_str(
+        "# HELP system_cpu_utilization_ratio Current CPU utilization ratio (0.0 to 1.0)\n",
+    );
     out.push_str("# TYPE system_cpu_utilization_ratio gauge\n");
-    out.push_str(&format!("system_cpu_utilization_ratio{{node_id=\"{}\"}} {:.4}\n\n", node_id, m.cpu_utilization));
+    out.push_str(&format!(
+        "system_cpu_utilization_ratio{{node_id=\"{}\"}} {:.4}\n\n",
+        node_id, m.cpu_utilization
+    ));
 
-    out.push_str("# HELP system_memory_utilization_ratio Current Memory utilization ratio (0.0 to 1.0)\n");
+    out.push_str(
+        "# HELP system_memory_utilization_ratio Current Memory utilization ratio (0.0 to 1.0)\n",
+    );
     out.push_str("# TYPE system_memory_utilization_ratio gauge\n");
-    out.push_str(&format!("system_memory_utilization_ratio{{node_id=\"{}\"}} {:.4}\n\n", node_id, m.memory_utilization));
+    out.push_str(&format!(
+        "system_memory_utilization_ratio{{node_id=\"{}\"}} {:.4}\n\n",
+        node_id, m.memory_utilization
+    ));
 
     out.push_str("# HELP system_memory_used_bytes Memory used in bytes\n");
     out.push_str("# TYPE system_memory_used_bytes gauge\n");
-    out.push_str(&format!("system_memory_used_bytes{{node_id=\"{}\"}} {}\n\n", node_id, m.memory_used_bytes));
+    out.push_str(&format!(
+        "system_memory_used_bytes{{node_id=\"{}\"}} {}\n\n",
+        node_id, m.memory_used_bytes
+    ));
 
     out.push_str("# HELP system_memory_total_bytes Total system memory in bytes\n");
     out.push_str("# TYPE system_memory_total_bytes gauge\n");
-    out.push_str(&format!("system_memory_total_bytes{{node_id=\"{}\"}} {}\n", node_id, m.memory_total_bytes));
+    out.push_str(&format!(
+        "system_memory_total_bytes{{node_id=\"{}\"}} {}\n",
+        node_id, m.memory_total_bytes
+    ));
 
     out
 }
@@ -340,10 +363,16 @@ Reading: 6 Writing: 179 Waiting: 106
         assert!(formatted.contains("http_connections_reading{node_id=\"node-test-01\"} 2"));
         assert!(formatted.contains("http_connections_writing{node_id=\"node-test-01\"} 10"));
         assert!(formatted.contains("http_connections_waiting{node_id=\"node-test-01\"} 30"));
-        assert!(formatted.contains("http_connections_handled_total{node_id=\"node-test-01\"} 1000"));
+        assert!(
+            formatted.contains("http_connections_handled_total{node_id=\"node-test-01\"} 1000")
+        );
         assert!(formatted.contains("http_requests_total{node_id=\"node-test-01\"} 5000"));
-        assert!(formatted.contains("system_cpu_utilization_ratio{node_id=\"node-test-01\"} 0.1523"));
-        assert!(formatted.contains("system_memory_utilization_ratio{node_id=\"node-test-01\"} 0.4567"));
+        assert!(
+            formatted.contains("system_cpu_utilization_ratio{node_id=\"node-test-01\"} 0.1523")
+        );
+        assert!(
+            formatted.contains("system_memory_utilization_ratio{node_id=\"node-test-01\"} 0.4567")
+        );
 
         // Crucial invariant: Absolutely NO aurora_ prefix in metric names
         assert!(!formatted.contains("aurora_"));

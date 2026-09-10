@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 mod app;
 mod config;
 mod extension;

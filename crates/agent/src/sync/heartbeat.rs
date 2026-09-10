@@ -1,6 +1,6 @@
 use crate::config::Config;
-use crate::grpc::pb::{HealthStatus, HeartbeatRequest, NginxMetadata};
 use crate::grpc::GrpcClient;
+use crate::grpc::pb::{HealthStatus, HeartbeatRequest, NginxMetadata};
 use crate::nginx::NginxManager;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
@@ -158,7 +158,11 @@ mod tests {
         let mut rng = SimpleRng::new();
         for _ in 0..100 {
             let delay = rng.next_interval_ms(5, 0.20);
-            assert!(delay >= 4000 && delay <= 6000, "delay {} out of range", delay);
+            assert!(
+                (4000..=6000).contains(&delay),
+                "delay {} out of range",
+                delay
+            );
         }
     }
 }
