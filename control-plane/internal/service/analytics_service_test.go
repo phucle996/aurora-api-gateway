@@ -104,9 +104,9 @@ func TestMetricsServiceAnalyticsQueryAndCatalog(t *testing.T) {
 		Step:  15,
 	}
 
-	res, err := svc.QueryAnalytics(context.Background(), queryReq)
+	res, err := svc.Query(context.Background(), queryReq)
 	if err != nil {
-		t.Fatalf("QueryAnalytics thất bại: %v", err)
+		t.Fatalf("Query thất bại: %v", err)
 	}
 	if len(res.Series) != 1 {
 		t.Fatalf("kỳ vọng 1 series, nhận: %d", len(res.Series))

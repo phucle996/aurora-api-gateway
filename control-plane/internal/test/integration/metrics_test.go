@@ -61,38 +61,45 @@ func TestMetricsFlexibilityLabAndProduction(t *testing.T) {
 	}
 
 	// 1. Kiểm tra cấu hình mặc định ban đầu là 'disabled'
-	w := request("GET", "/api/v1/settings/integrations/metrics", "")
+	w := request("GET", "/api/v1/analytics/connection", "")
 	if w.Code != http.StatusOK {
 		t.Fatalf("kỳ vọng mã 200, nhận được: %d, body: %s", w.Code, w.Body.String())
 	}
-	var defaultCfg map[string]interface{}
-	if err := json.Unmarshal(w.Body.Bytes(), &defaultCfg); err != nil {
+	var defaultConn map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &defaultConn); err != nil {
 		t.Fatal(err)
 	}
-	if defaultCfg["mode"] != "disabled" {
-		t.Errorf("kỳ vọng mode mặc định là 'disabled', nhận được: %v", defaultCfg["mode"])
+	cfgMap, _ := defaultConn["config"].(map[string]interface{})
+	if cfgMap["mode"] != "disabled" {
+		t.Errorf("kỳ vọng mode mặc định là 'disabled', nhận được: %v", cfgMap["mode"])
 	}
 
-	// 2. Trong chế độ mặc định disabled: Gọi lấy timeline metrics của node trả về 503
-	wMetricsDisabled := request("GET", "/api/v1/nodes/node-local-01/metrics", "")
+	// 2. Trong chế độ mặc định disabled: Gọi truy vấn analytics trả về 503
+	analyticsQueryPayload := `{
+		"source_id": "prometheus",
+		"queries": [
+			{"id": "A", "metric_key": "traffic.requests_rate", "aggregation": "sum", "filters": {"node_id": "node-local-01"}}
+		]
+	}`
+	wMetricsDisabled := request("POST", "/api/v1/analytics/query", analyticsQueryPayload)
 	if wMetricsDisabled.Code != http.StatusServiceUnavailable {
 		t.Fatalf("kỳ vọng mã lỗi 503 khi metrics đang disabled, nhận: %d", wMetricsDisabled.Code)
 	}
 
 	// 3. Chuyển sang chế độ 'prometheus' với máy chủ offline: Phải trả về 503 kèm PROMETHEUS_UNAVAILABLE
 	promPayload := `{"mode":"prometheus","prometheus_url":"http://127.0.0.1:59999","prometheus_job":"aurora-waf"}`
-	wProm := request("PUT", "/api/v1/settings/integrations/metrics", promPayload)
+	wProm := request("PUT", "/api/v1/analytics/connection", promPayload)
 	if wProm.Code != http.StatusOK {
 		t.Fatalf("kỳ vọng cập nhật sang prometheus thành công 200, nhận: %d", wProm.Code)
 	}
 
-	wMetricsPromUnreachable := request("GET", "/api/v1/nodes/node-local-01/metrics", "")
+	wMetricsPromUnreachable := request("POST", "/api/v1/analytics/query", analyticsQueryPayload)
 	if wMetricsPromUnreachable.Code != http.StatusServiceUnavailable {
 		t.Fatalf("kỳ vọng mã lỗi 503 khi Prometheus offline, nhận: %d", wMetricsPromUnreachable.Code)
 	}
 
 	// 4. Kiểm tra tính năng Test Connection tới máy chủ unreachable
-	wTest := request("POST", "/api/v1/settings/integrations/metrics/test", `{"url":"http://127.0.0.1:59999"}`)
+	wTest := request("POST", "/api/v1/analytics/connection/test", `{"mode":"prometheus","prometheus_url":"http://127.0.0.1:59999"}`)
 	if wTest.Code != http.StatusOK {
 		t.Fatalf("kỳ vọng endpoint test connection trả về 200, nhận: %d", wTest.Code)
 	}
@@ -110,12 +117,9 @@ func TestMetricsFlexibilityLabAndProduction(t *testing.T) {
 		if strings.Contains(r.URL.Path, "query_range") {
 			now := time.Now().Unix()
 			series := []any{}
-			for _, name := range []string{"aurora_node_cpu_percent", "aurora_node_memory_percent", "aurora_node_active_connections", "aurora_node_requests_per_second"} {
+			for _, name := range []string{"aurora_node_requests_per_second", "nginx_http_requests_total"} {
 				values := []any{[]any{float64(now - 60), "15.5"}, []any{float64(now), "18.2"}}
-				if name == "aurora_node_active_connections" {
-					values = []any{[]any{float64(now - 60), "15"}, []any{float64(now), "18"}}
-				}
-				series = append(series, map[string]any{"metric": map[string]string{"__name__": name, "node_id": "node-local-01", "job": "aurora-waf", "instance": "fixture"}, "values": values})
+				series = append(series, map[string]any{"metric": map[string]string{"__name__": name, "node_id": "node-local-01", "status": "200"}, "values": values})
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"status": "success", "data": map[string]any{"resultType": "matrix", "result": series}})
 			return
@@ -126,28 +130,12 @@ func TestMetricsFlexibilityLabAndProduction(t *testing.T) {
 	}))
 	defer mockProm.Close()
 
-	wPromOnline := request("PUT", "/api/v1/settings/integrations/metrics", fmt.Sprintf(`{"mode":"prometheus","prometheus_url":"%s","prometheus_job":"aurora-waf"}`, mockProm.URL))
+	wPromOnline := request("PUT", "/api/v1/analytics/connection", fmt.Sprintf(`{"mode":"prometheus","prometheus_url":"%s","prometheus_job":"aurora-waf"}`, mockProm.URL))
 	if wPromOnline.Code != http.StatusOK {
 		t.Fatalf("kỳ vọng cập nhật sang mock prometheus thành công, nhận: %d", wPromOnline.Code)
 	}
 
-	// 5a. Kiểm tra endpoint timeline node
-	wMetricsOnline := request("GET", "/api/v1/nodes/node-local-01/metrics", "")
-	if wMetricsOnline.Code != http.StatusOK {
-		t.Fatalf("kỳ vọng mã 200 từ mock prometheus, nhận: %d, body: %s", wMetricsOnline.Code, wMetricsOnline.Body.String())
-	}
-	var promPoints []map[string]interface{}
-	if err := json.Unmarshal(wMetricsOnline.Body.Bytes(), &promPoints); err != nil {
-		t.Fatal(err)
-	}
-	if len(promPoints) != 2 {
-		t.Fatalf("kỳ vọng 2 điểm đo từ Prometheus PromQL matrix, nhận: %d", len(promPoints))
-	}
-	if promPoints[0]["cpuUsage"] != 15.5 || promPoints[1]["cpuUsage"] != 18.2 {
-		t.Errorf("dữ liệu cpuUsage không khớp: %+v", promPoints)
-	}
-
-	// 5b. Kiểm tra endpoint Metric Catalog
+	// 5a. Kiểm tra endpoint Metric Catalog
 	wCatalog := request("GET", "/api/v1/analytics/catalog", "")
 	if wCatalog.Code != http.StatusOK {
 		t.Fatalf("kỳ vọng catalog 200, nhận: %d, body: %s", wCatalog.Code, wCatalog.Body.String())
@@ -160,16 +148,7 @@ func TestMetricsFlexibilityLabAndProduction(t *testing.T) {
 		t.Errorf("kỳ vọng categories trong catalog")
 	}
 
-	// 5c. Kiểm tra endpoint Analytics Query theo semantic keys
-	analyticsQueryPayload := `{
-		"source_id": "prometheus",
-		"queries": [
-			{"id": "A", "metric_key": "traffic.requests_rate", "aggregation": "sum", "filters": {"node_id": "node-local-01"}}
-		],
-		"start": ` + fmt.Sprintf("%d", time.Now().Unix()-300) + `,
-		"end": ` + fmt.Sprintf("%d", time.Now().Unix()) + `,
-		"step_seconds": 15
-	}`
+	// 5b. Kiểm tra endpoint Analytics Query theo semantic keys
 	wAnalytics := request("POST", "/api/v1/analytics/query", analyticsQueryPayload)
 	if wAnalytics.Code != http.StatusOK {
 		t.Fatalf("kỳ vọng analytics query 200, nhận: %d, body: %s", wAnalytics.Code, wAnalytics.Body.String())
@@ -183,12 +162,12 @@ func TestMetricsFlexibilityLabAndProduction(t *testing.T) {
 		t.Errorf("kỳ vọng có series trả về từ analytics query")
 	}
 
-	// 6. Vô hiệu hóa metrics -> API analytics & node metrics lập tức trả về 503 METRICS_DISABLED
-	wDisable := request("PUT", "/api/v1/settings/integrations/metrics", `{"mode":"disabled"}`)
+	// 6. Vô hiệu hóa metrics -> API analytics lập tức trả về 503 METRICS_DISABLED
+	wDisable := request("PUT", "/api/v1/analytics/connection", `{"mode":"disabled"}`)
 	if wDisable.Code != http.StatusOK {
 		t.Fatalf("kỳ vọng chuyển sang disabled thành công 200, nhận: %d", wDisable.Code)
 	}
-	wMetricsDisabledAgain := request("GET", "/api/v1/nodes/node-local-01/metrics", "")
+	wMetricsDisabledAgain := request("POST", "/api/v1/analytics/query", analyticsQueryPayload)
 	if wMetricsDisabledAgain.Code != http.StatusServiceUnavailable {
 		t.Fatalf("kỳ vọng 503 khi disabled, nhận: %d", wMetricsDisabledAgain.Code)
 	}

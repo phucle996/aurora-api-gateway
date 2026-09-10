@@ -56,8 +56,6 @@ export interface NodeSyncLog {
 export const nodesApi = {
   list: () => api.get<NodeRecord[]>('/api/v1/nodes'),
   getById: (id: string) => api.get<NodeRecord>(`/api/v1/nodes/${id}`),
-  getMetrics: (id: string) =>
-    api.get<NodeMetricPoint[]>(`/api/v1/nodes/${id}/metrics`),
   getSyncHistory: (id: string) =>
     api.get<NodeSyncLog[]>(`/api/v1/nodes/${id}/sync-history`),
   getConfig: (id: string) =>

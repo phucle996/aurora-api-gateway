@@ -15,7 +15,7 @@ import {
   Radio,
 } from 'lucide-react';
 import type { NodeItem } from './NodesTable';
-import { nodesApi, type NodeSyncLog } from '../../../lib/api';
+import { nodesApi, analyticsApi, type NodeSyncLog } from '../../../lib/api';
 import type { NodeHeartbeat, NodeMetricPoint } from '../../../lib/api/nodes';
 
 interface NodeDetailProps {
@@ -84,8 +84,35 @@ export function NodeDetail({
     const fetchHistory = async () => {
       setIsLoadingMetrics(true);
       try {
-        const data = await nodesApi.getMetrics(node.id);
+        const now = Math.floor(Date.now() / 1000);
+        const res = await analyticsApi.query({
+          source_id: 'prometheus',
+          start: now - 3600,
+          end: now,
+          step_seconds: 15,
+          queries: [
+            { id: 'rps', metric_key: 'traffic.requests_rate', aggregation: 'sum', filters: { node_id: node.id } },
+            { id: 'conn', metric_key: 'traffic.connections_active', aggregation: 'sum', filters: { node_id: node.id } },
+          ],
+        });
         if (cancelled) return;
+        const timeMap = new Map<number, NodeMetricPoint>();
+        for (const s of res.series) {
+          s.timestamps.forEach((ts, idx) => {
+            const pt: NodeMetricPoint = timeMap.get(ts) || {
+              timestamp: ts,
+              timeLabel: `${Math.round((now - ts) / 60)}m`,
+              rps: 0,
+              cpuUsage: 0,
+              memoryUsage: 0,
+              activeConnections: 0,
+            };
+            if (s.query_id === 'rps') pt.rps = s.values[idx] || 0;
+            if (s.query_id === 'conn') pt.activeConnections = Math.round(s.values[idx] || 0);
+            timeMap.set(ts, pt);
+          });
+        }
+        const data = Array.from(timeMap.values()).sort((a, b) => a.timestamp - b.timestamp);
         setMetrics(prev => {
           const merged = new Map(data.map(p => [p.timestamp, p]));
           for (const p of prev) merged.set(p.timestamp, p);

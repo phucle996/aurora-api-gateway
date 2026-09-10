@@ -11,20 +11,22 @@ type AnalyticsQueryItem struct {
 
 // AnalyticsQueryRequest là payload yêu cầu truy vấn metrics đa chiều từ Client.
 type AnalyticsQueryRequest struct {
-	SourceID string               `json:"source_id"` // "prometheus" hoặc ID của extension telemetry
-	Queries  []AnalyticsQueryItem `json:"queries"`
-	Start    int64                `json:"start"`        // Unix timestamp (giây)
-	End      int64                `json:"end"`          // Unix timestamp (giây)
-	Step     int                  `json:"step_seconds"` // Bước nhảy (giây), mặc định 15s
+	SourceID       string               `json:"source_id"`                 // "prometheus" hoặc ID của extension telemetry
+	ConnectionType string               `json:"connection_type,omitempty"` // "prometheus" | "victoriametrics" | "opentelemetry" | "clickhouse"
+	Queries        []AnalyticsQueryItem `json:"queries"`
+	Start          int64                `json:"start"`        // Unix timestamp (giây)
+	End            int64                `json:"end"`          // Unix timestamp (giây)
+	Step           int                  `json:"step_seconds"` // Bước nhảy (giây), mặc định 15s
 }
 
 // AnalyticsRawQueryRequest cho phép power-user thực thi trực tiếp câu PromQL.
 type AnalyticsRawQueryRequest struct {
-	SourceID string `json:"source_id"`
-	Query    string `json:"query"`
-	Start    int64  `json:"start"`
-	End      int64  `json:"end"`
-	Step     int    `json:"step_seconds"`
+	SourceID       string `json:"source_id"`
+	ConnectionType string `json:"connection_type,omitempty"`
+	Query          string `json:"query"`
+	Start          int64  `json:"start"`
+	End            int64  `json:"end"`
+	Step           int    `json:"step_seconds"`
 }
 
 // AnalyticsSeriesPoint là một chuỗi thời gian kết quả trả về cho Client.

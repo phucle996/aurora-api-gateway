@@ -18,12 +18,12 @@ const (
 
 // AnalyticsHandler xử lý các API truy vấn số liệu đa chiều và cung cấp danh mục Metric Catalog.
 type AnalyticsHandler struct {
-	metricsService service.MetricsService
+	analyticsService service.AnalyticsService
 }
 
 // NewAnalyticsHandler khởi tạo handler mới cho Analytics.
-func NewAnalyticsHandler(s service.MetricsService) *AnalyticsHandler {
-	return &AnalyticsHandler{metricsService: s}
+func NewAnalyticsHandler(s service.AnalyticsService) *AnalyticsHandler {
+	return &AnalyticsHandler{analyticsService: s}
 }
 
 // Query thực thi truy vấn metrics theo key-driven contract.
@@ -43,7 +43,7 @@ func (h *AnalyticsHandler) Query(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), analyticsQueryTimeout)
 	defer cancel()
 
-	resp, err := h.metricsService.QueryAnalytics(ctx, req)
+	resp, err := h.analyticsService.Query(ctx, req)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "truy vấn metrics quá thời gian quy định (timeout)"})
@@ -87,7 +87,7 @@ func (h *AnalyticsHandler) QueryRaw(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), analyticsQueryTimeout)
 	defer cancel()
 
-	resp, err := h.metricsService.QueryRaw(ctx, req)
+	resp, err := h.analyticsService.QueryRaw(ctx, req)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "truy vấn metrics quá thời gian quy định (timeout)"})
@@ -120,7 +120,7 @@ func (h *AnalyticsHandler) GetCatalog(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
 	defer cancel()
 
-	catalogResp, err := h.metricsService.GetCatalog(ctx)
+	catalogResp, err := h.analyticsService.GetCatalog(ctx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "lỗi trích xuất danh mục metrics: " + err.Error()})
 		return
@@ -135,7 +135,7 @@ func (h *AnalyticsHandler) GetConnection(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
 	defer cancel()
 
-	status, err := h.metricsService.GetConnectionStatus(ctx)
+	status, err := h.analyticsService.GetConnectionStatus(ctx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "lỗi đọc cấu hình kết nối: " + err.Error()})
 		return
@@ -156,7 +156,7 @@ func (h *AnalyticsHandler) UpdateConnection(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
-	if err := h.metricsService.SaveConfig(ctx, cfg); err != nil {
+	if err := h.analyticsService.SaveConfig(ctx, cfg); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -176,7 +176,7 @@ func (h *AnalyticsHandler) TestConnection(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
-	res, err := h.metricsService.TestConnectionWithConfig(ctx, cfg)
+	res, err := h.analyticsService.TestConnectionWithConfig(ctx, cfg)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "lỗi kiểm tra kết nối: " + err.Error()})
 		return

@@ -87,54 +87,14 @@ func TestAuditMetricsConcurrentConfigDurableAuthority(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, runtimeErr := s.GetNodeMetrics(context.Background(), "node-local-01")
+	_, runtimeErr := s.Query(context.Background(), entity.AnalyticsQueryRequest{SourceID: "prometheus"})
 	if cfg.Mode != "disabled" || !errors.Is(runtimeErr, taxonomy.ErrMetricsDisabled) {
 		t.Errorf("durable mode=%s but runtime error=%v; later SQLite commit must win both durable and active state", cfg.Mode, runtimeErr)
 	}
 }
 
 func TestAuditStandaloneRollupSurvivesRequestCancellation(t *testing.T) {
-	if os.Getenv("AURORA_METRICS_AUDIT") != "1" {
-		t.Skip("opt-in 65s durable rollup audit")
-	}
-	dbPath := filepath.Join(t.TempDir(), "rollup.db")
-	a, err := app.NewApp(context.Background(), config.Config{SQLitePath: dbPath})
-	if err != nil {
-		t.Fatal(err)
-	}
-	a.Close()
-	pools, err := infra.OpenSQLitePool(context.Background(), dbPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer pools.Close()
-	s := service.NewMetricsService(repository.NewAnalyticsRepository(pools.Writer), repository.NewNodeRepository(pools.Writer))
-	ctx, cancel := context.WithCancel(context.Background())
-	if err = s.SaveConfig(ctx, entity.MetricsIntegrationConfig{Mode: "standalone"}); err != nil {
-		cancel()
-		t.Fatal(err)
-	}
-	cancel() // net/http cancels request context when the settings response completes.
-	defer s.SaveConfig(context.Background(), entity.MetricsIntegrationConfig{Mode: "disabled"})
-	until := time.Now().Add(65 * time.Second)
-	for time.Now().Before(until) {
-		s.PushMetricPoint("node-local-01", entity.NodeMetricPoint{Timestamp: time.Now().Unix(), CPUUsage: 12, MemoryUsage: 34, RPS: 5000})
-		time.Sleep(100 * time.Millisecond)
-	}
-	var count int
-	if err = pools.Reader.QueryRow("SELECT count(*) FROM node_metrics_history").Scan(&count); err != nil {
-		t.Fatal(err)
-	}
-	points, err := s.GetNodeMetrics(context.Background(), "node-local-01")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(points) > 60 {
-		t.Errorf("ring exceeds bound: %d", len(points))
-	}
-	if count == 0 {
-		t.Errorf("%d RAM points but no durable rollup after 65s; request cancellation stopped the provider background worker", len(points))
-	}
+	t.Skip("deprecated: standalone mode rollup worker has been removed in favor of external TSDB query engine")
 }
 
 func TestAuditMetricsStaleHeartbeatNotReady(t *testing.T) {

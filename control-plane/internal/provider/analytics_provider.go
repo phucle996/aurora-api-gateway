@@ -43,9 +43,9 @@ type PrometheusVectorResponse struct {
 	} `json:"data"`
 }
 
-// MetricsProvider là interface trừu tượng định nghĩa hợp đồng Query-Only cho hệ thống Telemetry.
+// AnalyticsProvider là interface trừu tượng định nghĩa hợp đồng Query-Only cho hệ thống Telemetry.
 // Tuyệt đối không lưu đệm in-memory hay đóng vai trò collector trong Control Plane.
-type MetricsProvider interface {
+type AnalyticsProvider interface {
 	GetNodeTimeline(ctx context.Context, nodeID string) ([]entity.NodeMetricPoint, error)
 	QueryRange(ctx context.Context, query string, start, end int64, step int) (*PrometheusMatrixResponse, error)
 	QueryInstant(ctx context.Context, query string) (*PrometheusVectorResponse, error)
@@ -55,16 +55,24 @@ type MetricsProvider interface {
 	Stop() error
 }
 
-// NewMetricsProvider khởi tạo provider thích ứng dựa trên cấu hình ("prometheus", "disabled").
-func NewMetricsProvider(cfg entity.MetricsIntegrationConfig, client *http.Client) MetricsProvider {
+// MetricsProvider giữ alias tương thích cho AnalyticsProvider.
+type MetricsProvider = AnalyticsProvider
+
+// NewAnalyticsProvider khởi tạo provider thích ứng dựa trên cấu hình ("prometheus", "disabled").
+func NewAnalyticsProvider(cfg entity.MetricsIntegrationConfig, client *http.Client) AnalyticsProvider {
 	switch cfg.Mode {
 	case "prometheus":
 		return NewPrometheusMetricsProviderWithConfig(cfg, client)
 	case "disabled":
-		return NewDisabledMetricsProvider()
+		return &DisabledMetricsProvider{}
 	default:
-		return NewDisabledMetricsProvider()
+		return &DisabledMetricsProvider{}
 	}
+}
+
+// NewMetricsProvider giữ alias chuyển tiếp sang NewAnalyticsProvider.
+func NewMetricsProvider(cfg entity.MetricsIntegrationConfig, client *http.Client) MetricsProvider {
+	return NewAnalyticsProvider(cfg, client)
 }
 
 // ─── Prometheus Provider (External Prometheus / VictoriaMetrics PromQL) ────

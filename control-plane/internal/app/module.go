@@ -31,9 +31,9 @@ type Module struct {
 	AuthService          port.AuthService // Xác thực JWT — cần tham chiếu trong middleware
 	RuleHandler          *handler.RuleHandler
 	NodeHandler          *handler.NodeHandler
-	MetricsHandler       *handler.MetricsHandler
-	MetricsService       port.MetricsService
 	AnalyticsHandler     *handler.AnalyticsHandler
+	AnalyticsService     port.AnalyticsService
+	MetricsService       port.MetricsService
 	DomainHandler        *handler.DomainHandler
 	DomainRoutingHandler *handler.DomainRoutingHandler
 	UpstreamHandler      *handler.UpstreamHandler
@@ -112,15 +112,14 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 
 	nodeRepo := repository.NewNodeRepository(writerDB)
 	extensionRepo := repository.NewExtensionRepository(writerDB, readerDB)
-	metricsSvc := service.NewMetricsService(analyticsRepo, nodeRepo, extensionRepo)
-	metricsSvc.RegisterConfigListener(func(mCfg entity.MetricsIntegrationConfig) {
+	analyticsSvc := service.NewAnalyticsService(analyticsRepo, nodeRepo, extensionRepo)
+	analyticsSvc.RegisterConfigListener(func(mCfg entity.MetricsIntegrationConfig) {
 		rateLimitCollector.SetEnabled(mCfg.Mode != "disabled")
 	})
 	eventHub := provider.NewEventHub()
-	nodeSvc := service.NewNodeService(nodeRepo, metricsSvc, eventHub)
+	nodeSvc := service.NewNodeService(nodeRepo, analyticsSvc, eventHub)
 	nodeHdr := handler.NewNodeHandler(nodeSvc)
-	metricsHdr := handler.NewMetricsHandler(metricsSvc)
-	analyticsHdr := handler.NewAnalyticsHandler(metricsSvc)
+	analyticsHdr := handler.NewAnalyticsHandler(analyticsSvc)
 	systemRepo := repository.NewSystemRepository(readerDB)
 	systemSvc := service.NewSystemService(systemRepo, cfg)
 	systemHdr := handler.NewSystemHandler(systemSvc)
@@ -164,9 +163,9 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 		AuthService:          authSvc,
 		RuleHandler:          ruleHdr,
 		NodeHandler:          nodeHdr,
-		MetricsHandler:       metricsHdr,
-		MetricsService:       metricsSvc,
 		AnalyticsHandler:     analyticsHdr,
+		AnalyticsService:     analyticsSvc,
+		MetricsService:       analyticsSvc,
 		DomainHandler:        domainHdr,
 		DomainRoutingHandler: domainRoutingHdr,
 		UpstreamHandler:      upstreamHdr,

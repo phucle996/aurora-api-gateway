@@ -34,8 +34,13 @@ type nodeLiveState struct {
 	PendingCommand   string
 	ReloadStatus     string
 	LastTimestamp    int64
-	MetricsScope     string
-	Certificate      string
+	MetricsScope      string
+	Certificate       string
+	MetricsAvailable  bool
+	CPUUsage          float64
+	MemoryUsage       float64
+	ActiveConnections string
+	RequestsPerSecond string
 }
 
 type nodeService struct {
@@ -275,21 +280,19 @@ func (s *nodeService) ListNodes(ctx context.Context) ([]entity.ClusterNodeRecord
 			node.PolicySync = "Unknown (stale heartbeat)"
 		}
 
-		if s.metricsSvc != nil {
-			if pt := s.metricsSvc.GetLatestMetricPoint(node.ID); pt != nil && pt.Timestamp == node.LastHeartbeatTimestamp && node.Status == "Ready" {
-				node.MetricsAvailable = true
-				node.CPUUsage = pt.CPUUsage
-				node.MemoryUsage = pt.MemoryUsage
-				node.ActiveConnections = fmt.Sprintf("%d", pt.ActiveConnections)
-				node.RequestsPerSecond = fmt.Sprintf("%.1f", pt.RPS)
-			} else {
-				node.ActiveConnections = "—"
-				node.RequestsPerSecond = "—"
-			}
+		s.nodesMu.RLock()
+		live, hasLive := s.nodes[node.ID]
+		if hasLive && live.MetricsAvailable && node.Status == "Ready" {
+			node.MetricsAvailable = true
+			node.CPUUsage = live.CPUUsage
+			node.MemoryUsage = live.MemoryUsage
+			node.ActiveConnections = live.ActiveConnections
+			node.RequestsPerSecond = live.RequestsPerSecond
 		} else {
 			node.ActiveConnections = "—"
 			node.RequestsPerSecond = "—"
 		}
+		s.nodesMu.RUnlock()
 	}
 
 	return nodes, nil
@@ -415,21 +418,19 @@ func (s *nodeService) GetNodeByID(ctx context.Context, id string) (*entity.Clust
 		node.PolicySync = "Unknown (stale heartbeat)"
 	}
 
-	if s.metricsSvc != nil {
-		if pt := s.metricsSvc.GetLatestMetricPoint(node.ID); pt != nil && pt.Timestamp == node.LastHeartbeatTimestamp && node.Status == "Ready" {
-			node.MetricsAvailable = true
-			node.CPUUsage = pt.CPUUsage
-			node.MemoryUsage = pt.MemoryUsage
-			node.ActiveConnections = fmt.Sprintf("%d", pt.ActiveConnections)
-			node.RequestsPerSecond = fmt.Sprintf("%.1f", pt.RPS)
-		} else {
-			node.ActiveConnections = "—"
-			node.RequestsPerSecond = "—"
-		}
+	s.nodesMu.RLock()
+	live, hasLive := s.nodes[node.ID]
+	if hasLive && live.MetricsAvailable && node.Status == "Ready" {
+		node.MetricsAvailable = true
+		node.CPUUsage = live.CPUUsage
+		node.MemoryUsage = live.MemoryUsage
+		node.ActiveConnections = live.ActiveConnections
+		node.RequestsPerSecond = live.RequestsPerSecond
 	} else {
 		node.ActiveConnections = "—"
 		node.RequestsPerSecond = "—"
 	}
+	s.nodesMu.RUnlock()
 
 	return node, nil
 }
@@ -622,31 +623,20 @@ func (s *nodeService) RecordHeartbeat(ctx context.Context, payload entity.NodeHe
 	}
 	node.DesiredReleaseID = desiredRelease
 
+	if payload.MetricsAvailable {
+		node.MetricsAvailable = true
+		node.CPUUsage = payload.CPUUsage
+		node.MemoryUsage = payload.MemoryUsage
+		node.ActiveConnections = fmt.Sprintf("%d", payload.ActiveConnections)
+		node.RequestsPerSecond = fmt.Sprintf("%.1f", payload.RequestsPerSecond)
+	}
+
 	nodeStatus := node.Status
 	runtimeStartedAt := node.RuntimeStartedAt
 	nodeIP := node.IP
 	activeRelID := node.ActiveReleaseID
 	workerIdentity := node.WorkerIdentity
 	s.nodesMu.Unlock()
-
-	// 3. Đẩy điểm đo vào RAM nếu có metrics kèm theo
-	if s.metricsSvc != nil && payload.MetricsAvailable {
-		minutesAgo := int(float64(now.Unix()-payload.Timestamp) / 60.0)
-		label := fmt.Sprintf("-%dm", minutesAgo)
-		if minutesAgo <= 0 {
-			label = "Now"
-		}
-
-		s.metricsSvc.PushMetricPoint(payload.NodeID, entity.NodeMetricPoint{
-			Timestamp:         payload.Timestamp,
-			MetricsScope:      payload.MetricsScope,
-			TimeLabel:         label,
-			RPS:               payload.RequestsPerSecond,
-			CPUUsage:          payload.CPUUsage,
-			MemoryUsage:       payload.MemoryUsage,
-			ActiveConnections: payload.ActiveConnections,
-		})
-	}
 
 	// 4. Tính toán Sync Status cho realtime event
 	syncStatus := "In Sync"

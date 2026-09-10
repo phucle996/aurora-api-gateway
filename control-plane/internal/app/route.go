@@ -142,13 +142,7 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	r.GET("/api/v1/nodes/:id/config", authMidd, m.NodeHandler.GetConfig)                 // Kéo file cấu hình thực tế từ container node
 	r.POST("/api/v1/nodes/:id/reload", authMidd, m.NodeHandler.ReloadNode)               // Đặt lệnh reload cho 1 node
 	r.POST("/api/v1/nodes/:id/heartbeat", authMidd, m.NodeHandler.Heartbeat)             // Heartbeat telemetry đẩy từ Node (Protobuf binary)
-	r.GET("/api/v1/nodes/:id/metrics", authMidd, m.MetricsHandler.GetNodeMetrics)        // Timeline metrics của node
 	r.GET("/api/v1/nodes/:id/sync-history", authMidd, m.NodeHandler.GetSyncLogs)         // Lịch sử đồng bộ thực tế của node
-
-	// Cấu hình tích hợp hệ thống (System Settings & Telemetry Integrations)
-	r.GET("/api/v1/settings/integrations/metrics", authMidd, m.MetricsHandler.GetConfig)            // Lấy cấu hình Telemetry hiện tại
-	r.PUT("/api/v1/settings/integrations/metrics", authMidd, m.MetricsHandler.UpdateConfig)         // Chuyển đổi giữa Lab/Standalone và Production
-	r.POST("/api/v1/settings/integrations/metrics/test", authMidd, m.MetricsHandler.TestConnection) // Kiểm tra kết nối tới Prometheus
 
 	// Phân tích số liệu chuyên sâu & Analytics Explorer (Grafana Inline)
 	r.POST("/api/v1/analytics/query", authMidd, m.AnalyticsHandler.Query)
