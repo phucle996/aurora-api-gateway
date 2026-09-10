@@ -1,262 +1,143 @@
-# Kiến Trúc Codebase Aurora API Gateway & WAF
+# Kiến Trúc Codebase Aurora API Gateway & WAF (Ma Trận Hệ Thống)
 
-Tài liệu này là **Single Source of Truth (SSOT)** về cấu trúc, tổ chức luồng thực thi, ranh giới thẩm quyền (authority boundaries) và ma trận ánh xạ **Object (Dữ liệu/Hợp đồng) $\leftrightarrow$ Behavior (Hành vi/Nhiệm vụ)** xuyên suốt toàn bộ hệ thống.
+Tài liệu này là **Single Source of Truth (SSOT)** về ranh giới thẩm quyền (authority boundaries), luồng thực thi và ma trận ánh xạ giữa **Object (Mô hình dữ liệu / Khế ước / Snapshot)** và **Behavior (Hành vi / Chuyển dịch trạng thái / Invariants)** xuyên suốt toàn bộ hệ sinh thái Aurora WAF.
 
 ---
 
-## 1. Bản Đồ Tổng Thể Hệ Thống (System Topology)
-
-Hệ thống hoạt động theo mô hình **Hybrid Declarative Architecture**: Toàn bộ trạng thái cluster được quản lý tập trung tại Control Plane dưới dạng Spec snapshot, sau đó được phát tán tự động qua gRPC stream tới các Data Plane nodes.
+## 1. Bản Đồ Luồng Tổng Thể (System Architecture Flow)
 
 ```mermaid
 flowchart TD
-    subgraph UI ["Console Frontend (React / Vite)"]
-        Browser["Admin / SecOps Browser"]
+    subgraph UI ["Console Frontend"]
+        Browser["Admin / SecOps Console"]
     end
 
-    subgraph ControlPlane ["Control Plane (Go :8080, :9090)"]
+    subgraph ControlPlane ["Control Plane"]
         direction TB
-        Entry["Entry (cmd/main.go)"] --> Init["Init (Config, SQLite Pools, Migrations)"]
-        Init --> Composition["Composition (app.NewApp, Module, Routes, gRPC)"]
-        Composition --> ProcessPath["Process Path (Handler -> Service -> Repository)"]
-        Composition --> Providers["Providers (SpecScheduler, Catalog, Backup, Alerts)"]
-        ProcessPath --> SQLite[("SQLite WAL Database")]
-        Providers --> SQLite
+        EntryStep["Entry"] --> InitStep["Init (Config, DB Pools, Migrations)"]
+        InitStep --> CompStep["Composition (Module, Route Wiring, gRPC Server)"]
+        CompStep --> ExecStep["Process Path (Handler -> Service -> Repository)"]
+        CompStep --> WorkerStep["Background Providers (Spec, Catalog, Backup, Alerts)"]
+        ExecStep --> Storage[("Durable WAL Storage")]
+        WorkerStep --> Storage
     end
 
-    subgraph DataplaneNode ["Data Plane Node (Rust & NGINX)"]
+    subgraph DataplaneNode ["Data Plane Node"]
         direction TB
-        Agent["aurora-agent (crates/agent)"]
-        Agent -->|gRPC Stream :9090| SpecReconcile["Spec Reconciler & Jitter"]
-        SpecReconcile -->|Materialize| NginxConf["/etc/nginx/conf.d/*.conf"]
-        SpecReconcile -->|Dispatch| ExtensionRunners["Dynamic Extension Runners"]
+        AgentDaemon["Dataplane Agent"]
+        AgentDaemon -->|gRPC Bi-directional Stream| ReconcileLoop["Spec Reconciler & Jitter"]
+        ReconcileLoop -->|Materialize Conf| StaticConf["Static NGINX Configurations"]
+        ReconcileLoop -->|Dynamic Dispatch| Runners["Dynamic Extension Runners"]
         
-        subgraph NginxEngine ["NGINX Worker Process"]
-            NginxCore["NGINX Core HTTP Pipeline"]
-            CModule["ngx_http_aurora_waf_module (C Adapter)"]
-            RustFFI["aurora_ffi (crates/ffi)"]
-            RustEngine["aurora_engine (crates/engine)"]
+        subgraph WorkerEngine ["NGINX Worker Engine"]
+            HttpPipeline["HTTP Pipeline Hook"]
+            CModule["C Module Adapter"]
+            RustFFI["FFI Safety Layer"]
+            CoreEngine["WAF Vectorized Matching Engine"]
             
-            NginxCore --> CModule
+            HttpPipeline --> CModule
             CModule --> RustFFI
-            RustFFI --> RustEngine
+            RustFFI --> CoreEngine
         end
         
-        ExtensionRunners -.->|Telemetry Scrape| NginxCore
+        Runners -.->|Telemetry Scrape| HttpPipeline
     end
 
-    Browser -->|HTTP REST / SPA :8080| Composition
-    Agent -->|gRPC Stream :9090| Composition
+    Browser -->|HTTP REST / SPA| CompStep
+    AgentDaemon -->|gRPC Stream :9090| CompStep
 ```
 
 ---
 
-## 2. Control Plane: Vòng Đời & Luồng Xử Lý (Lifecycle Path)
+## 2. Control Plane: Ma Trận Vòng Đời Khởi Tạo (Lifecycle Path Matrix)
 
-Hệ thống Go backend tuân thủ nghiêm ngặt nguyên tắc **Workflow Isolation** và **Flat Workflow Context** theo [`AGENTS.md`](file:///home/phucle/Desktop/aurora-waf/AGENTS.md):
+Mô hình khởi động và chuyển tiếp trạng thái của bộ điều khiển Control Plane:
 
-```
-Entry (main.go) 
-  ↳ Init (Config -> SQLite Pools -> Migrations) 
-      ↳ Composition (app.NewApp -> Module -> HTTP Router -> gRPC Server) 
-          ↳ Execution (Handler -> Service -> Repository -> Database)
-```
-
-### 2.1. Chi tiết 4 Pha Vòng Đời
-
-| Pha | Tệp Nguồn / Vị Trí | Nhiệm Vụ & Ranh Giới (Responsibilities & Invariants) |
-| :--- | :--- | :--- |
-| **1. Entry** | [`control-plane/cmd/main.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/cmd/main.go) | Đọc flags CLI, lắng nghe OS signal (`SIGINT`, `SIGTERM`), khởi tạo vòng đời graceful shutdown context. |
-| **2. Init** | [`internal/config/config.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/config/config.go)<br>[`infra/sqlite.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/infra/sqlite.go)<br>[`infra/migrate.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/infra/migrate.go) | - Phân giải biến môi trường `AURORA_*` vào struct `Config`.<br>- Khởi tạo kết nối SQLite với tách biệt rõ ràng: 1 Connection Pool Writer độc quyền (WAL lock) + Connection Pool Readers đồng thời.<br>- Chạy migration tự động từ `migrations/*.sql` (`0001_tables` -> `0002_indexes` -> `0003_triggers` -> `0004_seeds`). |
-| **3. Composition** | [`internal/app/app.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/app/app.go)<br>[`internal/app/module.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/app/module.go)<br>[`internal/app/route.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/app/route.go)<br>[`internal/transport/grpc/server.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/transport/grpc/server.go) | - Khởi tạo `Module`: wire toàn bộ Repositories $\to$ Services $\to$ Handlers.<br>- Khởi chạy các Background Providers (`SpecScheduler`, `BackupScheduler`, `NotificationWorker`).<br>- Đăng ký HTTP Middleware (Auth, CORS, Security Headers, SPA fallback) & endpoints.<br>- Khởi tạo gRPC Server trên cổng `:9090` phục vụ Data Plane spec stream. |
-| **4. Process Path** | `internal/transport/http/handler/`<br>`internal/service/`<br>`internal/repository/` | Thực thi nghiệp vụ theo mô hình phân tầng đơn hướng: **Handler (Transport/DTO) $\rightarrow$ Service (Logic/Invariants) $\rightarrow$ Repository (CTE-first SQL Query)**. |
-
----
-
-### 2.2. Ma Trận Process Path: Object $\leftrightarrow$ Behavior (Control Plane)
-
-Mỗi workflow được cô lập hoàn toàn: không tái sử dụng DTO giữa các workflow khác nhau, repository ưu tiên Common Table Expressions (CTE).
-
-| Phân Vùng Nghiệp Vụ | Domain Object / Entity | File Thực Thi | Behavior / Function Chính | Ranh Giới & Durable State |
-| :--- | :--- | :--- | :--- | :--- |
-| **Spec & Cluster State** | `ClusterSpecRecord`<br>`ClusterSpecSnapshot`<br>`SpecReleaseCommand` | [`spec_handler.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/transport/http/handler/spec_handler.go)<br>[`spec_service.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/service/spec_service.go)<br>[`spec_repo.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/repository/spec_repo.go) | - `GetHeadSpec()`: Lấy YAML spec đang kích hoạt.<br>- `GenerateSpecSnapshot()`: Biên dịch toàn bộ trạng thái DB thành 1 file YAML duy nhất.<br>- `PublishRelease()`: Tính SHA-256 digest và lưu bất biến vào ledger. | Bảng `cluster_spec_releases` (bất biến qua triggers) & `cluster_spec_head` (singleton pointer). |
-| **gRPC Node Spec Stream** | `WatchSpecRequest`<br>`SpecReleaseChunk`<br>`NodeHeartbeat` | [`spec_stream_handler.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/transport/grpc/handler/spec_stream_handler.go) | - `WatchSpec()`: Stream gRPC Server đẩy spec mới xuống nodes.<br>- `Heartbeat()`: Tiếp nhận nhịp tim, phiên bản và telemetry từ agent. | Bảng `cluster_nodes` (cập nhật `last_heartbeat`, `observed_release_id`). |
-| **Extensions Catalog** | `ExtensionItem`<br>`ExtensionConfigUpdate`<br>`ExtensionRule` | [`extension_handler.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/transport/http/handler/extension_handler.go)<br>[`extension_service.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/service/extension_service.go)<br>[`extension_repo.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/repository/extension_repo.go) | - `ListExtensions()`: Lấy danh mục 115+ plugins.<br>- `UpdateConfig()`: Cập nhật JSON cấu hình / rules của extension.<br>- `ToggleStatus()`: Kích hoạt / Tắt tức thì plugin. | Bảng `extensions`. Tự động kích hoạt `SpecScheduler` tạo bản phát hành mới. |
-| **Domains & TLS** | `DomainRecord`<br>`CreateDomainCommand`<br>`UpdateDomainCommand` | [`domains.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/transport/http/handler/domains.go)<br>[`domain_service.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/service/domain_service.go)<br>[`domain_repo.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/repository/domain_repo.go) | - `ListDomains()`, `CreateDomain()`<br>- `UpdateDomain()`, `DeleteDomain()`<br>- `ValidateDomainBinding()`: Đảm bảo upstream liên kết tồn tại hợp lệ. | Bảng `domains`. Ràng buộc khóa duy nhất trên tên miền (`UNIQUE(domain)`). |
-| **Upstreams & Load Balancing** | `UpstreamRecord`<br>`UpstreamServer`<br>`HealthCheckConfig` | [`upstreams.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/transport/http/handler/upstreams.go)<br>[`upstream_service.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/service/upstream_service.go)<br>[`upstream_repo.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/repository/upstream_repo.go) | - `CreateUpstream()`, `UpdateUpstream()`<br>- `CompileUpstreamTopology()`: Tính toán hash thuật toán load balance (round-robin, ip_hash, least_conn). | Bảng `upstreams`, `upstream_releases`, `upstream_node_sync`. |
-| **WAF Rules Core** | `RuleItem`<br>`RuleRevision`<br>`CreateRuleCommand` | [`rules.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/transport/http/handler/rules.go)<br>[`rules_service.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/service/rules_service.go)<br>[`rule_repo.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/repository/rule_repo.go) | - `CreateRule()`, `UpdateRule()`: Tạo bản ghi và lưu vết revision bất biến.<br>- `CompileRuleset()`: Gọi binary `aurora-compile` sinh snapshot engine. | Bảng `rules`, `rule_revisions`, `ruleset_releases`, `rule_definitions`. |
-| **Access Control (IP/CIDR)** | `AccessObject`<br>`AccessRevision`<br>`AccessRelease` | [`access.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/transport/http/handler/access.go)<br>[`access_service.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/service/access_service.go)<br>[`access_repo.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/repository/access_repo.go) | - `ApplyChanges()`: Thêm/sửa/xóa quy tắc CIDR/ASN.<br>- `Desired()`: Cung cấp access snapshot cho node qua API.<br>- `Match()`: Ghi nhận sự kiện chặn IP vi phạm. | Bảng `access_objects`, `access_revisions`, `access_releases`, `access_reports`, `access_events`. |
-| **Cluster Nodes** | `ClusterNodeRecord`<br>`NodeHeartbeatPayload`<br>`NodeDirective` | [`nodes.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/transport/http/handler/nodes.go)<br>[`nodes_service.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/service/nodes_service.go)<br>[`nodes_repo.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/repository/nodes_repo.go) | - `RegisterNode()`: Tự động ghi nhận node mới qua heartbeat.<br>- `TriggerReload()`: Phát chỉ thị reload NGINX rolling queue.<br>- `DrainNode()`: Cách ly node khỏi traffic. | Bảng `cluster_nodes`, `node_sync_logs`. |
-| **Analytics Explorer** | `AnalyticsQuery`<br>`MetricSeries`<br>`TimeSeriesPoint` | [`analytics.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/transport/http/handler/analytics.go)<br>[`analytics_service.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/service/analytics_service.go)<br>[`analytics_repo.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/repository/analytics_repo.go) | - `QueryMetrics()`: Phân giải metric linh hoạt (tự động chuyển hướng giữa DB SQLite rollup cục bộ và Prometheus HTTP API).<br>- `IngestNodeMetrics()`: Thu thập CPU/RAM/RPS. | Bảng `node_metrics_history` kết hợp backend Prometheus linh hoạt. |
-| **Security & Auth** | `UserRecord`<br>`AuthProviderItem`<br>`LoginCommand` | [`auth.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/transport/http/handler/auth.go)<br>[`security.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/transport/http/handler/security.go)<br>[`auth_repo.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/repository/auth_repo.go) | - `Login()`: Xác thực tài khoản với mật khẩu Argon2id + TOTP 2FA.<br>- `UpdateAuthProvider()`: Bật/tắt OIDC, LDAP, SAML. | Bảng `users`, `auth_providers`, `system_settings`. |
-| **Notifications & Alerts** | `NotificationChannel`<br>`NotificationRule`<br>`AlertMessage` | [`notification.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/transport/http/handler/notification.go)<br>[`notification_service.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/service/notification_service.go)<br>[`notification_repo.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/repository/notification_repo.go) | - `SendAlert()`: Đẩy cảnh báo vào worker queue không nghẽn.<br>- `TestChannel()`: Kiểm tra kết nối webhook/Slack/Telegram/Email. | Bảng `notification_channels`, `notification_rules`. |
-| **Backup & Disaster Recovery**| `BackupSettings`<br>`BackupHistoryRecord`<br>`BackupArchive` | [`backup.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/transport/http/handler/backup.go)<br>[`backup_service.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/service/backup_service.go)<br>[`backup_repo.go`](file:///home/phucle/Desktop/aurora-waf/control-plane/internal/repository/backup_repo.go) | - `CreateBackup()`: Sao lưu tức thời DB SQLite & cấu hình.<br>- `UploadToS3()`: Đẩy archive sang kho lưu trữ S3/MinIO.<br>- `RestoreBackup()`: Khôi phục trạng thái hệ thống. | Bảng `backup_settings`, `backup_history`. |
-
----
-
-### 2.3. Ma Trận Providers & Background Workers (`internal/provider/`)
-
-| Provider Worker | Struct Quản Lý | Chu Kỳ / Kích Hoạt | Behavior / Nhiệm Vụ Cốt Lõi |
+| Pha Vòng Đời | Object / Context Sở Hữu | Behavior / Nhiệm Vụ Cốt Lõi | Ranh Giới Thẩm Quyền & Invariants |
 | :--- | :--- | :--- | :--- |
-| **SpecScheduler** | `SpecScheduler` | - Định kỳ (10s)<br>- Hoặc trigger ngay lập tức qua channel khi có mutation | Đọc snapshot từ DB, biên dịch file YAML spec hợp nhất, băm SHA-256 digest; nếu phát hiện thay đổi thì tạo release mới và notify gRPC stream phát cho các node. |
-| **CatalogProvider** | `CatalogProvider` | Khởi động hệ thống | Nạp danh mục 115+ extensions chuẩn hóa, validate schema cấu hình mặc định vào bộ nhớ và DB. |
-| **AnalyticsProvider** | `AnalyticsProvider` | Khi có truy vấn metrics | Quyết định nguồn cung cấp số liệu telemetry: chế độ `standalone` (SQLite history) hoặc `prometheus` (truy vấn reverse proxy Prometheus server). |
-| **BackupScheduler** | `BackupScheduler` | Cron expression (VD: `0 2 * * *`) | Tự động chụp snapshot SQLite an toàn trong chế độ Online Backup và đẩy lên cloud storage theo retention days. |
-| **NotificationWorker** | `NotificationWorker` | Bất đồng bộ (Channel queue 256) | Lấy alert events từ buffer, format tin nhắn theo template kênh (Telegram, Slack, Webhook, Discord) và retry gửi khi mạng lỗi. |
+| **1. Entry** | `AppContext`<br>`OSSignalChannel` | - Tiếp nhận tín hiệu hệ điều hành (`SIGINT`, `SIGTERM`).<br>- Khởi tạo context hủy đồng bộ để đóng toàn bộ subsystem một cách an toàn. | Điểm khởi đầu duy nhất; đảm bảo graceful termination không làm gián đoạn transaction đang commit. |
+| **2. Init** | `SystemConfig`<br>`SQLiteWriterPool`<br>`SQLiteReaderPool`<br>`MigrationPlan` | - Đọc và kiểm chuẩn các biến cấu hình hệ thống.<br>- Phân tách ranh giới lưu trữ: **1 Connection Writer độc quyền** (chống xung đột WAL write-lock) và **N Connections Reader đồng thời**.<br>- Thực thi chuỗi migration tự động theo thứ tự nghiêm ngặt: Tables $\to$ Indexes $\to$ Triggers $\to$ Seeds. | Source of Truth của trạng thái bền vững; đảm bảo DB integrity trước khi bất kỳ port nào mở đón traffic. |
+| **3. Composition** | `ModuleContainer`<br>`HTTPRouter`<br>`GRPCServer`<br>`ProviderRegistry` | - Wire toàn bộ quan hệ phụ thuộc: Repository $\to$ Service $\to$ Handler.<br>- Gắn các middleware bảo mật: Bearer Auth, CORS, Strict Security Headers, SPA Fallback Handler.<br>- Mở socket gRPC Stream phục vụ Data Plane spec replication.<br>- Đăng ký và kích hoạt các Background Worker Providers. | Vùng composition gốc; tuyệt đối không để rò rỉ Business Logic vào tầng liên kết phụ thuộc. |
+| **4. Process Path** | `RequestContext`<br>`CommandDTO`<br>`ResultProjection` | - Thực thi nghiệp vụ theo luồng đơn hướng: `Handler` (Transport/Validation) $\rightarrow$ `Service` (Business Rules/Invariants) $\rightarrow$ `Repository` (CTE-First SQL Query). | Workflow Isolation: Mỗi nghiệp vụ có DTO, Service Port và Repository Port riêng biệt; không dùng chung Entity chéo. |
 
 ---
 
-## 3. Rust Dataplane Agent (`crates/agent/`)
+## 3. Control Plane: Ma Trận Nghiệp Vụ (Object $\leftrightarrow$ Behavior Matrix)
 
-Agent là daemon Rust chạy trực tiếp trên mỗi Edge Node, chịu trách nhiệm kết nối với Controller qua gRPC, hiện thực hóa cấu hình thành file NGINX tĩnh, kiểm tra reload và điều phối telemetry.
-
-### 3.1. Pipeline Vòng Đời Agent
-
-```
-Bootstrap (main.rs / app.rs)
-  ↳ gRPC Sync Setup (sync/spec.rs, sync/heartbeat.rs)
-      ↳ Spec Watcher (Bi-directional Protobuf Stream :9090)
-          ↳ Digest Check -> Jitter Reconciliation (Chống thundering herd)
-              ↳ Materialization (spec/materialize.rs -> active-upstreams.conf, active-routing.conf)
-                  ↳ NGINX Hot Reload (-t -> -s reload)
-                      ↳ Extension Dispatcher (Kích hoạt/tắt dynamically runners)
-```
-
-### 3.2. Ma Trận Phân Vùng Agent: Object $\leftrightarrow$ Behavior
-
-| Phân Vùng | Object / Struct | File Thực Thi | Behavior / Logic Chi Tiết |
+| Phân Vùng Nghiệp Vụ | Core Objects (Entities / DTOs / Payloads) | Behaviors (Hành Vi & Chức Năng Cốt Lõi) | Authority Boundary, Durable State & Invariants |
 | :--- | :--- | :--- | :--- |
-| **Bootstrap & App Context** | `App`<br>`AgentConfig` | [`src/app.rs`](file:///home/phucle/Desktop/aurora-waf/crates/agent/src/app.rs)<br>[`src/config.rs`](file:///home/phucle/Desktop/aurora-waf/crates/agent/src/config.rs) | - `App::init()`: Khởi tạo thư mục policy, tạo upstreams conf mặc định.<br>- `App::run()`: Spawn các background tokio tasks cho sync, heartbeat và dispatcher.<br>- Phân giải flags `--controller-url`, `--node-id`, `--auth-token`. |
-| **gRPC Transport** | `GrpcClient` | [`src/grpc.rs`](file:///home/phucle/Desktop/aurora-waf/crates/agent/src/grpc.rs) | - Quản lý kênh kết nối HTTP/2 gRPC tới Controller.<br>- Chèn header xác thực `Authorization: Bearer <token>` vào metadata. |
-| **Spec Reconciler** | `SpecSyncWorker`<br>`Spec` (Schema AST) | [`src/sync/spec.rs`](file:///home/phucle/Desktop/aurora-waf/crates/agent/src/sync/spec.rs)<br>[`src/spec/schema.rs`](file:///home/phucle/Desktop/aurora-waf/crates/agent/src/spec/schema.rs) | - `sync_loop()`: Mở kết nối stream nhận chunk spec.<br>- `compute_sha256()`: Kiểm tra digest với release hiện tại.<br>- Áp dụng **Jitter Delay ngẫu nhiên** (0 - 2.5s) trước khi reload để tránh sập upstream đồng loạt. |
-| **Materializer** | `NginxManager`<br>`MaterializeResult` | [`src/spec/materialize.rs`](file:///home/phucle/Desktop/aurora-waf/crates/agent/src/spec/materialize.rs)<br>[`src/nginx.rs`](file:///home/phucle/Desktop/aurora-waf/crates/agent/src/nginx.rs) | - `materialize_nginx()`: Trích xuất config upstreams và routes từ YAML Spec ra đĩa cứng.<br>- `NginxManager::test_config()`: Chạy `nginx -t`.<br>- `NginxManager::reload()`: Chạy `nginx -s reload` an toàn không rớt kết nối. |
-| **Node Heartbeat** | `HeartbeatWorker`<br>`HeartbeatPayload` | [`src/sync/heartbeat.rs`](file:///home/phucle/Desktop/aurora-waf/crates/agent/src/sync/heartbeat.rs) | - Định kỳ (mỗi 10s) gửi telemetry node: CPU, RAM, active connections, status sang Controller.<br>- Tiếp nhận chỉ thị cưỡng chế reload từ Controller. |
-| **Extension Dispatcher** | `ExtensionDispatcher`<br>`ExtensionRunners` | [`src/extension/dispatcher.rs`](file:///home/phucle/Desktop/aurora-waf/crates/agent/src/extension/dispatcher.rs) | - `apply_spec()`: Phân tích khối `extensions:` trong Spec.<br>- Bật/tắt động các task chạy nền của bot detection, distributed rate limiter mà không cần khởi động lại Agent. |
-| **Telemetry Pipeline** | `MetricsManager`<br>`PrometheusExporter`<br>`OtlpExporter` | [`src/extension/metrics/`](file:///home/phucle/Desktop/aurora-waf/crates/agent/src/extension/metrics/) | - Cào chỉ số NGINX stub status.<br>- `PrometheusPullExporter`: Phục vụ endpoint `:9145/metrics`.<br>- `OtlpPushExporter`: Đẩy traces/metrics sang collector OTLP gRPC. |
+| **Spec & Cluster State** | `ClusterSpecRecord`<br>`ClusterSpecSnapshot`<br>`SpecReleaseCommand`<br>`SpecReleaseDigest` | - `GetHeadSpec()`: Đọc snapshot cấu hình đang kích hoạt.<br>- `GenerateSpecSnapshot()`: Biên dịch toàn bộ trạng thái DB thành 1 file YAML hợp nhất.<br>- `PublishRelease()`: Sinh băm SHA-256 digest và ghi sổ cái bất biến.<br>- `RollbackSpec()`: Kích hoạt phiên bản snapshot lịch sử đã kiểm chứng. | **Bảng `cluster_spec_releases` & `cluster_spec_head`**.<br>Invariants: Mọi bản phát hành là bất biến (immutable) qua Database Triggers. Cấm update/delete release đã sinh. |
+| **gRPC Node Spec Stream** | `WatchSpecRequest`<br>`SpecReleaseChunk`<br>`NodeHeartbeat`<br>`StreamAck` | - `WatchSpec()`: Mở luồng Server-Streaming gRPC đẩy spec mới tới Edge Nodes.<br>- `Heartbeat()`: Ghi nhận nhịp tim, phiên bản và telemetry từ agent.<br>- `AcknowledgeRelease()`: Xác nhận node đã biên dịch và nạp cấu hình thành công. | **Bảng `cluster_nodes`**.<br>Invariants: Phát hiện drift trạng thái nếu `observed_release_id` lệch với `head_release_id`. |
+| **Extensions Catalog** | `ExtensionItem`<br>`ExtensionRule`<br>`ExtensionConfigUpdate`<br>`CatalogSchema` | - `ListExtensions()`: Lấy danh mục 115+ plugins.<br>- `UpdateConfig()`: Cập nhật JSON cấu hình và rules tùy biến theo từng extension.<br>- `ToggleStatus()`: Bật / Tắt tức thì plugin.<br>- `TriggerSpecReconciliation()`: Phát tín hiệu biên dịch spec mới khi cấu hình extension đổi. | **Bảng `extensions`**.<br>Invariants: Config JSON phải thỏa mãn json_valid constraint và tương thích với dynamic runners của Agent. |
+| **Domains & TLS** | `DomainRecord`<br>`CreateDomainCommand`<br>`UpdateDomainCommand`<br>`DomainBinding` | - `CreateDomain()`, `UpdateDomain()`, `DeleteDomain()`.<br>- `ValidateDomainBinding()`: Kiểm tra upstream đích có tồn tại hợp lệ hay không.<br>- `EnforceTLSProfile()`: Cấu hình min_tls_version, HSTS, OCSP stapling. | **Bảng `domains`**.<br>Invariants: Tên miền là duy nhất (`UNIQUE(domain)`). Không cho phép domain trỏ tới upstream rỗng. |
+| **Upstreams Topology** | `UpstreamRecord`<br>`UpstreamServer`<br>`HealthCheckPolicy`<br>`UpstreamRelease` | - `CreateUpstream()`, `UpdateUpstream()`.<br>- `CompileUpstreamTopology()`: Tính toán danh sách backend servers, weights và thuật toán load balancing (`round_robin`, `ip_hash`, `least_conn`).<br>- `RecordNodeSync()`: Theo dõi pha nạp upstream của node. | **Bảng `upstreams`, `upstream_releases`, `upstream_node_sync`**.<br>Invariants: Không xóa upstream đang được một hoặc nhiều domain kích hoạt tham chiếu tới. |
+| **WAF Rules Core** | `RuleItem`<br>`RuleRevision`<br>`CreateRuleCommand`<br>`RuleDefinition` | - `CreateRule()`, `UpdateRule()`: Tạo quy tắc và snapshot version bất biến.<br>- `CompileRuleset()`: Gọi binary compiler sinh snapshot nhị phân WAF.<br>- `FreezeRevision()`: Đóng băng revision của quy tắc khi phát hành ruleset. | **Bảng `rules`, `rule_revisions`, `ruleset_releases`, `rule_definitions`**.<br>Invariants: Revisions có tính append-only, có trigger chặn sửa đổi/xóa lịch sử. |
+| **Access Control (IP/CIDR)** | `AccessObject`<br>`AccessRevision`<br>`AccessRelease`<br>`AccessMatchEvent` | - `ApplyChanges()`: Thêm/sửa/xóa quy tắc CIDR/ASN dạng flat entity.<br>- `Desired()`: Cung cấp snapshot access rule cho node.<br>- `RecordViolation()`: Ghi nhận sự kiện chặn IP vi phạm theo node_id. | **Bảng `access_objects`, `access_revisions`, `access_releases`, `access_events`**.<br>Invariants: Kiểm tra tính hợp lệ của dải CIDR trước khi commit transaction. |
+| **Cluster Nodes** | `ClusterNodeRecord`<br>`NodeHeartbeatPayload`<br>`NodeDirective` | - `RegisterNode()`: Tự động đăng ký node mới khi nhận heartbeat hợp lệ.<br>- `TriggerReload()`: Đưa lệnh reload vào hàng đợi rolling reload.<br>- `DrainNode()`: Đánh dấu trạng thái Draining để chuyển hướng traffic. | **Bảng `cluster_nodes`, `node_sync_logs`**.<br>Invariants: Node không gửi nhịp tim quá 60 giây sẽ tự động chuyển trạng thái `Not Ready`. |
+| **Analytics Explorer** | `AnalyticsQuery`<br>`MetricSeries`<br>`TimeSeriesPoint`<br>`NodeMetricsSnapshot` | - `QueryMetrics()`: Phân giải số liệu thống kê.<br>- `IngestNodeMetrics()`: Lưu trữ CPU, RAM, active connections, RPS định kỳ.<br>- `RouteTelemetryBackend()`: Chuyển đổi linh hoạt giữa SQLite Rollup và Prometheus API. | **Bảng `node_metrics_history` kết hợp Prometheus Server**.<br>Invariants: Không làm nghẽn luồng xử lý chính khi hệ thống telemetry bên ngoài quá tải. |
+| **Security & Auth** | `UserRecord`<br>`AuthProviderItem`<br>`LoginCommand`<br>`TOTPValidation` | - `Authenticate()`: Kiểm tra mật khẩu mã hóa Argon2id.<br>- `VerifyTwoFactor()`: Xác thực mã 6 chữ số TOTP RFC 6238.<br>- `ConfigureProvider()`: Bật/tắt OIDC SSO, LDAP, SAML. | **Bảng `users`, `auth_providers`, `system_settings`**.<br>Invariants: Tài khoản admin không được phép xóa; mật khẩu lưu trữ kèm muối (salt) ngẫu nhiên. |
+| **Notifications & Alerts** | `NotificationChannel`<br>`NotificationRule`<br>`AlertMessage`<br>`DispatchQueue` | - `EnqueueAlert()`: Đẩy thông báo sự cố vào hàng đợi bất đồng bộ.<br>- `TestChannel()`: Kiểm tra độ sống của Webhook, Telegram, Slack, Discord, Email.<br>- `FormatPayload()`: Định dạng payload theo cú pháp riêng của từng kênh. | **Bảng `notification_channels`, `notification_rules`**.<br>Invariants: Hàng đợi cảnh báo giới hạn kích thước (bounded buffer) tránh tràn bộ nhớ khi mạng nghẽn. |
+| **Backup & Disaster Recovery** | `BackupSettings`<br>`BackupHistoryRecord`<br>`BackupArchive` | - `CreateBackup()`: Khóa snapshot SQLite an toàn và nén archive.<br>- `UploadToS3()`: Đẩy tệp sao lưu sang S3/MinIO bucket.<br>- `RestoreBackup()`: Khôi phục toàn diện database từ snapshot đã lưu. | **Bảng `backup_settings`, `backup_history`**.<br>Invariants: Tự động dọn dẹp các bản backup cũ vượt quá thời hạn retention quy định. |
 
 ---
 
-## 4. Rust WAF Engine & NGINX FFI (`crates/engine/`, `crates/ffi/`, `adapters/nginx/`)
+## 4. Control Plane: Ma Trận Background Providers & Workers
 
-Tầng xử lý lưu lượng thực (Data Plane Core) chịu trách nhiệm kiểm tra từng gói tin HTTP với độ trễ micro-giây (sub-millisecond).
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Client as Client Request
-    participant Nginx as NGINX Core
-    participant CMod as ngx_http_aurora_waf_module (C)
-    participant FFI as aurora_ffi (Rust)
-    participant Engine as aurora_engine (Rust)
-    participant Upstream as Upstream Server
-
-    Client->>Nginx: HTTP Request
-    Nginx->>CMod: Hook tại ngx_http_access_handler
-    CMod->>FFI: aurora_match_request(req_ctx)
-    FFI->>Engine: Aho-Corasick & Hyperscan Matching
-    Engine-->>FFI: Match Decision (Allow / Block / Challenge)
-    FFI-->>CMod: Action Code (0: Pass, 403: Block, 429: Rate Limit)
-    
-    alt Block / Reject
-        CMod-->>Nginx: NGX_HTTP_FORBIDDEN (403)
-        Nginx-->>Client: Custom Error / Block Response
-    else Allow / Pass
-        CMod-->>Nginx: NGX_DECLINED (Tiếp tục chuỗi)
-        Nginx->>Upstream: Forward Request
-        Upstream-->>Nginx: HTTP Response
-        Nginx-->>Client: HTTP Response
-    end
-```
-
-### 4.1. Ma Trận Engine & FFI Components
-
-| Thành Phần | Object / Biểu Tượng | File Thực Thi | Nhiệm Vụ & Thuật Toán |
+| Provider Worker | Quản Lý Trạng Thái (State Object) | Chu Kỳ / Sự Kiện Kích Hoạt | Behavior & Trách Nhiệm Vận Hành |
 | :--- | :--- | :--- | :--- |
-| **Engine Core** | `Engine`<br>`CompiledRuleset`<br>`AhoCorasickMatcher` | [`crates/engine/src/lib.rs`](file:///home/phucle/Desktop/aurora-waf/crates/engine/src/lib.rs)<br>[`crates/engine/src/rules.rs`](file:///home/phucle/Desktop/aurora-waf/crates/engine/src/rules.rs) | - Khởi tạo bộ so khớp đa chuỗi Aho-Corasick + Hyperscan vectorization.<br>- So khớp path, header, body parameters với quy tắc WAF (SQLi, XSS, RCE). |
-| **Compiler Binary** | `aurora-compile` (Binary CLI) | [`crates/engine/src/bin/compile.rs`](file:///home/phucle/Desktop/aurora-waf/crates/engine/src/bin/compile.rs) | - Nhận ruleset JSON/YAML từ Controller.<br>- Biên dịch thành snapshot nhị phân bất biến (deterministic binary snapshot) tối ưu truy cập bộ nhớ cache CPU L1/L2. |
-| **Access CIDR Engine** | `RadixTree`<br>`IpMatcher` | [`crates/engine/src/access.rs`](file:///home/phucle/Desktop/aurora-waf/crates/engine/src/access.rs) | - Lưu trữ dải IP CIDR và Geo ASN trong cây Radix Tree.<br>- Kiểm tra IP nguồn trong thời gian $O(1)$. |
-| **Rust FFI Export** | `aurora_match_request`<br>`aurora_hot_swap_policy`<br>`aurora_free_result` | [`crates/ffi/src/lib.rs`](file:///home/phucle/Desktop/aurora-waf/crates/ffi/src/lib.rs) | - C ABI `extern "C"` an toàn (panic safety wrapper).<br>- Trao đổi dữ liệu pointer và buffer giữa C memory của NGINX và Rust memory an toàn. |
-| **Telemetry Serialization** | `TelemetryClient`<br>`ProtobufEncoder` | [`crates/ffi/src/telemetry/`](file:///home/phucle/Desktop/aurora-waf/crates/ffi/src/telemetry/) | - Đóng gói các log vi phạm WAF vào Protobuf binary buffer không làm chậm NGINX worker. |
-| **NGINX C Module Adapter** | `ngx_http_aurora_waf_module` | [`adapters/nginx/src/ngx_http_aurora_waf_module.c`](file:///home/phucle/Desktop/aurora-waf/adapters/nginx/src/ngx_http_aurora_waf_module.c) | - Đăng ký hook vào pha `NGX_HTTP_ACCESS_PHASE` của NGINX.<br>- Trích xuất request line, URI, headers, client IP.<br>- Nhận quyết định từ FFI và chặn/cho qua trực tiếp trong luồng event loop. |
+| **SpecScheduler** | `SpecReconciliationState`<br>`TriggerChannel` | - Chu kỳ định kỳ (10 giây).<br>- Hoặc kích hoạt ngay tức thì khi có mutation từ API. | Quét DB, tổng hợp toàn bộ Spec, băm SHA-256; nếu digest khác biệt thì tạo release mới và notify tới toàn bộ kênh gRPC streams. |
+| **CatalogProvider** | `DynamicExtensionRegistry`<br>`JSONSchemaValidator` | Khởi chạy hệ thống lúc bootstrap. | Tải danh mục 115+ plugins, đối chiếu schema JSON cấu hình mặc định, đồng bộ vào bảng lưu trữ extensions. |
+| **AnalyticsProvider** | `TelemetryStrategyContext`<br>`PrometheusClient` | Mỗi khi nhận yêu cầu truy vấn metrics. | Điều phối nguồn dữ liệu: truy vấn trực tiếp từ bảng rollup lịch sử hoặc gửi PromQL ngược dòng sang máy chủ Prometheus. |
+| **BackupScheduler** | `CronScheduleContext`<br>`StorageTarget` | Theo lịch biểu Cron (mặc định: `0 2 * * *`). | Chụp snapshot database dạng Online Backup không khóa bảng đọc, nén và đẩy lên kho lưu trữ cục bộ hoặc cloud S3. |
+| **NotificationWorker** | `AlertDispatcherQueue`<br>`RetryBackoffPolicy` | Bất đồng bộ liên tục qua Channel buffer (256 slots). | Rút thông điệp cảnh báo từ hàng đợi, phân phối theo các kênh kích hoạt tương ứng, xử lý retry với exponential backoff. |
 
 ---
 
-## 5. Frontend Console (`ui/src/`)
+## 5. Rust Dataplane Agent: Ma Trận Phân Vùng Kiến Trúc
 
-Giao diện quản trị là Single Page Application (SPA) xây dựng bằng React 19, TypeScript, Tailwind CSS và Radix UI, được nhúng trực tiếp vào binary của Go Controller qua `//go:embed all:dist`.
-
-### 5.1. Ma Trận UI Page, Components & API Contract
-
-| Route / Màn Hình | Tệp Trang (Page) | Component Chính | Behavior & Tương Tác Người Dùng | API Endpoint Liên Kết |
-| :--- | :--- | :--- | :--- | :--- |
-| **Dashboard** (`/`) | [`pages/dashboard/page.tsx`](file:///home/phucle/Desktop/aurora-waf/ui/src/pages/dashboard/page.tsx) | `StatsGrid`, `TrafficChart`, `ActiveAlerts`, `QuickNodes` | - Tổng quan RPS, lưu lượng bị chặn, số lượng node active.<br>- Biểu đồ thời gian thực. | `GET /api/v1/analytics/timeline`<br>`GET /api/v1/nodes` |
-| **Extensions Workspace** (`/extensions`) | [`pages/extensions/page.tsx`](file:///home/phucle/Desktop/aurora-waf/ui/src/pages/extensions/page.tsx) | [`ExtensionCard.tsx`](file:///home/phucle/Desktop/aurora-waf/ui/src/pages/extensions/components/ExtensionCard.tsx)<br>[`ExtensionTable.tsx`](file:///home/phucle/Desktop/aurora-waf/ui/src/pages/extensions/components/ExtensionTable.tsx)<br>[`ExtensionConfigModal.tsx`](file:///home/phucle/Desktop/aurora-waf/ui/src/pages/extensions/components/ExtensionConfigModal.tsx) | - Hiển thị 115+ plugins theo 11 nhóm chuyên biệt.<br>- **Click thẻ / hàng mở Bottom Drawer cao 78vh**.<br>- Xem bảng dữ liệu rules chuyên biệt từng extension.<br>- **Thêm quy tắc 2 Mode: UI View (Form trực quan) & JSON View (Raw editor)**. | `GET /api/v1/extensions`<br>`PUT /api/v1/extensions/:id/status`<br>`PUT /api/v1/extensions/:id/config` |
-| **WAF Rules Engine** (`/rules`) | [`pages/rules/page.tsx`](file:///home/phucle/Desktop/aurora-waf/ui/src/pages/rules/page.tsx) | `RulesList`, `RuleDetailDrawer`, `RuleEditorModal` | - Danh sách quy tắc WAF phân nhóm (SQLi, XSS, Traversal, Bot).<br>- Chỉnh sửa độ ưu tiên, score, hành vi (Allow/Log/Block). | `GET /api/v1/rules`<br>`POST /api/v1/rules`<br>`PUT /api/v1/rules/:id` |
-| **Domains & Certificates** (`/domains`) | [`pages/domains/page.tsx`](file:///home/phucle/Desktop/aurora-waf/ui/src/pages/domains/page.tsx) | `DomainList`, `DomainModal`, `CertStatusBadge` | - Cấu hình Host domain, TLS Auto-renew, Min TLS version, HSTS.<br>- Ràng buộc domain với Upstream cụ thể. | `GET /api/v1/domains`<br>`POST /api/v1/domains`<br>`PUT /api/v1/domains/:id` |
-| **Upstreams Topology** (`/upstreams`) | [`pages/upstreams/page.tsx`](file:///home/phucle/Desktop/aurora-waf/ui/src/pages/upstreams/page.tsx) | `UpstreamCard`, `UpstreamForm`, `ServerStatusList` | - Khai báo danh sách server backend IP:Port, trọng số weight.<br>- Cấu hình thuật toán load balancing và Active Health Checks. | `GET /api/v1/upstreams`<br>`POST /api/v1/upstreams` |
-| **Cluster Nodes** (`/nodes`) | [`pages/nodes/page.tsx`](file:///home/phucle/Desktop/aurora-waf/ui/src/pages/nodes/page.tsx) | `NodeTable`, `NodeMetricsCard`, `ReloadModal` | - Giám sát trạng thái Ready / Syncing / Drift của từng node.<br>- Phát lệnh Rolling Reload NGINX.<br>- Xem spec release digest node đang chạy. | `GET /api/v1/nodes`<br>`POST /api/v1/nodes/:id/reload` |
-| **Access Control (IP)** (`/access`) | [`pages/access/page.tsx`](file:///home/phucle/Desktop/aurora-waf/ui/src/pages/access/page.tsx) | `IpTable`, `AddCidrModal`, `GeoBlockPanel` | - Quản lý Whitelist / Blacklist theo IP, subnet CIDR hoặc quốc gia.<br>- Xem số lần vi phạm và log sự kiện vi phạm gần nhất. | `GET /api/v1/access/catalog`<br>`POST /api/v1/access/changes` |
-| **Analytics Explorer** (`/analytics`) | [`pages/analytics/page.tsx`](file:///home/phucle/Desktop/aurora-waf/ui/src/pages/analytics/page.tsx) | `ExplorerMetricsGrid`, `MetricBuilder`, `LatencyChart` | - Truy vấn metrics theo node, endpoint, status code.<br>- Phân tích p50, p90, p99 latency và lưu lượng throughput. | `POST /api/v1/analytics/query` |
-| **Settings & DR** (`/settings`) | [`pages/settings/page.tsx`](file:///home/phucle/Desktop/aurora-waf/ui/src/pages/settings/page.tsx) | `SecurityTab`, `IntegrationsTab`, `BackupsTab`, `AuditTab` | - Cấu hình 2FA, người dùng, SSO.<br>- Chuyển đổi chế độ Telemetry (`standalone` $\leftrightarrow$ `prometheus`).<br>- Sao lưu snapshot & cấu hình đẩy lên S3. | `GET /api/v1/settings/*`<br>`GET /api/v1/backups`<br>`POST /api/v1/backups` |
+| Phân Vùng | Core Objects & Structs | Behaviors & State Transitions | Invariants & Nguyên Tắc Bảo Vệ |
+| :--- | :--- | :--- | :--- |
+| **Bootstrap & Config** | `AgentRuntimeContext`<br>`AgentCliFlags` | - `bootstrap()`: Đọc tham số `--controller-url`, `--node-id`, `--auth-token`.<br>- `ensure_environment()`: Tạo các thư mục cấu hình và tệp upstreams rỗng ban đầu.<br>- `spawn_workers()`: Khởi động song song Spec Sync, Heartbeat và Telemetry tasks. | Ngăn chặn khởi động nếu thiếu token xác thực hoặc không phân giải được địa chỉ Controller. |
+| **gRPC Spec Sync** | `GrpcStreamClient`<br>`SpecReleaseWatcher`<br>`SpecStreamChunk` | - `connect_stream()`: Thiết lập kênh kết nối gRPC hai chiều với Controller.<br>- `receive_spec()`: Nhận dữ liệu stream spec YAML.<br>- `verify_digest()`: Đối chiếu SHA-256 digest của spec nhận được với release hiện hành. | Giữ kết nối persistent; tự động kết nối lại (reconnect loop) khi mạng ngắt quãng. |
+| **Reconciler & Jitter** | `ReconcileEngine`<br>`JitterTimer` | - `evaluate_diff()`: So sánh cấu hình cũ và mới.<br>- `apply_jitter()`: **Chờ ngẫu nhiên từ 0 đến 2500ms** trước khi áp dụng cấu hình xuống NGINX.<br>- `report_status()`: Phản hồi trạng thái nạp spec về Controller qua gRPC. | **Chống Thundering Herd**: Triệt tiêu hiện tượng toàn bộ cluster reload NGINX đồng thời làm sụt áp origin. |
+| **Materializer** | `NginxManager`<br>`MaterializePlan`<br>`UpstreamConf`<br>`RoutingConf` | - `materialize()`: Chuyển hóa AST của Spec thành cấu hình NGINX tĩnh.<br>- `validate()`: Thực thi lệnh `nginx -t` kiểm tra cú pháp.<br>- `hot_reload()`: Thực thi `nginx -s reload` nạp cấu hình không rớt TCP sessions.<br>- `rollback()`: Phục hồi cấu hình cũ nếu `nginx -t` trả về lỗi. | **Zero-Downtime Guarantee**: Nếu file cấu hình mới sinh lỗi cú pháp, NGINX giữ nguyên tiến trình cũ, không reload. |
+| **Heartbeat Worker** | `HeartbeatTask`<br>`NodeTelemetryReport` | - `collect_host_metrics()`: Thu thập mức sử dụng CPU, RAM và active connections.<br>- `send_heartbeat()`: Gửi nhịp tim kèm release ID đang nạp tới Controller mỗi 10s.<br>- `handle_command()`: Tiếp nhận và thực thi các chỉ thị cưỡng chế (reload, drain). | Đảm bảo Controller luôn nắm bắt chính xác trạng thái thực thi của từng edge node. |
+| **Extension Dispatcher**| `ExtensionDispatcher`<br>`DynamicRunnerMap`<br>`ExtensionSpecValue` | - `apply_spec()`: Duyệt qua danh sách dynamic extensions trong Spec.<br>- `start_runner()`: Khởi chạy worker task cho các extension được bật (Bot challenge, distributed rate limiter).<br>- `stop_runner()`: Hủy bỏ worker task khi extension bị vô hiệu hóa trong Spec. | Cho phép bật/tắt logic extension động trong bộ nhớ Agent mà không cần khởi động lại tiến trình daemon. |
+| **Telemetry Exporters** | `MetricsCollector`<br>`PrometheusPullServer`<br>`OtlpPushClient` | - `scrape_stub_status()`: Đọc số liệu từ NGINX internal stub status.<br>- `serve_prometheus()`: Cung cấp HTTP endpoint `:9145/metrics` chuẩn Prometheus format.<br>- `push_otlp()`: Đẩy traces/metrics sang OpenTelemetry collector theo chu kỳ. | Không tạo overhead vượt quá 1% CPU của node; phục vụ số liệu không khóa luồng chính. |
 
 ---
 
-## 6. Sơ Đồ Ánh Xạ Thư Mục Dự Án (Directory Layout Mapping)
+## 6. WAF Engine & NGINX FFI: Ma Trận Thực Thi Gói Tin
 
-```
-aurora-waf/
-├── control-plane/                # Go Control Plane (REST API, gRPC Server, Spec Engine)
-│   ├── cmd/                      # Điểm vào ứng dụng (main.go)
-│   ├── infra/                    # SQLite pools, Migrations engine
-│   ├── internal/
-│   │   ├── app/                  # Composition root: Module wiring, routes, App lifecycle
-│   │   ├── config/               # Cấu hình môi trường AURORA_*
-│   │   ├── console/              # Nhúng giao diện Web dist/ vào binary Go (//go:embed)
-│   │   ├── domain/               # Domain entities, value objects, error taxonomy
-│   │   ├── provider/             # Background workers (SpecScheduler, Catalog, Backup)
-│   │   ├── repository/           # CTE-first SQL queries truy cập SQLite
-│   │   ├── service/              # Nghiệp vụ logic & validation boundaries
-│   │   └── transport/            # HTTP Handlers (Gin) & gRPC Handlers (Protobuf)
-│   └── migrations/               # SQLite Schema (0001_tables, 0002_indexes, 0003_triggers, 0004_seeds)
-│
-├── crates/
-│   ├── agent/                    # Rust Edge Node Daemon (gRPC consumer, Spec materializer)
-│   │   └── src/
-│   │       ├── config.rs         # Tham số CLI agent (--controller-url, --node-id)
-│   │       ├── extension/        # Dispatcher & Telemetry exporters (Prometheus, OTLP)
-│   │       ├── grpc.rs           # gRPC client kết nối tới Controller
-│   │       ├── nginx.rs          # Quản lý process NGINX (test, reload)
-│   │       ├── spec/             # Schema parsing, Materialization thành file .conf
-│   │       └── sync/             # Bi-directional gRPC spec stream & heartbeat workers
-│   ├── engine/                   # Rust WAF Core Engine (Aho-Corasick, Hyperscan, Rule Compiler)
-│   └── ffi/                      # Rust C ABI Bindings & Protobuf Telemetry Serialization
-│
-├── adapters/
-│   └── nginx/                    # C Dynamic Module ngx_http_aurora_waf_module.so
-│       ├── include/              # Header định nghĩa C ABI
-│       └── src/                  # NGINX phase hooks & shared memory zone
-│
-├── ui/                           # Single Page Application (React 19, TypeScript, Vite)
-│   ├── src/
-│   │   ├── components/           # UI elements tái sử dụng (Button, Table, Drawer, Badges)
-│   │   ├── lib/api/              # Typed HTTP clients gọi Controller REST APIs
-│   │   └── pages/                # Các module màn hình (Dashboard, Extensions, Rules, Nodes...)
-│   └── vite.config.js            # Cấu hình build xuất thẳng vào control-plane/internal/console/dist
-│
-├── deploy/                       # Docker & Production Assets
-│   └── docker/                   # Dockerfile.controller, Dockerfile.node, entrypoint scripts
-├── docker-compose.yml            # Khởi chạy cụm Controller + Node-01 cục bộ
-├── AGENTS.md                     # Nguyên tắc phát triển (Workflow-first, Flat Entity, No God Context)
-├── CODEBASE.md                   # Single Source of Truth về cấu trúc Codebase (tài liệu này)
-└── README.md                     # Giới thiệu kiến trúc, tính năng & hướng dẫn vận hành nhanh
-```
+| Thành Phần | Data Buffers & Memory Models | Behaviors & Thuật Toán Xử Lý | Ranh Giới Bộ Nhớ & Thực Thi |
+| :--- | :--- | :--- | :--- |
+| **WAF Engine Core** | `CompiledRuleset`<br>`AhoCorasickAutomaton`<br>`HyperscanDatabase`<br>`RuleMatchResult` | - `build_automaton()`: Xây dựng máy trạng thái hữu hạn Aho-Corasick cho hàng nghìn chuỗi mẫu.<br>- `match_payload()`: Quét đồng thời các thành phần HTTP (URI, Headers, Query, Body).<br>- `evaluate_score()`: Tổng hợp điểm số bất thường (anomaly scoring) để đưa ra hành vi (Allow, Log, Block). | Thực thi hoàn toàn trong RAM; tốc độ tính toán vector hóa đạt hàng trăm nghìn requests/giây trên 1 core. |
+| **Rule Compiler** | `RulesetManifest`<br>`BinarySnapshotImage` | - `parse_manifest()`: Đọc quy tắc WAF dạng JSON/YAML từ Controller.<br>- `compile_binary()`: Biên dịch toàn bộ quy tắc thành snapshot nhị phân bất biến tối ưu cache L1/L2 của CPU. | Chạy ngoại tuyến (offline tool) tại Controller; Data Plane chỉ nạp snapshot đã biên dịch, không tốn tài nguyên compile. |
+| **CIDR Radix Engine** | `RadixTree`<br>`IpLookupTable`<br>`GeoAsnCatalog` | - `insert_subnet()`: Nạp dải IP CIDR và ASN vào cây Radix Tree.<br>- `lookup_ip()`: Kiểm tra IP nguồn client trong thời gian $O(1)$.<br>- `evaluate_geo()`: Đối chiếu mã quốc gia IP của request. | Tối ưu hóa bộ nhớ; kiểm tra địa chỉ IPv4/IPv6 với độ trễ nano-giây. |
+| **Rust FFI Export Layer** | `CApiRequestContext`<br>`CApiMatchVerdict`<br>`HotSwapHandle` | - `aurora_match_request()`: C ABI nhận con trỏ request từ NGINX và trả về kết quả phán quyết.<br>- `aurora_hot_swap_policy()`: Thay thế con trỏ snapshot chính sách trong shared memory mà không cần restart worker.<br>- `aurora_free_result()`: Giải phóng bộ nhớ veridct sau khi NGINX xử lý xong. | Panic-safe wrapper: Mọi lỗi unhandled bên Rust được bắt tại biên giới FFI, không làm crash tiến trình worker NGINX. |
+| **NGINX C Module Hook** | `ngx_http_aurora_waf_ctx_t`<br>`ngx_http_aurora_loc_conf_t`<br>`ngx_shm_zone_t` | - `ngx_http_aurora_waf_handler()`: Hook vào pha `NGX_HTTP_ACCESS_PHASE` của NGINX HTTP pipeline.<br>- `extract_request_meta()`: Đọc URI, method, headers, client IP từ `ngx_http_request_t`.<br>- `enforce_decision()`: Chặn gói tin (`NGX_HTTP_FORBIDDEN`), chuyển tiếp (`NGX_DECLINED`) hoặc phản hồi tùy biến. | Tích hợp trực tiếp vào Event Loop của NGINX; không chặn (non-blocking) các worker threads khác. |
 
 ---
 
-## 7. Nguyên Tắc Mở Rộng Codebase (Extension Invariants)
+## 7. Frontend Console: Ma Trận Màn Hình & Trạng Thái UI
 
-Khi bổ sung hoặc chỉnh sửa bất kỳ module nào, luôn tuân thủ các quy tắc bất biến:
-1. **Một Workflow $\rightarrow$ Một Luồng Khép Kín**: Không dùng chung DTO hoặc Entity giữa các workflow khác nhau; mỗi workflow sở hữu Command, Result, Service method và Repository method riêng.
-2. **CTE-First SQL**: Repository luôn ưu tiên Common Table Expressions trong 1 câu truy vấn duy nhất để đảm bảo tính nguyên tử (atomic) và truy vết được.
-3. **Immutability Releases**: Bảng release ledger (`cluster_spec_releases`, `ruleset_releases`, `policy_cluster_releases`) là bất biến sau khi ghi (được bảo vệ bởi Database Triggers).
-4. **Không Thundering Herd**: Mọi thay đổi cấu hình nạp xuống Data Plane phải đi qua kiểm tra Digest SHA-256 và Jitter delay trước khi reload NGINX.
+| Màn Hình / Không Gian Làm Việc | UI State Objects & Models | User Behaviors & Khả Năng Tương Tác | Backend API Contracts Tương Ứng |
+| :--- | :--- | :--- | :--- |
+| **Dashboard Tổng Quan** | `ClusterHealthOverview`<br>`RealtimeTrafficSeries`<br>`RecentViolationEvent` | - Xem tổng quan throughput (RPS), tỷ lệ chặn WAF, số node Online.<br>- Lọc biểu đồ lưu lượng theo khung thời gian (1h, 24h, 7d). | `GET /api/v1/analytics/timeline`<br>`GET /api/v1/nodes` |
+| **Extensions Workspace** | `ExtensionCatalog`<br>`ExtensionDraftConfig`<br>`RuleTableItems`<br>`DrawerState` | - Click trực tiếp vào thẻ hoặc dòng bảng để **mở Bottom Drawer cao 78vh**.<br>- Chuyển đổi nhanh trạng thái Bật/Tắt extension từ Header Drawer.<br>- Xem bảng dữ liệu quy tắc chuyên biệt theo từng extension.<br>- **Thêm quy tắc qua Modal 2 Mode**: Form UI trực quan $\leftrightarrow$ Trình soạn thảo JSON Raw với đồng bộ tự động 2 chiều. | `GET /api/v1/extensions`<br>`PUT /api/v1/extensions/:id/status`<br>`PUT /api/v1/extensions/:id/config` |
+| **Quy Tắc WAF** | `RuleRecordList`<br>`RuleFilterCriteria`<br>`RuleDraftDefinition` | - Phân loại theo nhóm (SQLi, XSS, Path Traversal, Bot, Auth).<br>- Tùy chỉnh score, priority và action (Allow, Log, Block).<br>- Xem lịch sử revision đã phát hành. | `GET /api/v1/rules`<br>`POST /api/v1/rules`<br>`PUT /api/v1/rules/:id` |
+| **Tên Miền & Chứng Chỉ** | `DomainGridList`<br>`CertAutoRenewState`<br>`UpstreamBindingSelection` | - Khai báo Host domain, kích hoạt Let's Encrypt / Custom SSL.<br>- Cấu hình HSTS, OCSP stapling, Min TLS 1.3.<br>- Liên kết domain với Upstream tương ứng. | `GET /api/v1/domains`<br>`POST /api/v1/domains`<br>`PUT /api/v1/domains/:id` |
+| **Cụm Upstreams** | `UpstreamTopology`<br>`BackendServerItem`<br>`HealthProbeSetting` | - Khai báo danh sách backend IP:Port và trọng số tải (weight).<br>- Chọn thuật toán Round Robin, Least Connections hoặc IP Hash.<br>- Cài đặt Active Synthetic Health Check (`/healthz`). | `GET /api/v1/upstreams`<br>`POST /api/v1/upstreams`<br>`PUT /api/v1/upstreams/:id` |
+| **Quản Trị Edge Nodes** | `NodeStatusList`<br>`NodeDriftState`<br>`ReloadQueueProgress` | - Giám sát nhịp tim, phiên bản và tình trạng đồng bộ spec (`In Sync` / `Drift`).<br>- Phát lệnh Rolling Reload NGINX có kiểm soát.<br>- Đưa node vào chế độ Draining phục vụ bảo trì. | `GET /api/v1/nodes`<br>`POST /api/v1/nodes/:id/reload`<br>`POST /api/v1/nodes/:id/drain` |
+| **Kiểm Soát IP / CIDR** | `AccessListGrid`<br>`CidrAddDraft`<br>`GeoBlockSelection` | - Quản lý Whitelist / Blacklist theo IP, dải Subnet CIDR hoặc Quốc gia.<br>- Xem bảng tổng hợp vi phạm và số lần bị chặn thời gian thực. | `GET /api/v1/access/catalog`<br>`POST /api/v1/access/changes` |
+| **Analytics Explorer** | `MetricQueryBuilder`<br>`LatencyDistribution`<br>`ThroughputBreakdown` | - Phân tích p50, p90, p99 latency theo endpoint và mã phản hồi HTTP.<br>- Lọc số liệu đa chiều theo node_id hoặc quy tắc kích hoạt. | `POST /api/v1/analytics/query` |
+| **Cài Đặt & Phục Hồi (DR)** | `SecurityCredential`<br>`TelemetryModeToggle`<br>`BackupScheduleForm` | - Đổi mật khẩu admin, kích hoạt 2FA Authenticator TOTP.<br>- Chuyển đổi linh hoạt chế độ Telemetry (`standalone` $\leftrightarrow$ `prometheus`).<br>- Tạo snapshot backup tức thời và tải archive về máy hoặc đẩy lên S3. | `GET /api/v1/settings/*`<br>`GET /api/v1/backups`<br>`POST /api/v1/backups` |
+
+---
+
+## 8. Nguyên Tắc Bất Biến Của Kiến Trúc (Architecture Invariants)
+
+1. **Workflow Isolation**: Mọi mutation và query phải thuộc về đúng 1 workflow sở hữu. Không tái sử dụng projection/entity của workflow khác làm đầu vào.
+2. **CTE-First Persistence**: Mọi tác vụ truy vấn và cập nhật dữ liệu đa trạng thái trong Repository phải ưu tiên Common Table Expressions (CTE) trong 1 câu SQL duy nhất để đảm bảo tính nguyên tử (atomic) và truy vết được.
+3. **Immutable Ledgers**: Các bảng release (`cluster_spec_releases`, `ruleset_releases`, `policy_cluster_releases`) được bảo vệ bằng trigger không cho phép update/delete sau khi ghi.
+4. **Non-Blocking Data Plane**: Mọi thao tác kiểm tra an ninh WAF và phân tán spec trên Data Plane đều diễn ra non-blocking, không bao giờ làm nghẽn Event Loop NGINX hoặc gây sụt giảm băng thông.
