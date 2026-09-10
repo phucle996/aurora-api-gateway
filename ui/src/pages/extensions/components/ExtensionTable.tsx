@@ -2,7 +2,6 @@ import React from 'react';
 import { ExtensionItem } from '../types';
 import { ExtensionIcon } from './ExtensionIcon';
 import { CATEGORIES_META } from '../data/catalog';
-import { Settings2, RotateCw } from 'lucide-react';
 
 interface ExtensionTableProps {
   extensions: ExtensionItem[];
@@ -13,7 +12,6 @@ interface ExtensionTableProps {
 
 export function ExtensionTable({
   extensions,
-  onToggle,
   onConfigure,
   togglingIds,
 }: ExtensionTableProps) {
@@ -42,9 +40,8 @@ export function ExtensionTable({
                 <tr
                   key={ext.id}
                   onClick={() => onConfigure(ext)}
-                  className={`group hover:bg-muted/40 transition-colors duration-200 cursor-pointer ${
-                    !ext.enabled ? 'opacity-80 hover:opacity-100' : ''
-                  }`}
+                  className={`group hover:bg-muted/40 transition-colors duration-200 cursor-pointer ${!ext.enabled ? 'opacity-80 hover:opacity-100' : ''
+                    }`}
                 >
                   {/* Extension Name & ID */}
                   <td className="py-3 px-4">
@@ -93,38 +90,21 @@ export function ExtensionTable({
                     </div>
                   </td>
 
-                  {/* Status Toggle */}
+                  {/* Status */}
                   <td className="py-3 px-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-2">
-                      {isToggling ? (
-                        <RotateCw className="w-4 h-4 animate-spin text-primary" />
-                      ) : (
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={ext.enabled}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onToggle(ext.id, !ext.enabled);
-                          }}
-                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-300 ease-in-out hover:scale-105 active:scale-95 focus:outline-none focus:ring-1 focus:ring-primary ${
-                            ext.enabled ? 'bg-emerald-500 shadow-xs' : 'bg-muted/80'
-                          }`}
-                        >
-                          <span
-                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
-                              ext.enabled ? 'translate-x-4' : 'translate-x-0'
-                            }`}
-                          />
-                        </button>
-                      )}
                       <span
-                        className={`text-[11px] font-medium transition-colors duration-200 ${
-                          ext.enabled
-                            ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
-                            : 'text-muted-foreground'
-                        }`}
+                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium border ${ext.enabled
+                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 font-semibold'
+                          : 'bg-muted/50 text-muted-foreground border-border'
+                          }`}
                       >
+                        {ext.enabled && (
+                          <span className="relative flex h-1.5 w-1.5 shrink-0">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                          </span>
+                        )}
                         {ext.enabled ? 'Active' : 'Disabled'}
                       </span>
                     </div>

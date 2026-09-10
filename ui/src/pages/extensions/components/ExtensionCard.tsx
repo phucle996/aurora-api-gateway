@@ -2,11 +2,11 @@ import React from 'react';
 import { ExtensionItem } from '../types';
 import { ExtensionIcon } from './ExtensionIcon';
 import { CATEGORIES_META } from '../data/catalog';
-import { Settings2, RotateCw, Tag } from 'lucide-react';
+import { Tag } from 'lucide-react';
 
 interface ExtensionCardProps {
   extension: ExtensionItem;
-  onToggle: (id: string, enabled: boolean) => void;
+  onToggle?: (id: string, enabled: boolean) => void;
   onConfigure: (ext: ExtensionItem) => void;
   isToggling?: boolean;
   index?: number;
@@ -14,9 +14,7 @@ interface ExtensionCardProps {
 
 export function ExtensionCard({
   extension,
-  onToggle,
   onConfigure,
-  isToggling = false,
   index = 0,
 }: ExtensionCardProps) {
   const meta = CATEGORIES_META[extension.category as keyof typeof CATEGORIES_META] || {
@@ -75,33 +73,6 @@ export function ExtensionCard({
                 </span>
               </div>
             </div>
-          </div>
-
-          {/* Switch toggle */}
-          <div className="flex items-center gap-1.5 shrink-0 pt-0.5" onClick={(e) => e.stopPropagation()}>
-            {isToggling ? (
-              <RotateCw className="w-4 h-4 animate-spin text-primary" />
-            ) : (
-              <button
-                type="button"
-                role="switch"
-                aria-checked={extension.enabled}
-                title={extension.enabled ? 'Click to disable' : 'Click to enable'}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggle(extension.id, !extension.enabled);
-                }}
-                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-300 ease-in-out hover:scale-105 active:scale-95 focus:outline-none focus:ring-1 focus:ring-primary ${
-                  extension.enabled ? 'bg-emerald-500 shadow-xs' : 'bg-muted/80'
-                }`}
-              >
-                <span
-                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
-                    extension.enabled ? 'translate-x-4' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-            )}
           </div>
         </div>
 

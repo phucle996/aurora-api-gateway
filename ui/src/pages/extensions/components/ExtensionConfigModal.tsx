@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { ExtensionItem } from '../types';
 import { ExtensionIcon } from './ExtensionIcon';
 import { EXTENSIONS_CATALOG, CATEGORIES_META } from '../data/catalog';
-import { getDefaultConfigJson } from '../data/defaultConfigs';
 import { ExtensionRuleItem } from './ExtensionRulesDrawer';
 import {
   X,
@@ -12,10 +11,10 @@ import {
   RotateCcw,
   Save,
   RotateCw,
-  FileCode,
   Copy,
   SlidersHorizontal,
   Plus,
+  ArrowLeft,
   Trash2,
   Edit3,
   Layers,
@@ -55,12 +54,9 @@ export function ExtensionConfigModal({
   const [rules, setRules] = useState<ExtensionRuleItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Add/Edit Sub-Panel State
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [addMode, setAddMode] = useState<'ui' | 'json'>('ui');
+  // Inline Rule Form State (replaces table view inside drawer)
+  const [isEditingRule, setIsEditingRule] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [ruleJsonText, setRuleJsonText] = useState('');
-  const [ruleJsonError, setRuleJsonError] = useState<string | null>(null);
 
   // Form state for UI mode
   const [ruleForm, setRuleForm] = useState<ExtensionRuleItem>({
@@ -71,12 +67,12 @@ export function ExtensionConfigModal({
     match_type: 'path',
     match_value: '',
     method: 'ALL',
-    rate: 100,
-    burst: 200,
-    period_secs: 1,
-    action: 'throttle',
-    custom_code: 429,
-    custom_message: 'Too Many Requests',
+    rate: undefined,
+    burst: undefined,
+    period_secs: undefined,
+    action: 'block',
+    custom_code: undefined,
+    custom_message: '',
   });
 
   const catalogEntry = extension
@@ -107,7 +103,7 @@ export function ExtensionConfigModal({
 
       setJsonError(null);
       setSaveSuccess(false);
-      setIsAddOpen(false);
+      setIsEditingRule(false);
       setEditingIndex(null);
       setWorkspaceMode('table');
     }
@@ -161,7 +157,7 @@ export function ExtensionConfigModal({
       setJsonError(null);
       return true;
     } catch (e) {
-      setJsonError('Lỗi cú pháp JSON: ' + (e as Error).message);
+      setJsonError('JSON syntax error: ' + (e as Error).message);
       return false;
     }
   };
@@ -187,57 +183,39 @@ export function ExtensionConfigModal({
     }
   };
 
-  // Open Add Rule Panel
+  // Open Add Rule Form (inline inside drawer)
   const handleOpenAdd = () => {
     const newRule: ExtensionRuleItem = {
       id: `rule_${Date.now().toString(36)}`,
-      name: `Quy tắc ${rules.length + 1}`,
+      name: '',
       description: '',
       enabled: true,
       match_type: 'path',
-      match_value: '/api/',
+      match_value: '',
       method: 'ALL',
-      rate: parsedConfig.rate || 100,
-      burst: parsedConfig.burst || 200,
-      period_secs: 1,
+      rate: undefined,
+      burst: undefined,
+      period_secs: undefined,
       action: isRateLimit ? 'throttle' : 'block',
-      custom_code: 429,
-      custom_message: 'Too Many Requests',
+      custom_code: undefined,
+      custom_message: '',
     };
     setRuleForm(newRule);
-    setRuleJsonText(JSON.stringify(newRule, null, 2));
-    setRuleJsonError(null);
     setEditingIndex(null);
-    setAddMode('ui');
-    setIsAddOpen(true);
+    setIsEditingRule(true);
   };
 
-  // Open Edit Rule
+  // Open Edit Rule Form (inline inside drawer)
   const handleOpenEdit = (rule: ExtensionRuleItem, index: number) => {
     setRuleForm({ ...rule });
-    setRuleJsonText(JSON.stringify(rule, null, 2));
-    setRuleJsonError(null);
     setEditingIndex(index);
-    setAddMode('ui');
-    setIsAddOpen(true);
+    setIsEditingRule(true);
   };
 
-  // Save Rule from Add/Edit panel (supporting both UI mode and JSON mode)
+  // Save Rule from inline form
   const handleSaveRuleEntry = () => {
-    let savedRule: ExtensionRuleItem;
-    if (addMode === 'json') {
-      try {
-        savedRule = JSON.parse(ruleJsonText);
-        if (!savedRule.id) savedRule.id = `rule_${Date.now().toString(36)}`;
-        if (!savedRule.name) savedRule.name = 'Quy tắc mới';
-      } catch (e) {
-        setRuleJsonError('Lỗi cú pháp JSON: ' + (e as Error).message);
-        return;
-      }
-    } else {
-      if (!ruleForm.name.trim()) return;
-      savedRule = { ...ruleForm };
-    }
+    if (!ruleForm.name.trim()) return;
+    const savedRule: ExtensionRuleItem = { ...ruleForm };
 
     let updatedRules: ExtensionRuleItem[];
     if (editingIndex !== null) {
@@ -249,7 +227,7 @@ export function ExtensionConfigModal({
 
     setRules(updatedRules);
     syncToJSON(parsedConfig, updatedRules);
-    setIsAddOpen(false);
+    setIsEditingRule(false);
     setEditingIndex(null);
   };
 
@@ -290,7 +268,8 @@ export function ExtensionConfigModal({
       setConfigText(extension.config_json || '{}');
     }
     setJsonError(null);
-    setIsAddOpen(false);
+    setIsEditingRule(false);
+    setEditingIndex(null);
   };
 
   // Save to backend
@@ -314,7 +293,7 @@ export function ExtensionConfigModal({
         }, 700);
       }
     } catch (e) {
-      setJsonError('Cú pháp JSON không hợp lệ: ' + (e as Error).message);
+      setJsonError('Invalid JSON syntax: ' + (e as Error).message);
     } finally {
       setIsSaving(false);
     }
@@ -346,9 +325,8 @@ export function ExtensionConfigModal({
         <div className="px-6 py-3.5 border-b border-border flex items-center justify-between bg-muted/20 shrink-0">
           <div className="flex items-center gap-3.5">
             <div
-              className={`p-2.5 rounded-xl ${
-                meta?.iconBgClass || 'bg-primary/10 text-primary'
-              } shadow-xs`}
+              className={`p-2.5 rounded-xl ${meta?.iconBgClass || 'bg-primary/10 text-primary'
+                } shadow-xs`}
             >
               <ExtensionIcon id={extension.id} category={extension.category} className="w-5 h-5" />
             </div>
@@ -381,70 +359,62 @@ export function ExtensionConfigModal({
           <div className="flex items-center gap-3">
             {/* Status Switch On/Off */}
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 border border-border">
-              <span className="text-xs font-medium text-muted-foreground">Trạng thái:</span>
+              <span className="text-xs font-medium text-muted-foreground">Status:</span>
               <button
                 type="button"
                 role="switch"
                 aria-checked={parsedConfig.enabled !== false}
                 onClick={handleToggleExtension}
-                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-300 ease-in-out hover:scale-105 active:scale-95 focus:outline-none focus:ring-1 focus:ring-primary ${
-                  parsedConfig.enabled !== false ? 'bg-emerald-500 shadow-xs' : 'bg-muted/80'
-                }`}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-300 ease-in-out hover:scale-105 active:scale-95 focus:outline-none focus:ring-1 focus:ring-primary ${parsedConfig.enabled !== false ? 'bg-emerald-500 shadow-xs' : 'bg-muted/80'
+                  }`}
               >
                 <span
-                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
-                    parsedConfig.enabled !== false ? 'translate-x-4' : 'translate-x-0'
-                  }`}
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${parsedConfig.enabled !== false ? 'translate-x-4' : 'translate-x-0'
+                    }`}
                 />
               </button>
-              <span
-                className={`text-xs font-semibold ${
-                  parsedConfig.enabled !== false
-                    ? 'text-emerald-600 dark:text-emerald-400'
-                    : 'text-muted-foreground'
-                }`}
-              >
-                {parsedConfig.enabled !== false ? 'Đang Bật' : 'Tắt'}
-              </span>
             </div>
 
-            {/* Mode Switch: Table vs JSON */}
-            <div className="flex items-center p-0.5 bg-muted/60 rounded-lg border border-border">
+            {/* Mode Switch: Table vs JSON with animated sliding pill */}
+            <div className="relative flex items-center p-1 bg-muted/60 rounded-lg border border-border">
+              {/* Sliding active pill background with smooth spring animation */}
+              <div
+                className={`absolute top-1 bottom-1 w-[calc(50%-4px)] bg-card rounded-md shadow-xs border border-border/80 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${workspaceMode === 'table' ? 'left-1' : 'left-[calc(50%)]'
+                  }`}
+              />
               <button
                 type="button"
                 onClick={() => handleModeChange('table')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150 cursor-pointer ${
-                  workspaceMode === 'table'
-                    ? 'bg-card text-foreground shadow-xs border border-border/80'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
+                className={`relative z-10 inline-flex items-center justify-center gap-1.5 px-3.5 py-1 text-xs font-medium transition-colors duration-200 cursor-pointer min-w-[72px] ${workspaceMode === 'table'
+                  ? 'text-foreground font-semibold'
+                  : 'text-muted-foreground hover:text-foreground'
+                  }`}
               >
-                <TableIcon className="w-3.5 h-3.5 text-primary" />
-                <span>Bảng dữ liệu & Rules</span>
+                <TableIcon className={`w-3.5 h-3.5 transition-colors duration-200 ${workspaceMode === 'table' ? 'text-primary' : 'text-muted-foreground'}`} />
+                <span>Table</span>
               </button>
               <button
                 type="button"
                 onClick={() => handleModeChange('json')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150 cursor-pointer ${
-                  workspaceMode === 'json'
-                    ? 'bg-card text-foreground shadow-xs border border-border/80'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
+                className={`relative z-10 inline-flex items-center justify-center gap-1.5 px-3.5 py-1 text-xs font-medium transition-colors duration-200 cursor-pointer min-w-[72px] ${workspaceMode === 'json'
+                  ? 'text-foreground font-semibold'
+                  : 'text-muted-foreground hover:text-foreground'
+                  }`}
               >
-                <Code2 className="w-3.5 h-3.5" />
-                <span>JSON Raw</span>
+                <Code2 className={`w-3.5 h-3.5 transition-colors duration-200 ${workspaceMode === 'json' ? 'text-primary' : 'text-muted-foreground'}`} />
+                <span>JSON</span>
               </button>
             </div>
 
             {/* Add Button */}
-            {workspaceMode === 'table' && (
+            {workspaceMode === 'table' && !isEditingRule && (
               <button
                 type="button"
                 onClick={handleOpenAdd}
                 className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all hover:scale-102 active:scale-95 shadow-xs cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>Thêm quy tắc</span>
+                <span>Add Rule</span>
               </button>
             )}
 
@@ -453,26 +423,25 @@ export function ExtensionConfigModal({
               type="button"
               disabled={isSaving}
               onClick={handleApplyConfig}
-              className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 shadow-xs cursor-pointer disabled:opacity-50 active:scale-95 ${
-                saveSuccess
-                  ? 'bg-emerald-600 text-white scale-102'
-                  : 'bg-emerald-600 hover:bg-emerald-500 text-white'
-              }`}
+              className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 shadow-xs cursor-pointer disabled:opacity-50 active:scale-95 ${saveSuccess
+                ? 'bg-emerald-600 text-white scale-102'
+                : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                }`}
             >
               {isSaving ? (
                 <>
                   <RotateCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>Đang lưu...</span>
+                  <span>Saving...</span>
                 </>
               ) : saveSuccess ? (
                 <>
                   <Check className="w-3.5 h-3.5 animate-bounce" />
-                  <span>Đã lưu</span>
+                  <span>Saved</span>
                 </>
               ) : (
                 <>
                   <Save className="w-3.5 h-3.5" />
-                  <span>Áp dụng cấu hình</span>
+                  <span>Apply Configuration</span>
                 </>
               )}
             </button>
@@ -491,299 +460,360 @@ export function ExtensionConfigModal({
         {/* Drawer Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {workspaceMode === 'table' ? (
-            <div className="space-y-6">
-              {/* Extension-Specific Parameter Strip */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 rounded-xl border border-border bg-muted/10 text-xs">
-                {isRateLimit ? (
-                  <>
-                    <div>
-                      <span className="text-[11px] text-muted-foreground block mb-0.5">
-                        Tốc độ mặc định
-                      </span>
-                      <span className="font-semibold text-foreground font-mono text-sm">
-                        {parsedConfig.rate ?? parsedConfig.default_rate ?? 100} req/s
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-muted-foreground block mb-0.5">
-                        Dung lượng Burst
-                      </span>
-                      <span className="font-semibold text-foreground font-mono text-sm">
-                        {parsedConfig.burst ?? parsedConfig.default_burst ?? 200}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-muted-foreground block mb-0.5">
-                        Định danh theo
-                      </span>
-                      <span className="font-semibold text-foreground font-mono uppercase text-xs">
-                        {parsedConfig.limit_by ?? 'Client IP'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-muted-foreground block mb-0.5">
-                        HTTP Phản hồi
-                      </span>
-                      <span className="font-semibold text-rose-500 font-mono text-sm">
-                        {parsedConfig.rejected_code ?? 429} Too Many Requests
-                      </span>
-                    </div>
-                  </>
-                ) : isBotOrSecurity ? (
-                  <>
-                    <div>
-                      <span className="text-[11px] text-muted-foreground block mb-0.5">
-                        Chế độ phòng thủ
-                      </span>
-                      <span className="font-semibold text-foreground font-mono uppercase text-xs">
-                        {parsedConfig.mode ?? 'Enforce'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-muted-foreground block mb-0.5">
-                        Độ nhạy (Sensitivity)
-                      </span>
-                      <span className="font-semibold text-foreground font-mono text-xs">
-                        {parsedConfig.sensitivity ?? 'High'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-muted-foreground block mb-0.5">
-                        Ngưỡng Anomaly
-                      </span>
-                      <span className="font-semibold text-foreground font-mono text-xs">
-                        {parsedConfig.anomaly_threshold ?? 5} điểm
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-muted-foreground block mb-0.5">
-                        Hành vi vi phạm
-                      </span>
-                      <span className="font-semibold text-rose-500 font-mono text-xs uppercase">
-                        {parsedConfig.action ?? 'Block (403)'}
-                      </span>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div>
-                      <span className="text-[11px] text-muted-foreground block mb-0.5">
-                        Mã định danh
-                      </span>
-                      <span className="font-mono text-xs text-foreground">{extension.id}</span>
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-muted-foreground block mb-0.5">
-                        Nhóm phân loại
-                      </span>
-                      <span className="font-medium text-xs text-foreground uppercase">
-                        {extension.category}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-muted-foreground block mb-0.5">
-                        Số quy tắc cấu hình
-                      </span>
-                      <span className="font-mono text-xs text-primary font-bold">
-                        {rules.length} quy tắc
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-muted-foreground block mb-0.5">
-                        Thời gian tạo
-                      </span>
-                      <span className="font-mono text-[11px] text-muted-foreground">
-                        {new Date().toLocaleDateString()}
-                      </span>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Data Table Toolbar */}
-              <div className="flex items-center justify-between gap-4">
-                <div className="relative flex-1 max-w-sm">
-                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Tìm quy tắc trong bảng (tên, URI, action)..."
-                    className="w-full pl-9 pr-3 py-1.5 text-xs bg-background border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                  />
-                </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>
-                    Hiển thị <strong>{filteredRules.length}</strong> / {rules.length} quy tắc
-                  </span>
-                </div>
-              </div>
-
-              {/* Extension-Specific Data Table */}
-              <div className="border border-border rounded-xl overflow-hidden shadow-xs bg-card">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-muted/40 border-b border-border text-muted-foreground uppercase font-mono text-[10px] tracking-wider">
-                    <tr>
-                      <th className="py-3 px-4 w-1/12">Status</th>
-                      <th className="py-3 px-4 w-3/12">Tên quy tắc</th>
-                      <th className="py-3 px-4 w-3/12">Điều kiện khớp (Match)</th>
-                      <th className="py-3 px-4 w-2/12">Thông số / Giới hạn</th>
-                      <th className="py-3 px-4 w-2/12">Hành động</th>
-                      <th className="py-3 px-4 w-1/12 text-right">Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/60">
-                    {filteredRules.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="py-12 text-center text-muted-foreground">
-                          <div className="flex flex-col items-center justify-center">
-                            <Shield className="w-8 h-8 opacity-40 mb-2" />
-                            <p className="text-sm font-semibold text-foreground">
-                              Chưa có quy tắc nào
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              Nhấn "+ Thêm quy tắc" ở góc trên để bắt đầu thêm bộ luật cho extension.
-                            </p>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredRules.map((rule, idx) => {
-                        const originalIndex = rules.findIndex((r) => r.id === rule.id);
-                        return (
-                          <tr
-                            key={rule.id}
-                            className={`hover:bg-muted/30 transition-colors ${
-                              !rule.enabled ? 'opacity-60 bg-muted/10' : ''
-                            }`}
-                          >
-                            {/* Status */}
-                            <td className="py-3 px-4">
-                              <button
-                                type="button"
-                                onClick={() => handleToggleRule(originalIndex)}
-                                className="cursor-pointer hover:scale-110 active:scale-95 transition-transform"
-                                title={rule.enabled ? 'Đang bật' : 'Đang tắt'}
-                              >
-                                {rule.enabled ? (
-                                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                                ) : (
-                                  <XCircle className="w-4 h-4 text-muted-foreground" />
-                                )}
-                              </button>
-                            </td>
-
-                            {/* Name & ID */}
-                            <td className="py-3 px-4">
-                              <div>
-                                <span className="font-semibold text-foreground">{rule.name}</span>
-                                {rule.description && (
-                                  <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-                                    {rule.description}
-                                  </p>
-                                )}
-                              </div>
-                            </td>
-
-                            {/* Match condition */}
-                            <td className="py-3 px-4">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                {rule.method && (
-                                  <span className="font-mono text-[10px] px-1.5 py-0.5 bg-muted rounded-sm border border-border/80">
-                                    {rule.method}
-                                  </span>
-                                )}
-                                <span className="font-mono text-[10px] px-2 py-0.5 bg-muted/80 text-foreground rounded-sm truncate max-w-[220px]">
-                                  {rule.match_type ? `${rule.match_type}: ` : ''}
-                                  {rule.match_value || 'Mọi request'}
-                                </span>
-                              </div>
-                            </td>
-
-                            {/* Specs / Rate */}
-                            <td className="py-3 px-4 font-mono text-[11px]">
-                              {rule.rate ? (
-                                <span className="inline-flex items-center gap-1 text-primary bg-primary/10 px-2 py-0.5 rounded-sm border border-primary/20">
-                                  <Gauge className="w-3 h-3" />
-                                  <span>
-                                    {rule.rate} r/s (burst {rule.burst ?? rule.rate})
-                                  </span>
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
-                            </td>
-
-                            {/* Action */}
-                            <td className="py-3 px-4">
-                              <span
-                                className={`px-2 py-0.5 rounded-none text-[10px] font-mono uppercase tracking-wider ${
-                                  rule.action === 'block'
-                                    ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
-                                    : rule.action === 'throttle'
-                                    ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
-                                    : rule.action === 'challenge'
-                                    ? 'bg-purple-500/10 text-purple-500 border border-purple-500/20'
-                                    : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
-                                }`}
-                              >
-                                {rule.action || 'block'}
-                              </span>
-                            </td>
-
-                            {/* Actions */}
-                            <td className="py-3 px-4 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenEdit(rule, originalIndex)}
-                                  className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
-                                  title="Chỉnh sửa"
-                                >
-                                  <Edit3 className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteRule(originalIndex)}
-                                  className="p-1 rounded text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 cursor-pointer"
-                                  title="Xóa"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : (
-            /* RAW JSON MODE */
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-foreground uppercase tracking-wide">
-                  Cấu hình thô (Raw JSON Configuration)
-                </label>
-                <div className="flex items-center gap-2">
-                  {catalogEntry && (
+            isEditingRule ? (
+              /* INLINE RULE FORM - Replaces table inside drawer */
+              <div className="space-y-5 animate-in fade-in duration-200">
+                {/* Form Header */}
+                <div className="flex items-center justify-between pb-3 border-b border-border">
+                  <div className="flex items-center gap-3">
                     <button
                       type="button"
                       onClick={() => {
-                        const defaultTemplate = getDefaultConfigJson(extension.id);
-                        if (defaultTemplate && defaultTemplate !== '{}') {
-                          setConfigText(defaultTemplate);
-                          syncFromJSON(defaultTemplate);
-                        }
+                        setIsEditingRule(false);
+                        setEditingIndex(null);
                       }}
-                      className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted px-2 py-1 rounded-sm border border-border/60 transition-all duration-150 cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted border border-border/80 transition-colors cursor-pointer"
                     >
-                      <FileCode className="w-3 h-3 text-primary" />
-                      <span>Template</span>
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <span>Back to Table</span>
                     </button>
-                  )}
+                    <div className="h-4 w-px bg-border" />
+                    <div>
+                      <h4 className="font-semibold text-sm text-foreground">
+                        {editingIndex !== null ? 'Edit Rule' : 'Add New Rule'}
+                      </h4>
+                      <p className="text-[11px] text-muted-foreground">
+                        Configure match conditions and execution behaviors directly for this extension.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Form Inputs (Pure UI view, no JSON mode toggle) */}
+                <div className="bg-card border border-border rounded-xl p-6 shadow-xs space-y-4 text-xs">
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-1.5">
+                      Rule Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={ruleForm.name}
+                      onChange={(e) => setRuleForm({ ...ruleForm, name: e.target.value })}
+                      className="w-full px-3.5 py-2 text-xs bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-foreground mb-1.5">
+                        Action
+                      </label>
+                      <select
+                        value={ruleForm.action}
+                        onChange={(e) => setRuleForm({ ...ruleForm, action: e.target.value })}
+                        className="w-full px-3.5 py-2 text-xs bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs"
+                      >
+                        <option value="throttle">Throttle (Rate Limit 429)</option>
+                        <option value="block">Block (Forbidden 403)</option>
+                        <option value="challenge">Challenge (Interactive CAPTCHA)</option>
+                        <option value="allow">Allow (Bypass / Whitelist)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-foreground mb-1.5">
+                        HTTP Method
+                      </label>
+                      <select
+                        value={ruleForm.method}
+                        onChange={(e) => setRuleForm({ ...ruleForm, method: e.target.value })}
+                        className="w-full px-3.5 py-2 text-xs bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs"
+                      >
+                        <option value="ALL">ALL Methods</option>
+                        <option value="GET">GET</option>
+                        <option value="POST">POST</option>
+                        <option value="PUT">PUT</option>
+                        <option value="DELETE">DELETE</option>
+                        <option value="PATCH">PATCH</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-foreground mb-1.5">
+                        Match Condition Type
+                      </label>
+                      <select
+                        value={ruleForm.match_type}
+                        onChange={(e) => setRuleForm({ ...ruleForm, match_type: e.target.value })}
+                        className="w-full px-3.5 py-2 text-xs bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs"
+                      >
+                        <option value="path">URI Path (Path Prefix)</option>
+                        <option value="ip">Client IP / CIDR</option>
+                        <option value="header">Request Header</option>
+                        <option value="all">All Requests (Global)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-foreground mb-1.5">
+                        Match Value
+                      </label>
+                      <input
+                        type="text"
+                        value={ruleForm.match_value || ''}
+                        onChange={(e) => setRuleForm({ ...ruleForm, match_value: e.target.value })}
+                        className="w-full px-3.5 py-2 text-xs bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono shadow-2xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-foreground mb-1.5">
+                        Rate Limit (req/s)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={ruleForm.rate ?? ''}
+                        onChange={(e) =>
+                          setRuleForm({
+                            ...ruleForm,
+                            rate: e.target.value ? parseInt(e.target.value, 10) : undefined,
+                          })
+                        }
+                        className="w-full px-3.5 py-2 text-xs bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono shadow-2xs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-foreground mb-1.5">
+                        Burst Capacity
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={ruleForm.burst ?? ''}
+                        onChange={(e) =>
+                          setRuleForm({
+                            ...ruleForm,
+                            burst: e.target.value ? parseInt(e.target.value, 10) : undefined,
+                          })
+                        }
+                        className="w-full px-3.5 py-2 text-xs bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono shadow-2xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-1.5">
+                      Description / Notes
+                    </label>
+                    <input
+                      type="text"
+                      value={ruleForm.description || ''}
+                      onChange={(e) => setRuleForm({ ...ruleForm, description: e.target.value })}
+                      className="w-full px-3.5 py-2 text-xs bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs"
+                    />
+                  </div>
+
+                  {/* Form Footer Buttons */}
+                  <div className="pt-4 border-t border-border flex items-center justify-end gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditingRule(false);
+                        setEditingIndex(null);
+                      }}
+                      className="px-4 py-2 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveRuleEntry}
+                      disabled={!ruleForm.name.trim()}
+                      className="px-5 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {editingIndex !== null ? 'Update Rule' : 'Save Rule'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-6 animate-in fade-in duration-200">
+
+
+                {/* Data Table Toolbar */}
+                <div className="flex items-center justify-between gap-4">
+                  <div className="relative flex-1 max-w-sm">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-3 py-1.5 text-xs bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>
+                      Showing <strong>{filteredRules.length}</strong> / {rules.length} rules
+                    </span>
+                  </div>
+                </div>
+
+                {/* Extension-Specific Data Table */}
+                <div className="border border-border rounded-xl overflow-hidden shadow-xs bg-card">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-muted/40 border-b border-border text-muted-foreground uppercase font-mono text-[10px] tracking-wider">
+                      <tr>
+                        <th className="py-3 px-4 w-1/12">Status</th>
+                        <th className="py-3 px-4 w-3/12">Rule Name</th>
+                        <th className="py-3 px-4 w-3/12">Match Condition</th>
+                        <th className="py-3 px-4 w-2/12">Rate / Limits</th>
+                        <th className="py-3 px-4 w-2/12">Action</th>
+                        <th className="py-3 px-4 w-1/12 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {filteredRules.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-12 text-center text-muted-foreground">
+                            <div className="flex flex-col items-center justify-center">
+                              <Shield className="w-8 h-8 opacity-40 mb-2" />
+                              <p className="text-sm font-semibold text-foreground">
+                                No rules defined yet
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                Click "+ Add Rule" above to define rules for this extension.
+                              </p>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredRules.map((rule, idx) => {
+                          const originalIndex = rules.findIndex((r) => r.id === rule.id);
+                          return (
+                            <tr
+                              key={rule.id}
+                              className={`hover:bg-muted/30 transition-colors ${!rule.enabled ? 'opacity-60 bg-muted/10' : ''
+                                }`}
+                            >
+                              {/* Status */}
+                              <td className="py-3 px-4">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleRule(originalIndex)}
+                                  className="cursor-pointer hover:scale-110 active:scale-95 transition-transform"
+                                  title={rule.enabled ? 'Enabled' : 'Disabled'}
+                                >
+                                  {rule.enabled ? (
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                                  ) : (
+                                    <XCircle className="w-4 h-4 text-muted-foreground" />
+                                  )}
+                                </button>
+                              </td>
+
+                              {/* Name & ID */}
+                              <td className="py-3 px-4">
+                                <div>
+                                  <span className="font-semibold text-foreground">{rule.name}</span>
+                                  {rule.description && (
+                                    <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                                      {rule.description}
+                                    </p>
+                                  )}
+                                </div>
+                              </td>
+
+                              {/* Match condition */}
+                              <td className="py-3 px-4">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {rule.method && (
+                                    <span className="font-mono text-[10px] px-1.5 py-0.5 bg-muted rounded-sm border border-border/80">
+                                      {rule.method}
+                                    </span>
+                                  )}
+                                  <span className="font-mono text-[10px] px-2 py-0.5 bg-muted/80 text-foreground rounded-sm truncate max-w-[220px]">
+                                    {rule.match_type ? `${rule.match_type}: ` : ''}
+                                    {rule.match_value || 'All requests'}
+                                  </span>
+                                </div>
+                              </td>
+
+                              {/* Specs / Rate */}
+                              <td className="py-3 px-4 font-mono text-[11px]">
+                                {rule.rate ? (
+                                  <span className="inline-flex items-center gap-1 text-primary bg-primary/10 px-2 py-0.5 rounded-sm border border-primary/20">
+                                    <Gauge className="w-3 h-3" />
+                                    <span>
+                                      {rule.rate} r/s (burst {rule.burst ?? rule.rate})
+                                    </span>
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </td>
+
+                              {/* Action */}
+                              <td className="py-3 px-4">
+                                <span
+                                  className={`px-2 py-0.5 rounded-none text-[10px] font-mono uppercase tracking-wider ${rule.action === 'block'
+                                    ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
+                                    : rule.action === 'throttle'
+                                      ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                                      : rule.action === 'challenge'
+                                        ? 'bg-purple-500/10 text-purple-500 border border-purple-500/20'
+                                        : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                                    }`}
+                                >
+                                  {rule.action || 'block'}
+                                </span>
+                              </td>
+
+                              {/* Actions */}
+                              <td className="py-3 px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEdit(rule, originalIndex)}
+                                    className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
+                                    title="Edit"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteRule(originalIndex)}
+                                    className="p-1 rounded text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 cursor-pointer"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )
+          ) : (
+            /* RAW JSON MODE */
+            <div className="space-y-4 animate-in fade-in duration-200">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-foreground uppercase tracking-wide">
+                  Raw JSON Configuration
+                </label>
+                <div className="flex items-center gap-2">
+
                   <button
                     type="button"
                     onClick={handleFormat}
@@ -808,7 +838,7 @@ export function ExtensionConfigModal({
                     ) : (
                       <Copy className="w-3 h-3" />
                     )}
-                    <span>{copied ? 'Đã copy' : 'Copy'}</span>
+                    <span>{copied ? 'Copied' : 'Copy'}</span>
                   </button>
                   <button
                     type="button"
@@ -848,7 +878,7 @@ export function ExtensionConfigModal({
           <span className="flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-primary" />
             <span>
-              Cấu hình được tự động lưu vào SQLite Authority và đồng bộ xuống Dataplane Nodes.
+              Configuration is automatically persisted to SQLite Authority and synchronized to Dataplane Nodes.
             </span>
           </span>
           <button
@@ -856,220 +886,12 @@ export function ExtensionConfigModal({
             onClick={onClose}
             className="px-3 py-1 rounded-md border border-border hover:bg-muted text-foreground transition-colors cursor-pointer"
           >
-            Đóng Workspace
+            Close Workspace
           </button>
         </div>
       </div>
 
-      {/* SUB-PANEL: ADD / EDIT RULE WITH 2 MODES (UI VIEW & JSON VIEW) */}
-      {isAddOpen && (
-        <div
-          className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150"
-          onClick={() => setIsAddOpen(false)}
-        >
-          <div
-            className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in zoom-in-95 duration-150"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Sub-panel Header */}
-            <div className="px-5 py-3.5 border-b border-border flex items-center justify-between bg-muted/20">
-              <div className="flex items-center gap-2">
-                <SlidersHorizontal className="w-4 h-4 text-primary" />
-                <h4 className="font-semibold text-sm text-foreground">
-                  {editingIndex !== null ? 'Chỉnh sửa quy tắc' : 'Thêm quy tắc mới'}
-                </h4>
-              </div>
 
-              {/* Mode switch for Add Rule: UI View vs JSON View */}
-              <div className="flex items-center p-0.5 bg-muted/60 rounded-md border border-border">
-                <button
-                  type="button"
-                  onClick={() => setAddMode('ui')}
-                  className={`px-2.5 py-1 rounded-sm text-[11px] font-medium transition-all ${
-                    addMode === 'ui'
-                      ? 'bg-card text-foreground shadow-xs'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  UI View
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRuleJsonText(JSON.stringify(ruleForm, null, 2));
-                    setAddMode('json');
-                  }}
-                  className={`px-2.5 py-1 rounded-sm text-[11px] font-medium transition-all ${
-                    addMode === 'json'
-                      ? 'bg-card text-foreground shadow-xs'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  JSON View
-                </button>
-              </div>
-            </div>
-
-            {/* Sub-panel Body */}
-            <div className="p-5 space-y-4">
-              {addMode === 'ui' ? (
-                <div className="space-y-3.5 text-xs">
-                  <div>
-                    <label className="block text-[11px] font-medium text-muted-foreground mb-1">
-                      Tên quy tắc *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={ruleForm.name}
-                      onChange={(e) => setRuleForm({ ...ruleForm, name: e.target.value })}
-                      placeholder="VD: Chặn spam login"
-                      className="w-full px-3 py-1.5 bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[11px] font-medium text-muted-foreground mb-1">
-                        Hành động (Action)
-                      </label>
-                      <select
-                        value={ruleForm.action}
-                        onChange={(e) => setRuleForm({ ...ruleForm, action: e.target.value })}
-                        className="w-full px-3 py-1.5 bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                      >
-                        <option value="throttle">Throttle (Giới hạn tốc độ 429)</option>
-                        <option value="block">Block (Chặn truy cập 403)</option>
-                        <option value="challenge">Challenge (Xác thực CAPTCHA)</option>
-                        <option value="allow">Allow (Bypass / Ưu tiên cho phép)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-medium text-muted-foreground mb-1">
-                        Phương thức HTTP
-                      </label>
-                      <select
-                        value={ruleForm.method}
-                        onChange={(e) => setRuleForm({ ...ruleForm, method: e.target.value })}
-                        className="w-full px-3 py-1.5 bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                      >
-                        <option value="ALL">ALL Methods</option>
-                        <option value="GET">GET</option>
-                        <option value="POST">POST</option>
-                        <option value="PUT">PUT</option>
-                        <option value="DELETE">DELETE</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[11px] font-medium text-muted-foreground mb-1">
-                        Loại điều kiện khớp
-                      </label>
-                      <select
-                        value={ruleForm.match_type}
-                        onChange={(e) => setRuleForm({ ...ruleForm, match_type: e.target.value })}
-                        className="w-full px-3 py-1.5 bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                      >
-                        <option value="path">Đường dẫn URI (Path Prefix)</option>
-                        <option value="ip">Địa chỉ IP / CIDR</option>
-                        <option value="header">Request Header</option>
-                        <option value="all">Tất cả request (Global)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-medium text-muted-foreground mb-1">
-                        Giá trị khớp (Match Value)
-                      </label>
-                      <input
-                        type="text"
-                        value={ruleForm.match_value || ''}
-                        onChange={(e) => setRuleForm({ ...ruleForm, match_value: e.target.value })}
-                        placeholder="/api/v1/auth/login"
-                        className="w-full px-3 py-1.5 bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[11px] font-medium text-muted-foreground mb-1">
-                        Tốc độ giới hạn (Rate - req/s)
-                      </label>
-                      <input
-                        type="number"
-                        value={ruleForm.rate ?? 100}
-                        onChange={(e) =>
-                          setRuleForm({ ...ruleForm, rate: parseInt(e.target.value, 10) || 1 })
-                        }
-                        className="w-full px-3 py-1.5 bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-medium text-muted-foreground mb-1">
-                        Dung lượng bùng phát (Burst)
-                      </label>
-                      <input
-                        type="number"
-                        value={ruleForm.burst ?? 200}
-                        onChange={(e) =>
-                          setRuleForm({ ...ruleForm, burst: parseInt(e.target.value, 10) || 1 })
-                        }
-                        className="w-full px-3 py-1.5 bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                /* JSON VIEW FOR RULE */
-                <div className="space-y-2">
-                  <label className="block text-[11px] font-medium text-muted-foreground">
-                    Định nghĩa Rule bằng JSON
-                  </label>
-                  <textarea
-                    rows={10}
-                    value={ruleJsonText}
-                    onChange={(e) => {
-                      setRuleJsonText(e.target.value);
-                      if (ruleJsonError) setRuleJsonError(null);
-                    }}
-                    className="w-full font-mono text-xs bg-muted/20 border border-border rounded-md p-3 text-foreground leading-relaxed focus:outline-none focus:ring-1 focus:ring-primary"
-                    spellCheck={false}
-                  />
-                  {ruleJsonError && (
-                    <p className="text-xs text-rose-500 flex items-center gap-1">
-                      <AlertCircle className="w-3.5 h-3.5" />
-                      <span>{ruleJsonError}</span>
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Sub-panel Footer */}
-            <div className="px-5 py-3 border-t border-border bg-muted/20 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setIsAddOpen(false)}
-                className="px-3.5 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-              >
-                Hủy
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveRuleEntry}
-                className="px-4 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all cursor-pointer shadow-xs"
-              >
-                Lưu vào danh sách
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

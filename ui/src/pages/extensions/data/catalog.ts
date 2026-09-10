@@ -131,7 +131,7 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     category: 'security_engine',
     description: 'Core Layer 7 request inspection, anomaly scoring, and enforcement engine.',
     version: '1.0.0',
-    enabled: true,
+    enabled: false,
     is_builtin: true,
     tags: ['waf', 'security', 'inspection', 'core', 'owasp'],
     config_json: JSON.stringify({
@@ -153,7 +153,7 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     category: 'security_engine',
     description: 'Deep token analysis preventing classic, boolean, error-based, and stacked SQLi attacks.',
     version: '1.0.0',
-    enabled: true,
+    enabled: false,
     is_builtin: true,
     tags: ['sqli', 'database', 'security', 'injection'],
     config_json: JSON.stringify({
@@ -177,7 +177,7 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     category: 'security_engine',
     description: 'Script tag, inline event, and DOM-based XSS payload sanitization and blocking.',
     version: '1.0.0',
-    enabled: true,
+    enabled: false,
     is_builtin: true,
     tags: ['xss', 'html', 'javascript', 'sanitization'],
     config_json: JSON.stringify({
@@ -196,7 +196,7 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     category: 'security_engine',
     description: 'Detects shell metacharacters, pipes, backticks, and unauthorized command execution attempts.',
     version: '1.0.0',
-    enabled: true,
+    enabled: false,
     is_builtin: true,
     tags: ['rce', 'command-injection', 'bash', 'shell'],
     config_json: JSON.stringify({
@@ -223,7 +223,7 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     category: 'security_engine',
     description: 'Stops ../, ..%2f, and null-byte directory traversal attacks targeting file system roots.',
     version: '1.0.0',
-    enabled: true,
+    enabled: false,
     is_builtin: true,
     tags: ['lfi', 'path-traversal', 'filesystem', 'dot-dot-slash'],
     config_json: JSON.stringify({
@@ -246,7 +246,7 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     category: 'security_engine',
     description: 'Restricts outbound fetch URLs and blocks requests targeting cloud metadata and private IP ranges.',
     version: '1.0.0',
-    enabled: true,
+    enabled: false,
     is_builtin: true,
     tags: ['ssrf', 'cloud-metadata', 'aws', 'gcp', 'private-ip'],
     config_json: JSON.stringify({
@@ -273,7 +273,7 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     category: 'security_engine',
     description: 'Blocks deserialization exploits, Java/PHP code execution, and OGNL/SpEL injection attacks.',
     version: '1.0.0',
-    enabled: true,
+    enabled: false,
     is_builtin: true,
     tags: ['rce', 'deserialization', 'java', 'spring', 'ognl'],
     config_json: JSON.stringify({
@@ -292,7 +292,7 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     category: 'security_engine',
     description: 'Enforces RFC strict compliance, detects smuggling, bad content-lengths, and malformed headers.',
     version: '1.0.0',
-    enabled: true,
+    enabled: false,
     is_builtin: true,
     tags: ['smuggling', 'rfc', 'protocol', 'headers'],
     config_json: JSON.stringify({
@@ -402,7 +402,7 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     category: 'security_engine',
     description: 'Detects and blocks automated security scanners such as Nikto, Nessus, Acunetix, and sqlmap.',
     version: '1.0.0',
-    enabled: true,
+    enabled: false,
     is_builtin: true,
     tags: ['scanner', 'sqlmap', 'nikto', 'burp', 'fingerprint'],
     config_json: JSON.stringify({
@@ -475,7 +475,7 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     category: 'security_engine',
     description: 'Comprehensive WebAssembly OWASP CRS v4 rule collection covering Top 10 vulnerabilities.',
     version: '1.0.0',
-    enabled: true,
+    enabled: false,
     is_builtin: true,
     tags: ['owasp', 'crs', 'coraza', 'top-10'],
     config_json: JSON.stringify({
@@ -1684,7 +1684,7 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     category: 'observability',
     description: 'Exposes Prometheus pull metrics endpoint on port 9145 with NGINX status scraping and OTLP push.',
     version: '1.0.0',
-    enabled: true,
+    enabled: false,
     is_builtin: true,
     tags: ['prometheus', 'metrics', 'otlp', 'telemetry'],
     config_json: JSON.stringify({
@@ -1896,7 +1896,7 @@ export const EXTENSIONS_CATALOG: ExtensionItem[] = [
     category: 'observability',
     description: 'Logs all configuration mutations and administrative actions into an immutable audit stream.',
     version: '1.0.0',
-    enabled: true,
+    enabled: false,
     is_builtin: true,
     tags: ['audit', 'compliance', 'security', 'tamper-proof'],
     config_json: JSON.stringify({
