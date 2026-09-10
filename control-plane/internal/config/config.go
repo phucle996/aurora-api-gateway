@@ -18,7 +18,6 @@ type Config struct {
 	AdminTokenFile   string
 	CompilerPath     string
 	JWTSecret        string
-	RateLimitUDPAddr string
 	Version          string
 	BuildTime        string
 	TrustedProxies   []string
@@ -47,7 +46,6 @@ func LoadConfig() Config {
 		AdminTokenFile:   os.Getenv("AURORA_ADMIN_TOKEN_FILE"),
 		CompilerPath:     os.Getenv("AURORA_COMPILER_PATH"),
 		JWTSecret:        jwtSecret,
-		RateLimitUDPAddr: value("AURORA_RATE_LIMIT_UDP", "127.0.0.1:5140"),
 		Version:          value("AURORA_VERSION", DefaultVersion),
 		BuildTime:        value("AURORA_BUILD_TIME", DefaultBuildTime),
 		TrustedProxies:   trustedProxies,

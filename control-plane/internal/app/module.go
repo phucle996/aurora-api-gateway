@@ -37,7 +37,6 @@ type Module struct {
 	DomainHandler        *handler.DomainHandler
 	DomainRoutingHandler *handler.DomainRoutingHandler
 	UpstreamHandler      *handler.UpstreamHandler
-	RateLimitHandler     *handler.RateLimitHandler
 	SystemHandler        *handler.SystemHandler
 	SecurityHandler      *handler.SecurityHandler
 	NotificationHandler  *handler.NotificationHandler
@@ -100,10 +99,6 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 		metricsCfg = &entity.MetricsIntegrationConfig{Mode: "prometheus"}
 	}
 
-	rateLimitRepo := repository.NewRateLimitRepository(writerDB, readerDB)
-	rateLimitSvc := service.NewRateLimitService(rateLimitRepo)
-	rateLimitHdr := handler.NewRateLimitHandler(rateLimitSvc)
-
 	nodeRepo := repository.NewNodeRepository(writerDB)
 	extensionRepo := repository.NewExtensionRepository(writerDB, readerDB)
 	analyticsSvc := service.NewAnalyticsService(analyticsRepo, nodeRepo, extensionRepo)
@@ -160,7 +155,6 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 		DomainHandler:        domainHdr,
 		DomainRoutingHandler: domainRoutingHdr,
 		UpstreamHandler:      upstreamHdr,
-		RateLimitHandler:     rateLimitHdr,
 		SystemHandler:        systemHdr,
 		SecurityHandler:      securityHdr,
 		NotificationHandler:  notificationHdr,

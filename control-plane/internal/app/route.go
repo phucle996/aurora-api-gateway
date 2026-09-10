@@ -101,18 +101,6 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	r.GET("/api/v1/upstream-sync/:node", authMidd, m.UpstreamHandler.Desired) // Đồng bộ cấu hình upstream tới NGINX Data Plane
 	r.POST("/api/v1/upstream-sync/:node", authMidd, m.UpstreamHandler.Report) // Node báo cáo kết quả đồng bộ upstream
 
-	// Quản lý Rate Limit Rules API
-	r.POST("/api/v1/rate-limits", authMidd, m.RateLimitHandler.Create)                   // Tạo mới Rate Limit Rule
-	r.GET("/api/v1/rate-limits", authMidd, m.RateLimitHandler.List)                      // Danh sách Rate Limit Rules
-	r.GET("/api/v1/rate-limits/stats", authMidd, m.RateLimitHandler.GetStats)            // Thống kê tổng hợp số liệu thực tế
-	r.GET("/api/v1/rate-limits/metrics", authMidd, m.RateLimitHandler.GetMetrics)        // Biểu đồ vận tốc & top endpoints
-	r.GET("/api/v1/rate-limits/:id", authMidd, m.RateLimitHandler.GetByID)               // Chi tiết Rate Limit Rule
-	r.PUT("/api/v1/rate-limits/:id", authMidd, m.RateLimitHandler.Update)                // Cập nhật Rate Limit Rule
-	r.DELETE("/api/v1/rate-limits/:id", authMidd, m.RateLimitHandler.Delete)             // Xóa Rate Limit Rule
-	r.POST("/api/v1/rate-limits/flush", authMidd, m.RateLimitHandler.Flush)              // Flush metrics chủ động
-	r.POST("/api/v1/rate-limits/enable", authMidd, m.RateLimitHandler.EnableCollector)   // Bật thu thập metrics
-	r.POST("/api/v1/rate-limits/disable", authMidd, m.RateLimitHandler.DisableCollector) // Tắt thu thập metrics
-
 	// Quản lý Rule API v2 (schema mới, hỗ trợ điều kiện phức tạp)
 	r.POST("/api/v2/rules", authMidd, m.RuleHandler.CreateDefinition)
 	r.PUT("/api/v2/rules/:id", authMidd, m.RuleHandler.UpdateDefinition)
