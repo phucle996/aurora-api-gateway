@@ -7,7 +7,6 @@ import {
   ExtensionStatsData,
 } from './types';
 import { EXTENSIONS_CATALOG, CATEGORIES_META } from './data/catalog';
-import { ExtensionStats } from './components/ExtensionStats';
 import { ExtensionFilters } from './components/ExtensionFilters';
 import { ExtensionCard } from './components/ExtensionCard';
 import { ExtensionTable } from './components/ExtensionTable';
@@ -258,13 +257,6 @@ export default function ExtensionsPage() {
           </button>
         </div>
       )}
-
-      {/* KPI Stats */}
-      <ExtensionStats
-        stats={stats}
-        selectedCategory={selectedCategory}
-        onSelectCategory={(cat) => setSelectedCategory(cat)}
-      />
 
       {/* Filters & Navigation */}
       <ExtensionFilters
