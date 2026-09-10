@@ -3,7 +3,6 @@ export * from './rules';
 export * from './nodes';
 export * from './analytics';
 export * from './ip-access';
-export * from './rate-limits';
 export * from './domains';
 export * from './system';
 export * from './security';

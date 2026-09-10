@@ -8,7 +8,6 @@ import {
   Shield,
   Layers,
   GlobeLock,
-  Gauge,
   Server,
   Settings,
   Blocks,
@@ -135,12 +134,6 @@ export function ConsoleSidebar({
       path: '/ip-access',
       aliases: ['/access-control'],
       icon: <GlobeLock className="w-4 h-4 shrink-0" />,
-    },
-    {
-      label: 'Rate Limiting',
-      path: '/rate-limits',
-      aliases: ['/rate-limiting'],
-      icon: <Gauge className="w-4 h-4 shrink-0" />,
     },
     {
       label: 'NGINX / Nodes',
