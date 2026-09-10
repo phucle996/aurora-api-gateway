@@ -101,12 +101,12 @@ impl App {
         ))));
 
         // Baseline initialization from CLI flags (if any) until first spec sync
-        let initial_spec = crate::spec::ExtensionsSpec {
-            prometheus: Some(crate::spec::MetricsExtensionSpec {
+        let initial_spec = crate::spec::extensions::ExtensionsSpec {
+            prometheus: Some(crate::spec::extensions::MetricsExtensionSpec {
                 enabled: self.cfg.metrics_prometheus || self.cfg.metrics_otlp_endpoint.is_some(),
                 port: self.cfg.metrics_port,
                 stub_status_url: self.cfg.nginx_stub_status_url.clone(),
-                prometheus: Some(crate::spec::PrometheusSpec {
+                prometheus: Some(crate::spec::extensions::PrometheusSpec {
                     enabled: self.cfg.metrics_prometheus,
                     path: "/metrics".to_string(),
                 }),
@@ -114,7 +114,7 @@ impl App {
                     .cfg
                     .metrics_otlp_endpoint
                     .as_ref()
-                    .map(|ep| crate::spec::OtlpSpec {
+                    .map(|ep| crate::spec::extensions::OtlpSpec {
                         enabled: true,
                         endpoint: ep.clone(),
                         interval_secs: self.cfg.metrics_otlp_interval_secs,

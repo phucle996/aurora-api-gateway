@@ -3,7 +3,7 @@ use crate::extension::ExtensionDispatcher;
 use crate::grpc::GrpcClient;
 use crate::nginx::NginxManager;
 use crate::spec::materialize::materialize_nginx;
-use crate::spec::{NodeSpec, compute_sha256};
+use crate::spec::schema::{compute_sha256, Spec};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -50,7 +50,7 @@ impl SpecSyncRunner {
         {
             let hash = compute_sha256(raw.as_bytes());
             info!(hash = %hash, path = %self.spec_path.display(), "Loading baseline node-spec.yaml from disk");
-            if let Ok(spec) = NodeSpec::parse_yaml(&raw) {
+            if let Ok(spec) = Spec::parse_yaml(&raw) {
                 let _ = materialize_nginx(&spec, &self.cfg.policy_dir, &self.cfg.routing_dir).await;
                 self.dispatcher
                     .lock()
@@ -74,7 +74,7 @@ impl SpecSyncRunner {
             ));
         }
 
-        let spec = NodeSpec::parse_yaml(body).map_err(|e| format!("YAML parse error: {}", e))?;
+        let spec = Spec::parse_yaml(body).map_err(|e| format!("YAML parse error: {}", e))?;
 
         // 1. Write atomic node-spec.yaml
         let tmp_path = self

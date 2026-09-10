@@ -1,5 +1,7 @@
 use super::metrics::{MetricsManager, OtlpExporter, PrometheusExporter};
-use crate::spec::{ExtensionsSpec, MetricsExtensionSpec};
+use crate::spec::extensions::{ExtensionsSpec, MetricsExtensionSpec};
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
@@ -10,6 +12,7 @@ pub struct ExtensionDispatcher {
     node_id: Arc<String>,
     metrics_shutdown: Option<CancellationToken>,
     last_metrics_spec: Option<MetricsExtensionSpec>,
+    dynamic_runners: HashMap<String, (CancellationToken, u64)>,
 }
 
 impl ExtensionDispatcher {
@@ -18,12 +21,14 @@ impl ExtensionDispatcher {
             node_id,
             metrics_shutdown: None,
             last_metrics_spec: None,
+            dynamic_runners: HashMap::new(),
         }
     }
 
-    /// Apply declarative extension configurations from NodeSpec.
+    /// Apply declarative extension configurations from Spec.
     pub async fn apply_spec(&mut self, spec: &ExtensionsSpec) {
         self.dispatch_metrics(&spec.prometheus).await;
+        self.dispatch_dynamic(&spec.dynamic).await;
     }
 
     async fn dispatch_metrics(&mut self, metrics_spec: &Option<MetricsExtensionSpec>) {
@@ -101,13 +106,100 @@ impl ExtensionDispatcher {
         );
     }
 
+    async fn dispatch_dynamic(&mut self, dynamic: &HashMap<String, serde_yaml::Value>) {
+        // 1. Identify running extensions that are now disabled or removed -> Stop them
+        let stopped_names: Vec<String> = self
+            .dynamic_runners
+            .keys()
+            .filter(|name| {
+                dynamic
+                    .get(*name)
+                    .map(|v| !is_extension_enabled(v))
+                    .unwrap_or(true)
+            })
+            .cloned()
+            .collect();
+
+        for name in stopped_names {
+            if let Some((cancel, _)) = self.dynamic_runners.remove(&name) {
+                info!(
+                    extension = %name,
+                    "Stopping dynamic extension '{}' (Zero-Overhead enforced)",
+                    name
+                );
+                cancel.cancel();
+            }
+        }
+
+        // 2. Start or hot-reload enabled extensions
+        for (name, val) in dynamic {
+            if !is_extension_enabled(val) {
+                continue;
+            }
+
+            let hash = compute_config_hash(val);
+
+            // Check if already running with identical config
+            if let Some((_, current_hash)) = self.dynamic_runners.get(name) {
+                if *current_hash == hash {
+                    continue;
+                }
+                // Config changed -> Stop previous task
+                if let Some((cancel, _)) = self.dynamic_runners.remove(name) {
+                    info!(
+                        extension = %name,
+                        "Reloading dynamic extension '{}' with updated configuration",
+                        name
+                    );
+                    cancel.cancel();
+                }
+            }
+
+            // Start new dynamic extension token
+            let cancel = CancellationToken::new();
+            info!(
+                extension = %name,
+                "Dynamic extension '{}' successfully started/dispatched",
+                name
+            );
+            self.dynamic_runners.insert(name.clone(), (cancel, hash));
+        }
+    }
+
     /// Shutdown all active running extensions.
     pub async fn shutdown_all(&mut self) {
         if let Some(cancel) = self.metrics_shutdown.take() {
             cancel.cancel();
         }
         self.last_metrics_spec = None;
+
+        for (name, (cancel, _)) in self.dynamic_runners.drain() {
+            info!(
+                extension = %name,
+                "Stopping dynamic extension '{}' (shutdown)",
+                name
+            );
+            cancel.cancel();
+        }
     }
+}
+
+fn is_extension_enabled(val: &serde_yaml::Value) -> bool {
+    if let serde_yaml::Value::Mapping(map) = val
+        && let Some(serde_yaml::Value::Bool(b)) =
+            map.get(serde_yaml::Value::String("enabled".to_string()))
+    {
+        return *b;
+    }
+    false
+}
+
+fn compute_config_hash(val: &serde_yaml::Value) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    if let Ok(s) = serde_yaml::to_string(val) {
+        s.hash(&mut hasher);
+    }
+    hasher.finish()
 }
 
 #[cfg(test)]
@@ -123,13 +215,14 @@ mod tests {
         // 1. Initial state: disabled -> no running extension
         dispatcher.apply_spec(&spec).await;
         assert!(dispatcher.metrics_shutdown.is_none());
+        assert!(dispatcher.dynamic_runners.is_empty());
 
         // 2. Enable metrics
         spec.prometheus = Some(MetricsExtensionSpec {
             enabled: true,
             port: 19145,
             stub_status_url: None,
-            prometheus: Some(crate::spec::PrometheusSpec {
+            prometheus: Some(crate::spec::extensions::PrometheusSpec {
                 enabled: true,
                 path: "/metrics".to_string(),
             }),
@@ -139,7 +232,35 @@ mod tests {
         dispatcher.apply_spec(&spec).await;
         assert!(dispatcher.metrics_shutdown.is_some());
 
-        // 3. Disable metrics -> shuts down immediately
+        // 3. Enable dynamic extension
+        let mut bot_cfg = serde_yaml::Mapping::new();
+        bot_cfg.insert(
+            serde_yaml::Value::String("enabled".to_string()),
+            serde_yaml::Value::Bool(true),
+        );
+        bot_cfg.insert(
+            serde_yaml::Value::String("block_mode".to_string()),
+            serde_yaml::Value::String("challenge".to_string()),
+        );
+        spec.dynamic
+            .insert("bot-detection".to_string(), serde_yaml::Value::Mapping(bot_cfg));
+
+        dispatcher.apply_spec(&spec).await;
+        assert!(dispatcher.dynamic_runners.contains_key("bot-detection"));
+
+        // 4. Disable dynamic extension -> shuts down immediately
+        if let Some(serde_yaml::Value::Mapping(m)) =
+            spec.dynamic.get_mut("bot-detection")
+        {
+            m.insert(
+                serde_yaml::Value::String("enabled".to_string()),
+                serde_yaml::Value::Bool(false),
+            );
+        }
+        dispatcher.apply_spec(&spec).await;
+        assert!(!dispatcher.dynamic_runners.contains_key("bot-detection"));
+
+        // 5. Disable metrics -> shuts down immediately
         spec.prometheus.as_mut().unwrap().enabled = false;
         dispatcher.apply_spec(&spec).await;
         assert!(dispatcher.metrics_shutdown.is_none());

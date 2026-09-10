@@ -8,9 +8,6 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"net/url"
-	"regexp"
-	"strings"
 	"sync"
 	"time"
 
@@ -19,15 +16,8 @@ import (
 	"github.com/goccy/go-yaml"
 )
 
-var (
-	domainHostRegex  = regexp.MustCompile(`^(\*\.)?[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$`)
-	backendAddrRegex = regexp.MustCompile(`^[a-zA-Z0-9.\[\]:_-]+$`)
-	failTimeoutRegex = regexp.MustCompile(`^[0-9]{1,6}[smh]$`)
-	sniRegex         = regexp.MustCompile(`^[a-zA-Z0-9.-]+$`)
-)
-
 // SpecScheduler is an autonomous background provider that periodically compiles
-// cluster authority data into a single declarative NodeSpec snapshot and synchronizes
+// cluster authority data into a single declarative Spec snapshot and synchronizes
 // it to the database with jitter to eliminate thundering herds.
 type SpecScheduler struct {
 	repo           repo.SpecSyncRepository
@@ -123,7 +113,7 @@ func (s *SpecScheduler) runLoop() {
 	}
 }
 
-// Reconcile gathers cluster authority data, compiles a canonical NodeSpec YAML document,
+// Reconcile gathers cluster authority data, compiles a canonical Spec YAML document,
 // and persists a new release if the content digest has changed.
 func (s *SpecScheduler) Reconcile(ctx context.Context) (*entity.ClusterSpecRelease, error) {
 	s.mu.Lock()
@@ -157,7 +147,7 @@ func (s *SpecScheduler) Reconcile(ctx context.Context) (*entity.ClusterSpecRelea
 		Digest:        calculatedHash,
 		SpecYAML:      yamlStr,
 		Actor:         "spec-scheduler",
-		ChangeSummary: fmt.Sprintf("Cluster NodeSpec compiled with %d extensions, %d routes", len(doc.Extensions), len(auth.RoutingRecords)),
+		ChangeSummary: fmt.Sprintf("Cluster Spec compiled with %d extensions, %d routes", len(doc.Extensions), len(auth.RoutingRecords)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to publish spec release: %w", err)
@@ -167,7 +157,7 @@ func (s *SpecScheduler) Reconcile(ctx context.Context) (*entity.ClusterSpecRelea
 	return newRelease, nil
 }
 
-func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*entity.NodeSpecDocument, string, string, error) {
+func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*Spec, string, string, error) {
 	releaseID := int64(1)
 	if auth != nil {
 		if auth.WAFReleaseID > 0 {
@@ -177,13 +167,12 @@ func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*entity
 		}
 	}
 
-	doc := entity.NodeSpecDocument{
+	doc := Spec{
 		Version:     1,
 		ReleaseID:   releaseID,
 		GeneratedAt: "2026-01-01T00:00:00Z",
-		NodeID:      "cluster",
 		Extensions:  make(map[string]map[string]interface{}),
-		WAF: entity.WAFSpec{
+		WAF: WAFSpec{
 			Mode: "enforce",
 		},
 	}
@@ -198,9 +187,25 @@ func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*entity
 
 		doc.UpstreamsConf = auth.UpstreamsConf
 
-		routingConf, err := s.renderRoutingConfig(auth.RoutingRecords)
-		if err == nil {
-			doc.RoutingConf = routingConf
+		if len(auth.RoutingRecords) > 0 {
+			domains := make([]DomainRoutingSpec, 0, len(auth.RoutingRecords))
+			for _, d := range auth.RoutingRecords {
+				if d.Host == "" {
+					continue
+				}
+				domains = append(domains, DomainRoutingSpec{
+					Host: d.Host,
+					Locations: []LocationRoutingSpec{
+						{
+							Path:     "/",
+							Upstream: d.Target,
+						},
+					},
+				})
+			}
+			if len(domains) > 0 {
+				doc.Routing = RoutingSpec{Domains: domains}
+			}
 		}
 
 		if len(auth.Extensions) > 0 {
@@ -233,207 +238,6 @@ func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*entity
 	return &doc, string(yamlBytes), hashStr, nil
 }
 
-func (s *SpecScheduler) renderRoutingConfig(records []entity.SpecRoutingRecord) (string, error) {
-	if len(records) == 0 {
-		return "# No domain routes configured\n", nil
-	}
-
-	var config strings.Builder
-	config.WriteString("map $http_upgrade $aurora_route_connection { default upgrade; '' ''; }\n")
-
-	for _, d := range records {
-		if !domainHostRegex.MatchString(d.Host) || strings.Contains(d.Host, "..") {
-			return "", fmt.Errorf("invalid domain %d: invalid host %q", d.ID, d.Host)
-		}
-
-		name := fmt.Sprintf("aurora_route_%d", d.ID)
-		var transport struct {
-			RequestCompression string `json:"requestCompression"`
-			HTTPVersion        string `json:"httpVersion"`
-			EnableWebSocket    bool   `json:"enableWebSocket"`
-			EnableSSE          bool   `json:"enableSse"`
-			EnableGRPC         bool   `json:"enableGrpc"`
-			KeepAlive          int    `json:"keepAliveConnections"`
-			KeepAliveTimeout   int    `json:"keepAliveTimeout"`
-		}
-		var ssl struct {
-			Enabled    bool   `json:"enabled"`
-			Verify     bool   `json:"verifyCert"`
-			SNI        string `json:"sniHost"`
-			CA         string `json:"caCert"`
-			MTLS       bool   `json:"mTLS"`
-			ClientCert string `json:"clientCert"`
-			ClientKey  string `json:"clientKey"`
-		}
-		var nodes []struct {
-			Address     string `json:"address"`
-			Weight      int    `json:"weight"`
-			MaxFails    int    `json:"maxFails"`
-			FailTimeout string `json:"failTimeout"`
-			Backup      bool   `json:"backup"`
-		}
-		scheme := "http"
-		sni := ""
-
-		if d.ServersJSON != "" {
-			if err := json.Unmarshal([]byte(d.ServersJSON), &nodes); err != nil {
-				return "", err
-			}
-			if d.TransportJSON != "" {
-				_ = json.Unmarshal([]byte(d.TransportJSON), &transport)
-			}
-			if d.SSLJSON != "" {
-				_ = json.Unmarshal([]byte(d.SSLJSON), &ssl)
-			}
-			if ssl.Enabled {
-				scheme = "https"
-				sni = ssl.SNI
-			}
-		} else if d.Target != "" {
-			u, err := url.Parse(d.Target)
-			if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
-				return "", fmt.Errorf("domain %d references missing pool or invalid origin", d.ID)
-			}
-			scheme = u.Scheme
-			if u.Port() == "" && scheme == "https" {
-				u.Host += ":443"
-			}
-			sni = u.Hostname()
-			ssl.Verify = true
-			nodes = append(nodes, struct {
-				Address     string `json:"address"`
-				Weight      int    `json:"weight"`
-				MaxFails    int    `json:"maxFails"`
-				FailTimeout string `json:"failTimeout"`
-				Backup      bool   `json:"backup"`
-			}{Address: u.Host, Weight: 1})
-		}
-
-		if len(nodes) == 0 {
-			continue
-		}
-
-		if transport.HTTPVersion == "HTTP/3" || (transport.RequestCompression != "" && transport.RequestCompression != "none") || (d.ProbesJSON != "" && d.ProbesJSON != "[]" && d.ProbesJSON != "null") {
-			fmt.Fprintf(&config, "server { listen 80; server_name %s; include /etc/nginx/domain-waf.conf; return 503; }\n", d.Host)
-			continue
-		}
-
-		fmt.Fprintf(&config, "upstream %s {\n", name)
-		if d.DynamicDNS {
-			fmt.Fprintf(&config, "zone %s 256k;\nresolver 127.0.0.11 valid=5s ipv6=off;\nresolver_timeout 2s;\n", name)
-		}
-		switch d.Algorithm {
-		case "", "round_robin":
-		case "least_conn", "ip_hash":
-			fmt.Fprintf(&config, "%s;\n", d.Algorithm)
-		default:
-			return "", fmt.Errorf("invalid algorithm %q", d.Algorithm)
-		}
-
-		for _, n := range nodes {
-			if !backendAddrRegex.MatchString(n.Address) || n.Weight < 0 || n.MaxFails < 0 || n.Weight > 10000 || n.MaxFails > 10000 {
-				return "", fmt.Errorf("invalid backend address or limits")
-			}
-			if n.FailTimeout != "" && !failTimeoutRegex.MatchString(n.FailTimeout) {
-				return "", fmt.Errorf("invalid fail timeout")
-			}
-			if n.Weight == 0 {
-				n.Weight = 1
-			}
-			if scheme == "https" {
-				u, e := url.Parse("https://" + n.Address)
-				if e != nil {
-					return "", fmt.Errorf("invalid HTTPS origin")
-				}
-				if u.Port() == "" {
-					n.Address += ":443"
-				}
-			}
-			fmt.Fprintf(&config, "server %s weight=%d max_fails=%d", n.Address, n.Weight, n.MaxFails)
-			if d.DynamicDNS {
-				config.WriteString(" resolve")
-			}
-			if n.FailTimeout != "" {
-				fmt.Fprintf(&config, " fail_timeout=%s", n.FailTimeout)
-			}
-			if n.Backup {
-				if d.Algorithm == "ip_hash" {
-					return "", fmt.Errorf("ip_hash cannot use backup peers")
-				}
-				config.WriteString(" backup")
-			}
-			config.WriteString(";\n")
-		}
-
-		if transport.KeepAlive <= 0 {
-			transport.KeepAlive = 32
-		}
-		if transport.KeepAlive > 4096 {
-			return "", fmt.Errorf("keepalive limit exceeded")
-		}
-		if transport.KeepAliveTimeout > 0 {
-			fmt.Fprintf(&config, "keepalive_timeout %ds;\n", transport.KeepAliveTimeout)
-		}
-
-		fmt.Fprintf(&config, "keepalive %d;\n}\nserver {\nlisten 80;\nserver_name %s;\ninclude /etc/nginx/domain-waf.conf;\n", transport.KeepAlive, d.Host)
-		if d.Status != "Active" {
-			config.WriteString("return 503;\n}\n")
-			continue
-		}
-
-		config.WriteString("location / {\n")
-		directive := "grpc"
-		grpcScheme := "grpc"
-		if scheme == "https" {
-			grpcScheme = "grpcs"
-		}
-		fmt.Fprintf(&config, "grpc_pass %s://%s;\ngrpc_set_header Host $host;\ngrpc_set_header X-Real-IP $remote_addr;\ngrpc_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\ngrpc_read_timeout 1h;\ngrpc_send_timeout 1h;\n", grpcScheme, name)
-
-		if scheme == "https" {
-			fmt.Fprintf(&config, "%s_ssl_server_name on;\n%s_ssl_session_reuse off;\n", directive, directive)
-			caPath := "/etc/ssl/certs/ca-certificates.crt"
-			if ssl.MTLS && (!ssl.Enabled || !ssl.Verify || ssl.ClientCert == "" || ssl.ClientKey == "") {
-				return "", fmt.Errorf("invalid mTLS routing credentials")
-			}
-			for _, asset := range []struct{ content, directive string }{
-				{ssl.CA, "grpc_ssl_trusted_certificate"},
-				{ssl.ClientCert, "grpc_ssl_certificate"},
-				{ssl.ClientKey, "grpc_ssl_certificate_key"},
-			} {
-				if asset.content == "" || (asset.directive != "grpc_ssl_trusted_certificate" && !ssl.MTLS) {
-					continue
-				}
-				sum := sha256.Sum256([]byte(asset.content))
-				name := hex.EncodeToString(sum[:]) + ".pem"
-				path := "/var/lib/aurora-routing/certificates/" + name
-				if asset.directive == "grpc_ssl_trusted_certificate" {
-					caPath = path
-				} else {
-					fmt.Fprintf(&config, "%s %s;\n", asset.directive, path)
-				}
-			}
-			if sni != "" {
-				if !sniRegex.MatchString(sni) {
-					return "", fmt.Errorf("invalid origin SNI")
-				}
-				fmt.Fprintf(&config, "%s_ssl_name %s;\n", directive, sni)
-			}
-			if ssl.Verify {
-				if sni == "" {
-					return "", fmt.Errorf("verified TLS pool requires SNI hostname")
-				}
-				fmt.Fprintf(&config, "%s_ssl_verify on;\n%s_ssl_verify_depth 5;\n%s_ssl_trusted_certificate %s;\n", directive, directive, directive, caPath)
-			}
-		}
-		fmt.Fprintf(&config, "%s_connect_timeout 2s;\n%s_next_upstream error timeout http_502 http_503 http_504;\n%s_next_upstream_tries 3;\n}\n}\n", directive, directive, directive)
-	}
-
-	hash := sha256.Sum256([]byte(config.String()))
-	digest := hex.EncodeToString(hash[:])
-	fmt.Fprintf(&config, "server { listen 127.0.0.1:9082; location = /routing-digest { return 200 '%s'; } }\n", digest)
-	return "# routing-digest: " + digest + "\n" + config.String(), nil
-}
-
 func cleanJSONFloats(v interface{}) interface{} {
 	switch val := v.(type) {
 	case map[string]interface{}:
@@ -456,4 +260,75 @@ func cleanJSONFloats(v interface{}) interface{} {
 	default:
 		return val
 	}
+}
+
+// Spec represents the declarative specification for the Aurora gateway cluster.
+type Spec struct {
+	Version       uint32                            `yaml:"version" json:"version"`
+	ReleaseID     int64                             `yaml:"release_id" json:"release_id"`
+	GeneratedAt   string                            `yaml:"generated_at" json:"generated_at"`
+	Extensions    map[string]map[string]interface{} `yaml:"extensions" json:"extensions"`
+	WAF           WAFSpec                           `yaml:"waf" json:"waf"`
+	Access        AccessSpec                        `yaml:"access" json:"access"`
+	Upstreams     []UpstreamSpec                    `yaml:"upstreams,omitempty" json:"upstreams,omitempty"`
+	UpstreamsConf string                            `yaml:"upstreams_conf,omitempty" json:"upstreams_conf,omitempty"`
+	Routing       RoutingSpec                       `yaml:"routing,omitempty" json:"routing,omitempty"`
+	RoutingConf   string                            `yaml:"routing_conf,omitempty" json:"routing_conf,omitempty"`
+}
+
+type ExtensionsSpec struct {
+	Metrics *MetricsExtensionSpec `yaml:"metrics,omitempty" json:"metrics,omitempty"`
+}
+
+type MetricsExtensionSpec struct {
+	Enabled       bool            `yaml:"enabled" json:"enabled"`
+	Port          uint16          `yaml:"port" json:"port"`
+	StubStatusURL string          `yaml:"stub_status_url,omitempty" json:"stub_status_url,omitempty"`
+	Prometheus    *PrometheusSpec `yaml:"prometheus,omitempty" json:"prometheus,omitempty"`
+	OTLP          *OTLPSpec       `yaml:"otlp,omitempty" json:"otlp,omitempty"`
+}
+
+type PrometheusSpec struct {
+	Enabled bool   `yaml:"enabled" json:"enabled"`
+	Path    string `yaml:"path" json:"path"`
+}
+
+type OTLPSpec struct {
+	Enabled      bool   `yaml:"enabled" json:"enabled"`
+	Endpoint     string `yaml:"endpoint" json:"endpoint"`
+	IntervalSecs uint64 `yaml:"interval_secs" json:"interval_secs"`
+}
+
+type WAFSpec struct {
+	Mode       string   `yaml:"mode" json:"mode"`
+	BlockPaths []string `yaml:"block_paths,omitempty" json:"block_paths,omitempty"`
+	RawJSON    string   `yaml:"raw_json,omitempty" json:"raw_json,omitempty"`
+}
+
+type AccessSpec struct {
+	RawJSON string `yaml:"raw_json,omitempty" json:"raw_json,omitempty"`
+}
+
+type UpstreamSpec struct {
+	Name    string               `yaml:"name" json:"name"`
+	Servers []UpstreamServerSpec `yaml:"servers" json:"servers"`
+}
+
+type UpstreamServerSpec struct {
+	Addr   string `yaml:"addr" json:"addr"`
+	Weight uint32 `yaml:"weight" json:"weight"`
+}
+
+type RoutingSpec struct {
+	Domains []DomainRoutingSpec `yaml:"domains,omitempty" json:"domains,omitempty"`
+}
+
+type DomainRoutingSpec struct {
+	Host      string                `yaml:"host" json:"host"`
+	Locations []LocationRoutingSpec `yaml:"locations,omitempty" json:"locations,omitempty"`
+}
+
+type LocationRoutingSpec struct {
+	Path     string `yaml:"path" json:"path"`
+	Upstream string `yaml:"upstream" json:"upstream"`
 }

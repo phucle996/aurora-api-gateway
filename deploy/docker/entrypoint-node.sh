@@ -57,6 +57,10 @@ if [ ! -f /var/lib/aurora-policy/active-upstreams.conf ]; then
     printf '%s\n' '# Aurora API Gateway initial active upstreams' > /var/lib/aurora-policy/active-upstreams.conf
 fi
 
+if [ ! -f /var/lib/aurora-policy/active-extensions.conf ]; then
+    printf '%s\n' '# Aurora API Gateway initial active extensions' > /var/lib/aurora-policy/active-extensions.conf
+fi
+
 chown -R nginx:nginx /var/lib/aurora-policy
 chmod 700 /var/lib/aurora-policy
 
@@ -71,6 +75,7 @@ aurora_waf_node_id ${NODE_ID};
 aurora_waf_token ${AUTH_TOKEN};
 aurora_waf_heartbeat_interval ${HEARTBEAT_INTERVAL};
 add_header X-Aurora-Node "${NODE_ID}" always;
+include /var/lib/aurora-policy/active-extensions.conf;
 EOF
 chmod 600 /etc/nginx/domain-waf.conf
 mkdir -p /var/lib/aurora-routing
@@ -81,25 +86,7 @@ if [ ! -f /var/lib/aurora-routing/active-domain-routing.conf ]; then
 fi
 
 # Baseline for optional modules/dependencies
-mkdir -p /var/lib/aurora-routing/dependencies/base /usr/share/aurora-dependency-check
-chmod 755 /usr/share/aurora-dependency-check
-printf 'Aurora compression verification. %.0s' {1..256} > /usr/share/aurora-dependency-check/data.txt
-chmod 644 /usr/share/aurora-dependency-check/data.txt
-touch /var/lib/aurora-routing/dependencies/base/modules.conf
-if [ ! -f /var/lib/aurora-routing/dependencies/base/http.conf ]; then
-cat << 'EOF' > /var/lib/aurora-routing/dependencies/base/http.conf
-server {
-    listen 127.0.0.1:9085;
-    server_name localhost;
-    location = /generation { return 200 "base"; }
-    location = /gzip { gzip on; gzip_min_length 1; gzip_types text/plain; default_type text/plain; alias /usr/share/aurora-dependency-check/data.txt; }
-    location = /brotli { return 404; }
-}
-EOF
-fi
-if [ ! -L /var/lib/aurora-routing/dependencies/current ]; then
-    ln -sfn /var/lib/aurora-routing/dependencies/base /var/lib/aurora-routing/dependencies/current
-fi
+/extension-modules.sh init
 
 # Validate NGINX syntax
 /opt/nginx/usr/sbin/nginx -t -c /etc/nginx/nginx.conf

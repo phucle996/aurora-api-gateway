@@ -155,29 +155,20 @@ func TestSpecScheduler_WarmupAndReconcile(t *testing.T) {
 	if !strings.Contains(updated.SpecYAML, "updated.local") {
 		t.Fatalf("expected updated spec YAML to contain updated.local")
 	}
-	if !strings.Contains(updated.SpecYAML, "grpc_pass grpc://aurora_route_2") {
-		t.Fatalf("expected spec YAML to contain grpc_pass")
+	if !strings.Contains(updated.SpecYAML, "http://new_backend") {
+		t.Fatalf("expected spec YAML to contain http://new_backend")
 	}
 }
 
-func TestSpecScheduler_GRPCRoutingWithMTLS(t *testing.T) {
+func TestSpecScheduler_DeclarativeRoutingYAML(t *testing.T) {
 	mockRepo := &mockSpecSyncRepo{
 		authorityData: &entity.SpecAuthorityData{
 			RoutingRecords: []entity.SpecRoutingRecord{
 				{
-					ID:          10,
-					Host:        "secure-service.internal",
-					Status:      "Active",
-					ServersJSON: `[{"address":"backend:50051","weight":1}]`,
-					SSLJSON: `{
-						"enabled": true,
-						"verifyCert": true,
-						"sniHost": "secure-service.internal",
-						"caCert": "-----BEGIN CERTIFICATE-----\nCA\n-----END CERTIFICATE-----",
-						"mTLS": true,
-						"clientCert": "-----BEGIN CERTIFICATE-----\nCLIENT\n-----END CERTIFICATE-----",
-						"clientKey": "-----BEGIN PRIVATE KEY-----\nKEY\n-----END PRIVATE KEY-----"
-					}`,
+					ID:     10,
+					Host:   "secure-service.internal",
+					Status: "Active",
+					Target: "http://backend-upstream",
 				},
 			},
 		},
@@ -193,26 +184,11 @@ func TestSpecScheduler_GRPCRoutingWithMTLS(t *testing.T) {
 		t.Fatalf("unexpected reconcile error: %v", err)
 	}
 
-	// Verify gRPC directives
-	if !strings.Contains(rel.SpecYAML, "grpc_pass grpcs://aurora_route_10;") {
-		t.Fatalf("expected grpcs pass in YAML")
+	// Verify declarative YAML structure
+	if !strings.Contains(rel.SpecYAML, "host: secure-service.internal") {
+		t.Fatalf("expected host in declarative YAML: %s", rel.SpecYAML)
 	}
-	if !strings.Contains(rel.SpecYAML, "grpc_ssl_server_name on;") {
-		t.Fatalf("expected grpc_ssl_server_name in YAML")
-	}
-	if !strings.Contains(rel.SpecYAML, "grpc_ssl_certificate /var/lib/aurora-routing/certificates/") {
-		t.Fatalf("expected mTLS grpc_ssl_certificate in YAML")
-	}
-	if !strings.Contains(rel.SpecYAML, "grpc_ssl_certificate_key /var/lib/aurora-routing/certificates/") {
-		t.Fatalf("expected mTLS grpc_ssl_certificate_key in YAML")
-	}
-	if !strings.Contains(rel.SpecYAML, "grpc_ssl_trusted_certificate /var/lib/aurora-routing/certificates/") {
-		t.Fatalf("expected custom CA grpc_ssl_trusted_certificate in YAML")
-	}
-	if !strings.Contains(rel.SpecYAML, "grpc_ssl_name secure-service.internal;") {
-		t.Fatalf("expected grpc_ssl_name in YAML")
-	}
-	if !strings.Contains(rel.SpecYAML, "grpc_ssl_verify on;") {
-		t.Fatalf("expected grpc_ssl_verify in YAML")
+	if !strings.Contains(rel.SpecYAML, "upstream: http://backend-upstream") {
+		t.Fatalf("expected upstream in declarative YAML: %s", rel.SpecYAML)
 	}
 }

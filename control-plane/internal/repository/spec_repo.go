@@ -218,25 +218,33 @@ func (r *SpecSyncRepository) PublishSpecRelease(ctx context.Context, release ent
 		actor = "system"
 	}
 
-	const insertReleaseSQL = `
-	INSERT INTO cluster_spec_releases (digest, spec_yaml, actor, change_summary)
-	VALUES (?, ?, ?, ?);
-	`
-	res, err := tx.ExecContext(ctx, insertReleaseSQL, release.Digest, release.SpecYAML, actor, release.ChangeSummary)
-	if err != nil {
-		return nil, fmt.Errorf("insert cluster spec release: %w", err)
-	}
-
-	id, err := res.LastInsertId()
-	if err != nil {
-		return nil, fmt.Errorf("get last insert id for cluster spec release: %w", err)
-	}
-
 	const upsertHeadSQL = `
 	INSERT INTO cluster_spec_head (singleton, release_id)
 	VALUES (1, ?)
 	ON CONFLICT(singleton) DO UPDATE SET release_id = excluded.release_id;
 	`
+
+	var id int64
+	var existingActor string
+	err = tx.QueryRowContext(ctx, "SELECT id, actor FROM cluster_spec_releases WHERE digest = ?", release.Digest).Scan(&id, &existingActor)
+	if err == nil {
+		actor = existingActor
+	} else {
+		const insertReleaseSQL = `
+		INSERT INTO cluster_spec_releases (digest, spec_yaml, actor, change_summary)
+		VALUES (?, ?, ?, ?);
+		`
+		res, err := tx.ExecContext(ctx, insertReleaseSQL, release.Digest, release.SpecYAML, actor, release.ChangeSummary)
+		if err != nil {
+			return nil, fmt.Errorf("insert cluster spec release: %w", err)
+		}
+
+		id, err = res.LastInsertId()
+		if err != nil {
+			return nil, fmt.Errorf("get last insert id for cluster spec release: %w", err)
+		}
+	}
+
 	if _, err := tx.ExecContext(ctx, upsertHeadSQL, id); err != nil {
 		return nil, fmt.Errorf("update cluster spec head: %w", err)
 	}
