@@ -342,52 +342,6 @@ CREATE TABLE IF NOT EXISTS upstream_node_sync (
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
--- Rate limiting rules and metrics
-CREATE TABLE IF NOT EXISTS rate_limit_rules (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
-    description TEXT NOT NULL DEFAULT '',
-    enabled_dimensions TEXT NOT NULL DEFAULT '["ip"]' CHECK(json_valid(enabled_dimensions)),
-    dimension_order TEXT NOT NULL DEFAULT '["ip"]' CHECK(json_valid(dimension_order)),
-    ip_config TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(ip_config)),
-    header_config TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(header_config)),
-    path_config TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(path_config)),
-    rate_limit INTEGER NOT NULL CHECK(rate_limit > 0),
-    rate_unit TEXT NOT NULL DEFAULT '1 minute',
-    burst INTEGER NOT NULL DEFAULT 0,
-    action_exceeded TEXT NOT NULL DEFAULT 'block_429',
-    custom_response INTEGER NOT NULL DEFAULT 1 CHECK(custom_response IN (0,1)),
-    response_code INTEGER NOT NULL DEFAULT 429,
-    response_body TEXT NOT NULL DEFAULT '',
-    log_events INTEGER NOT NULL DEFAULT 1 CHECK(log_events IN (0,1)),
-    add_reputation INTEGER NOT NULL DEFAULT 0 CHECK(add_reputation IN (0,1)),
-    enable_alert INTEGER NOT NULL DEFAULT 0 CHECK(enable_alert IN (0,1)),
-    status TEXT NOT NULL DEFAULT 'Active' CHECK(status IN ('Active', 'Inactive')),
-    created_by TEXT NOT NULL DEFAULT 'admin',
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
-
-CREATE TABLE IF NOT EXISTS rate_limit_hourly_metrics (
-    hour_bucket TEXT PRIMARY KEY,
-    total_hits INTEGER NOT NULL DEFAULT 0,
-    blocked_count INTEGER NOT NULL DEFAULT 0,
-    throttled_count INTEGER NOT NULL DEFAULT 0,
-    avg_latency_ms REAL NOT NULL DEFAULT 0.0,
-    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
-
-CREATE TABLE IF NOT EXISTS rate_limit_endpoint_metrics (
-    hour_bucket TEXT NOT NULL,
-    endpoint TEXT NOT NULL,
-    method TEXT NOT NULL,
-    rule_name TEXT NOT NULL DEFAULT '',
-    request_count INTEGER NOT NULL DEFAULT 0,
-    blocked_count INTEGER NOT NULL DEFAULT 0,
-    throttled_count INTEGER NOT NULL DEFAULT 0,
-    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-    PRIMARY KEY(hour_bucket, endpoint, method)
-);
 
 -- Authentication providers
 CREATE TABLE IF NOT EXISTS auth_providers (
@@ -450,14 +404,6 @@ CREATE TABLE IF NOT EXISTS backup_history (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
--- Origin observations
-CREATE TABLE IF NOT EXISTS origin_observations (
-    node_id TEXT PRIMARY KEY REFERENCES cluster_nodes(id) ON DELETE CASCADE,
-    observed_at INTEGER NOT NULL,
-    received_at INTEGER NOT NULL,
-    routing_digest TEXT NOT NULL,
-    peers_json TEXT NOT NULL
-);
 
 -- Extensions catalog and configurations
 CREATE TABLE IF NOT EXISTS extensions (
@@ -474,36 +420,6 @@ CREATE TABLE IF NOT EXISTS extensions (
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
--- Dataplane dynamic modules and supervisor jobs
-CREATE TABLE IF NOT EXISTS node_modules (
-    node_id TEXT PRIMARY KEY REFERENCES cluster_nodes(id) ON DELETE CASCADE,
-    checked_at INTEGER NOT NULL,
-    received_at INTEGER NOT NULL,
-    nginx_version TEXT NOT NULL,
-    architecture TEXT NOT NULL,
-    modules_json TEXT NOT NULL,
-    installable INTEGER NOT NULL,
-    error TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS module_jobs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    node_id TEXT NOT NULL REFERENCES cluster_nodes(id) ON DELETE CASCADE,
-    action TEXT NOT NULL,
-    state TEXT NOT NULL CHECK(state IN ('pending','running','succeeded','failed')),
-    message TEXT NOT NULL DEFAULT '',
-    logs TEXT NOT NULL DEFAULT '',
-    requested_by TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS module_desired_state (
-    name TEXT PRIMARY KEY,
-    enabled INTEGER NOT NULL DEFAULT 0,
-    updated_at INTEGER NOT NULL,
-    updated_by TEXT NOT NULL
-);
 
 -- Cluster NodeSpec snapshot releases and head
 CREATE TABLE IF NOT EXISTS cluster_spec_releases (
