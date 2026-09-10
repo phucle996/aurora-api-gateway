@@ -3,7 +3,7 @@ use crate::extension::ExtensionDispatcher;
 use crate::grpc::GrpcClient;
 use crate::nginx::NginxManager;
 use crate::spec::materialize::materialize_nginx;
-use crate::spec::schema::{compute_sha256, Spec};
+use crate::spec::schema::{Spec, compute_sha256};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;

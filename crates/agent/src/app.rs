@@ -58,7 +58,11 @@ impl App {
 
         let default_upstreams = cfg.policy_dir.join("active-upstreams.conf");
         if !default_upstreams.exists() {
-            let _ = tokio::fs::write(&default_upstreams, "# Aurora API Gateway initial upstreams\n").await;
+            let _ = tokio::fs::write(
+                &default_upstreams,
+                "# Aurora API Gateway initial upstreams\n",
+            )
+            .await;
         }
 
         // 3. Initialize NGINX Manager
@@ -110,15 +114,13 @@ impl App {
                     enabled: self.cfg.metrics_prometheus,
                     path: "/metrics".to_string(),
                 }),
-                otlp: self
-                    .cfg
-                    .metrics_otlp_endpoint
-                    .as_ref()
-                    .map(|ep| crate::spec::extensions::OtlpSpec {
+                otlp: self.cfg.metrics_otlp_endpoint.as_ref().map(|ep| {
+                    crate::spec::extensions::OtlpSpec {
                         enabled: true,
                         endpoint: ep.clone(),
                         interval_secs: self.cfg.metrics_otlp_interval_secs,
-                    }),
+                    }
+                }),
             }),
             ..Default::default()
         };

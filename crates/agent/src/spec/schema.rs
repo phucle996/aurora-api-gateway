@@ -41,7 +41,6 @@ pub struct Spec {
     pub routing_conf: Option<String>,
 }
 
-
 impl Spec {
     pub fn parse_yaml(raw: &str) -> Result<Self, serde_yaml::Error> {
         serde_yaml::from_str(raw)

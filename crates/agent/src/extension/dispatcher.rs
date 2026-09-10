@@ -242,16 +242,16 @@ mod tests {
             serde_yaml::Value::String("block_mode".to_string()),
             serde_yaml::Value::String("challenge".to_string()),
         );
-        spec.dynamic
-            .insert("bot-detection".to_string(), serde_yaml::Value::Mapping(bot_cfg));
+        spec.dynamic.insert(
+            "bot-detection".to_string(),
+            serde_yaml::Value::Mapping(bot_cfg),
+        );
 
         dispatcher.apply_spec(&spec).await;
         assert!(dispatcher.dynamic_runners.contains_key("bot-detection"));
 
         // 4. Disable dynamic extension -> shuts down immediately
-        if let Some(serde_yaml::Value::Mapping(m)) =
-            spec.dynamic.get_mut("bot-detection")
-        {
+        if let Some(serde_yaml::Value::Mapping(m)) = spec.dynamic.get_mut("bot-detection") {
             m.insert(
                 serde_yaml::Value::String("enabled".to_string()),
                 serde_yaml::Value::Bool(false),
