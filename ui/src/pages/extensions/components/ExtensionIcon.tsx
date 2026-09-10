@@ -1,98 +1,188 @@
 import React from 'react';
 import {
-  Activity,
-  FileText,
-  Network,
-  Globe,
-  ShieldAlert,
-  Bot,
-  EyeOff,
-  Gauge,
-  Zap,
-  Sliders,
-  Cpu,
-  ShieldCheck,
-  KeyRound,
+  // 1. Security Engine (15)
   Shield,
-  Minimize2,
-  GitFork,
-  Fingerprint,
-  Database,
-  Key,
-  Hash,
-  LineChart,
-  Eye,
+  DatabaseZap,
+  CodeXml,
   Terminal,
-  Radio,
-  Blocks,
-  Lock,
-  ArrowRightLeft,
-  Filter,
-  Sparkles,
-  HeartPulse,
-  Timer,
-  Repeat,
-  Shuffle,
-  HardDrive,
-  Trash2,
-  CloudLightning,
-  Webhook,
+  FolderSearch,
+  GlobeLock,
   Bug,
-  FileSearch,
-  CheckSquare,
-  FileCode,
-  PauseCircle,
-  Binary,
-  RefreshCw,
-  Archive,
-  Scale,
-  BrainCircuit,
-  MessageSquare,
+  Network,
+  Bot,
+  Radar,
+  KeyRound,
+  ScanSearch,
+  EyeOff,
+  SlidersHorizontal,
+  ShieldCheck,
+
+  // 2. Authentication (12)
+  Lock,
+  Key,
+  Ticket,
+  Hash,
+  ShieldUser,
+  UserCheck,
+  FileKey2,
+  Contact,
+  Building2,
+  ExternalLink,
+  Cookie,
+  Layers,
+
+  // 3. Authorization & Security (12)
+  ListChecks,
   Users,
+  Scale,
+  LocateFixed,
+  MapPinOff,
+  Globe,
+  Compass,
+  Share2,
+  ShieldX,
+  FileCheck,
+  FileSignature,
+  BadgeCheck,
+
+  // 4. Traffic Control (14)
+  Gauge,
+  Timer,
+  Cpu,
+  Split,
+  Wifi,
+  Shrink,
+  GitFork,
+  GitBranch,
+  Shuffle,
+  Copy,
+  Ghost,
+  Sparkles,
+  Construction,
+  OctagonX,
+
+  // 5. Request Transformation (10)
+  Heading,
+  Search,
+  FileJson,
+  Route,
+  Server,
+  Repeat2,
+  Brackets,
+  FileCode2,
+  Binary,
+  Hexagon,
+
+  // 6. Response Transformation (8)
+  Sliders,
+  FileEdit,
+  Replace,
+  VenetianMask,
+  Filter,
+  Archive,
+  FileArchive,
+  AlertOctagon,
+
+  // 7. Observability (12)
+  Activity,
+  Waypoints,
+  GitCommit,
+  LineChart,
+  FileText,
+  Radio,
+  Scroll,
+  Boxes,
+  Flame,
+  SearchCode,
+  Fingerprint,
+  History,
+
+  // 8. Resilience & Upstream (10)
+  ZapOff,
+  RotateCw,
+  Hourglass,
+  Crosshair,
+  HeartPulse,
+  Stethoscope,
+  LifeBuoy,
+  FastForward,
+  Magnet,
+  TrendingUp,
+
+  // 9. Cache & Content (8)
+  HardDrive,
+  Zap,
+  Trash2,
+  Barcode,
+  GitPullRequest,
+  File,
+  FileQuestion,
+  Disc,
+
+  // 10. Integration & Runtime (8)
+  CloudLightning,
+  Cloud,
+  Webhook,
+  PlayCircle,
+  CheckCircle2,
+  Plug,
+  Workflow,
+  Antenna,
+
+  // 11. AI Gateway (6)
+  Brain,
+  Orbit,
+  Coins,
+  ScanEye,
+  BrainCircuit,
+  MessageSquareWarning,
+
+  // Fallbacks
+  Blocks,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface ExtensionIconProps {
   id: string;
-  category: string;
+  category?: string;
   className?: string;
 }
 
 export function ExtensionIcon({ id, category, className = 'w-5 h-5' }: ExtensionIconProps) {
-  // Specific plugin mapping
   switch (id) {
-    // 1. Security Engine
+    // 1. Security Engine (15) - All Unique
     case 'waf-core':
-      return <ShieldAlert className={className} />;
+      return <Shield className={className} />;
     case 'sqli-protection':
-      return <Database className={className} />;
+      return <DatabaseZap className={className} />;
     case 'xss-protection':
-      return <FileCode className={className} />;
+      return <CodeXml className={className} />;
     case 'command-injection-protection':
       return <Terminal className={className} />;
     case 'path-traversal-protection':
-      return <FileSearch className={className} />;
+      return <FolderSearch className={className} />;
     case 'ssrf-protection':
-      return <Globe className={className} />;
+      return <GlobeLock className={className} />;
     case 'rce-protection':
       return <Bug className={className} />;
     case 'protocol-anomaly':
-      return <Activity className={className} />;
+      return <Network className={className} />;
     case 'bot-detection':
       return <Bot className={className} />;
     case 'ip-reputation':
-      return <ShieldAlert className={className} />;
+      return <Radar className={className} />;
     case 'credential-stuffing':
-      return <Lock className={className} />;
+      return <KeyRound className={className} />;
     case 'scanner-detection':
-      return <EyeOff className={className} />;
+      return <ScanSearch className={className} />;
     case 'sensitive-data-detection':
-      return <Eye className={className} />;
+      return <EyeOff className={className} />;
     case 'custom-waf-rules':
-      return <Sliders className={className} />;
+      return <SlidersHorizontal className={className} />;
     case 'owasp-crs':
       return <ShieldCheck className={className} />;
 
-    // 2. Authentication
+    // 2. Authentication (12) - All Unique
     case 'basic-auth':
       return <Lock className={className} />;
     case 'key-auth':
@@ -100,210 +190,235 @@ export function ExtensionIcon({ id, category, className = 'w-5 h-5' }: Extension
       return <Key className={className} />;
     case 'jwt-auth':
     case 'jwt_auth':
-      return <KeyRound className={className} />;
+      return <Ticket className={className} />;
     case 'hmac-auth':
       return <Hash className={className} />;
     case 'oauth2-auth':
+      return <ShieldUser className={className} />;
     case 'openid-connect':
-      return <Users className={className} />;
+      return <UserCheck className={className} />;
     case 'mtls-auth':
-      return <Fingerprint className={className} />;
+      return <FileKey2 className={className} />;
     case 'ldap-auth':
+      return <Contact className={className} />;
     case 'saml-auth':
-      return <Users className={className} />;
+      return <Building2 className={className} />;
     case 'forward-auth':
-      return <ArrowRightLeft className={className} />;
+      return <ExternalLink className={className} />;
     case 'session-auth':
-      return <Database className={className} />;
+      return <Cookie className={className} />;
     case 'multi-auth':
-      return <ShieldCheck className={className} />;
+      return <Layers className={className} />;
 
-    // 3. Authorization & Security
+    // 3. Authorization & Security (12) - All Unique
     case 'acl':
+      return <ListChecks className={className} />;
     case 'rbac':
-      return <CheckSquare className={className} />;
+      return <Users className={className} />;
     case 'opa-authz':
-      return <ShieldCheck className={className} />;
+      return <Scale className={className} />;
     case 'ip-restriction':
-      return <Shield className={className} />;
+      return <LocateFixed className={className} />;
     case 'geo-restriction':
     case 'geoip':
-      return <Globe className={className} />;
+      return <MapPinOff className={className} />;
     case 'user-agent-restriction':
-    case 'referer-restriction':
-      return <Filter className={className} />;
-    case 'cors':
       return <Globe className={className} />;
+    case 'referer-restriction':
+      return <Compass className={className} />;
+    case 'cors':
+      return <Share2 className={className} />;
     case 'csrf-protection':
-      return <Lock className={className} />;
+      return <ShieldX className={className} />;
     case 'api-schema-validator':
-      return <FileCode className={className} />;
+      return <FileCheck className={className} />;
     case 'request-signature':
-      return <Fingerprint className={className} />;
+      return <FileSignature className={className} />;
     case 'consumer-restriction':
-      return <Users className={className} />;
+      return <BadgeCheck className={className} />;
 
-    // 4. Traffic Control
+    // 4. Traffic Control (14) - All Unique
     case 'rate-limit':
     case 'rate_limiter':
-    case 'rate-limit-local':
-    case 'rate-limit-distributed':
       return <Gauge className={className} />;
+    case 'rate-limit-local':
+      return <Timer className={className} />;
+    case 'rate-limit-distributed':
+      return <Cpu className={className} />;
     case 'connection-limit':
+      return <Split className={className} />;
     case 'bandwidth-limit':
-      return <Sliders className={className} />;
+      return <Wifi className={className} />;
     case 'request-size-limit':
-      return <Minimize2 className={className} />;
+      return <Shrink className={className} />;
     case 'traffic-split':
+      return <GitFork className={className} />;
     case 'canary-release':
     case 'canary_routing':
-      return <GitFork className={className} />;
+      return <GitBranch className={className} />;
     case 'blue-green':
       return <Shuffle className={className} />;
     case 'request-mirror':
+      return <Copy className={className} />;
     case 'traffic-shadow':
-      return <Radio className={className} />;
+      return <Ghost className={className} />;
     case 'priority-routing':
-      return <Sliders className={className} />;
+      return <Sparkles className={className} />;
     case 'maintenance-mode':
-      return <PauseCircle className={className} />;
+      return <Construction className={className} />;
     case 'request-termination':
-      return <EyeOff className={className} />;
+      return <OctagonX className={className} />;
 
-    // 5. Request Transformation
+    // 5. Request Transformation (10) - All Unique
     case 'request-header-transform':
     case 'request_transformer':
-      return <Sliders className={className} />;
+      return <Heading className={className} />;
     case 'request-query-transform':
+      return <Search className={className} />;
     case 'request-body-transform':
-      return <FileText className={className} />;
+      return <FileJson className={className} />;
     case 'uri-rewrite':
+      return <Route className={className} />;
     case 'host-rewrite':
+      return <Server className={className} />;
     case 'method-rewrite':
-      return <ArrowRightLeft className={className} />;
+      return <Repeat2 className={className} />;
     case 'json-transform':
+      return <Brackets className={className} />;
     case 'xml-json-transform':
-      return <Binary className={className} />;
+      return <FileCode2 className={className} />;
     case 'grpc-transcode':
+      return <Binary className={className} />;
     case 'graphql-rest-transform':
-      return <RefreshCw className={className} />;
+      return <Hexagon className={className} />;
 
-    // 6. Response Transformation
+    // 6. Response Transformation (8) - All Unique
     case 'response-header-transform':
     case 'header_masking':
       return <Sliders className={className} />;
     case 'response-body-transform':
+      return <FileEdit className={className} />;
     case 'response-rewrite':
-      return <FileText className={className} />;
+      return <Replace className={className} />;
     case 'response-mask':
-      return <EyeOff className={className} />;
+      return <VenetianMask className={className} />;
     case 'json-filter':
       return <Filter className={className} />;
     case 'compression-gzip':
+      return <Archive className={className} />;
     case 'compression-brotli':
     case 'brotli_compress':
-      return <Minimize2 className={className} />;
+      return <FileArchive className={className} />;
     case 'error-transform':
-      return <ShieldAlert className={className} />;
+      return <AlertOctagon className={className} />;
 
-    // 7. Observability
+    // 7. Observability (12) - All Unique
     case 'prometheus':
     case 'metrics':
       return <Activity className={className} />;
     case 'opentelemetry':
     case 'distributed_tracing':
-      return <Network className={className} />;
+      return <Waypoints className={className} />;
     case 'zipkin':
-      return <Activity className={className} />;
+      return <GitCommit className={className} />;
     case 'datadog':
     case 'datadog_apm':
       return <LineChart className={className} />;
     case 'access-log':
     case 'access_logger':
-    case 'http-logger':
-    case 'syslog-logger':
       return <FileText className={className} />;
-    case 'kafka-logger':
-    case 'loki-logger':
-    case 'elasticsearch-logger':
-      return <Database className={className} />;
-    case 'request-id':
-      return <Hash className={className} />;
-    case 'audit-log':
-      return <ShieldCheck className={className} />;
-
-    // 8. Resilience & Upstream
-    case 'circuit-breaker':
-      return <Zap className={className} />;
-    case 'retry-policy':
-      return <Repeat className={className} />;
-    case 'timeout-policy':
-      return <Timer className={className} />;
-    case 'outlier-detection':
-      return <Filter className={className} />;
-    case 'active-health-check':
-    case 'passive-health-check':
-      return <HeartPulse className={className} />;
-    case 'fallback-upstream':
-      return <Shuffle className={className} />;
-    case 'hedged-request':
+    case 'http-logger':
       return <Radio className={className} />;
-    case 'upstream-affinity':
+    case 'syslog-logger':
+      return <Scroll className={className} />;
+    case 'kafka-logger':
+      return <Boxes className={className} />;
+    case 'loki-logger':
+      return <Flame className={className} />;
+    case 'elasticsearch-logger':
+      return <SearchCode className={className} />;
+    case 'request-id':
       return <Fingerprint className={className} />;
-    case 'adaptive-concurrency':
-      return <Gauge className={className} />;
+    case 'audit-log':
+      return <History className={className} />;
 
-    // 9. Cache & Content
+    // 8. Resilience & Upstream (10) - All Unique
+    case 'circuit-breaker':
+      return <ZapOff className={className} />;
+    case 'retry-policy':
+      return <RotateCw className={className} />;
+    case 'timeout-policy':
+      return <Hourglass className={className} />;
+    case 'outlier-detection':
+      return <Crosshair className={className} />;
+    case 'active-health-check':
+      return <HeartPulse className={className} />;
+    case 'passive-health-check':
+      return <Stethoscope className={className} />;
+    case 'fallback-upstream':
+      return <LifeBuoy className={className} />;
+    case 'hedged-request':
+      return <FastForward className={className} />;
+    case 'upstream-affinity':
+      return <Magnet className={className} />;
+    case 'adaptive-concurrency':
+      return <TrendingUp className={className} />;
+
+    // 9. Cache & Content (8) - All Unique
     case 'proxy-cache':
     case 'cache_accelerator':
-      return <Database className={className} />;
-    case 'redis-cache':
       return <HardDrive className={className} />;
+    case 'redis-cache':
+      return <Zap className={className} />;
     case 'cache-purge':
       return <Trash2 className={className} />;
     case 'etag':
+      return <Barcode className={className} />;
     case 'conditional-request':
-      return <Archive className={className} />;
+      return <GitPullRequest className={className} />;
     case 'static-response':
+      return <File className={className} />;
     case 'mock-response':
-      return <FileText className={className} />;
+      return <FileQuestion className={className} />;
     case 'response-buffering':
-      return <Sliders className={className} />;
+      return <Disc className={className} />;
 
-    // 10. Integration & Runtime
+    // 10. Integration & Runtime (8) - All Unique
     case 'aws-lambda':
-    case 'azure-functions':
       return <CloudLightning className={className} />;
+    case 'azure-functions':
+      return <Cloud className={className} />;
     case 'webhook':
       return <Webhook className={className} />;
     case 'serverless-pre-function':
+      return <PlayCircle className={className} />;
     case 'serverless-post-function':
-    case 'lua_jit_runtime':
-      return <Terminal className={className} />;
+      return <CheckCircle2 className={className} />;
     case 'external-plugin':
     case 'wasm_filter':
-      return <Cpu className={className} />;
+      return <Plug className={className} />;
     case 'kafka-proxy':
+      return <Workflow className={className} />;
     case 'mqtt-proxy':
     case 'websocket_guard':
-      return <Radio className={className} />;
+      return <Antenna className={className} />;
 
-    // 11. AI Gateway
+    // 11. AI Gateway (6) - All Unique
     case 'ai-proxy':
-      return <Bot className={className} />;
+      return <Brain className={className} />;
     case 'ai-multi-provider':
-      return <Shuffle className={className} />;
+      return <Orbit className={className} />;
     case 'ai-token-rate-limit':
-      return <Scale className={className} />;
+      return <Coins className={className} />;
     case 'ai-prompt-guard':
-      return <ShieldAlert className={className} />;
+      return <ScanEye className={className} />;
     case 'ai-semantic-cache':
       return <BrainCircuit className={className} />;
     case 'ai-content-moderation':
-      return <MessageSquare className={className} />;
+      return <MessageSquareWarning className={className} />;
 
     default:
-      // Category fallbacks
+      // Category generic fallbacks
       switch (category) {
         case 'security_engine':
         case 'security':
@@ -315,22 +430,22 @@ export function ExtensionIcon({ id, category, className = 'w-5 h-5' }: Extension
           return <ShieldCheck className={className} />;
         case 'traffic_control':
         case 'traffic':
-          return <Sliders className={className} />;
+          return <Gauge className={className} />;
         case 'request_transformation':
-          return <ArrowRightLeft className={className} />;
+          return <Heading className={className} />;
         case 'response_transformation':
-          return <Sparkles className={className} />;
+          return <Sliders className={className} />;
         case 'observability':
           return <Activity className={className} />;
         case 'resilience_upstream':
           return <HeartPulse className={className} />;
         case 'cache_content':
-          return <Database className={className} />;
+          return <HardDrive className={className} />;
         case 'integration_runtime':
         case 'runtime':
-          return <Cpu className={className} />;
+          return <Plug className={className} />;
         case 'ai_gateway':
-          return <BrainCircuit className={className} />;
+          return <Brain className={className} />;
         default:
           return <Blocks className={className} />;
       }

@@ -217,7 +217,7 @@ export default function ExtensionsPage() {
                 <h1 className="text-xl font-bold text-foreground tracking-tight">
                   Extensions Hub
                 </h1>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20 animate-ext-pulse">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-none text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20 animate-ext-pulse">
                   <Sparkles className="w-3 h-3" />
                   115 Plugins Available
                 </span>
@@ -284,7 +284,7 @@ export default function ExtensionsPage() {
         <div className="p-3 bg-card/60 border border-border/80 rounded-lg flex items-center justify-between text-xs animate-in fade-in slide-in-from-top-1 duration-200">
           <div className="flex items-center gap-2">
             <span
-              className={`px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider ${selectedCategoryMeta.badgeClass}`}
+              className={`px-2 py-0.5 rounded-none text-[10px] font-bold border uppercase tracking-wider ${selectedCategoryMeta.badgeClass}`}
             >
               {selectedCategoryMeta.label}
             </span>

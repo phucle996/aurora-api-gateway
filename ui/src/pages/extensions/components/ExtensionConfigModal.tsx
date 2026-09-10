@@ -126,12 +126,12 @@ export function ExtensionConfigModal({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-base text-foreground">{extension.name}</h3>
-                <span className="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.2 rounded-xs">
+                <span className="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-none">
                   {extension.id}
                 </span>
                 {meta && (
                   <span
-                    className={`px-2 py-0.2 rounded-full text-[10px] font-medium border uppercase tracking-wider ${meta.badgeClass}`}
+                    className={`px-2 py-0.5 rounded-none text-[10px] font-medium border uppercase tracking-wider ${meta.badgeClass}`}
                   >
                     {meta.label}
                   </span>

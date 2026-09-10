@@ -7,15 +7,15 @@ import {
   List,
   ShieldAlert,
   ShieldCheck,
-  Lock,
-  Sliders,
+  KeyRound,
+  Gauge,
   ArrowRightLeft,
   Sparkles,
   Activity,
   HeartPulse,
-  Database,
+  HardDrive,
   Cpu,
-  Bot,
+  Brain,
   Layers,
 } from 'lucide-react';
 
@@ -52,7 +52,7 @@ export function ExtensionFilters({
     {
       id: 'authentication',
       label: 'Authentication',
-      icon: <Lock className="w-3.5 h-3.5 text-indigo-500" />,
+      icon: <KeyRound className="w-3.5 h-3.5 text-indigo-500" />,
     },
     {
       id: 'authorization_security',
@@ -62,7 +62,7 @@ export function ExtensionFilters({
     {
       id: 'traffic_control',
       label: 'Traffic Control',
-      icon: <Sliders className="w-3.5 h-3.5 text-amber-500" />,
+      icon: <Gauge className="w-3.5 h-3.5 text-amber-500" />,
     },
     {
       id: 'request_transformation',
@@ -87,7 +87,7 @@ export function ExtensionFilters({
     {
       id: 'cache_content',
       label: 'Cache & Content',
-      icon: <Database className="w-3.5 h-3.5 text-sky-500" />,
+      icon: <HardDrive className="w-3.5 h-3.5 text-sky-500" />,
     },
     {
       id: 'integration_runtime',
@@ -97,7 +97,7 @@ export function ExtensionFilters({
     {
       id: 'ai_gateway',
       label: 'AI Gateway',
-      icon: <Bot className="w-3.5 h-3.5 text-teal-500" />,
+      icon: <Brain className="w-3.5 h-3.5 text-teal-500" />,
     },
   ];
 
@@ -209,7 +209,7 @@ export function ExtensionFilters({
               key={cat.id}
               type="button"
               onClick={() => onCategoryChange(cat.id)}
-              className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-full border whitespace-nowrap transition-all duration-200 cursor-pointer hover:scale-105 active:scale-95 ${
+              className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-none border whitespace-nowrap transition-all duration-200 cursor-pointer hover:scale-105 active:scale-95 ${
                 isSelected
                   ? 'border-primary bg-primary/10 text-primary font-semibold shadow-xs ring-1 ring-primary/20 scale-102'
                   : 'border-border/70 bg-card/70 text-muted-foreground hover:text-foreground hover:border-border'
@@ -220,7 +220,7 @@ export function ExtensionFilters({
               </span>
               <span>{cat.label}</span>
               <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono transition-colors duration-200 ${
+                className={`text-[10px] px-1.5 py-0.5 rounded-none font-mono transition-colors duration-200 ${
                   isSelected
                     ? 'bg-primary text-primary-foreground font-bold'
                     : 'bg-muted text-muted-foreground group-hover:bg-muted/80'

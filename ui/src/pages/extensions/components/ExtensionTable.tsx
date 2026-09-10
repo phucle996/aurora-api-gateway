@@ -53,7 +53,7 @@ export function ExtensionTable({
                       <div className="min-w-0 flex-1">
                         <div className="font-semibold text-foreground flex items-center gap-2">
                           <span className="truncate group-hover:text-primary transition-colors duration-150">{ext.name}</span>
-                          <span className="font-mono text-[10px] text-muted-foreground bg-muted px-1.5 py-0.2 rounded-xs shrink-0">
+                          <span className="font-mono text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-none shrink-0">
                             {ext.id}
                           </span>
                           {ext.enabled && (
@@ -73,7 +73,7 @@ export function ExtensionTable({
                   {/* Category */}
                   <td className="py-3 px-4 whitespace-nowrap">
                     <span
-                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-medium border uppercase tracking-wider transition-transform duration-150 inline-block group-hover:scale-105 ${meta.badgeClass}`}
+                      className={`px-2.5 py-0.5 rounded-none text-[10px] font-medium border uppercase tracking-wider transition-transform duration-150 inline-block group-hover:scale-105 ${meta.badgeClass}`}
                     >
                       {meta.label}
                     </span>
@@ -83,7 +83,7 @@ export function ExtensionTable({
                   <td className="py-3 px-4 whitespace-nowrap font-mono text-[11px] text-muted-foreground">
                     <div className="flex items-center gap-1.5">
                       <span>v{ext.version}</span>
-                      <span className="text-[10px] bg-muted px-1.5 py-0.2 rounded-xs">
+                      <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded-none">
                         {ext.is_builtin ? 'Core' : 'Custom'}
                       </span>
                     </div>

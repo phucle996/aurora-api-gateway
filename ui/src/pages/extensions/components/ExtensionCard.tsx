@@ -64,7 +64,7 @@ export function ExtensionCard({
                 )}
               </div>
               <div className="flex items-center gap-1.5 mt-1">
-                <span className="font-mono text-[10px] text-muted-foreground bg-muted/70 px-1.5 py-0.5 rounded-xs transition-colors group-hover:bg-muted">
+                <span className="font-mono text-[10px] text-muted-foreground bg-muted/70 px-1.5 py-0.5 rounded-none transition-colors group-hover:bg-muted">
                   {extension.id}
                 </span>
                 <span className="text-[10px] text-muted-foreground/80 font-mono">
@@ -115,7 +115,7 @@ export function ExtensionCard({
               {extension.tags.slice(0, 3).map((tag) => (
                 <span
                   key={tag}
-                  className="text-[9px] text-muted-foreground/70 bg-muted/40 px-1.5 py-0.2 rounded-xs whitespace-nowrap font-mono hover:bg-muted transition-colors duration-150"
+                  className="text-[9px] text-muted-foreground/70 bg-muted/40 px-1.5 py-0.5 rounded-none whitespace-nowrap font-mono hover:bg-muted transition-colors duration-150"
                 >
                   #{tag}
                 </span>
@@ -134,16 +134,16 @@ export function ExtensionCard({
       <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between gap-2 text-xs">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span
-            className={`px-2 py-0.5 rounded-full text-[10px] font-medium border uppercase tracking-wider transition-transform duration-200 group-hover:scale-105 ${meta.badgeClass}`}
+            className={`px-2 py-0.5 rounded-none text-[10px] font-medium border uppercase tracking-wider transition-transform duration-200 group-hover:scale-105 ${meta.badgeClass}`}
           >
             {meta.label}
           </span>
           {extension.is_builtin ? (
-            <span className="px-1.5 py-0.5 rounded-xs text-[10px] bg-muted/80 text-muted-foreground font-mono">
+            <span className="px-1.5 py-0.5 rounded-none text-[10px] bg-muted/80 text-muted-foreground font-mono">
               Core
             </span>
           ) : (
-            <span className="px-1.5 py-0.5 rounded-xs text-[10px] bg-primary/10 text-primary font-mono animate-pulse">
+            <span className="px-1.5 py-0.5 rounded-none text-[10px] bg-primary/10 text-primary font-mono animate-pulse">
               Custom
             </span>
           )}

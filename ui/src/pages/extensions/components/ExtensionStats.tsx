@@ -118,7 +118,7 @@ export function ExtensionStats({
                 key={catKey}
                 type="button"
                 onClick={() => onSelectCategory && onSelectCategory(catKey)}
-                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-xs font-medium cursor-pointer transition-all duration-200 border hover:scale-105 active:scale-95 ${
+                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-none font-medium cursor-pointer transition-all duration-200 border hover:scale-105 active:scale-95 ${
                   isSelected
                     ? `${meta.badgeClass} ring-1 ring-primary font-bold shadow-xs scale-105`
                     : `${meta.badgeClass} opacity-85 hover:opacity-100`
