@@ -150,6 +150,14 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	r.PUT("/api/v1/settings/integrations/metrics", authMidd, m.MetricsHandler.UpdateConfig)         // Chuyển đổi giữa Lab/Standalone và Production
 	r.POST("/api/v1/settings/integrations/metrics/test", authMidd, m.MetricsHandler.TestConnection) // Kiểm tra kết nối tới Prometheus
 
+	// Phân tích số liệu chuyên sâu & Analytics Explorer (Grafana Inline)
+	r.POST("/api/v1/analytics/query", authMidd, m.AnalyticsHandler.Query)
+	r.POST("/api/v1/analytics/query-raw", authMidd, m.AnalyticsHandler.QueryRaw)
+	r.GET("/api/v1/analytics/catalog", authMidd, m.AnalyticsHandler.GetCatalog)
+	r.GET("/api/v1/analytics/connection", authMidd, m.AnalyticsHandler.GetConnection)
+	r.PUT("/api/v1/analytics/connection", authMidd, m.AnalyticsHandler.UpdateConnection)
+	r.POST("/api/v1/analytics/connection/test", authMidd, m.AnalyticsHandler.TestConnection)
+
 	// Cấu hình Bảo mật, 2FA & Đổi mật khẩu (Security Settings)
 	r.GET("/api/v1/settings/security", authMidd, m.SecurityHandler.GetOverview)
 	r.PUT("/api/v1/settings/security/auth-providers/:id", authMidd, m.SecurityHandler.UpdateProvider)

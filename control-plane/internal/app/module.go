@@ -33,6 +33,7 @@ type Module struct {
 	NodeHandler          *handler.NodeHandler
 	MetricsHandler       *handler.MetricsHandler
 	MetricsService       port.MetricsService
+	AnalyticsHandler     *handler.AnalyticsHandler
 	DomainHandler        *handler.DomainHandler
 	DomainRoutingHandler *handler.DomainRoutingHandler
 	UpstreamHandler      *handler.UpstreamHandler
@@ -94,14 +95,14 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	upstreamSvc := service.NewUpstreamService(upstreamRepo, specTrigger)
 	upstreamHdr := handler.NewUpstreamHandler(upstreamSvc)
 
-	settingsRepo := repository.NewSettingsRepository(writerDB)
-	metricsCfg, _ := settingsRepo.GetMetricsConfig(context.Background())
+	analyticsRepo := repository.NewAnalyticsRepository(writerDB)
+	metricsCfg, _ := analyticsRepo.GetMetricsConfig(context.Background())
 	if metricsCfg == nil {
-		metricsCfg = &entity.MetricsIntegrationConfig{Mode: "standalone"}
+		metricsCfg = &entity.MetricsIntegrationConfig{Mode: "prometheus"}
 	}
 
 	rateLimitRepo := repository.NewRateLimitRepository(writerDB, readerDB)
-	rateLimitMetricsProvider := provider.NewDynamicRateLimitMetricsProvider(settingsRepo, rateLimitRepo)
+	rateLimitMetricsProvider := provider.NewDynamicRateLimitMetricsProvider(analyticsRepo, rateLimitRepo)
 	rateLimitSvc := service.NewRateLimitService(rateLimitRepo, rateLimitMetricsProvider)
 	rateLimitCollector := provider.NewRateLimitCollector(rateLimitSvc, cfg.RateLimitUDPAddr)
 	rateLimitHdr := handler.NewRateLimitHandler(rateLimitSvc, rateLimitCollector)
@@ -110,7 +111,8 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	}
 
 	nodeRepo := repository.NewNodeRepository(writerDB)
-	metricsSvc := service.NewMetricsService(settingsRepo, nodeRepo)
+	extensionRepo := repository.NewExtensionRepository(writerDB, readerDB)
+	metricsSvc := service.NewMetricsService(analyticsRepo, nodeRepo, extensionRepo)
 	metricsSvc.RegisterConfigListener(func(mCfg entity.MetricsIntegrationConfig) {
 		rateLimitCollector.SetEnabled(mCfg.Mode != "disabled")
 	})
@@ -118,6 +120,7 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	nodeSvc := service.NewNodeService(nodeRepo, metricsSvc, eventHub)
 	nodeHdr := handler.NewNodeHandler(nodeSvc)
 	metricsHdr := handler.NewMetricsHandler(metricsSvc)
+	analyticsHdr := handler.NewAnalyticsHandler(metricsSvc)
 	systemRepo := repository.NewSystemRepository(readerDB)
 	systemSvc := service.NewSystemService(systemRepo, cfg)
 	systemHdr := handler.NewSystemHandler(systemSvc)
@@ -143,7 +146,6 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	grpcSpecHdr := grpchandler.NewSpecSyncHandler(specSyncSvc)
 	specHdr := handler.NewSpecHandler(specSyncSvc)
 
-	extensionRepo := repository.NewExtensionRepository(writerDB, readerDB)
 	extensionSvc := service.NewExtensionService(extensionRepo, specTrigger)
 	extensionHdr := handler.NewExtensionHandler(extensionSvc)
 
@@ -164,6 +166,7 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 		NodeHandler:          nodeHdr,
 		MetricsHandler:       metricsHdr,
 		MetricsService:       metricsSvc,
+		AnalyticsHandler:     analyticsHdr,
 		DomainHandler:        domainHdr,
 		DomainRoutingHandler: domainRoutingHdr,
 		UpstreamHandler:      upstreamHdr,

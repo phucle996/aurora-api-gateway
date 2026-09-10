@@ -4,7 +4,6 @@ export type SettingsTab =
   | 'General'
   | 'Security'
   | 'Notifications'
-  | 'Integrations'
   | 'Logging'
   | 'Backup & Restore';
 
@@ -18,7 +17,6 @@ export function SettingsHeader({ activeTab, onTabChange }: SettingsHeaderProps) 
     'General',
     'Security',
     'Notifications',
-    'Integrations',
     'Logging',
     'Backup & Restore',
   ];

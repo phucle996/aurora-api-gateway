@@ -12,6 +12,7 @@ import {
   Server,
   Settings,
   Blocks,
+  BarChart3,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -110,6 +111,12 @@ export function ConsoleSidebar({
       path: '/events',
       aliases: [],
       icon: <ShieldAlert className="w-4 h-4 shrink-0" />,
+    },
+    {
+      label: 'Analytics',
+      path: '/analytics',
+      aliases: ['/metrics', '/telemetry'],
+      icon: <BarChart3 className="w-4 h-4 shrink-0 text-primary" />,
     },
     {
       label: 'Rules',

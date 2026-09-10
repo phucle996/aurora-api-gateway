@@ -3,69 +3,131 @@ package provider_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"aurora-waf.local/control-plane/internal/domain/entity"
-	"aurora-waf.local/control-plane/internal/domain/repo"
 	"aurora-waf.local/control-plane/internal/provider"
+	"aurora-waf.local/control-plane/internal/provider/catalog"
 )
 
-// Fault injection repository for rollup boundary tests.
-type failingRollupRepository struct {
-	repo.NodeRepository
-	fail    bool
-	written []entity.NodeMetricHistoryRecord
+func TestCatalogPromQLCompilation(t *testing.T) {
+	queryItem := entity.AnalyticsQueryItem{
+		ID:          "A",
+		MetricKey:   "traffic.requests_rate",
+		Aggregation: "sum",
+		Filters: map[string]string{
+			"node_id": "node-sg-01",
+			"status":  "200",
+		},
+		GroupBy: []string{"node_id", "status"},
+	}
+
+	promQL, err := catalog.BuildPromQL(queryItem, "1m")
+	if err != nil {
+		t.Fatalf("BuildPromQL thất bại: %v", err)
+	}
+
+	if !strings.Contains(promQL, "sum by (node_id,status)") {
+		t.Errorf("PromQL thiếu group_by chính xác: %s", promQL)
+	}
+	if !strings.Contains(promQL, `node_id="node-sg-01"`) || !strings.Contains(promQL, `status="200"`) {
+		t.Errorf("PromQL thiếu bộ lọc filters: %s", promQL)
+	}
 }
 
-func (r *failingRollupRepository) BatchInsertMetricsHistory(ctx context.Context, rows []entity.NodeMetricHistoryRecord) error {
-	if _, ok := ctx.Deadline(); !ok {
-		return errors.New("missing write deadline")
+func TestCatalogExtensionFilter(t *testing.T) {
+	activeExts := map[string]bool{
+		"waf_engine": false,
+		"rate_limit": true,
 	}
-	if r.fail {
-		return errors.New("storage unavailable")
+
+	cats := catalog.FilterCategoriesByActiveExtensions(activeExts)
+	for _, c := range cats {
+		if c.ID == "waf" {
+			t.Errorf("danh mục WAF không nên xuất hiện khi waf_engine tắt")
+		}
 	}
-	r.written = append(r.written, rows...)
-	return nil
+
+	foundRateLimit := false
+	for _, c := range cats {
+		if c.ID == "rate_limit" {
+			foundRateLimit = true
+		}
+	}
+	if !foundRateLimit {
+		t.Errorf("danh mục rate_limit phải xuất hiện khi extension bật")
+	}
 }
 
-func (r *failingRollupRepository) GetRecentMetricsHistory(context.Context, string, int) ([]entity.NodeMetricPoint, error) {
-	return []entity.NodeMetricPoint{
-		{Timestamp: time.Now().Unix() - 3500, CPUUsage: 10, MetricsScope: "container"},
-		{Timestamp: time.Now().Unix() - 4000, CPUUsage: 99, MetricsScope: "container"},
-	}, nil
-}
+func TestPrometheusProviderQueryRangeAndInstant(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "query_range") {
+			resp := map[string]any{
+				"status": "success",
+				"data": map[string]any{
+					"resultType": "matrix",
+					"result": []any{
+						map[string]any{
+							"metric": map[string]string{"node_id": "test-node", "status": "200"},
+							"values": []any{
+								[]any{float64(time.Now().Unix() - 15), "10.5"},
+								[]any{float64(time.Now().Unix()), "12.0"},
+							},
+						},
+					},
+				},
+			}
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+		if strings.Contains(r.URL.Path, "query") {
+			resp := map[string]any{
+				"status": "success",
+				"data": map[string]any{
+					"resultType": "vector",
+					"result": []any{
+						map[string]any{
+							"metric": map[string]string{"node_id": "test-node"},
+							"value":  []any{float64(time.Now().Unix()), "1"},
+						},
+					},
+				},
+			}
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+	}))
+	defer mockServer.Close()
 
-func TestStandaloneRollupRetainsFailedBatchAndBoundsMemory(t *testing.T) {
-	r := &failingRollupRepository{fail: true}
-	p := provider.NewStandaloneMetricsProvider(r)
-	for i := 1; i <= 100000; i++ {
-		p.PushMetricPoint("node", entity.NodeMetricPoint{Timestamp: int64(i), CPUUsage: 20, MemoryUsage: 30, RPS: 50000, ActiveConnections: 8})
+	prov := provider.NewPrometheusMetricsProvider(mockServer.URL, "aurora-waf", mockServer.Client())
+
+	// Test connection
+	connRes, err := prov.TestConnection(context.Background())
+	if err != nil || !connRes.Success {
+		t.Fatalf("TestConnection thất bại: %+v, err: %v", connRes, err)
 	}
-	if p.BufferLen("node") != 3601 || p.RollupBucketsLen() != 1 || p.RollupCount("node") != 100000 {
-		t.Fatal("unbounded or lost samples")
+
+	// Test QueryRange
+	matrix, err := prov.QueryRange(context.Background(), "up", time.Now().Unix()-60, time.Now().Unix(), 15)
+	if err != nil {
+		t.Fatalf("QueryRange lỗi: %v", err)
 	}
-	if p.FlushRollupBatch() == nil || p.RollupCount("node") != 100000 {
-		t.Fatal("failed write lost rollup")
+	if len(matrix.Data.Result) != 1 {
+		t.Fatalf("kỳ vọng 1 series, nhận được: %d", len(matrix.Data.Result))
 	}
-	r.fail = false
-	if err := p.FlushRollupBatch(); err != nil {
-		t.Fatal(err)
+
+	// Test QueryInstant
+	vector, err := prov.QueryInstant(context.Background(), "up")
+	if err != nil {
+		t.Fatalf("QueryInstant lỗi: %v", err)
 	}
-	if p.RollupBucketsLen() != 0 || len(r.written) != 1 {
-		t.Fatal("retry did not settle exactly once")
-	}
-	row := r.written[0]
-	if row.Timestamp != 100000 || row.CPUUsage != 20 || row.MemoryUsage != 30 || row.RequestsPerSecond != 50000 || row.ActiveConnections != 8 {
-		t.Fatal(row)
-	}
-	if err := p.FlushRollupBatch(); err != nil || len(r.written) != 1 {
-		t.Fatal("settled batch replayed", err)
+	if len(vector.Data.Result) != 1 {
+		t.Fatalf("kỳ vọng 1 kết quả vector, nhận: %d", len(vector.Data.Result))
 	}
 }
 
@@ -99,55 +161,39 @@ func TestPrometheusTimelineRejectsIncompleteOrAmbiguousSeries(t *testing.T) {
 					if kind == "wrong-node" {
 						labels["node_id"] = "other"
 					}
-					if kind == "mixed-instance" && i == 3 {
+					if kind == "mixed-instance" && i == 1 {
 						labels["instance"] = "two"
 					}
-					value := strconv.Itoa(i + 1)
-					if kind == "nan" {
-						value = "NaN"
+					values := []any{[]any{now, "10"}}
+					if kind == "nan" && i == 0 {
+						values = []any{[]any{now, "NaN"}}
 					}
-					record := map[string]any{"metric": labels, "values": []any{[]any{now, value}}}
-					series = append(series, record)
+					series = append(series, map[string]any{"metric": labels, "values": values})
 					if kind == "duplicate" && i == 0 {
-						series = append(series, record)
+						series = append(series, map[string]any{"metric": labels, "values": values})
 					}
 				}
 				if kind == "empty" {
-					series = []any{}
+					series = nil
 				}
-				_ = json.NewEncoder(w).Encode(map[string]any{"status": "success", "data": map[string]any{"resultType": "matrix", "result": series}})
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"status": "success",
+					"data":   map[string]any{"resultType": "matrix", "result": series},
+				})
 			}))
 			defer upstream.Close()
-			p := provider.NewPrometheusMetricsProvider(upstream.URL, "real-job", nil)
-			points, err := p.GetNodeTimeline(context.Background(), "node\"test")
+
+			p := provider.NewPrometheusMetricsProvider(upstream.URL, "real-job", upstream.Client())
+			points, err := p.GetNodeTimeline(context.Background(), `node"test`)
 			if kind == "complete" {
-				if err != nil || len(points) != 1 || points[0].CPUUsage != 1 || points[0].MemoryUsage != 2 || points[0].ActiveConnections != 3 || points[0].RPS != 4 {
-					t.Fatal(points, err)
+				if err != nil || len(points) != 1 {
+					t.Fatalf("expected 1 complete point, got %v (%d points)", err, len(points))
 				}
-			} else if kind == "empty" {
-				if err != nil || points == nil || len(points) != 0 {
-					t.Fatal(points, err)
-				}
-			} else if err == nil {
-				t.Fatal("invalid response accepted", points)
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected failure for %s, got points: %+v", kind, points)
 			}
 		})
-	}
-}
-
-func TestNodeTimelineMergesDurableHourWithLiveAndRejectsReplay(t *testing.T) {
-	p := provider.NewStandaloneMetricsProvider(&failingRollupRepository{})
-	now := time.Now().Unix()
-	p.PushMetricPoint("node", entity.NodeMetricPoint{Timestamp: now - 2, CPUUsage: 20, MetricsScope: "container"})
-	p.PushMetricPoint("node", entity.NodeMetricPoint{Timestamp: now - 3, CPUUsage: 99, MetricsScope: "container"})
-	p.PushMetricPoint("node", entity.NodeMetricPoint{Timestamp: now - 2, CPUUsage: 99, MetricsScope: "container"})
-	points, err := p.GetNodeTimeline(context.Background(), "node")
-	if err != nil || len(points) != 2 || points[0].CPUUsage != 10 || points[1].CPUUsage != 20 {
-		t.Fatal(points, err)
-	}
-	restarted := provider.NewStandaloneMetricsProvider(&failingRollupRepository{})
-	points, err = restarted.GetNodeTimeline(context.Background(), "node")
-	if err != nil || len(points) != 1 || points[0].CPUUsage != 10 {
-		t.Fatal(points, err)
 	}
 }

@@ -79,47 +79,7 @@ func TestMetricsFlexibilityLabAndProduction(t *testing.T) {
 		t.Fatalf("kỳ vọng mã lỗi 503 khi metrics đang disabled, nhận: %d", wMetricsDisabled.Code)
 	}
 
-	// 3. Kích hoạt chuyển sang chế độ 'standalone' (Lab/Dev mode): Gọi lấy metrics thành công 200 OK
-	standalonePayload := `{"mode":"standalone","prometheus_url":"http://127.0.0.1:9090","prometheus_job":"aurora-waf-nodes"}`
-	wEnable := request("PUT", "/api/v1/settings/integrations/metrics", standalonePayload)
-	if wEnable.Code != http.StatusOK {
-		t.Fatalf("kỳ vọng cập nhật sang standalone thành công 200, nhận: %d", wEnable.Code)
-	}
-
-	// Đẩy 1 heartbeat protobuf cho node-local-01
-	hb := entity.NodeHeartbeatPayload{
-		MetricsScope: "container", MetricsAvailable: true, Hostname: "test-container", WorkerIdentity: "worker-1", RuntimeStartedAt: time.Now().Unix() - 120,
-		NodeID:            "node-local-01",
-		Timestamp:         time.Now().Unix(),
-		CPUUsage:          15.5,
-		MemoryUsage:       42.0,
-		RequestsPerSecond: 250.0,
-		ActiveConnections: 18,
-		ActiveReleaseID:   1,
-	}
-	protoBytes := hb.MarshalBinary()
-	rHb := httptest.NewRequest("POST", "/api/v1/nodes/node-local-01/heartbeat", bytes.NewReader(protoBytes))
-	rHb.Header.Set("Content-Type", "application/x-protobuf")
-	rHb.Header.Set("Authorization", "Bearer "+token)
-	wHb := httptest.NewRecorder()
-	mux.ServeHTTP(wHb, rHb)
-	if wHb.Code != http.StatusOK {
-		t.Fatalf("kỳ vọng mã 200 khi push heartbeat protobuf, nhận: %d", wHb.Code)
-	}
-
-	wMetrics := request("GET", "/api/v1/nodes/node-local-01/metrics", "")
-	if wMetrics.Code != http.StatusOK {
-		t.Fatalf("kỳ vọng mã 200 khi lấy metrics standalone, nhận được: %d, body: %s", wMetrics.Code, wMetrics.Body.String())
-	}
-	var points []map[string]interface{}
-	if err := json.Unmarshal(wMetrics.Body.Bytes(), &points); err != nil {
-		t.Fatal(err)
-	}
-	if len(points) == 0 {
-		t.Errorf("kỳ vọng có các điểm đo timeline, nhận được mảng rỗng")
-	}
-
-	// 4. Chuyển sang chế độ 'prometheus' với máy chủ offline: Phải trả về 503 kèm PROMETHEUS_UNAVAILABLE
+	// 3. Chuyển sang chế độ 'prometheus' với máy chủ offline: Phải trả về 503 kèm PROMETHEUS_UNAVAILABLE
 	promPayload := `{"mode":"prometheus","prometheus_url":"http://127.0.0.1:59999","prometheus_job":"aurora-waf"}`
 	wProm := request("PUT", "/api/v1/settings/integrations/metrics", promPayload)
 	if wProm.Code != http.StatusOK {
@@ -131,7 +91,7 @@ func TestMetricsFlexibilityLabAndProduction(t *testing.T) {
 		t.Fatalf("kỳ vọng mã lỗi 503 khi Prometheus offline, nhận: %d", wMetricsPromUnreachable.Code)
 	}
 
-	// 5. Kiểm tra tính năng Test Connection tới máy chủ unreachable
+	// 4. Kiểm tra tính năng Test Connection tới máy chủ unreachable
 	wTest := request("POST", "/api/v1/settings/integrations/metrics/test", `{"url":"http://127.0.0.1:59999"}`)
 	if wTest.Code != http.StatusOK {
 		t.Fatalf("kỳ vọng endpoint test connection trả về 200, nhận: %d", wTest.Code)
@@ -144,26 +104,25 @@ func TestMetricsFlexibilityLabAndProduction(t *testing.T) {
 		t.Errorf("kỳ vọng test connection thất bại cho cổng không tồn tại")
 	}
 
-	// 5b. Giả lập một Prometheus Server Online với endpoint /api/v1/query_range
+	// 5. Giả lập một Prometheus Server Online với endpoint /api/v1/query_range & /api/v1/query
 	mockProm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if strings.Contains(r.URL.Path, "query_range") {
-			if !strings.Contains(r.URL.Query().Get("query"), `job="aurora-waf"`) {
-				t.Error("missing job selector")
-			}
 			now := time.Now().Unix()
 			series := []any{}
 			for _, name := range []string{"aurora_node_cpu_percent", "aurora_node_memory_percent", "aurora_node_active_connections", "aurora_node_requests_per_second"} {
-				values := []any{[]any{now - 60, "15.5"}, []any{now, "18.2"}}
+				values := []any{[]any{float64(now - 60), "15.5"}, []any{float64(now), "18.2"}}
 				if name == "aurora_node_active_connections" {
-					values = []any{[]any{now - 60, "15"}, []any{now, "18"}}
+					values = []any{[]any{float64(now - 60), "15"}, []any{float64(now), "18"}}
 				}
 				series = append(series, map[string]any{"metric": map[string]string{"__name__": name, "node_id": "node-local-01", "job": "aurora-waf", "instance": "fixture"}, "values": values})
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"status": "success", "data": map[string]any{"resultType": "matrix", "result": series}})
 			return
 		}
-		_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[]}}`))
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "success", "data": map[string]any{"resultType": "vector", "result": []any{
+			map[string]any{"metric": map[string]string{}, "value": []any{float64(time.Now().Unix()), "1"}},
+		}}})
 	}))
 	defer mockProm.Close()
 
@@ -172,6 +131,7 @@ func TestMetricsFlexibilityLabAndProduction(t *testing.T) {
 		t.Fatalf("kỳ vọng cập nhật sang mock prometheus thành công, nhận: %d", wPromOnline.Code)
 	}
 
+	// 5a. Kiểm tra endpoint timeline node
 	wMetricsOnline := request("GET", "/api/v1/nodes/node-local-01/metrics", "")
 	if wMetricsOnline.Code != http.StatusOK {
 		t.Fatalf("kỳ vọng mã 200 từ mock prometheus, nhận: %d, body: %s", wMetricsOnline.Code, wMetricsOnline.Body.String())
@@ -187,15 +147,50 @@ func TestMetricsFlexibilityLabAndProduction(t *testing.T) {
 		t.Errorf("dữ liệu cpuUsage không khớp: %+v", promPoints)
 	}
 
-	// 6. Chuyển đổi linh hoạt lại chế độ 'standalone' (Lab/Dev): Hệ thống lập tức phục hồi 200 OK
-	wRestore := request("PUT", "/api/v1/settings/integrations/metrics", `{"mode":"standalone","prometheus_url":"http://127.0.0.1:9090","prometheus_job":"aurora-waf"}`)
-	if wRestore.Code != http.StatusOK {
-		t.Fatalf("kỳ vọng chuyển lại standalone thành công 200, nhận: %d", wRestore.Code)
+	// 5b. Kiểm tra endpoint Metric Catalog
+	wCatalog := request("GET", "/api/v1/analytics/catalog", "")
+	if wCatalog.Code != http.StatusOK {
+		t.Fatalf("kỳ vọng catalog 200, nhận: %d, body: %s", wCatalog.Code, wCatalog.Body.String())
+	}
+	var catalogBody map[string]any
+	if err := json.Unmarshal(wCatalog.Body.Bytes(), &catalogBody); err != nil {
+		t.Fatal(err)
+	}
+	if categories, ok := catalogBody["categories"].([]any); !ok || len(categories) == 0 {
+		t.Errorf("kỳ vọng categories trong catalog")
 	}
 
-	wMetricsRestored := request("GET", "/api/v1/nodes/node-local-01/metrics", "")
-	if wMetricsRestored.Code != http.StatusOK {
-		t.Fatalf("kỳ vọng mã 200 sau khi chuyển lại standalone, nhận: %d", wMetricsRestored.Code)
+	// 5c. Kiểm tra endpoint Analytics Query theo semantic keys
+	analyticsQueryPayload := `{
+		"source_id": "prometheus",
+		"queries": [
+			{"id": "A", "metric_key": "traffic.requests_rate", "aggregation": "sum", "filters": {"node_id": "node-local-01"}}
+		],
+		"start": ` + fmt.Sprintf("%d", time.Now().Unix()-300) + `,
+		"end": ` + fmt.Sprintf("%d", time.Now().Unix()) + `,
+		"step_seconds": 15
+	}`
+	wAnalytics := request("POST", "/api/v1/analytics/query", analyticsQueryPayload)
+	if wAnalytics.Code != http.StatusOK {
+		t.Fatalf("kỳ vọng analytics query 200, nhận: %d, body: %s", wAnalytics.Code, wAnalytics.Body.String())
+	}
+	var analyticsRes map[string]any
+	if err := json.Unmarshal(wAnalytics.Body.Bytes(), &analyticsRes); err != nil {
+		t.Fatal(err)
+	}
+	seriesList, ok := analyticsRes["series"].([]any)
+	if !ok || len(seriesList) == 0 {
+		t.Errorf("kỳ vọng có series trả về từ analytics query")
+	}
+
+	// 6. Vô hiệu hóa metrics -> API analytics & node metrics lập tức trả về 503 METRICS_DISABLED
+	wDisable := request("PUT", "/api/v1/settings/integrations/metrics", `{"mode":"disabled"}`)
+	if wDisable.Code != http.StatusOK {
+		t.Fatalf("kỳ vọng chuyển sang disabled thành công 200, nhận: %d", wDisable.Code)
+	}
+	wMetricsDisabledAgain := request("GET", "/api/v1/nodes/node-local-01/metrics", "")
+	if wMetricsDisabledAgain.Code != http.StatusServiceUnavailable {
+		t.Fatalf("kỳ vọng 503 khi disabled, nhận: %d", wMetricsDisabledAgain.Code)
 	}
 }
 

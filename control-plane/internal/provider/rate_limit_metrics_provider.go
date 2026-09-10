@@ -44,28 +44,28 @@ func NewRateLimitMetricsProvider(
 
 // DynamicRateLimitMetricsProvider giải quyết provider phù hợp dựa trên cấu hình settings động trong SQLite.
 type DynamicRateLimitMetricsProvider struct {
-	settingsRepo  repo.SettingsRepository
+	analyticsRepo repo.AnalyticsRepository
 	rateLimitRepo repo.RateLimitRepository
 	httpClient    *http.Client
 }
 
 // NewDynamicRateLimitMetricsProvider khởi tạo provider động tự động đồng bộ theo cấu hình SQLite.
 func NewDynamicRateLimitMetricsProvider(
-	settingsRepo repo.SettingsRepository,
+	analyticsRepo repo.AnalyticsRepository,
 	rateLimitRepo repo.RateLimitRepository,
 ) *DynamicRateLimitMetricsProvider {
 	return &DynamicRateLimitMetricsProvider{
-		settingsRepo:  settingsRepo,
+		analyticsRepo: analyticsRepo,
 		rateLimitRepo: rateLimitRepo,
 		httpClient:    &http.Client{Timeout: 4 * time.Second},
 	}
 }
 
 func (p *DynamicRateLimitMetricsProvider) resolve(ctx context.Context) (RateLimitMetricsProvider, string) {
-	if p.settingsRepo == nil {
+	if p.analyticsRepo == nil {
 		return NewStandaloneRateLimitProvider(p.rateLimitRepo), "standalone"
 	}
-	cfg, err := p.settingsRepo.GetMetricsConfig(ctx)
+	cfg, err := p.analyticsRepo.GetMetricsConfig(ctx)
 	if err != nil || cfg == nil {
 		return NewStandaloneRateLimitProvider(p.rateLimitRepo), "standalone"
 	}

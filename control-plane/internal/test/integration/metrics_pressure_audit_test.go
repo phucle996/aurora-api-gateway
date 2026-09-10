@@ -21,13 +21,13 @@ import (
 // Test-only scheduling gate around REAL SQLite commit. It makes a valid
 // concurrent Save interleaving deterministic, without replacing storage.
 type metricsAuditSaveGate struct {
-	repo.SettingsRepository
+	repo.AnalyticsRepository
 	committed chan struct{}
 	resume    chan struct{}
 }
 
 func (g *metricsAuditSaveGate) SaveMetricsConfig(ctx context.Context, c entity.MetricsIntegrationConfig) error {
-	if err := g.SettingsRepository.SaveMetricsConfig(ctx, c); err != nil {
+	if err := g.AnalyticsRepository.SaveMetricsConfig(ctx, c); err != nil {
 		return err
 	}
 	if c.Mode == "standalone" {
@@ -52,8 +52,8 @@ func TestAuditMetricsConcurrentConfigDurableAuthority(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer pools.Close()
-	durable := repository.NewSettingsRepository(pools.Writer)
-	gate := &metricsAuditSaveGate{SettingsRepository: durable, committed: make(chan struct{}), resume: make(chan struct{})}
+	durable := repository.NewAnalyticsRepository(pools.Writer)
+	gate := &metricsAuditSaveGate{AnalyticsRepository: durable, committed: make(chan struct{}), resume: make(chan struct{})}
 	s := service.NewMetricsService(gate, repository.NewNodeRepository(pools.Writer))
 	first := make(chan error, 1)
 	go func() {
@@ -108,7 +108,7 @@ func TestAuditStandaloneRollupSurvivesRequestCancellation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer pools.Close()
-	s := service.NewMetricsService(repository.NewSettingsRepository(pools.Writer), repository.NewNodeRepository(pools.Writer))
+	s := service.NewMetricsService(repository.NewAnalyticsRepository(pools.Writer), repository.NewNodeRepository(pools.Writer))
 	ctx, cancel := context.WithCancel(context.Background())
 	if err = s.SaveConfig(ctx, entity.MetricsIntegrationConfig{Mode: "standalone"}); err != nil {
 		cancel()
@@ -153,7 +153,7 @@ func TestAuditMetricsStaleHeartbeatNotReady(t *testing.T) {
 	}
 	defer pools.Close()
 	nodeRepo := repository.NewNodeRepository(pools.Writer)
-	metrics := service.NewMetricsService(repository.NewSettingsRepository(pools.Writer), nodeRepo)
+	metrics := service.NewMetricsService(repository.NewAnalyticsRepository(pools.Writer), nodeRepo)
 	nodes := service.NewNodeService(nodeRepo, metrics, nil)
 	defer metrics.SaveConfig(context.Background(), entity.MetricsIntegrationConfig{Mode: "disabled"})
 	for _, mode := range []string{"disabled", "standalone", "prometheus"} {

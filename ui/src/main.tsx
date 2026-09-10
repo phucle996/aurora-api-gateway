@@ -12,6 +12,7 @@ import RuleHistoryPage from './pages/rule-history/page';
 import CreateIpRulePage from './pages/create-ip-rule/page';
 import CreateRateLimitPage from './pages/create-rate-limit/page';
 import SecurityEventsPage from './pages/events/page';
+import AnalyticsPage from './pages/analytics/page';
 import IpAccessPage from './pages/ip-access/page';
 import DatasetEntriesPage from './pages/dataset-entries/page';
 import AddDatasetPage from './pages/add-dataset/page';
@@ -53,6 +54,8 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/upstreams/:id/edit" element={<EditUpstreamPage />} />
           <Route path="/upstreams/edit/:id" element={<EditUpstreamPage />} />
           <Route path="/events" element={<SecurityEventsPage />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="/telemetry" element={<AnalyticsPage />} />
 
           {/* Rules Management */}
           <Route path="/rules" element={<RulesPage />} />
