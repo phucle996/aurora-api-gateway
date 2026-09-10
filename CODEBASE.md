@@ -4,41 +4,7 @@ Tài liệu này mô tả chi tiết **cách thức tổ chức, khởi dựng v
 
 ---
 
-## 1. Sơ Đồ Khung Khởi Dựng (Assembly Blueprint)
-
-```mermaid
-flowchart TD
-    subgraph ControllerFlow ["1. Controller Subsystem Assembly"]
-        CEntry["Entry"] --> CInit["Init (Config, DB Pools, Schema)"]
-        CInit --> CComp["Composition (Module Wire, Route, gRPC)"]
-        CComp --> CPath["Main Process Path (Handler -> Service -> Repo)"]
-        CComp --> CProv["Providers (Spec Sync, Catalog, Schedulers)"]
-    end
-
-    subgraph AgentFlow ["2. Dataplane Agent Assembly"]
-        ABoot["Bootstrap & Context"] --> AClient["gRPC Stream Client"]
-        AClient --> ARecon["Reconciler & Jitter"]
-        ARecon --> AMat["Materializer (Static File Generation)"]
-        ARecon --> ADisp["Extension Dispatcher (Dynamic Runners)"]
-        ADisp --> ATel["Telemetry Pipeline"]
-    end
-
-    subgraph EngineFFIFlow ["3. Engine & FFI Subsystem Assembly"]
-        EComp["Offline Compiler"] --> EEngine["Vectorized Core Engine"]
-        EEngine --> EFFI["C ABI Safety FFI"]
-        EFFI --> ENginx["NGINX Module Phase Hooks"]
-    end
-
-    subgraph UIFlow ["4. Console UI Subsystem Assembly"]
-        UEntry["App Shell & Providers"] --> ULayout["Sidebar & Workspace Shell"]
-        ULayout --> UViews["Workspace Drawer (3/4 Height) & Modals"]
-        UViews --> UTransport["Reactive API Client"]
-    end
-```
-
----
-
-## 2. Controller Subsystem: Ma Trận Khởi Dựng & Luồng Xử Lý
+## 1. Controller Subsystem: Ma Trận Khởi Dựng & Luồng Xử Lý
 
 Mô tả cách bộ điều khiển trung tâm được ráp nối từ lúc khởi động cho tới khi tiếp nhận và chuyển giao dữ liệu:
 
@@ -54,7 +20,7 @@ Mô tả cách bộ điều khiển trung tâm được ráp nối từ lúc kh�
 
 ---
 
-## 3. Dataplane Agent: Ma Trận Khởi Dựng Tiến Trình Biên (Edge Agent)
+## 2. Dataplane Agent: Ma Trận Khởi Dựng Tiến Trình Biên (Edge Agent)
 
 Mô tả cách thức daemon biên tiếp nhận cấu hình từ xa và hiện thực hóa xuống máy chủ HTTP:
 
@@ -69,7 +35,7 @@ Mô tả cách thức daemon biên tiếp nhận cấu hình từ xa và hiện 
 
 ---
 
-## 4. Engine & FFI: Ma Trận Xử Lý Gói Tin Thời Gian Thực
+## 3. Engine & FFI: Ma Trận Xử Lý Gói Tin Thời Gian Thực
 
 Mô tả cách thức động cơ an ninh lõi và lớp giao tiếp FFI can thiệp vào luồng xử lý HTTP:
 
@@ -83,7 +49,7 @@ Mô tả cách thức động cơ an ninh lõi và lớp giao tiếp FFI can thi
 
 ---
 
-## 5. Console UI: Ma Trận Lắp Ráp Giao Diện Quản Trị
+## 4. Console UI: Ma Trận Lắp Ráp Giao Diện Quản Trị
 
 Mô tả cách ứng dụng giao diện được tổ chức thành các lớp vỏ bọc và không gian tương tác:
 
@@ -96,7 +62,7 @@ Mô tả cách ứng dụng giao diện được tổ chức thành các lớp v
 
 ---
 
-## 6. Ma Trận Quy Tắc Bất Biến (Architecture Invariants Matrix)
+## 5. Ma Trận Quy Tắc Bất Biến (Architecture Invariants Matrix)
 
 | Nguyên Tắc Thiết Kế | Trọng Tâm Bắt Buộc | Lợi Ích Cốt Lõi | Rủi Ro Ngăn Ngừa |
 | :--- | :--- | :--- | :--- |
