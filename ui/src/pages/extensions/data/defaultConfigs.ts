@@ -1,7 +1,7 @@
-import fs from 'fs';
-import path from 'path';
+// Standard default configuration templates for Aurora extensions
+// Provides typed and valid JSON configuration structures for UI and catalog
 
-const STANDARD_CONFIGS = {
+export const EXTENSION_DEFAULT_CONFIGS: Record<string, Record<string, any>> = {
   // 1. Security Engine (15)
   'waf-core': {
     enabled: true,
@@ -978,51 +978,8 @@ const STANDARD_CONFIGS = {
   }
 };
 
-const catalogPath = path.resolve('ui/src/pages/extensions/data/catalog.ts');
-let catalogLines = fs.readFileSync(catalogPath, 'utf8').split('\n');
-
-let updatedCount = 0;
-for (let i = 0; i < catalogLines.length; i++) {
-  const line = catalogLines[i];
-  const idMatch = line.match(/id:\s*'([^']+)'/);
-  if (idMatch) {
-    const id = idMatch[1];
-    if (STANDARD_CONFIGS[id]) {
-      // Find the config_json line in this item
-      for (let j = i + 1; j < Math.min(i + 15, catalogLines.length); j++) {
-        if (catalogLines[j].trim().startsWith('config_json:')) {
-          const formattedJson = JSON.stringify(STANDARD_CONFIGS[id], null, 2);
-          catalogLines[j] = `    config_json: JSON.stringify(${formattedJson}, null, 2),`;
-          updatedCount++;
-          break;
-        }
-      }
-    }
-  }
+export function getDefaultConfigJson(id: string): string {
+  const config = EXTENSION_DEFAULT_CONFIGS[id];
+  if (!config) return '{}';
+  return JSON.stringify(config, null, 2);
 }
-
-console.log(`Updated ${updatedCount} extensions in catalog.ts with standard JSON configurations`);
-fs.writeFileSync(catalogPath, catalogLines.join('\n'), 'utf8');
-
-// Update control-plane/migrations/0004_seeds.sql
-const seedsPath = path.resolve('control-plane/migrations/0004_seeds.sql');
-let seedsContent = fs.readFileSync(seedsPath, 'utf8');
-
-let seedsUpdatedCount = 0;
-for (const [id, configObj] of Object.entries(STANDARD_CONFIGS)) {
-  const jsonStr = JSON.stringify(configObj).replace(/'/g, "''");
-  const regex = new RegExp(`\\('${id}',\\s*('[^']*'),\\s*('[^']*'),\\s*('[^']*'),\\s*([01]),\\s*'([^']*)'\\)`, 'g');
-  
-  if (regex.test(seedsContent)) {
-    seedsContent = seedsContent.replace(regex, (match, name, cat, desc, enabled) => {
-      seedsUpdatedCount++;
-      return `('${id}', ${name}, ${cat}, ${desc}, ${enabled}, '${jsonStr}')`;
-    });
-  }
-}
-
-console.log(`Updated ${seedsUpdatedCount} rows in 0004_seeds.sql with standard JSON configurations`);
-fs.writeFileSync(seedsPath, seedsContent, 'utf8');
-
-
-

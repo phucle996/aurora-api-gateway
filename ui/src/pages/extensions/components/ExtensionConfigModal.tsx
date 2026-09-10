@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ExtensionItem } from '../types';
 import { ExtensionIcon } from './ExtensionIcon';
 import { EXTENSIONS_CATALOG, CATEGORIES_META } from '../data/catalog';
+import { getDefaultConfigJson } from '../data/defaultConfigs';
 import { X, Check, AlertCircle, Wand2, RotateCcw, Save, RotateCw, FileCode, Copy } from 'lucide-react';
 
 interface ExtensionConfigModalProps {
@@ -66,15 +67,18 @@ export function ExtensionConfigModal({
   };
 
   const handleLoadTemplate = () => {
-    if (catalogEntry && catalogEntry.config_json) {
+    const defaultTemplate = getDefaultConfigJson(extension.id);
+    if (defaultTemplate && defaultTemplate !== '{}') {
+      setConfigText(defaultTemplate);
+    } else if (catalogEntry && catalogEntry.config_json) {
       try {
         const parsed = JSON.parse(catalogEntry.config_json);
         setConfigText(JSON.stringify(parsed, null, 2));
       } catch {
         setConfigText(catalogEntry.config_json);
       }
-      setJsonError(null);
     }
+    setJsonError(null);
   };
 
   const handleCopy = () => {
