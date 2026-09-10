@@ -53,18 +53,24 @@ Aurora API Gateway is organized into four decoupled layers:
       │          ▼          │                   │          ▼          │
       │   Rust Core Engine  │                   │   Rust Core Engine  │
       │  (Zero-Alloc Path)  │                   │  (Zero-Alloc Path)  │
+      │          ▲          │                   │          ▲          │
+      │          │ IPC      │                   │          │ IPC      │
+      │          ▼          │                   │          ▼          │
+      │   Dataplane Agent   │                   │   Dataplane Agent   │
+      │  (YAML Materializer)│                   │  (YAML Materializer)│
       └──────────▲──────────┘                   └──────────▲──────────┘
                  │                                         │
-                 │ ── HTTP / SSE Config Synchronization ── │
+                 │ ── gRPC Declarative YAML Spec Sync ──── │
+                 │        (:9090 - Protobuf Stream)        │
                  │                                         │
       ┌──────────┴─────────────────────────────────────────┴──────────┐
       │                   Aurora Control Plane                        │
-      │            Go Daemon + Embedded SQLite (:8080)                │
-      │  - CTE-First Repositories        - Policy Compilation Engine  │
-      │  - UDP Rate Limit Collector      - AWS S3 Disaster Recovery   │
+      │            Go Daemon + Embedded SQLite (:8080, :9090)         │
+      │  - CTE-First Repositories        - SpecScheduler (YAML Comp)  │
+      │  - gRPC Sync Server (:9090)      - AWS S3 Disaster Recovery   │
       └───────────────────────────────▲───────────────────────────────┘
                                       │
-                                      │ REST API / WebSocket
+                                      │ REST API / WebSocket (:8080)
                                       ▼
                       ┌───────────────────────────────┐
                       │    Aurora Management Console  │
@@ -76,11 +82,12 @@ Aurora API Gateway is organized into four decoupled layers:
 
 | Component | Technology | Directory | Responsibility |
 | :--- | :--- | :--- | :--- |
-| **Core Engine** | Rust (Edition 2024) | [`crates/engine`](crates/engine) | Request evaluation, exact-path & regex matching, token bucket, IP reputation. |
-| **C ABI Boundary** | Rust / C FFI | [`crates/ffi`](crates/ffi) | C-compatible stable ABI boundary (v3) for NGINX module integration. |
+| **Core Engine** | Rust (Edition 2024) | [`crates/engine`](crates/engine) | Zero-allocation request evaluation, exact-path & Aho-Corasick matching, token bucket, IP reputation. |
+| **C ABI Boundary** | Rust / C FFI | [`crates/ffi`](crates/ffi) | C-compatible stable ABI boundary (v3) for native NGINX module integration. |
 | **NGINX Adapter** | C | [`adapters/nginx`](adapters/nginx) | Native NGINX dynamic HTTP module hooking into the `NGX_HTTP_ACCESS_PHASE`. |
-| **Control Plane** | Go 1.27 | [`control-plane`](control-plane) | Cluster management, dynamic routing distribution, rule compiler, audit logs, S3 backup. |
-| **Console UI** | React / TypeScript | [`ui`](ui) | Modern management dashboard for domains, rules, rate limits, policies, and metrics. |
+| **Dataplane Agent** | Rust (Edition 2024) | [`crates/agent`](crates/agent) | High-performance gRPC client, declarative **YAML Spec materializer**, and 115 modular extensions runtime. |
+| **Control Plane** | Go 1.27 | [`control-plane`](control-plane) | Cluster management, **gRPC declarative YAML Spec scheduler (:9090)**, rule compiler, REST API (:8080), S3 backup. |
+| **Console UI** | React / TypeScript | [`ui`](ui) | Modern management dashboard for domains, WAF policies, extensions (with visual rules builder & raw JSON modes), and analytics. |
 
 ---
 
@@ -97,10 +104,16 @@ Aurora API Gateway is organized into four decoupled layers:
 - **Origin Security**: Upstream TLS verification and mutual TLS (**mTLS**) authentication with custom CA bundles and client certificates.
 - **Health Probing**: Active HTTP/HTTPS health checks with configurable intervals, probe paths, and failure thresholds.
 
-### ⚡ Distributed Rate Limiting & Telemetry
-- **Algorithms**: Token Bucket and Sliding Window counter models.
-- **High-Throughput UDP Telemetry**: Worker nodes stream rate limit observations over non-blocking UDP to avoid latency spikes on HTTP request pipelines.
-- **Targeting**: Rate limit by Client IP, API Token, Host header, or custom request attributes.
+### ⚡ Declarative YAML Spec Engine & gRPC Synchronization
+- **Unified Declarative `Spec` in YAML**: The entire cluster configuration (WAF mitigation rules, Radix IP access tree, Upstream pools, Domain routing, and all 115 modular extensions) is compiled into a single unified, deterministic **YAML** manifest.
+- **High-Performance gRPC Pipeline (`:9090`)**: Worker nodes connect over persistent HTTP/2 gRPC channels using Protobuf (`sync.v1.SpecSyncService`), eliminating polling overhead and stale states.
+- **Cryptographic SHA-256 Digest Validation**: Changes take effect with sub-second latency only when the YAML digest changes, avoiding redundant reloads and preventing thundering herds via jitter-based reconciliation.
+- **In-Process Modular Extensions (115 Extensions)**: Modular capabilities (Rate Limiting, Bot Detection, Header Transformation, Authentication, etc.) dynamically managed with cooperative cancellation tokens and configurable via Visual UI Builder or raw JSON.
+
+### 📊 Comprehensive Analytics & Prometheus Telemetry
+- **Direct TSDB / Prometheus Integration**: Direct query proxy via `/api/v1/analytics/query` for Prometheus, VictoriaMetrics, or compatible TSDB backends.
+- **Built-in Metric Catalog**: Out-of-the-box telemetry catalog for request rates, WAF mitigation blocks, rate limit rejections, upstream latency, and error distributions.
+- **Zero TSDB Bloat on Control Plane**: Telemetry writes bypass the control plane database entirely, keeping the SQLite authority lean and rock-solid.
 
 ### 💾 Automated Disaster Recovery & S3 Cloud Storage
 - **Atomic Local Snapshots**: Creates consistent SQLite snapshots using `VACUUM INTO` without locking live readers.
@@ -141,12 +154,13 @@ docker compose up -d
 
 Once started, the following services are available:
 
-| Service | Address | Description |
-| :--- | :--- | :--- |
-| **Aurora Console** | [http://localhost:8080](http://localhost:8080) | Control Plane Management UI & REST API |
-| **Cluster Load Balancer** | [http://localhost:8090](http://localhost:8090) | Fronting ingress routing to WAF nodes |
-| **WAF Node 01** | [http://localhost:8091](http://localhost:8091) | Standalone Data Plane Node 1 |
-| **WAF Node 02** | [http://localhost:8092](http://localhost:8092) | Standalone Data Plane Node 2 |
+| Service | Address | Protocol | Description |
+| :--- | :--- | :--- | :--- |
+| **Aurora Console** | [http://localhost:8080](http://localhost:8080) | HTTP / REST | Control Plane Management UI & REST API |
+| **Aurora Spec Sync** | `localhost:9090` | gRPC / Protobuf | Declarative YAML Spec & Heartbeat streaming |
+| **Cluster Load Balancer** | [http://localhost:8090](http://localhost:8090) | HTTP | Fronting ingress routing to WAF nodes |
+| **WAF Node 01** | [http://localhost:8091](http://localhost:8091) | HTTP | Standalone Data Plane Node 1 |
+| **WAF Node 02** | [http://localhost:8092](http://localhost:8092) | HTTP | Standalone Data Plane Node 2 |
 
 #### Testing the WAF Data Plane
 
