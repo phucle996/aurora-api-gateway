@@ -106,11 +106,10 @@ export function ExtensionRulesTable({
                       return (
                         <td key={col.key} className="py-2.5 px-3">
                           <span
-                            className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                              val
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${val
                                 ? 'bg-emerald-500/10 text-emerald-600'
                                 : 'bg-muted text-muted-foreground'
-                            }`}
+                              }`}
                           >
                             {val ? 'Yes' : 'No'}
                           </span>

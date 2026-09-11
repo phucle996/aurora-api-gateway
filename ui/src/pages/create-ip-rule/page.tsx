@@ -7,7 +7,7 @@ import {
   type AccessObject,
   type AccessCatalog,
 } from '../../lib/api/access';
-import { domainsApi } from '../../lib/api/domains';
+import { routesApi } from '../../lib/api/routes';
 import { BasicInfoSection } from './sections/BasicInfoSection';
 import { SourceSection } from './sections/SourceSection';
 import { ScopeSection } from './sections/ScopeSection';
@@ -55,7 +55,10 @@ export function CreateIpRulePage() {
       accessApi.list(),
       accessApi.status(),
       accessApi.catalog(),
-      domainsApi.catalog().catch(() => []),
+      routesApi.list({ limit: 200 }).then(r => {
+        const seen = new Set<string>();
+        return (r.items || []).filter(i => i.host && !seen.has(i.host) && seen.add(i.host)).map(i => ({ domain: i.host }));
+      }).catch(() => []),
     ])
       .then(([items, status, cat, domCatalog]) => {
         if (!live) return;

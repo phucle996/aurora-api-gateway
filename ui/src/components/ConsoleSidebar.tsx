@@ -3,10 +3,8 @@ import { Link, useLocation } from 'react-router-dom';
 import logoImg from '../assets/logo.png';
 import {
   LayoutDashboard,
-  Globe,
-  ShieldAlert,
-  Shield,
-  Layers,
+  Route,
+  ShieldCheck,
   Server,
   Settings,
   Blocks,
@@ -93,10 +91,16 @@ export function ConsoleSidebar({
       icon: <LayoutDashboard className="w-4 h-4 shrink-0" />,
     },
     {
-      label: 'Domains',
-      path: '/domains',
-      aliases: ['/domains/create', '/domains/add'],
-      icon: <Globe className="w-4 h-4 shrink-0" />,
+      label: 'Routes',
+      path: '/routes',
+      aliases: ['/domains'],
+      icon: <Route className="w-4 h-4 shrink-0 text-primary" />,
+    },
+    {
+      label: 'Certificates',
+      path: '/certificates',
+      aliases: [],
+      icon: <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-400" />,
     },
     {
       label: 'Upstreams',
@@ -105,28 +109,10 @@ export function ConsoleSidebar({
       icon: <Server className="w-4 h-4 shrink-0" />,
     },
     {
-      label: 'Security Events',
-      path: '/events',
-      aliases: [],
-      icon: <ShieldAlert className="w-4 h-4 shrink-0" />,
-    },
-    {
       label: 'Analytics',
       path: '/analytics',
       aliases: ['/metrics', '/telemetry'],
       icon: <BarChart3 className="w-4 h-4 shrink-0 text-primary" />,
-    },
-    {
-      label: 'Rules',
-      path: '/rules',
-      aliases: ['/create-rule', '/edit-rule'],
-      icon: <Shield className="w-4 h-4 shrink-0" />,
-    },
-    {
-      label: 'Policies',
-      path: '/policies',
-      aliases: ['/create-policy', '/policies/create'],
-      icon: <Layers className="w-4 h-4 shrink-0" />,
     },
     {
       label: 'NGINX / Nodes',

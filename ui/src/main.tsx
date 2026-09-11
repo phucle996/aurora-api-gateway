@@ -3,20 +3,12 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import DashboardPage from './pages/dashboard/page';
 import LoginPage from './pages/login/page';
-import PoliciesPage from './pages/policies/page';
-import CreatePolicyPage from './pages/create-policy/page';
-import RulesPage from './pages/rules/page';
-import CreateRulePage from './pages/create-rule/page';
-import EditRulePage from './pages/edit-rule/page';
-import RuleHistoryPage from './pages/rule-history/page';
-import SecurityEventsPage from './pages/events/page';
 import AnalyticsPage from './pages/analytics/page';
 import NodesPage from './pages/nodes/page';
 import ExtensionsPage from './pages/extensions/page';
 import SettingsPage from './pages/settings/page';
-import DomainsPage from './pages/domains/page';
-import CreateDomainPage from './pages/create-domain/page';
-import EditDomainPage from './pages/domains/edit/page';
+import RoutesPage from './pages/routes/page';
+import CertificatesPage from './pages/certificates/page';
 import UpstreamsPage from './pages/upstreams/page';
 import CreateUpstreamPage from './pages/upstreams/create/page';
 import EditUpstreamPage from './pages/upstreams/edit/page';
@@ -36,44 +28,20 @@ createRoot(document.getElementById('root')!).render(
         <Route element={<ConsoleLayout />}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/domains" element={<DomainsPage />} />
-          <Route path="/domains/create" element={<CreateDomainPage />} />
-          <Route path="/domains/add" element={<CreateDomainPage />} />
-          <Route path="/create-domain" element={<CreateDomainPage />} />
-          <Route path="/domains/:id/edit" element={<EditDomainPage />} />
-          <Route path="/domains/edit/:id" element={<EditDomainPage />} />
+          
+          {/* Traffic / Routing & Certificates */}
+          <Route path="/routes" element={<RoutesPage />} />
+          <Route path="/certificates" element={<CertificatesPage />} />
+          <Route path="/domains/*" element={<Navigate to="/routes" replace />} />
+          <Route path="/domains" element={<Navigate to="/routes" replace />} />
+          <Route path="/create-domain" element={<Navigate to="/routes" replace />} />
           <Route path="/upstreams" element={<UpstreamsPage />} />
           <Route path="/upstreams/create" element={<CreateUpstreamPage />} />
           <Route path="/upstreams/add" element={<CreateUpstreamPage />} />
           <Route path="/upstreams/:id/edit" element={<EditUpstreamPage />} />
           <Route path="/upstreams/edit/:id" element={<EditUpstreamPage />} />
-          <Route path="/events" element={<SecurityEventsPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/telemetry" element={<AnalyticsPage />} />
-
-          {/* Rules Management */}
-          <Route path="/rules" element={<RulesPage />} />
-          <Route path="/rules/create" element={<CreateRulePage />} />
-          <Route path="/create-rule" element={<CreateRulePage />} />
-          <Route path="/rules/:id/edit" element={<EditRulePage />} />
-          <Route path="/rules/edit/:id" element={<EditRulePage />} />
-          <Route path="/rules/edit" element={<EditRulePage />} />
-          <Route path="/edit-rule" element={<EditRulePage />} />
-          <Route path="/rules/history" element={<RuleHistoryPage />} />
-          <Route path="/rules/:id/history" element={<RuleHistoryPage />} />
-          <Route path="/rules/history/:id" element={<RuleHistoryPage />} />
-          <Route path="/rule-history" element={<RuleHistoryPage />} />
-
-          {/* Policies */}
-          <Route path="/policies" element={<PoliciesPage />} />
-          <Route path="/policies/create" element={<CreatePolicyPage />} />
-          <Route path="/create-policy" element={<CreatePolicyPage />} />
-
-          {/* IP & Access Control (Consolidated into Extensions Hub) */}
-          <Route path="/ip-access/*" element={<Navigate to="/extensions" replace />} />
-          <Route path="/ip-access" element={<Navigate to="/extensions" replace />} />
-          <Route path="/access-control/*" element={<Navigate to="/extensions" replace />} />
-          <Route path="/access-control" element={<Navigate to="/extensions" replace />} />
 
           {/* Cluster & Nodes */}
           <Route path="/nodes" element={<NodesPage />} />
@@ -93,7 +61,3 @@ createRoot(document.getElementById('root')!).render(
     </ThemeProvider>
   </StrictMode>
 );
-
-
-
-
