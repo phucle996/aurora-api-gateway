@@ -5,7 +5,6 @@ import {
   AlertTriangle,
   FileCode2,
   RefreshCw,
-  Activity,
 } from 'lucide-react';
 
 import type { NodeItem } from './NodesTable';
@@ -22,14 +21,6 @@ export function NodesStats({ nodes }: NodesStatsProps) {
   const revisions = new Set(nodes?.map(n => n.ruleset));
   const ruleset = revisions.size > 1 ? 'Mixed' : [...revisions][0] || 'Unknown';
 
-  const totalRps = nodes
-    ? nodes.filter(n => n.status === 'Ready' && n.metricsAvailable).reduce((acc, n) => acc + (parseFloat(n.requestsPerSecond) || 0), 0).toFixed(1)
-    : '0.0';
-
-  const totalConns = nodes
-    ? nodes.filter(n => n.status === 'Ready' && n.metricsAvailable).reduce((acc, n) => acc + (parseInt(n.activeConnections, 10) || 0), 0)
-    : 0;
-
   return (
     <div className="space-y-4">
       {/* Title & Description */}
@@ -38,12 +29,12 @@ export function NodesStats({ nodes }: NodesStatsProps) {
           Cluster / Nodes
         </h1>
         <p className="text-xs text-muted-foreground mt-1">
-          Monitor registered NGINX WAF nodes, health status, ruleset sync, and live traffic metrics.
+          Monitor registered NGINX data plane nodes, operational health, and ruleset synchronization.
         </p>
       </div>
 
       {/* Dynamic Stats Grid - 100% Real Data from Nodes API */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         {/* Card 1: Registered Nodes */}
         <div className="bg-card border border-border p-3.5 flex flex-col justify-between shadow-xs rounded-sm transition-colors">
           <div className="flex items-center justify-between text-muted-foreground mb-2">
@@ -104,21 +95,7 @@ export function NodesStats({ nodes }: NodesStatsProps) {
           </div>
         </div>
 
-        {/* Card 5: Throughput & Connections */}
-        <div className="bg-card border border-border p-3.5 flex flex-col justify-between shadow-xs rounded-sm transition-colors">
-          <div className="flex items-center justify-between text-muted-foreground mb-2">
-            <span className="text-[11px] font-medium text-muted-foreground">Cluster Load</span>
-            <Activity className="w-4 h-4 text-amber-500" />
-          </div>
-          <div>
-            <div className="text-lg font-bold tabular-nums text-foreground">{totalRps} RPS</div>
-            <div className="text-[10px] text-muted-foreground mt-0.5">
-              <span>{totalConns} active connections</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 6: Ruleset Revision */}
+        {/* Card 5: Ruleset Revision */}
         <div className="bg-card border border-border p-3.5 flex flex-col justify-between shadow-xs rounded-sm transition-colors">
           <div className="flex items-center justify-between text-muted-foreground mb-2">
             <span className="text-[11px] font-medium text-muted-foreground">Ruleset Revision</span>
@@ -133,4 +110,3 @@ export function NodesStats({ nodes }: NodesStatsProps) {
     </div>
   );
 }
-

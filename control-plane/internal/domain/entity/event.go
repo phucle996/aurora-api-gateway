@@ -6,21 +6,14 @@ type SSEMessage struct {
 	Data  any
 }
 
-// NodeHeartbeatEvent payload chứa thông tin nhịp tim và telemetry realtime của node.
+// NodeHeartbeatEvent payload chứa thông tin nhịp tim realtime của node.
 type NodeHeartbeatEvent struct {
-	MetricsScope     string
-	RuntimeStartedAt int64
-	MetricsAvailable bool
-	NodeID           string
-	IP               string
-	Status           string
-	RPS              float64
-	ActiveConns      int
-	CPUUsage         float64
-	MemoryUsage      float64
-	Sync             string
-	Ruleset          string
-	Timestamp        int64
+	NodeID    string
+	IP        string
+	Status    string
+	Sync      string
+	Ruleset   string
+	Timestamp int64
 }
 
 // NodeSyncEvent payload chứa thông tin sự kiện đồng bộ ruleset thực tế.

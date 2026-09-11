@@ -5,10 +5,8 @@ package entity
 // Tuân thủ quy tắc kiến trúc Aurora API Gateway: Flat entity, không lồng ghép đối tượng phức tạp,
 // tách bạch giữa dữ liệu bền vững (SQLite) và telemetry tức thời (In-Memory/OS).
 type ClusterNodeRecord struct {
-	MetricsScope           string
 	RuntimeStartedAt       int64
 	WorkerIdentity         string
-	MetricsAvailable       bool
 	ID                     string
 	Name                   string
 	Hostname               string
@@ -25,10 +23,6 @@ type ClusterNodeRecord struct {
 	Certificate            string
 	PolicySync             string
 	LastSyncTime           string
-	CPUUsage               float64
-	MemoryUsage            float64
-	ActiveConnections      string
-	RequestsPerSecond      string
 	Uptime                 string
 	PendingCommand         string
 	ReloadStatus           string
@@ -72,10 +66,4 @@ type NodeSyncLogRecord struct {
 	CreatedAt string
 }
 
-// NodeHeartbeatState is the heartbeat workflow's persisted observation boundary.
-type NodeHeartbeatState struct {
-	ActiveReleaseID *int64
-	Timestamp       int64
-	ReloadStatus    string
-	WorkerIdentity  string
-}
+

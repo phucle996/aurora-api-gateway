@@ -11,14 +11,14 @@ import (
 // healthcheckService chịu trách nhiệm cung cấp thông tin trạng thái hoạt động và
 // thực hiện kiểm tra mức độ sẵn sàng (Healthcheck & Readiness probe) của hệ thống control-plane.
 type healthcheckService struct {
-	storage repo.StorageRepository
+	system repo.SystemRepository
 }
 
 // NewHealthcheckService khởi tạo dịch vụ HealthcheckService,
-// nhận vào repo.StorageRepository và trả về interface domainservice.HealthcheckService.
-func NewHealthcheckService(storage repo.StorageRepository) domainservice.HealthcheckService {
+// nhận vào repo.SystemRepository và trả về interface domainservice.HealthcheckService.
+func NewHealthcheckService(system repo.SystemRepository) domainservice.HealthcheckService {
 	return &healthcheckService{
-		storage: storage,
+		system: system,
 	}
 }
 
@@ -34,5 +34,5 @@ func (s *healthcheckService) Status() entity.ControllerStatus {
 
 // Ready kiểm tra xem hệ thống đã sẵn sàng phục vụ lưu lượng truy cập hay chưa (Readiness Probe).
 func (s *healthcheckService) Ready(ctx context.Context) error {
-	return s.storage.Check(ctx)
+	return s.system.Check(ctx)
 }

@@ -14,6 +14,10 @@ type mockSystemRepo struct {
 	err   error
 }
 
+func (m *mockSystemRepo) Check(ctx context.Context) error {
+	return nil
+}
+
 func (m *mockSystemRepo) GetNodeCounts(ctx context.Context) (int, int, error) {
 	return m.total, m.ready, m.err
 }

@@ -8,8 +8,6 @@ import {
 
 export interface NodeItem {
   runtimeStartedAt?: number;
-  metricsScope?: string;
-  metricsAvailable?: boolean;
   id: string;
   name: string;
   hostname?: string;
@@ -19,15 +17,9 @@ export interface NodeItem {
   status: 'Ready' | 'Not Ready' | 'Draining';
   version: string;
   ruleset: string;
-  rps?: string;
-  connections?: string;
   lastHeartbeat: string;
   lastHeartbeatTimestamp?: number;
   sync: 'In Sync' | 'Drift' | 'Syncing';
-  cpuUsage: number;
-  memoryUsage: number;
-  activeConnections: string;
-  requestsPerSecond: string;
   uptime: string;
   joinMethod: string;
   certificate: string;
@@ -201,8 +193,7 @@ export function NodesTable({
               </th>
               <th className="py-2.5 px-3 font-medium">Version</th>
               <th className="py-2.5 px-3 font-medium">Ruleset</th>
-              <th className="py-2.5 px-3 font-medium">RPS</th>
-              <th className="py-2.5 px-3 font-medium">Connections</th>
+              <th className="py-2.5 px-3 font-medium">Uptime</th>
               <th className="py-2.5 px-3 font-medium">Last Heartbeat</th>
               <th className="py-2.5 px-3 font-medium text-right">Sync</th>
             </tr>
@@ -214,7 +205,7 @@ export function NodesTable({
           >
             {isLoading && nodes.length === 0 ? (
               <tr>
-                <td colSpan={10} className="py-12 text-center text-muted-foreground">
+                <td colSpan={9} className="py-12 text-center text-muted-foreground">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <RotateCw className="w-5 h-5 animate-spin text-primary" />
                     <span>Loading cluster nodes...</span>
@@ -223,7 +214,7 @@ export function NodesTable({
               </tr>
             ) : filteredNodes.length === 0 ? (
               <tr>
-                <td colSpan={10} className="py-12 text-center text-muted-foreground">
+                <td colSpan={9} className="py-12 text-center text-muted-foreground">
                   {nodes.length === 0
                     ? 'No nodes registered in the cluster yet.'
                     : 'No nodes found matching the filter criteria.'}
@@ -277,13 +268,8 @@ export function NodesTable({
                     {/* Ruleset */}
                     <td className="py-2 px-3 text-blue-600 dark:text-cyan-400">{node.ruleset}</td>
 
-                    {/* RPS */}
-                    <td className="py-2 px-3 text-slate-800 dark:text-slate-200">{node.metricsAvailable ? node.requestsPerSecond : '—'}</td>
-
-                    {/* Connections */}
-                    <td className="py-2 px-3 text-slate-800 dark:text-slate-200">
-                      {node.metricsAvailable ? node.activeConnections : '—'}
-                    </td>
+                    {/* Uptime */}
+                    <td className="py-2 px-3 text-slate-600 dark:text-slate-300 font-mono text-[11px]">{node.uptime || '—'}</td>
 
                     {/* Last Heartbeat */}
                     <td className="py-2 px-3 text-slate-500 dark:text-slate-400">

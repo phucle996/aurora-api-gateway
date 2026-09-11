@@ -4,8 +4,6 @@ import (
 	"aurora-waf.local/control-plane/infra"
 	"aurora-waf.local/control-plane/internal/app"
 	"aurora-waf.local/control-plane/internal/config"
-	"aurora-waf.local/control-plane/internal/domain/entity"
-	"aurora-waf.local/control-plane/internal/repository"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -170,80 +168,5 @@ func TestMetricsFlexibilityLabAndProduction(t *testing.T) {
 	wMetricsDisabledAgain := request("POST", "/api/v1/analytics/query", analyticsQueryPayload)
 	if wMetricsDisabledAgain.Code != http.StatusServiceUnavailable {
 		t.Fatalf("kỳ vọng 503 khi disabled, nhận: %d", wMetricsDisabledAgain.Code)
-	}
-}
-
-func TestBatchedMetricsHistoryCleanupWithPacing(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "cleanup.db")
-	a, err := app.NewApp(context.Background(), config.Config{SQLitePath: path})
-	if err != nil {
-		t.Fatal(err)
-	}
-	a.Close()
-
-	pools, err := infra.OpenSQLitePool(context.Background(), path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer pools.Close()
-
-	nodeRepo := repository.NewNodeRepository(pools.Writer)
-	now := time.Now().Unix()
-
-	// 1. Tạo 1200 bản ghi cũ quá 10 ngày (> retention 7 ngày)
-	var oldRecords []entity.NodeMetricHistoryRecord
-	for i := 0; i < 1200; i++ {
-		oldRecords = append(oldRecords, entity.NodeMetricHistoryRecord{
-			NodeID:            "node-local-01",
-			Timestamp:         now - (10*86400 + int64(i)),
-			CPUUsage:          10.0,
-			MemoryUsage:       20.0,
-			ActiveConnections: 5,
-			RequestsPerSecond: 100.0,
-		})
-	}
-	if err := nodeRepo.BatchInsertMetricsHistory(context.Background(), oldRecords); err != nil {
-		t.Fatalf("insert old records: %v", err)
-	}
-
-	// 2. Tạo 10 bản ghi mới (hôm nay, còn trong hạn 7 ngày)
-	var freshRecords []entity.NodeMetricHistoryRecord
-	for i := 0; i < 10; i++ {
-		freshRecords = append(freshRecords, entity.NodeMetricHistoryRecord{
-			NodeID:            "node-local-01",
-			Timestamp:         now - int64(i*60),
-			CPUUsage:          15.0,
-			MemoryUsage:       25.0,
-			ActiveConnections: 12,
-			RequestsPerSecond: 200.0,
-		})
-	}
-	if err := nodeRepo.BatchInsertMetricsHistory(context.Background(), freshRecords); err != nil {
-		t.Fatalf("insert fresh records: %v", err)
-	}
-
-	// 3. Thực hiện CleanupExpiredMetricsHistory (chạy batch 500 dòng/lần với pacing 30ms)
-	start := time.Now()
-	if err := nodeRepo.CleanupExpiredMetricsHistory(context.Background(), 7); err != nil {
-		t.Fatalf("cleanup failed: %v", err)
-	}
-	elapsed := time.Since(start)
-
-	// Vì có 1200 bản ghi, sẽ chia thành:
-	// Batch 1: 500 dòng (pacing 30ms)
-	// Batch 2: 500 dòng (pacing 30ms)
-	// Batch 3: 200 dòng (< 500 dòng -> dừng)
-	// Tổng pacing tối thiểu là ~60ms
-	if elapsed < 50*time.Millisecond {
-		t.Errorf("kỳ vọng có pacing giữa các batch (>50ms), thực tế: %v", elapsed)
-	}
-
-	// 4. Kiểm tra số lượng bản ghi còn lại trong SQLite: phải đúng 10 bản ghi tươi mới
-	var count int
-	if err := pools.Reader.QueryRow("SELECT count(*) FROM node_metrics_history WHERE node_id = 'node-local-01'").Scan(&count); err != nil {
-		t.Fatal(err)
-	}
-	if count != 10 {
-		t.Fatalf("kỳ vọng còn lại 10 bản ghi mới, thực tế còn: %d", count)
 	}
 }

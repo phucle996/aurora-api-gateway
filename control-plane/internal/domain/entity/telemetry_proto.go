@@ -30,17 +30,6 @@ type NodeHeartbeatPayload struct {
 	Metadata          *NginxMetadata
 }
 
-// NodeMetricHistoryRecord đại diện cho 1 bản ghi rollup 1 phút được lưu vào bảng node_metrics_history.
-type NodeMetricHistoryRecord struct {
-	MetricsScope      string
-	NodeID            string
-	Timestamp         int64
-	CPUUsage          float64
-	MemoryUsage       float64
-	ActiveConnections int
-	RequestsPerSecond float64
-}
-
 // MarshalBinary tuần tự hóa NodeHeartbeatPayload sang định dạng Protobuf binary wire format.
 func (p *NodeHeartbeatPayload) MarshalBinary() []byte {
 	var b []byte

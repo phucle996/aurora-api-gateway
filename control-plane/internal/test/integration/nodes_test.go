@@ -209,18 +209,6 @@ func TestNodeHeartbeatWorkflow(t *testing.T) {
 	if node.Status != "Ready" {
 		t.Errorf("kỳ vọng node status là 'Ready', nhận: %s", node.Status)
 	}
-	if node.CPUUsage != 22.5 {
-		t.Errorf("kỳ vọng CPUUsage = 22.5, nhận: %f", node.CPUUsage)
-	}
-	if node.MemoryUsage != 65.0 {
-		t.Errorf("kỳ vọng MemoryUsage = 65.0, nhận: %f", node.MemoryUsage)
-	}
-	if node.ActiveConnections != "42" {
-		t.Errorf("kỳ vọng ActiveConnections = '42', nhận: %s", node.ActiveConnections)
-	}
-	if node.RequestsPerSecond != "320.0" {
-		t.Errorf("kỳ vọng RequestsPerSecond = '320.0', nhận: %s", node.RequestsPerSecond)
-	}
 
 	// 6. Kiểm tra node mới chưa từng tồn tại (như node-01 trong Docker cluster) tự động ghi danh qua heartbeat
 	hbNew := entity.NodeHeartbeatPayload{

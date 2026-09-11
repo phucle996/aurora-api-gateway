@@ -33,14 +33,8 @@ type nodeLiveState struct {
 	Metadata         *entity.NginxMetadata
 	PendingCommand   string
 	ReloadStatus     string
+	Certificate      string
 	LastTimestamp    int64
-	MetricsScope      string
-	Certificate       string
-	MetricsAvailable  bool
-	CPUUsage          float64
-	MemoryUsage       float64
-	ActiveConnections string
-	RequestsPerSecond string
 }
 
 type nodeService struct {
@@ -88,26 +82,21 @@ func (s *nodeService) livenessReaper(interval time.Duration) {
 			if node.Status != "Offline" && now.Sub(node.LastSeen) > 15*time.Second {
 				node.Status = "Offline"
 				offlineEvents = append(offlineEvents, entity.NodeHeartbeatEvent{
-					NodeID:           node.ID,
-					IP:               node.IP,
-					Status:           "Not Ready",
-					Timestamp:        now.Unix(),
-					RuntimeStartedAt: node.RuntimeStartedAt,
+					NodeID:    node.ID,
+					IP:        node.IP,
+					Status:    "Not Ready",
+					Timestamp: now.Unix(),
 				})
 			}
-			// Xóa các node không hoạt động quá 10 phút khỏi RAM
+			// Xóa các node không hoạt động quá 10 phút khỏi RAM và database
 			if now.Sub(node.LastSeen) > 10*time.Minute {
 				delete(s.nodes, id)
+				if s.repo != nil {
+					_ = s.repo.DeleteNode(context.Background(), id)
+				}
 			}
 		}
 		s.nodesMu.Unlock()
-
-		// Garbage collect stale dead nodes from database (nodes with last_heartbeat older than 10 minutes)
-		if s.repo != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			_, _ = s.repo.PruneStaleNodes(ctx, 600)
-			cancel()
-		}
 
 		if len(offlineEvents) > 0 && s.eventHub != nil {
 			s.eventHub.Broadcast("nodes_heartbeat", offlineEvents)
@@ -199,7 +188,6 @@ func (s *nodeService) ListNodes(ctx context.Context) ([]entity.ClusterNodeRecord
 				Status:           live.Status,
 				ActiveReleaseID:  relID,
 				RuntimeStartedAt: live.RuntimeStartedAt,
-				MetricsScope:     live.MetricsScope,
 				Certificate:      live.Certificate,
 			}
 			nodes = append(nodes, newNode)
@@ -208,9 +196,6 @@ func (s *nodeService) ListNodes(ctx context.Context) ([]entity.ClusterNodeRecord
 		} else {
 			if live.Hostname != "" {
 				rec.Hostname = live.Hostname
-			}
-			if live.MetricsScope != "" {
-				rec.MetricsScope = live.MetricsScope
 			}
 			if live.Certificate != "" {
 				rec.Certificate = live.Certificate
@@ -286,20 +271,6 @@ func (s *nodeService) ListNodes(ctx context.Context) ([]entity.ClusterNodeRecord
 		if node.Status != "Ready" {
 			node.PolicySync = "Unknown (stale heartbeat)"
 		}
-
-		s.nodesMu.RLock()
-		live, hasLive := s.nodes[node.ID]
-		if hasLive && live.MetricsAvailable && node.Status == "Ready" {
-			node.MetricsAvailable = true
-			node.CPUUsage = live.CPUUsage
-			node.MemoryUsage = live.MemoryUsage
-			node.ActiveConnections = live.ActiveConnections
-			node.RequestsPerSecond = live.RequestsPerSecond
-		} else {
-			node.ActiveConnections = "—"
-			node.RequestsPerSecond = "—"
-		}
-		s.nodesMu.RUnlock()
 	}
 
 	return nodes, nil
@@ -332,7 +303,6 @@ func (s *nodeService) GetNodeByID(ctx context.Context, id string) (*entity.Clust
 			Status:           live.Status,
 			ActiveReleaseID:  relID,
 			RuntimeStartedAt: live.RuntimeStartedAt,
-			MetricsScope:     live.MetricsScope,
 			Certificate:      live.Certificate,
 		}
 		node = newNode
@@ -345,9 +315,6 @@ func (s *nodeService) GetNodeByID(ctx context.Context, id string) (*entity.Clust
 	if inLive {
 		if live.Hostname != "" {
 			node.Hostname = live.Hostname
-		}
-		if live.MetricsScope != "" {
-			node.MetricsScope = live.MetricsScope
 		}
 		if live.Certificate != "" {
 			node.Certificate = live.Certificate
@@ -424,20 +391,6 @@ func (s *nodeService) GetNodeByID(ctx context.Context, id string) (*entity.Clust
 	if node.Status != "Ready" {
 		node.PolicySync = "Unknown (stale heartbeat)"
 	}
-
-	s.nodesMu.RLock()
-	live, hasLive := s.nodes[node.ID]
-	if hasLive && live.MetricsAvailable && node.Status == "Ready" {
-		node.MetricsAvailable = true
-		node.CPUUsage = live.CPUUsage
-		node.MemoryUsage = live.MemoryUsage
-		node.ActiveConnections = live.ActiveConnections
-		node.RequestsPerSecond = live.RequestsPerSecond
-	} else {
-		node.ActiveConnections = "—"
-		node.RequestsPerSecond = "—"
-	}
-	s.nodesMu.RUnlock()
 
 	return node, nil
 }
@@ -543,7 +496,6 @@ func (s *nodeService) RecordHeartbeat(ctx context.Context, payload entity.NodeHe
 			PendingCommand:   "none",
 			ReloadStatus:     "none",
 			RuntimeStartedAt: payload.RuntimeStartedAt,
-			MetricsScope:     payload.MetricsScope,
 			Certificate:      payload.Authentication,
 		}
 		s.nodes[payload.NodeID] = node
@@ -581,9 +533,6 @@ func (s *nodeService) RecordHeartbeat(ctx context.Context, payload entity.NodeHe
 	}
 	if payload.RuntimeStartedAt > 0 {
 		node.RuntimeStartedAt = payload.RuntimeStartedAt
-	}
-	if payload.MetricsScope != "" {
-		node.MetricsScope = payload.MetricsScope
 	}
 	if payload.Authentication != "" {
 		node.Certificate = payload.Authentication
@@ -630,16 +579,7 @@ func (s *nodeService) RecordHeartbeat(ctx context.Context, payload entity.NodeHe
 	}
 	node.DesiredReleaseID = desiredRelease
 
-	if payload.MetricsAvailable {
-		node.MetricsAvailable = true
-		node.CPUUsage = payload.CPUUsage
-		node.MemoryUsage = payload.MemoryUsage
-		node.ActiveConnections = fmt.Sprintf("%d", payload.ActiveConnections)
-		node.RequestsPerSecond = fmt.Sprintf("%.1f", payload.RequestsPerSecond)
-	}
-
 	nodeStatus := node.Status
-	runtimeStartedAt := node.RuntimeStartedAt
 	nodeIP := node.IP
 	activeRelID := node.ActiveReleaseID
 	workerIdentity := node.WorkerIdentity
@@ -658,19 +598,12 @@ func (s *nodeService) RecordHeartbeat(ctx context.Context, payload entity.NodeHe
 	// 5. Đưa nhịp tim vào hàng đợi gom batch để phát sóng chung 1 event duy nhất
 	if s.eventHub != nil {
 		s.queueHeartbeat(entity.NodeHeartbeatEvent{
-			NodeID:           payload.NodeID,
-			MetricsScope:     payload.MetricsScope,
-			MetricsAvailable: payload.MetricsAvailable,
-			RuntimeStartedAt: runtimeStartedAt,
-			IP:               nodeIP,
-			Status:           nodeStatus,
-			RPS:              payload.RequestsPerSecond,
-			ActiveConns:      payload.ActiveConnections,
-			CPUUsage:         payload.CPUUsage,
-			MemoryUsage:      payload.MemoryUsage,
-			Sync:             syncStatus,
-			Ruleset:          rulesetName,
-			Timestamp:        payload.Timestamp,
+			NodeID:    payload.NodeID,
+			IP:        nodeIP,
+			Status:    nodeStatus,
+			Sync:      syncStatus,
+			Ruleset:   rulesetName,
+			Timestamp: payload.Timestamp,
 		})
 	}
 

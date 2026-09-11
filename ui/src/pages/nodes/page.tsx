@@ -36,7 +36,6 @@ export default function NodesPage() {
     const fresh = !!n.lastHeartbeatTimestamp && now - n.lastHeartbeatTimestamp <= 45000;
     return {
       ...n, status: fresh ? n.status : 'Not Ready',
-      metricsAvailable: fresh && n.metricsAvailable,
       lastHeartbeat: formatRelativeTime(n.lastHeartbeatTimestamp),
       policySync: fresh ? n.policySync : 'Unknown (stale heartbeat)',
     };
@@ -82,8 +81,7 @@ export default function NodesPage() {
       try {
         const parsed = JSON.parse(event.data);
         const updates: NodeHeartbeat[] = (Array.isArray(parsed) ? parsed : [parsed]).filter((u: NodeHeartbeat) =>
-          typeof u.node_id === 'string' && Number.isFinite(u.timestamp) && u.timestamp > 0 && u.timestamp <= Date.now() / 1000 + 5 &&
-          [u.rps, u.active_conns, u.cpu_usage, u.memory_usage].every(v => typeof v === 'number' && Number.isFinite(v) && v >= 0));
+          typeof u.node_id === 'string' && Number.isFinite(u.timestamp) && u.timestamp > 0 && u.timestamp <= Date.now() / 1000 + 5);
         setHeartbeats(prev => {
           const next = { ...prev };
           for (const u of updates) if (!next[u.node_id] || next[u.node_id].timestamp < u.timestamp) next[u.node_id] = u;
@@ -93,10 +91,8 @@ export default function NodesPage() {
           const u = updates.filter(it => it.node_id === n.id).sort((a, b) => b.timestamp - a.timestamp)[0];
           if (!u || u.timestamp * 1000 <= (n.lastHeartbeatTimestamp || 0)) return n;
           return {
-            ...n, ip: u.ip || n.ip, status: u.status, requestsPerSecond: u.rps.toFixed(1),
-            activeConnections: String(u.active_conns), cpuUsage: u.cpu_usage, memoryUsage: u.memory_usage,
-            sync: u.sync, policySync: u.sync, ruleset: u.ruleset, metricsScope: u.metrics_scope,
-            metricsAvailable: u.metrics_available, runtimeStartedAt: u.runtime_started_at,
+            ...n, ip: u.ip || n.ip, status: u.status,
+            sync: u.sync, policySync: u.sync, ruleset: u.ruleset,
             lastHeartbeatTimestamp: u.timestamp * 1000
           };
         }));

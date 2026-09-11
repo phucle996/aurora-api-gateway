@@ -20,7 +20,7 @@ func TestNodeObservationReplayReloadAndScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	node, err := svc.GetNodeByID(ctx, hb.NodeID)
-	if err != nil || node.Hostname != hb.Hostname || node.MetricsScope != "container" || node.RuntimeStartedAt != hb.RuntimeStartedAt || node.ActiveReleaseID == nil || *node.ActiveReleaseID != hb.ActiveReleaseID || node.Certificate != "Bearer / HTTP" {
+	if err != nil || node.Hostname != hb.Hostname || node.RuntimeStartedAt != hb.RuntimeStartedAt || node.ActiveReleaseID == nil || *node.ActiveReleaseID != hb.ActiveReleaseID || node.Certificate != "Bearer / HTTP" {
 		t.Fatal(node, err)
 	}
 	if err := repo.SetNodeCommand(ctx, hb.NodeID, "reload_process", "pending"); err != nil {
@@ -35,18 +35,18 @@ func TestNodeObservationReplayReloadAndScope(t *testing.T) {
 	if _, err := svc.RecordHeartbeat(ctx, hb); err != nil {
 		t.Fatal(err)
 	}
-	state, err := repo.GetHeartbeatState(ctx, hb.NodeID)
-	if err != nil || state.ReloadStatus != "reloading" {
-		t.Fatal("heartbeat alone confirmed reload", state, err)
+	nodeRec, err := repo.GetNodeByID(ctx, hb.NodeID)
+	if err != nil || nodeRec.ReloadStatus != "reloading" {
+		t.Fatal("heartbeat alone confirmed reload", nodeRec, err)
 	}
 	hb.Timestamp++
 	hb.WorkerIdentity = "worker-after"
 	if _, err := svc.RecordHeartbeat(ctx, hb); err != nil {
 		t.Fatal(err)
 	}
-	state, err = repo.GetHeartbeatState(ctx, hb.NodeID)
-	if err != nil || state.ReloadStatus != "completed" {
-		t.Fatal(state, err)
+	nodeRec, err = repo.GetNodeByID(ctx, hb.NodeID)
+	if err != nil || nodeRec.ReloadStatus != "completed" {
+		t.Fatal(nodeRec, err)
 	}
 	hb.Timestamp -= 2
 	hb.ActiveReleaseID = 2

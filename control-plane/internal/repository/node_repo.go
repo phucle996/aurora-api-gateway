@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"time"
 
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	"aurora-waf.local/control-plane/internal/domain/repo"
@@ -53,7 +52,7 @@ func (r *sqliteNodeRepository) ListNodes(ctx context.Context) ([]entity.ClusterN
 		n.created_at,
 		n.last_applied_at AS last_sync_time,
 		n.pending_command,
-		n.reload_status, n.runtime_started_at, n.metrics_scope, n.worker_identity
+		n.reload_status, n.runtime_started_at, n.worker_identity
 	FROM cluster_nodes n
 	LEFT JOIN latest_cluster_spec lcs ON 1=1
 	ORDER BY n.name ASC;`
@@ -83,7 +82,7 @@ func (r *sqliteNodeRepository) ListNodes(ctx context.Context) ([]entity.ClusterN
 			&item.CreatedAt,
 			&item.LastSyncTime,
 			&item.PendingCommand,
-			&item.ReloadStatus, &item.RuntimeStartedAt, &item.MetricsScope, &item.WorkerIdentity,
+			&item.ReloadStatus, &item.RuntimeStartedAt, &item.WorkerIdentity,
 		); err != nil {
 			return nil, fmt.Errorf("quét bản ghi node thất bại: %w", err)
 		}
@@ -136,7 +135,7 @@ func (r *sqliteNodeRepository) GetNodeByID(ctx context.Context, id string) (*ent
 		n.created_at,
 		n.last_applied_at AS last_sync_time,
 		n.pending_command,
-		n.reload_status, n.runtime_started_at, n.metrics_scope, n.worker_identity
+		n.reload_status, n.runtime_started_at, n.worker_identity
 	FROM cluster_nodes n
 	LEFT JOIN latest_cluster_spec lcs ON 1=1
 	WHERE n.id = ?
@@ -159,7 +158,7 @@ func (r *sqliteNodeRepository) GetNodeByID(ctx context.Context, id string) (*ent
 		&item.CreatedAt,
 		&item.LastSyncTime,
 		&item.PendingCommand,
-		&item.ReloadStatus, &item.RuntimeStartedAt, &item.MetricsScope, &item.WorkerIdentity,
+		&item.ReloadStatus, &item.RuntimeStartedAt, &item.WorkerIdentity,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -176,40 +175,6 @@ func (r *sqliteNodeRepository) GetNodeByID(ctx context.Context, id string) (*ent
 		item.PolicySync = "Synchronized"
 	}
 	return &item, nil
-}
-
-// UpdateHeartbeat cập nhật thời điểm heartbeat và trạng thái liveness mới nhất của node.
-// Tự động ghi danh (auto-register) node mới vào cluster nếu node chưa từng tồn tại.
-func (r *sqliteNodeRepository) UpdateHeartbeat(ctx context.Context, payload entity.NodeHeartbeatPayload) error {
-	deployment := "Unknown"
-	switch payload.MetricsScope {
-	case "container":
-		deployment = "Docker Container"
-	case "host":
-		deployment = "Systemd Service"
-	}
-	auth := payload.Authentication
-	if auth == "" {
-		auth = "Unknown"
-	}
-	query := `
-    INSERT INTO cluster_nodes
-      (id,name,hostname,ip,status,version,sync_status,join_method,certificate,last_heartbeat,created_at,
-       observed_release_id,runtime_started_at,worker_identity,metrics_scope,last_applied_at)
-    VALUES (?,?,?,?,'Ready',?,'Syncing',?,?,datetime(?,'unixepoch'),datetime(?,'unixepoch'),?,?,?,?,
-            CASE WHEN ? > 0 THEN datetime(?,'unixepoch') ELSE '' END)
-    ON CONFLICT(id) DO UPDATE SET
-      hostname=excluded.hostname, ip=CASE WHEN excluded.ip != '' THEN excluded.ip ELSE cluster_nodes.ip END,
-      version=excluded.version, join_method=excluded.join_method, certificate=excluded.certificate,
-      last_heartbeat=excluded.last_heartbeat,status='Ready',
-      last_applied_at=CASE WHEN excluded.observed_release_id > 0 AND (cluster_nodes.observed_release_id IS NULL OR cluster_nodes.observed_release_id != excluded.observed_release_id) THEN excluded.last_heartbeat ELSE cluster_nodes.last_applied_at END,
-      observed_release_id=excluded.observed_release_id,
-      reload_status=CASE WHEN cluster_nodes.reload_status='reloading' AND cluster_nodes.worker_identity != '' AND excluded.worker_identity != '' AND cluster_nodes.worker_identity != excluded.worker_identity THEN 'completed' ELSE cluster_nodes.reload_status END,
-      runtime_started_at=excluded.runtime_started_at, worker_identity=excluded.worker_identity,metrics_scope=excluded.metrics_scope
-    WHERE cluster_nodes.observed_release_id IS NULL OR unixepoch(excluded.last_heartbeat) > unixepoch(cluster_nodes.last_heartbeat);`
-	_, err := r.db.ExecContext(ctx, query, payload.NodeID, payload.NodeID, payload.Hostname, payload.IP, payload.Version,
-		deployment, auth, payload.Timestamp, payload.Timestamp, payload.ActiveReleaseID, payload.RuntimeStartedAt, payload.WorkerIdentity, payload.MetricsScope, payload.ActiveReleaseID, payload.Timestamp)
-	return err
 }
 
 // SetNodeCommand đặt lệnh điều khiển chờ thực thi cho một node.
@@ -330,135 +295,6 @@ func (r *sqliteNodeRepository) GetRollingNodesStatus(ctx context.Context) (pendi
 	return pending, reloading, completed, nil
 }
 
-// BatchInsertMetricsHistory ghi gom cụm (batch) các điểm đo rollup vào bảng node_metrics_history.
-func (r *sqliteNodeRepository) BatchInsertMetricsHistory(ctx context.Context, records []entity.NodeMetricHistoryRecord) error {
-	if len(records) == 0 {
-		return nil
-	}
-
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	stmt, err := tx.PrepareContext(ctx, `
-		INSERT OR REPLACE INTO node_metrics_history 
-		(node_id, timestamp, cpu_usage, memory_usage, active_connections, requests_per_second, metrics_scope)
-		VALUES (?, ?, ?, ?, ?, ?, ?);
-	`)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-
-	for _, rec := range records {
-		if _, err := stmt.ExecContext(ctx, rec.NodeID, rec.Timestamp, rec.CPUUsage, rec.MemoryUsage, rec.ActiveConnections, rec.RequestsPerSecond, rec.MetricsScope); err != nil {
-			return fmt.Errorf("lưu batch metric history cho node %s thất bại: %w", rec.NodeID, err)
-		}
-	}
-
-	return tx.Commit()
-}
-
-// CleanupExpiredMetricsHistory tự động dọn dẹp các bản ghi metrics cũ quá số ngày retentionDays (mặc định 7 ngày).
-// Thực hiện xóa theo từng batch nhỏ (500 bản ghi/mẻ) kết hợp pacing (nghỉ 30ms giữa các mẻ)
-// nhằm giải phóng write lock cho SQLite, tránh gây nghẽn database hoặc tăng đột biến kích thước WAL.
-func (r *sqliteNodeRepository) CleanupExpiredMetricsHistory(ctx context.Context, retentionDays int) error {
-	if retentionDays <= 0 {
-		retentionDays = 7
-	}
-	modifier := fmt.Sprintf("-%d days", retentionDays)
-	batchSize := 500
-
-	query := `
-	DELETE FROM node_metrics_history
-	WHERE rowid IN (
-		SELECT rowid
-		FROM node_metrics_history
-		WHERE timestamp < strftime('%s', 'now', ?)
-		LIMIT ?
-	);`
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
-		res, err := r.db.ExecContext(ctx, query, modifier, batchSize)
-		if err != nil {
-			return fmt.Errorf("dọn dẹp batch metrics history hết hạn thất bại: %w", err)
-		}
-
-		rows, err := res.RowsAffected()
-		if err != nil {
-			return err
-		}
-
-		// Nếu không còn dòng nào hết hạn hoặc mẻ vừa xóa ít hơn batchSize -> đã dọn sạch toàn bộ
-		if rows == 0 || rows < int64(batchSize) {
-			break
-		}
-
-		// Pacing: nhường write lock cho các workflow khác (như ghi metrics hoặc update rule)
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(30 * time.Millisecond):
-		}
-	}
-
-	return nil
-}
-
-// GetRecentMetricsHistory lấy tối đa limit bản ghi lịch sử gần nhất và sắp xếp theo thời gian tăng dần.
-func (r *sqliteNodeRepository) GetRecentMetricsHistory(ctx context.Context, nodeID string, limit int) ([]entity.NodeMetricPoint, error) {
-	if limit <= 0 {
-		limit = 60
-	}
-	query := `
-	WITH recent AS (
-		SELECT timestamp, cpu_usage, memory_usage, active_connections, requests_per_second, metrics_scope
-		FROM node_metrics_history
-		WHERE node_id = ? AND timestamp >= unixepoch('now') - 3600 AND timestamp <= unixepoch('now')
-		ORDER BY timestamp DESC
-		LIMIT ?
-	)
-	SELECT timestamp, cpu_usage, memory_usage, active_connections, requests_per_second, metrics_scope
-	FROM recent
-	ORDER BY timestamp ASC;`
-
-	rows, err := r.db.QueryContext(ctx, query, nodeID, limit)
-	if err != nil {
-		return nil, fmt.Errorf("truy vấn lịch sử metrics node %s thất bại: %w", nodeID, err)
-	}
-	defer rows.Close()
-
-	var points []entity.NodeMetricPoint
-	now := time.Now().Unix()
-	for rows.Next() {
-		var p entity.NodeMetricPoint
-		if err := rows.Scan(&p.Timestamp, &p.CPUUsage, &p.MemoryUsage, &p.ActiveConnections, &p.RPS, &p.MetricsScope); err != nil {
-			return nil, fmt.Errorf("quét bản ghi lịch sử metric thất bại: %w", err)
-		}
-		minutesAgo := int(float64(now-p.Timestamp) / 60.0)
-		p.TimeLabel = fmt.Sprintf("-%dm", minutesAgo)
-		if minutesAgo <= 0 {
-			p.TimeLabel = "Now"
-		}
-		points = append(points, p)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("lỗi trong quá trình đọc lịch sử metrics: %w", err)
-	}
-	if points == nil {
-		points = []entity.NodeMetricPoint{}
-	}
-	return points, nil
-}
-
 // InsertSyncLog lưu lại sự kiện đồng bộ thực tế của node vào bảng node_sync_logs.
 func (r *sqliteNodeRepository) InsertSyncLog(ctx context.Context, nodeID string, eventType string, releaseID *int64, message string) (*entity.NodeSyncLogRecord, error) {
 	query := `
@@ -510,38 +346,15 @@ func (r *sqliteNodeRepository) ListNodeSyncLogs(ctx context.Context, nodeID stri
 	return logs, nil
 }
 
-func (r *sqliteNodeRepository) GetHeartbeatState(ctx context.Context, nodeID string) (*entity.NodeHeartbeatState, error) {
-	var state entity.NodeHeartbeatState
-	err := r.db.QueryRowContext(ctx, `SELECT observed_release_id, CASE WHEN observed_release_id IS NULL THEN 0 ELSE COALESCE(unixepoch(last_heartbeat),0) END, reload_status,worker_identity FROM cluster_nodes WHERE id=?`, nodeID).Scan(&state.ActiveReleaseID, &state.Timestamp, &state.ReloadStatus, &state.WorkerIdentity)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	return &state, err
-}
-
 func (r *sqliteNodeRepository) EnsureNodeExists(ctx context.Context, nodeID, ip, hostname string) error {
 	if nodeID == "" {
 		return nil
 	}
 	query := `INSERT INTO cluster_nodes (id, name, hostname, ip, status, version, sync_status, join_method, certificate, last_heartbeat, created_at)
-		VALUES (?, ?, ?, ?, 'Ready', '0.4.1', 'In Sync', 'gRPC Sync', 'None', datetime('now'), datetime('now'))
+		VALUES (?, ?, ?, ?, 'Ready', 'active', 'In Sync', 'gRPC Sync', 'Valid', datetime('now'), datetime('now'))
 		ON CONFLICT(id) DO NOTHING;`
 	_, err := r.db.ExecContext(ctx, query, nodeID, nodeID, hostname, ip)
 	return err
-}
-
-func (r *sqliteNodeRepository) PruneStaleNodes(ctx context.Context, staleThresholdSecs int64) (int64, error) {
-	if staleThresholdSecs <= 0 {
-		staleThresholdSecs = 600
-	}
-	query := `DELETE FROM cluster_nodes 
-		WHERE last_heartbeat IS NOT NULL 
-		  AND (unixepoch('now') - unixepoch(last_heartbeat)) > ?;`
-	res, err := r.db.ExecContext(ctx, query, staleThresholdSecs)
-	if err != nil {
-		return 0, fmt.Errorf("prune stale cluster_nodes: %w", err)
-	}
-	return res.RowsAffected()
 }
 
 func (r *sqliteNodeRepository) DeleteNode(ctx context.Context, id string) error {

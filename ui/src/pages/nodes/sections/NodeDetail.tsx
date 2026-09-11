@@ -67,16 +67,7 @@ export function NodeDetail({
   const uptimeDisplay = formatNodeUptime(node.runtimeStartedAt, node.status, node.uptime);
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
 
-  useEffect(() => {
-    const event = latestHeartbeatEvent;
-    if (!event || event.node_id !== node.id || !event.metrics_available) return;
-    const point: NodeMetricPoint = {
-      timestamp: event.timestamp, timeLabel: new Date(event.timestamp * 1000).toLocaleTimeString(),
-      rps: event.rps, activeConnections: event.active_conns, cpuUsage: event.cpu_usage,
-      memoryUsage: event.memory_usage, metricsScope: event.metrics_scope
-    };
-    setMetrics(prev => [...prev.filter(p => p.timestamp !== point.timestamp && p.timestamp >= Date.now() / 1000 - 3600), point].sort((a, b) => a.timestamp - b.timestamp));
-  }, [latestHeartbeatEvent, node.id]);
+
 
   useEffect(() => {
     if (activeTab !== 'Metrics') return;
@@ -163,8 +154,8 @@ export function NodeDetail({
     if (activeTab === 'Config') void fetchNodeConfig();
     return () => { ++configRequest.current; };
   }, [activeTab, fetchNodeConfig]);
-  const visibleMetrics = metrics.filter(p => p.timestamp >= now / 1000 - 3600 && p.metricsScope === node.metricsScope);
-  const current = node.status === 'Ready' && node.metricsAvailable;
+  const visibleMetrics = metrics.filter(p => p.timestamp >= now / 1000 - 3600);
+  const currentMetric = visibleMetrics.length > 0 ? visibleMetrics[visibleMetrics.length - 1] : null;
 
   const handleCopyConfig = async () => {
     if (!nodeConfig) return;
@@ -301,18 +292,18 @@ export function NodeDetail({
               </div>
             </div>
 
-            {/* Realtime Connections & Traffic */}
+            {/* Operational Info */}
             <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-xs">
               <div className="p-2.5 bg-muted/40 border border-border">
-                <div className="text-[10px] text-slate-500">Active Connections</div>
-                <div className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">
-                  {current ? node.activeConnections : '—'}
+                <div className="text-[10px] text-slate-500">Join Method</div>
+                <div className="text-sm font-semibold text-slate-900 dark:text-white mt-0.5 truncate">
+                  {node.joinMethod || 'Token'}
                 </div>
               </div>
               <div className="p-2.5 bg-muted/40 border border-border">
-                <div className="text-[10px] text-slate-500">Requests per Second</div>
-                <div className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">
-                  {current ? node.requestsPerSecond : '—'}
+                <div className="text-[10px] text-slate-500">Certificate</div>
+                <div className="text-sm font-semibold text-slate-900 dark:text-white mt-0.5 truncate">
+                  {node.certificate || 'Valid'}
                 </div>
               </div>
             </div>
@@ -404,8 +395,8 @@ export function NodeDetail({
                 {/* 1. CPU Usage */}
                 <TaskmgrChart
                   title="CPU"
-                  subtitle={`${node.metricsScope || "Unknown"} · % CPU allocation`}
-                  currentDisplay={current ? `${node.cpuUsage.toFixed(2)}%` : "Unavailable"}
+                  subtitle="% CPU allocation"
+                  currentDisplay={currentMetric ? `${currentMetric.cpuUsage.toFixed(2)}%` : "Unavailable"}
                   data={visibleMetrics.map((m) => ({
                     timestamp: m.timestamp,
                     label: new Date(m.timestamp * 1000).toLocaleTimeString(),
@@ -422,8 +413,8 @@ export function NodeDetail({
                 {/* 2. Memory / RAM Usage */}
                 <TaskmgrChart
                   title="Memory"
-                  subtitle={`${node.metricsScope || "Unknown"} · % memory limit`}
-                  currentDisplay={current ? `${node.memoryUsage.toFixed(2)}%` : "Unavailable"}
+                  subtitle="% memory limit"
+                  currentDisplay={currentMetric ? `${currentMetric.memoryUsage.toFixed(2)}%` : "Unavailable"}
                   data={visibleMetrics.map((m) => ({
                     timestamp: m.timestamp,
                     label: new Date(m.timestamp * 1000).toLocaleTimeString(),
@@ -440,7 +431,7 @@ export function NodeDetail({
                 <TaskmgrChart
                   title="Throughput (RPS)"
                   subtitle="Requests / Second"
-                  currentDisplay={current ? `${node.requestsPerSecond} req/s` : "Unavailable"}
+                  currentDisplay={currentMetric ? `${currentMetric.rps.toFixed(1)} req/s` : "Unavailable"}
                   data={visibleMetrics.map((m) => ({
                     timestamp: m.timestamp,
                     label: new Date(m.timestamp * 1000).toLocaleTimeString(),
@@ -457,7 +448,7 @@ export function NodeDetail({
                 <TaskmgrChart
                   title="Connections"
                   subtitle="Active TCP Sockets"
-                  currentDisplay={current ? `${node.activeConnections} active` : "Unavailable"}
+                  currentDisplay={currentMetric ? `${currentMetric.activeConnections} active` : "Unavailable"}
                   data={visibleMetrics.map((m) => ({
                     timestamp: m.timestamp,
                     label: new Date(m.timestamp * 1000).toLocaleTimeString(),

@@ -57,8 +57,8 @@ type Module struct {
 // readerDB dùng cho các query (list/detail/stats/history).
 // cfg cung cấp JWT secret, đường dẫn compiler và các thiết lập khác.
 func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
-	storageRepo := repository.NewStorageRepository(readerDB)
-	healthcheckSvc := service.NewHealthcheckService(storageRepo)
+	systemRepo := repository.NewSystemRepository(readerDB)
+	healthcheckSvc := service.NewHealthcheckService(systemRepo)
 	healthcheckHdr := handler.NewHealthcheckHandler(healthcheckSvc)
 
 	authRepo := repository.NewAuthRepository(readerDB)
@@ -95,7 +95,6 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	nodeSvc := service.NewNodeService(nodeRepo, analyticsSvc, eventHub)
 	nodeHdr := handler.NewNodeHandler(nodeSvc)
 	analyticsHdr := handler.NewAnalyticsHandler(analyticsSvc)
-	systemRepo := repository.NewSystemRepository(readerDB)
 	systemSvc := service.NewSystemService(systemRepo, cfg)
 	systemHdr := handler.NewSystemHandler(systemSvc)
 

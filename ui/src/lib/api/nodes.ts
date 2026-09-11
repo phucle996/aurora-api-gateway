@@ -1,17 +1,17 @@
 import { api } from '../fetcher';
 
 export interface NodeHeartbeat {
- node_id: string; timestamp: number; ip: string; status: NodeRecord['status'];
- rps: number; active_conns: number; cpu_usage: number; memory_usage: number;
- sync: NodeRecord['sync']; ruleset: string; metrics_scope: string;
- metrics_available: boolean; runtime_started_at: number;
+  node_id: string;
+  timestamp: number;
+  ip: string;
+  status: NodeRecord['status'];
+  sync: NodeRecord['sync'];
+  ruleset: string;
 }
 
 export interface NodeRecord {
   lastHeartbeatTimestamp?: number;
   runtimeStartedAt?: number;
-  metricsScope?: string;
-  metricsAvailable?: boolean;
   id: string;
   name: string;
   hostname?: string;
@@ -27,15 +27,10 @@ export interface NodeRecord {
   certificate: string;
   policySync: string;
   lastSyncTime: string;
-  cpuUsage: number;
-  memoryUsage: number;
-  activeConnections: string;
-  requestsPerSecond: string;
   uptime: string;
 }
 
 export interface NodeMetricPoint {
-  metricsScope?: string;
   timestamp: number;
   timeLabel: string;
   rps: number;

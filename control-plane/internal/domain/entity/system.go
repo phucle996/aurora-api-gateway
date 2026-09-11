@@ -21,3 +21,11 @@ type SystemInfo struct {
 	MemoryAllocBytes     uint64
 	MemoryAllocFormatted string
 }
+
+// ControllerStatus là flat entity chứa trạng thái hoạt động của controller.
+type ControllerStatus struct {
+	Component        string
+	Stage            string
+	EnforcementReady *bool
+	Message          string
+}

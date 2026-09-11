@@ -62,14 +62,8 @@ func (h *NodeHandler) List(c *gin.Context) {
 			"certificate":            node.Certificate,
 			"policySync":             node.PolicySync,
 			"lastSyncTime":           node.LastSyncTime,
-			"cpuUsage":               node.CPUUsage,
-			"memoryUsage":            node.MemoryUsage,
-			"activeConnections":      node.ActiveConnections,
-			"requestsPerSecond":      node.RequestsPerSecond,
 			"uptime":                 node.Uptime,
 			"runtimeStartedAt":       node.RuntimeStartedAt,
-			"metricsScope":           node.MetricsScope,
-			"metricsAvailable":       node.MetricsAvailable,
 		})
 	}
 
@@ -119,14 +113,8 @@ func (h *NodeHandler) GetByID(c *gin.Context) {
 		"certificate":            node.Certificate,
 		"policySync":             node.PolicySync,
 		"lastSyncTime":           node.LastSyncTime,
-		"cpuUsage":               node.CPUUsage,
-		"memoryUsage":            node.MemoryUsage,
-		"activeConnections":      node.ActiveConnections,
-		"requestsPerSecond":      node.RequestsPerSecond,
 		"uptime":                 node.Uptime,
 		"runtimeStartedAt":       node.RuntimeStartedAt,
-		"metricsScope":           node.MetricsScope,
-		"metricsAvailable":       node.MetricsAvailable,
 	})
 }
 
@@ -309,19 +297,12 @@ func (h *NodeHandler) EventsStream(c *gin.Context) {
 				resp := make([]dto.NodeHeartbeatEventResponse, len(beats))
 				for i, b := range beats {
 					resp[i] = dto.NodeHeartbeatEventResponse{
-						MetricsScope:     b.MetricsScope,
-						RuntimeStartedAt: b.RuntimeStartedAt,
-						MetricsAvailable: b.MetricsAvailable,
-						NodeID:           b.NodeID,
-						IP:               b.IP,
-						Status:           b.Status,
-						RPS:              b.RPS,
-						ActiveConns:      b.ActiveConns,
-						CPUUsage:         b.CPUUsage,
-						MemoryUsage:      b.MemoryUsage,
-						Sync:             b.Sync,
-						Ruleset:          b.Ruleset,
-						Timestamp:        b.Timestamp,
+						NodeID:    b.NodeID,
+						IP:        b.IP,
+						Status:    b.Status,
+						Sync:      b.Sync,
+						Ruleset:   b.Ruleset,
+						Timestamp: b.Timestamp,
 					}
 				}
 				data = resp
