@@ -113,8 +113,8 @@ export function ConsoleSidebar({
     {
       label: 'L4 Gateway',
       path: '/l4',
-      aliases: ['/l4/services', '/l4/upstreams'],
-      icon: <Network className="w-4 h-4 shrink-0 text-cyan-400" />,
+      aliases: ['/l4/create', '/l4/add', '/l4/services', '/l4/upstreams'],
+      icon: <Network className="w-4 h-4 shrink-0 text-primary" />,
     },
     {
       label: 'Analytics',

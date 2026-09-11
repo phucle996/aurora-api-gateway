@@ -106,18 +106,27 @@ export function L4ServiceModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
-      <div className="w-full max-w-xl bg-card border border-border/60 rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        <div className="flex items-center justify-between p-5 border-b border-border/50">
-          <div className="flex items-center gap-2">
-            <Network className="w-5 h-5 text-cyan-400" />
-            <h3 className="font-semibold text-lg text-foreground">
-              {service ? 'Edit L4 Stream Service' : 'New L4 Stream Service'}
-            </h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="relative w-full max-w-xl bg-card border border-border/80 rounded-2xl shadow-2xl overflow-hidden font-sans">
+        {/* Modal Header */}
+        <div className="flex items-center justify-between p-5 border-b border-border/70 bg-card">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-primary/10 text-primary">
+              <Network className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-foreground">
+                {service ? 'Edit L4 Stream Service' : 'Create L4 Stream Service'}
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Configure TCP/UDP streaming proxy, port bindings, and access control.
+              </p>
+            </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -135,7 +144,7 @@ export function L4ServiceModal({
                 placeholder="e.g. postgres_edge"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-border/60 bg-background/50 text-foreground focus:ring-1 focus:ring-cyan-500 focus:outline-none"
+                className="w-full px-3 py-1.5 text-xs bg-background border border-border/80 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/40 focus:border-primary text-foreground placeholder:text-muted-foreground"
               />
             </div>
 
@@ -146,7 +155,7 @@ export function L4ServiceModal({
               <select
                 value={protocol}
                 onChange={(e) => setProtocol(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-border/60 bg-background/50 text-foreground focus:ring-1 focus:ring-cyan-500 focus:outline-none"
+                className="w-full px-3 py-1.5 text-xs bg-background border border-border/80 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/40 focus:border-primary text-foreground cursor-pointer font-sans"
               >
                 <option value="tcp">TCP (Reliable stream: DB, SSH, Redis)</option>
                 <option value="udp">UDP (Datagram: DNS, Game, Syslog)</option>
@@ -165,12 +174,12 @@ export function L4ServiceModal({
               max={65535}
               value={port}
               onChange={(e) => setPort(parseInt(e.target.value) || 0)}
-              className="w-full px-3 py-2 text-sm font-mono rounded-lg border border-border/60 bg-background/50 text-foreground focus:ring-1 focus:ring-cyan-500 focus:outline-none"
+              className="w-full px-3 py-1.5 text-xs font-mono bg-background border border-border/80 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/40 focus:border-primary text-foreground"
             />
           </div>
 
           {/* Forward Target Type Toggle */}
-          <div className="p-4 rounded-xl border border-border/60 bg-muted/20 space-y-3">
+          <div className="p-3.5 rounded-xl border border-border/70 bg-muted/20 space-y-3">
             <label className="block text-xs font-semibold text-foreground">
               Forward Destination *
             </label>
@@ -179,10 +188,10 @@ export function L4ServiceModal({
               <button
                 type="button"
                 onClick={() => setTargetType('upstream')}
-                className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium border transition-all ${
+                className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium border transition-all cursor-pointer ${
                   targetType === 'upstream'
-                    ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/40 shadow-sm'
-                    : 'bg-background/40 text-muted-foreground border-border/40 hover:bg-muted/40'
+                    ? 'bg-primary/10 text-primary border-primary/40 shadow-xs font-semibold'
+                    : 'bg-background/60 text-muted-foreground border-border/60 hover:bg-muted/40'
                 }`}
               >
                 <Server className="w-3.5 h-3.5" />
@@ -192,10 +201,10 @@ export function L4ServiceModal({
               <button
                 type="button"
                 onClick={() => setTargetType('endpoint')}
-                className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium border transition-all ${
+                className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium border transition-all cursor-pointer ${
                   targetType === 'endpoint'
-                    ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/40 shadow-sm'
-                    : 'bg-background/40 text-muted-foreground border-border/40 hover:bg-muted/40'
+                    ? 'bg-primary/10 text-primary border-primary/40 shadow-xs font-semibold'
+                    : 'bg-background/60 text-muted-foreground border-border/60 hover:bg-muted/40'
                 }`}
               >
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -209,12 +218,12 @@ export function L4ServiceModal({
                   Select Upstream Pool:
                 </label>
                 {availableUpstreams.length === 0 ? (
-                  <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400 text-xs flex items-center justify-between">
+                  <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-500 text-xs flex items-center justify-between">
                     <span>No upstreams configured yet.</span>
                     <Link
                       to="/upstreams"
                       target="_blank"
-                      className="inline-flex items-center gap-1 font-semibold underline hover:text-amber-300"
+                      className="inline-flex items-center gap-1 font-semibold underline hover:text-amber-400"
                     >
                       Create Upstream <ExternalLink className="w-3 h-3" />
                     </Link>
@@ -224,7 +233,7 @@ export function L4ServiceModal({
                     value={upstream}
                     onChange={(e) => setUpstream(e.target.value)}
                     required={targetType === 'upstream'}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-border/60 bg-background/50 text-foreground focus:ring-1 focus:ring-cyan-500 focus:outline-none"
+                    className="w-full px-3 py-1.5 text-xs bg-background border border-border/80 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/40 focus:border-primary text-foreground cursor-pointer font-sans"
                   >
                     {availableUpstreams.map((up) => (
                       <option key={up.name} value={up.name}>
@@ -245,20 +254,20 @@ export function L4ServiceModal({
                   placeholder="e.g. 10.0.0.15:5432 or db.internal:5432"
                   value={endpoint}
                   onChange={(e) => setEndpoint(e.target.value)}
-                  className="w-full px-3 py-2 text-sm font-mono rounded-lg border border-border/60 bg-background/50 text-foreground focus:ring-1 focus:ring-cyan-500 focus:outline-none"
+                  className="w-full px-3 py-1.5 text-xs font-mono bg-background border border-border/80 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/40 focus:border-primary text-foreground placeholder:text-muted-foreground"
                 />
                 <p className="text-[11px] text-muted-foreground mt-1">
-                  Forwards raw stream directly to this server without requiring a pool.
+                  Forwards raw stream directly to this target without requiring a pool.
                 </p>
               </div>
             )}
           </div>
 
           {/* ACL Rules Section */}
-          <div className="space-y-2 pt-2 border-t border-border/40">
+          <div className="space-y-2 pt-2 border-t border-border/60">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                <Shield className="w-3.5 h-3.5 text-cyan-400" />
+                <Shield className="w-3.5 h-3.5 text-primary" />
                 Layer 4 Access Control (CIDR Allow / Deny)
               </label>
               <span className="text-[11px] text-muted-foreground">Evaluated in order</span>
@@ -270,12 +279,12 @@ export function L4ServiceModal({
                 placeholder="e.g. 192.168.1.0/24 or 10.0.0.5"
                 value={newCidr}
                 onChange={(e) => setNewCidr(e.target.value)}
-                className="flex-1 px-3 py-1.5 text-xs font-mono rounded-lg border border-border/60 bg-background/50 text-foreground focus:ring-1 focus:ring-cyan-500 focus:outline-none"
+                className="flex-1 px-3 py-1.5 text-xs font-mono bg-background border border-border/80 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/40 focus:border-primary text-foreground placeholder:text-muted-foreground"
               />
               <select
                 value={newAction}
                 onChange={(e) => setNewAction(e.target.value as 'allow' | 'deny')}
-                className="px-2.5 py-1.5 text-xs rounded-lg border border-border/60 bg-background/50 text-foreground focus:outline-none"
+                className="px-2.5 py-1.5 text-xs bg-background border border-border/80 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/40 text-foreground cursor-pointer"
               >
                 <option value="allow">ALLOW</option>
                 <option value="deny">DENY</option>
@@ -283,7 +292,7 @@ export function L4ServiceModal({
               <button
                 type="button"
                 onClick={handleAddACL}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white transition-all shadow-sm"
+                className="px-3 py-1.5 text-xs font-semibold text-primary-foreground bg-primary hover:bg-primary/90 rounded-lg transition-colors cursor-pointer shadow-xs"
               >
                 Add Rule
               </button>
@@ -294,14 +303,14 @@ export function L4ServiceModal({
                 {acl.map((r, idx) => (
                   <div
                     key={idx}
-                    className="flex items-center justify-between px-3 py-1.5 rounded-lg border border-border/40 bg-muted/20 text-xs font-mono"
+                    className="flex items-center justify-between px-3 py-1.5 rounded-lg border border-border/60 bg-background text-xs font-mono"
                   >
                     <div className="flex items-center gap-2">
                       <span
                         className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
                           r.action === 'allow'
-                            ? 'bg-emerald-500/20 text-emerald-400'
-                            : 'bg-rose-500/20 text-rose-400'
+                            ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                            : 'bg-destructive/10 text-destructive border border-destructive/20'
                         }`}
                       >
                         {r.action}
@@ -311,7 +320,7 @@ export function L4ServiceModal({
                     <button
                       type="button"
                       onClick={() => handleRemoveACL(idx)}
-                      className="text-muted-foreground hover:text-destructive"
+                      className="text-muted-foreground hover:text-destructive p-1 rounded transition-colors cursor-pointer"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
@@ -322,7 +331,7 @@ export function L4ServiceModal({
           </div>
 
           {/* Advanced Timeouts */}
-          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-border/40">
+          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-border/60">
             <div>
               <label className="block text-xs font-semibold text-foreground mb-1">
                 Proxy Timeout
@@ -332,7 +341,7 @@ export function L4ServiceModal({
                 placeholder="1h, 30m, 60s"
                 value={proxyTimeout}
                 onChange={(e) => setProxyTimeout(e.target.value)}
-                className="w-full px-3 py-1.5 text-xs font-mono rounded-lg border border-border/60 bg-background/50 text-foreground focus:ring-1 focus:ring-cyan-500 focus:outline-none"
+                className="w-full px-3 py-1.5 text-xs font-mono bg-background border border-border/80 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/40 focus:border-primary text-foreground"
               />
             </div>
             <div>
@@ -344,7 +353,7 @@ export function L4ServiceModal({
                 placeholder="5s, 10s"
                 value={connectTimeout}
                 onChange={(e) => setConnectTimeout(e.target.value)}
-                className="w-full px-3 py-1.5 text-xs font-mono rounded-lg border border-border/60 bg-background/50 text-foreground focus:ring-1 focus:ring-cyan-500 focus:outline-none"
+                className="w-full px-3 py-1.5 text-xs font-mono bg-background border border-border/80 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/40 focus:border-primary text-foreground"
               />
             </div>
           </div>
@@ -358,7 +367,7 @@ export function L4ServiceModal({
               placeholder="Optional description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3 py-1.5 text-xs rounded-lg border border-border/60 bg-background/50 text-foreground focus:ring-1 focus:ring-cyan-500 focus:outline-none"
+              className="w-full px-3 py-1.5 text-xs bg-background border border-border/80 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/40 focus:border-primary text-foreground placeholder:text-muted-foreground font-sans"
             />
           </div>
 
@@ -368,26 +377,26 @@ export function L4ServiceModal({
               id="modalSvcEnabled"
               checked={enabled}
               onChange={(e) => setEnabled(e.target.checked)}
-              className="rounded border-border/60 text-cyan-500 focus:ring-cyan-400"
+              className="rounded border-border/80 text-primary focus:ring-primary cursor-pointer"
             />
-            <label htmlFor="modalSvcEnabled" className="text-xs text-foreground font-medium">
+            <label htmlFor="modalSvcEnabled" className="text-xs text-foreground font-medium cursor-pointer">
               Enable listener upon saving
             </label>
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-border/50">
+          <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-border/60">
             <button
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2 text-sm font-medium rounded-lg border border-border/60 bg-muted/20 hover:bg-muted/40 text-foreground transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-xs font-medium text-foreground bg-muted hover:bg-muted/80 rounded-lg transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-4 py-2 text-sm font-medium rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white transition-all shadow-sm disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-primary-foreground bg-primary hover:bg-primary/90 disabled:opacity-50 rounded-lg transition-colors cursor-pointer shadow-xs"
             >
               {isSubmitting ? 'Saving...' : service ? 'Save Changes' : 'Create Service'}
             </button>

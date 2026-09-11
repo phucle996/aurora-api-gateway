@@ -13,6 +13,8 @@ import UpstreamsPage from './pages/upstreams/page';
 import CreateUpstreamPage from './pages/upstreams/create/page';
 import EditUpstreamPage from './pages/upstreams/edit/page';
 import L4GatewayPage from './pages/l4/page';
+import CreateL4ServicePage from './pages/l4/create/page';
+import EditL4ServicePage from './pages/l4/edit/page';
 import ConsoleLayout from './layouts/ConsoleLayout';
 
 import { ThemeProvider } from './components/theme-provider';
@@ -43,6 +45,10 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/upstreams/:id/edit" element={<EditUpstreamPage />} />
           <Route path="/upstreams/edit/:id" element={<EditUpstreamPage />} />
           <Route path="/l4" element={<L4GatewayPage />} />
+          <Route path="/l4/create" element={<CreateL4ServicePage />} />
+          <Route path="/l4/add" element={<CreateL4ServicePage />} />
+          <Route path="/l4/:id/edit" element={<EditL4ServicePage />} />
+          <Route path="/l4/edit/:id" element={<EditL4ServicePage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
 
           <Route path="/telemetry" element={<AnalyticsPage />} />
