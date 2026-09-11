@@ -403,5 +403,10 @@ func (r *sqliteL4Repository) GetAllActiveServices(ctx context.Context) ([]entity
 		it.Enabled = enabledInt == 1
 		items = append(items, it)
 	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate active l4 services: %w", err)
+	}
+
 	return items, nil
 }

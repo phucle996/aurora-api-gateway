@@ -1,11 +1,9 @@
 package app
 
 import (
-	"context"
 	"database/sql"
 
 	"aurora-waf.local/control-plane/internal/config"
-	"aurora-waf.local/control-plane/internal/domain/entity"
 	"aurora-waf.local/control-plane/internal/domain/repo"
 	port "aurora-waf.local/control-plane/internal/domain/service"
 	"aurora-waf.local/control-plane/internal/provider"
@@ -82,10 +80,6 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	certHdr := handler.NewCertificateHandler(certSvc)
 
 	analyticsRepo := repository.NewAnalyticsRepository(writerDB)
-	metricsCfg, _ := analyticsRepo.GetMetricsConfig(context.Background())
-	if metricsCfg == nil {
-		metricsCfg = &entity.MetricsIntegrationConfig{Mode: "prometheus"}
-	}
 
 	nodeRepo := repository.NewNodeRepository(writerDB)
 	extensionRepo := repository.NewExtensionRepository(writerDB, readerDB)

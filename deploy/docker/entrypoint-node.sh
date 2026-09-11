@@ -89,6 +89,10 @@ if [ ! -f /var/lib/aurora-routing/active-domain-routing.conf ]; then
     printf '# No configured domains yet\n' > /var/lib/aurora-routing/active-domain-routing.conf
 fi
 
+if [ ! -f /var/lib/aurora-routing/active-l4-streams.conf ]; then
+    printf '# No configured L4 streams yet\n' > /var/lib/aurora-routing/active-l4-streams.conf
+fi
+
 # Baseline for optional modules/dependencies
 /extension-modules.sh init
 
@@ -101,13 +105,19 @@ if ! /opt/nginx/usr/sbin/nginx -t -c /etc/nginx/nginx.conf; then
 fi
 
 echo "[Aurora Node: ${NODE_ID}] Starting Aurora Dataplane Agent & NGINX supervisor..."
-exec /usr/local/bin/aurora-agent \
-  --controller-url "${CONTROLLER_URL}" \
-  --node-id "${NODE_ID}" \
-  --auth-token "${AUTH_TOKEN}" \
-  --nginx-bin "${NGINX_BIN:-/opt/nginx/usr/sbin/nginx}" \
-  --nginx-conf "${NGINX_CONF:-/etc/nginx/nginx.conf}" \
-  --policy-dir "${POLICY_DIR:-/var/lib/aurora-policy}" \
-  --routing-dir "${ROUTING_DIR:-/var/lib/aurora-routing}" \
-  --modules-dir "${MODULES_DIR:-/opt/modules}" \
+EXEC_ARGS=(
+  --controller-url "${CONTROLLER_URL}"
+  --node-id "${NODE_ID}"
+  --auth-token "${AUTH_TOKEN}"
+  --nginx-bin "${NGINX_BIN:-/opt/nginx/usr/sbin/nginx}"
+  --nginx-conf "${NGINX_CONF:-/etc/nginx/nginx.conf}"
+  --policy-dir "${POLICY_DIR:-/var/lib/aurora-policy}"
+  --routing-dir "${ROUTING_DIR:-/var/lib/aurora-routing}"
+  --modules-dir "${MODULES_DIR:-/opt/modules}"
   --nginx-stub-status-url "${NGINX_STUB_STATUS_URL}"
+)
+if [ -n "${GRPC_URL:-}" ]; then
+  EXEC_ARGS+=(--grpc-url "${GRPC_URL}")
+fi
+
+exec /usr/local/bin/aurora-agent "${EXEC_ARGS[@]}"

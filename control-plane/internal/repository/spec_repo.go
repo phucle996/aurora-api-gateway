@@ -264,6 +264,9 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 				upstreams = append(upstreams, u)
 			}
 		}
+		if err := uRows.Err(); err != nil {
+			return nil, fmt.Errorf("iterate unified upstreams: %w", err)
+		}
 		out.UpstreamRecords = upstreams
 	}
 
@@ -288,6 +291,9 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 				s.Enabled = enabledInt == 1
 				l4services = append(l4services, s)
 			}
+		}
+		if err := l4sRows.Err(); err != nil {
+			return nil, fmt.Errorf("iterate l4 services: %w", err)
 		}
 		out.L4Services = l4services
 	}

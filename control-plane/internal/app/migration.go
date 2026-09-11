@@ -34,7 +34,7 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return err
 	}
-	if version > 4 {
+	if version > 6 {
 		return fmt.Errorf("unsupported database schema version %d", version)
 	}
 	if version < 1 {

@@ -9,13 +9,20 @@ services:
     container_name: aurora-controller
     ports:
       - "8080:8080"
-      - "9090:9090"
+      - "9099:9099"
     environment:
-      - AURORA_GRPC_ADDR=0.0.0.0:9090
+      - AURORA_GRPC_ADDR=0.0.0.0:9099
       - AURORA_JWT_SECRET=aurora-api-gateway-jwt-secret-docker-compose-dev-key
+      - AURORA_PROMETHEUS_URL=http://prometheus:9090
+      - AURORA_ALERTMANAGER_URL=http://alertmanager:9093
     volumes:
       - controller-data:/data
     restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_started
+      alertmanager:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/readyz"]
       interval: 3s
@@ -31,6 +38,7 @@ services:
     container_name: aurora-node
     environment:
       - CONTROLLER_URL=http://controller:8080
+      - GRPC_URL=http://controller:9099
       - NODE_ID=node-01
       - AUTH_TOKEN=71b268cadc82c2ecfff176c7dfd5c4ac77a0e6a3cd0ae3a7d87b1b9bb686b994
     ports:
@@ -48,7 +56,42 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: aurora-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+    depends_on:
+      alertmanager:
+        condition: service_started
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: aurora-alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./deploy/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    restart: unless-stopped
+
 volumes:
   controller-data:
   node-policy:
   node-routing:
+  prometheus-data:
+  alertmanager-data:

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"aurora-waf.local/control-plane/internal/domain/entity"
@@ -53,6 +54,12 @@ func (r *alertmanagerRepo) GetSettings(ctx context.Context) (*entity.Alertmanage
 	}
 
 	s.Enabled = enabledInt == 1
+	if envProm := os.Getenv("AURORA_PROMETHEUS_URL"); envProm != "" && s.PrometheusURL == "http://127.0.0.1:9090" {
+		s.PrometheusURL = envProm
+	}
+	if envAM := os.Getenv("AURORA_ALERTMANAGER_URL"); envAM != "" && s.AlertmanagerURL == "http://127.0.0.1:9093" {
+		s.AlertmanagerURL = envAM
+	}
 	return &s, nil
 }
 
