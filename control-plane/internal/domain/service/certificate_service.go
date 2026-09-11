@@ -13,4 +13,5 @@ type CertificateService interface {
 	CreateCertificate(ctx context.Context, cmd entity.CreateCertificateCommand) (*entity.CertificateItem, error)
 	UpdateCertificate(ctx context.Context, cmd entity.UpdateCertificateCommand) (*entity.CertificateItem, error)
 	DeleteCertificate(ctx context.Context, id string) error
+	ToggleCertificateStatus(ctx context.Context, id string, enabled bool) error
 }

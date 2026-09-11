@@ -1,0 +1,52 @@
+groups:
+  - name: aurora-waf-alerts
+    rules:
+      - alert: AuroraHighWafBlockRate
+        expr: sum(rate(aurora_waf_evaluations_total{action="block"}[2m])) by (node_id) > 50
+        for: 1m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Tỷ lệ block WAF cao đột biến trên node {{ $labels.node_id }}"
+          description: "Phát hiện hơn 50 requests/s bị WAF chặn trong 2 phút vừa qua trên node {{ $labels.node_id }}. Có thể hệ thống đang chịu tấn công DDoS hoặc Exploit burst."
+
+      - alert: AuroraNodeHighCpu
+        expr: aurora_node_cpu_percent > 85
+        for: 3m
+        labels:
+          severity: high
+          category: system
+        annotations:
+          summary: "CPU node {{ $labels.node_id }} vượt quá 85%"
+          description: "Mức sử dụng CPU của node {{ $labels.node_id }} duy trì trên 85% trong hơn 3 phút (giá trị hiện tại: {{ $value }}%)."
+
+      - alert: AuroraNodeHighMemory
+        expr: aurora_node_memory_percent > 90
+        for: 3m
+        labels:
+          severity: high
+          category: system
+        annotations:
+          summary: "Bộ nhớ node {{ $labels.node_id }} vượt quá 90%"
+          description: "Mức sử dụng RAM của node {{ $labels.node_id }} duy trì trên 90% trong hơn 3 phút (giá trị hiện tại: {{ $value }}%)."
+
+      - alert: AuroraConnectionSpike
+        expr: sum(aurora_node_active_connections) by (node_id) > 10000
+        for: 2m
+        labels:
+          severity: medium
+          category: traffic
+        annotations:
+          summary: "Số kết nối đồng thời cao trên node {{ $labels.node_id }}"
+          description: "Node {{ $labels.node_id }} đang duy trì hơn 10,000 active connections (hiện tại: {{ $value }})."
+
+      - alert: AuroraNodeDown
+        expr: up{job="aurora-waf-nodes"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: cluster
+        annotations:
+          summary: "Node Dataplane {{ $labels.instance }} mất kết nối"
+          description: "Prometheus không thể scrape metrics từ Dataplane node {{ $labels.instance }} trong hơn 1 phút."

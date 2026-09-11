@@ -57,6 +57,7 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	r.PUT("/api/v1/routes/:id", authMidd, m.RouteHandler.Update)
 	r.DELETE("/api/v1/routes/:id", authMidd, m.RouteHandler.Delete)
 	r.PUT("/api/v1/routes/:id/status", authMidd, m.RouteHandler.ToggleStatus)
+	r.PATCH("/api/v1/routes/:id/toggle", authMidd, m.RouteHandler.ToggleStatus)
 
 	// Quản lý Certificates API
 	r.GET("/api/v1/certificates", authMidd, m.CertificateHandler.List)
@@ -64,6 +65,8 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	r.GET("/api/v1/certificates/:id", authMidd, m.CertificateHandler.GetByID)
 	r.PUT("/api/v1/certificates/:id", authMidd, m.CertificateHandler.Update)
 	r.DELETE("/api/v1/certificates/:id", authMidd, m.CertificateHandler.Delete)
+	r.PUT("/api/v1/certificates/:id/status", authMidd, m.CertificateHandler.ToggleStatus)
+	r.PATCH("/api/v1/certificates/:id/toggle", authMidd, m.CertificateHandler.ToggleStatus)
 
 	// Quản lý Upstream API & Node Sync
 	r.POST("/api/v1/upstreams", authMidd, m.UpstreamHandler.Create)           // Tạo mới upstream pool
@@ -111,16 +114,20 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	r.POST("/api/v1/settings/security/2fa/disable", authMidd, m.SecurityHandler.Disable2FA)
 	r.POST("/api/v1/settings/security/change-password", authMidd, m.SecurityHandler.ChangePassword)
 
-	// Cấu hình Thông báo Đa Kênh & Quy tắc Cảnh báo (Notification Channels & Alert Rules)
-	r.GET("/api/v1/settings/notifications", authMidd, m.NotificationHandler.GetOverview)
-	r.PUT("/api/v1/settings/notifications/channels/:id", authMidd, m.NotificationHandler.UpdateChannel)
-	r.PUT("/api/v1/settings/notifications/rules/:id", authMidd, m.NotificationHandler.UpdateRule)
-	r.POST("/api/v1/settings/notifications/channels/:id/test", authMidd, m.NotificationHandler.TestChannel)
-
 	// Sao lưu & Phục hồi dữ liệu (Backup & Restore, S3 Storage, Cron Job & Drag-and-Drop)
 	r.GET("/api/v1/settings/backup", authMidd, m.BackupHandler.GetOverview)
 	r.PUT("/api/v1/settings/backup/config", authMidd, m.BackupHandler.UpdateConfig)
 	r.GET("/api/v1/settings/backup/download", authMidd, m.BackupHandler.DownloadLocalBackup)
 	r.POST("/api/v1/settings/backup/s3/upload", authMidd, m.BackupHandler.TriggerS3Backup)
 	r.POST("/api/v1/settings/backup/restore", authMidd, m.BackupHandler.RestoreSnapshot)
+
+	// Tích hợp Alertmanager & Prometheus (Alert Rules, Active Alerts, Silences & Config)
+	r.GET("/api/v1/integrations/alerts/overview", authMidd, m.AlertmanagerHandler.GetOverview)
+	r.GET("/api/v1/integrations/alerts/rules", authMidd, m.AlertmanagerHandler.GetLiveRules)
+	r.GET("/api/v1/integrations/alerts/firing", authMidd, m.AlertmanagerHandler.GetFiringAlerts)
+	r.GET("/api/v1/integrations/alerts/silences", authMidd, m.AlertmanagerHandler.GetSilences)
+	r.POST("/api/v1/integrations/alerts/silences", authMidd, m.AlertmanagerHandler.CreateSilence)
+	r.DELETE("/api/v1/integrations/alerts/silences/:id", authMidd, m.AlertmanagerHandler.ExpireSilence)
+	r.GET("/api/v1/integrations/alerts/config", authMidd, m.AlertmanagerHandler.GetConfig)
+	r.PUT("/api/v1/integrations/alerts/config", authMidd, m.AlertmanagerHandler.UpdateConfig)
 }

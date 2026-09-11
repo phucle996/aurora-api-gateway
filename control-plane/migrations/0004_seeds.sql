@@ -25,22 +25,9 @@ INSERT OR IGNORE INTO auth_providers (id, name, description, enabled, config_jso
 ('ldap', 'LDAP / Active Directory', 'Corporate centralized identity directory query over secure LDAPS / STARTTLS.', 0, '{"server":"ldap.company.internal","port":636,"use_ssl":true,"bind_dn":"cn=readonly,dc=company,dc=internal","bind_password":"","base_dn":"ou=users,dc=company,dc=internal","user_filter":"(uid=%s)","group_filter":"(memberUid=%s)"}'),
 ('saml', 'SAML 2.0 Enterprise', 'Security Assertion Markup Language federated integration for corporate IdPs.', 0, '{"idp_metadata_url":"https://idp.company.internal/metadata.xml","entity_id":"urn:aurora:waf:saml","sso_url":"https://idp.company.internal/sso/login"}');
 
--- Seed default notification channels
-INSERT OR IGNORE INTO notification_channels (id, name, description, enabled, config_json) VALUES
-('email', 'Email (SMTP)', 'Deliver incident security alerts, daily digest reports, and node health notices via SMTP mail server.', 1, '{"host":"smtp.mailgun.org","port":587,"encryption":"STARTTLS","username":"alerts@mg.aurora-waf.io","password":"","from_address":"alerts@aurora-waf.io","to_addresses":"secops@company.com"}'),
-('slack', 'Slack Incoming Webhook', 'Stream real-time incident notifications, threat bursts, and node failover alerts to a designated Slack channel.', 1, '{"webhook_url":"https://example.com/slack-webhook-placeholder","channel":"#waf-alerts","username":"Aurora WAF Bot","mention_critical":true}'),
-('telegram', 'Telegram Bot', 'Push direct alerts or group channel messages using an official Telegram bot token and chat target.', 0, '{"bot_token":"","chat_id":"","thread_id":"","parse_mode":"HTML"}'),
-('discord', 'Discord Webhook', 'Forward attack blocks and system lifecycle events directly to Discord channels via rich embedded cards.', 0, '{"webhook_url":"","bot_name":"Aurora Guardian","avatar_url":""}'),
-('webhook', 'Custom HTTP Webhook', 'Send signed JSON payloads via HTTP POST to SIEM (Splunk, Elastic, Datadog) or custom internal ingestion endpoints.', 0, '{"endpoint_url":"https://siem.internal.corp/events/waf","method":"POST","headers":"Authorization: Bearer placeholder-siem-token\\nX-Source: aurora-waf","secret_token":"","skip_tls_verify":false}'),
-('pagerduty', 'PagerDuty & Opsgenie', 'Trigger urgent on-call responder paging and high-severity incident escalation via Events API v2.', 0, '{"routing_key":"","severity":"critical","auto_resolve":true}');
-
--- Seed default notification trigger rules
-INSERT OR IGNORE INTO notification_rules (id, name, description, severity, enabled) VALUES
-('rule_critical_threats', 'Critical Threat & Exploit Bursts', 'Triggers on confirmed SQL Injection, Remote Code Execution, and Zero-day path traversal blocks.', 'critical', 1),
-('rule_node_offline', 'Node Health & Cluster Degradation', 'Triggers immediately when a data plane node fails heartbeat checks or drops offline.', 'critical', 1),
-('rule_ddos_spikes', 'Rate Limiting & DDoS Throttling Spikes', 'Triggers when requests exceed threshold burst rates or IP blacklist enforcement kicks in.', 'high', 1),
-('rule_cert_expiry', 'SSL/TLS Certificate Expiration Warning', 'Triggers 30 days and 7 days prior to HTTPS domain certificate expiration.', 'medium', 1),
-('rule_config_changes', 'Audit & Security Administrative Events', 'Notifies when WAF rule sets are published, 2FA status changes, or admin credentials update.', 'low', 0);
+-- Seed default alertmanager & prometheus integration settings
+INSERT OR IGNORE INTO alertmanager_settings (id, enabled, alertmanager_url, prometheus_url) VALUES
+(1, 1, 'http://127.0.0.1:9093', 'http://127.0.0.1:9090');
 
 -- Seed default backup settings singleton record
 INSERT OR IGNORE INTO backup_settings (

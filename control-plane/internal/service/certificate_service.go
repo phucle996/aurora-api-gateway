@@ -74,3 +74,11 @@ func (s *CertificateServiceImpl) DeleteCertificate(ctx context.Context, id strin
 	s.notifyMutation()
 	return nil
 }
+
+func (s *CertificateServiceImpl) ToggleCertificateStatus(ctx context.Context, id string, enabled bool) error {
+	if err := s.certRepo.ToggleCertificateStatus(ctx, id, enabled); err != nil {
+		return err
+	}
+	s.notifyMutation()
+	return nil
+}

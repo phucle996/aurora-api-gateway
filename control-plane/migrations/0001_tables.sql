@@ -36,7 +36,6 @@ CREATE TABLE IF NOT EXISTS cluster_nodes (
     observed_release_id INTEGER,
     runtime_started_at INTEGER NOT NULL DEFAULT 0,
     worker_identity TEXT NOT NULL DEFAULT '',
-    metrics_scope TEXT NOT NULL DEFAULT 'unknown',
     last_applied_at TEXT NOT NULL DEFAULT ''
 );
 
@@ -44,17 +43,6 @@ CREATE TABLE IF NOT EXISTS system_settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
-
-CREATE TABLE IF NOT EXISTS node_metrics_history (
-    node_id TEXT NOT NULL,
-    timestamp INTEGER NOT NULL,
-    cpu_usage REAL NOT NULL,
-    memory_usage REAL NOT NULL,
-    active_connections INTEGER NOT NULL,
-    requests_per_second REAL NOT NULL,
-    metrics_scope TEXT NOT NULL DEFAULT 'legacy-host',
-    PRIMARY KEY (node_id, timestamp)
 );
 
 CREATE TABLE IF NOT EXISTS node_sync_logs (
@@ -145,25 +133,12 @@ CREATE TABLE IF NOT EXISTS auth_providers (
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
--- Notification channels and alert rules
-CREATE TABLE IF NOT EXISTS notification_channels (
-    id TEXT PRIMARY KEY CHECK(id IN ('email', 'slack', 'telegram', 'discord', 'webhook', 'pagerduty')),
-    name TEXT NOT NULL,
-    description TEXT NOT NULL,
-    enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0, 1)),
-    config_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(config_json)),
-    last_tested_at TEXT NOT NULL DEFAULT '',
-    last_test_status TEXT NOT NULL DEFAULT '',
-    last_test_message TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
-
-CREATE TABLE IF NOT EXISTS notification_rules (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    description TEXT NOT NULL,
-    severity TEXT NOT NULL DEFAULT 'medium',
+-- Alertmanager & Prometheus integration settings singleton record
+CREATE TABLE IF NOT EXISTS alertmanager_settings (
+    id INTEGER PRIMARY KEY CHECK(id = 1),
     enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+    alertmanager_url TEXT NOT NULL DEFAULT 'http://127.0.0.1:9093',
+    prometheus_url TEXT NOT NULL DEFAULT 'http://127.0.0.1:9090',
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 

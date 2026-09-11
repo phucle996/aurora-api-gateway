@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { api } from '../../lib/fetcher';
+import { extensionsApi } from '../../lib/api';
 import {
   ExtensionItem,
   ExtensionCategory,
@@ -32,7 +32,7 @@ export default function ExtensionsPage() {
   const fetchExtensions = async (isManual = false) => {
     if (isManual) setIsRefreshing(true);
     try {
-      const res = await api.get<ExtensionsApiResponse>('/api/v1/extensions');
+      const res = await extensionsApi.list();
       const apiItems = res.extensions || [];
 
       if (apiItems.length > 0) {
@@ -164,9 +164,7 @@ export default function ExtensionsPage() {
     );
 
     try {
-      await api.put(`/api/v1/extensions/${encodeURIComponent(id)}/status`, {
-        enabled: newEnabled,
-      });
+      await extensionsApi.updateStatus(id, newEnabled);
     } catch (e) {
       // Rollback on failure
       setExtensions((prev) =>
@@ -185,9 +183,7 @@ export default function ExtensionsPage() {
   // Save extension configuration
   const handleSaveConfig = async (id: string, configJSON: string): Promise<boolean> => {
     try {
-      await api.put(`/api/v1/extensions/${encodeURIComponent(id)}/config`, {
-        config_json: configJSON,
-      });
+      await extensionsApi.updateConfig(id, configJSON);
 
       // Update in local state
       setExtensions((prev) =>

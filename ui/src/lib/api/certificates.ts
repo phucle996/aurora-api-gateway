@@ -55,6 +55,6 @@ export const certificatesApi = {
   get: (id: string) => api.get<CertificateItem>(`/api/v1/certificates/${id}`),
   create: (payload: CreateCertificatePayload) => api.post<CertificateItem>('/api/v1/certificates', payload),
   update: (id: string, payload: UpdateCertificatePayload) => api.put<CertificateItem>(`/api/v1/certificates/${id}`, payload),
-  toggle: (id: string, enabled: boolean) => api.patch<CertificateItem>(`/api/v1/certificates/${id}/toggle`, { enabled }),
+  toggle: (id: string, enabled: boolean) => api.put<{ message: string; enabled: boolean }>(`/api/v1/certificates/${id}/status`, { enabled }),
   delete: (id: string) => api.delete<{ status: string; id: string }>(`/api/v1/certificates/${id}`),
 };

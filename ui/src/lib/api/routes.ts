@@ -60,6 +60,6 @@ export const routesApi = {
   get: (id: string) => api.get<RouteItem>(`/api/v1/routes/${id}`),
   create: (payload: CreateRoutePayload) => api.post<RouteItem>('/api/v1/routes', payload),
   update: (id: string, payload: UpdateRoutePayload) => api.put<RouteItem>(`/api/v1/routes/${id}`, payload),
-  toggle: (id: string, enabled: boolean) => api.patch<RouteItem>(`/api/v1/routes/${id}/toggle`, { enabled }),
+  toggle: (id: string, enabled: boolean) => api.put<{ message: string; enabled: boolean }>(`/api/v1/routes/${id}/status`, { enabled }),
   delete: (id: string) => api.delete<{ status: string; id: string }>(`/api/v1/routes/${id}`),
 };

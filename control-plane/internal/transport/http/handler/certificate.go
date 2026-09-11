@@ -332,3 +332,30 @@ func (h *CertificateHandler) Delete(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "certificate deleted successfully"})
 }
+
+// ToggleStatus bật/tắt nhanh Certificate.
+func (h *CertificateHandler) ToggleStatus(c *gin.Context) {
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id không được để trống"})
+		return
+	}
+
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), certificateActionTimeout)
+	defer cancel()
+
+	if err := h.service.ToggleCertificateStatus(ctx, id, req.Enabled); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "certificate status updated", "enabled": req.Enabled})
+}

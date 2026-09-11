@@ -192,6 +192,26 @@ func (r *SQLiteCertificateRepository) DeleteCertificate(ctx context.Context, id 
 	return nil
 }
 
+func (r *SQLiteCertificateRepository) ToggleCertificateStatus(ctx context.Context, id string, enabled bool) error {
+	const query = `UPDATE ssl_certificates SET enabled = ?, updated_at = datetime('now') WHERE id = ?`
+	val := 0
+	if enabled {
+		val = 1
+	}
+	res, err := r.db.ExecContext(ctx, query, val, id)
+	if err != nil {
+		return fmt.Errorf("toggle certificate status: %w", err)
+	}
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("certificate %q not found", id)
+	}
+	return nil
+}
+
 func (r *SQLiteCertificateRepository) GetAllActiveCertificates(ctx context.Context) ([]entity.CertificateItem, error) {
 	const query = `
 	SELECT 

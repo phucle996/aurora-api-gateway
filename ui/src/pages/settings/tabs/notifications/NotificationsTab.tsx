@@ -1,127 +1,53 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, AlertCircle, CheckCircle2, X, Loader2 } from 'lucide-react';
 import {
-  notificationsApi,
-  type NotificationChannelItem,
-  type NotificationRuleItem,
+  alertsApi,
+  type AlertmanagerOverview,
+  type PrometheusRuleItem,
+  type AlertmanagerSilenceItem,
 } from '../../../../lib/api';
-import { NotificationChannelsSection } from './sections/NotificationChannelsSection';
-import { AlertRulesSection } from './sections/AlertRulesSection';
-import { ChannelSetupModal } from './sections/ChannelSetupModal';
+import { AlertmanagerIntegrationSection } from './sections/AlertmanagerIntegrationSection';
 
 export function NotificationsTab() {
   const [loading, setLoading] = useState(true);
-  const [channels, setChannels] = useState<NotificationChannelItem[]>([]);
-  const [rules, setRules] = useState<NotificationRuleItem[]>([]);
   const [errorBanner, setErrorBanner] = useState('');
   const [successBanner, setSuccessBanner] = useState('');
 
-  // Toggling state
-  const [togglingId, setTogglingId] = useState<string | null>(null);
-  const [togglingRuleId, setTogglingRuleId] = useState<string | null>(null);
+  // Alertmanager & Prometheus states
+  const [amOverview, setAmOverview] = useState<AlertmanagerOverview | null>(null);
+  const [amRules, setAmRules] = useState<PrometheusRuleItem[]>([]);
+  const [amSilences, setAmSilences] = useState<AlertmanagerSilenceItem[]>([]);
+  const [amLoading, setAmLoading] = useState(false);
 
-  // Setup Modal state
-  const [activeSetupChannel, setActiveSetupChannel] = useState<NotificationChannelItem | null>(null);
-
-  const loadOverview = async () => {
+  const loadAlertmanagerData = async () => {
     try {
-      setLoading(true);
+      setAmLoading(true);
+      const [ov, rRes, sRes] = await Promise.all([
+        alertsApi.getOverview().catch(() => null),
+        alertsApi.getLiveRules().catch(() => ({ rules: [], total: 0 })),
+        alertsApi.getSilences().catch(() => ({ silences: [], total: 0 })),
+      ]);
+      setAmOverview(ov);
+      setAmRules(rRes.rules || []);
+      setAmSilences(sRes.silences || []);
       setErrorBanner('');
-      const data = await notificationsApi.getOverview();
-      setChannels(data.channels || []);
-      setRules(data.rules || []);
     } catch (err: any) {
-      setErrorBanner(err?.message || 'Không thể tải cấu hình thông báo từ máy chủ');
+      setErrorBanner(err?.message || 'Không thể tải dữ liệu từ Alertmanager & Prometheus');
     } finally {
+      setAmLoading(false);
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadOverview();
+    loadAlertmanagerData();
   }, []);
-
-  // Toggle Channel Active State
-  const handleToggleChannel = async (channel: NotificationChannelItem) => {
-    const nextEnabled = !channel.enabled;
-
-    // Optimistic UI update
-    setChannels((prev) =>
-      prev.map((c) => (c.id === channel.id ? { ...c, enabled: nextEnabled } : c))
-    );
-    setTogglingId(channel.id);
-    setErrorBanner('');
-
-    try {
-      await notificationsApi.updateChannel(channel.id, nextEnabled, channel.config_json);
-      setSuccessBanner(`Đã ${nextEnabled ? 'bật' : 'tắt'} kênh thông báo ${channel.name}`);
-      setTimeout(() => setSuccessBanner(''), 3000);
-    } catch (err: any) {
-      // Rollback on error
-      setChannels((prev) =>
-        prev.map((c) => (c.id === channel.id ? { ...c, enabled: channel.enabled } : c))
-      );
-      setErrorBanner(err?.message || 'Cập nhật trạng thái kênh thất bại');
-    } finally {
-      setTogglingId(null);
-    }
-  };
-
-  // Toggle Alert Rule
-  const handleToggleRule = async (rule: NotificationRuleItem) => {
-    const nextEnabled = !rule.enabled;
-
-    setRules((prev) =>
-      prev.map((r) => (r.id === rule.id ? { ...r, enabled: nextEnabled } : r))
-    );
-    setTogglingRuleId(rule.id);
-    setErrorBanner('');
-
-    try {
-      await notificationsApi.updateRule(rule.id, nextEnabled);
-      setSuccessBanner(`Đã ${nextEnabled ? 'kích hoạt' : 'tạm dừng'} quy tắc "${rule.name}"`);
-      setTimeout(() => setSuccessBanner(''), 3000);
-    } catch (err: any) {
-      setRules((prev) =>
-        prev.map((r) => (r.id === rule.id ? { ...r, enabled: rule.enabled } : r))
-      );
-      setErrorBanner(err?.message || 'Cập nhật quy tắc cảnh báo thất bại');
-    } finally {
-      setTogglingRuleId(null);
-    }
-  };
-
-  const handleSaved = (channelId: string, newConfigStr: string) => {
-    setChannels((prev) =>
-      prev.map((c) => (c.id === channelId ? { ...c, config_json: newConfigStr } : c))
-    );
-    const targetChannel = channels.find((c) => c.id === channelId);
-    setSuccessBanner(`Đã lưu cấu hình cho ${targetChannel?.name || channelId}`);
-    setTimeout(() => setSuccessBanner(''), 3000);
-  };
-
-  const handleTestCompleted = (channelId: string, success: boolean, message: string) => {
-    setChannels((prev) =>
-      prev.map((c) =>
-        c.id === channelId
-          ? {
-              ...c,
-              last_test_status: success ? 'success' : 'failed',
-              last_test_message: message,
-              last_tested_at: new Date().toISOString(),
-            }
-          : c
-      )
-    );
-  };
-
-  const activeChannelsCount = channels.filter((c) => c.enabled).length;
 
   if (loading) {
     return (
       <div className="p-8 flex items-center justify-center gap-2 text-muted-foreground text-xs bg-card border border-border font-sans">
         <Loader2 className="w-4 h-4 animate-spin text-primary" />
-        <span>Đang tải cấu hình kênh thông báo...</span>
+        <span>Đang kết nối tới Alertmanager & Prometheus...</span>
       </div>
     );
   }
@@ -134,11 +60,11 @@ export function NotificationsTab() {
           <div className="flex items-center gap-2">
             <Bell className="w-4 h-4 text-primary" />
             <span className="text-sm font-semibold text-foreground">
-              Notifications & Multi-Channel Alert Routing
+              Alertmanager & Prometheus Observability Engine
             </span>
           </div>
           <span className="text-[11px] font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded">
-            {activeChannelsCount} notification channel(s) active
+            {amRules.length} metric rule(s) active
           </span>
         </div>
 
@@ -175,31 +101,20 @@ export function NotificationsTab() {
           </div>
         )}
 
-        {/* 1. Multi-Channel Grid */}
-        <NotificationChannelsSection
-          channels={channels}
-          togglingId={togglingId}
-          onToggleChannel={handleToggleChannel}
-          onOpenSetup={(channel) => setActiveSetupChannel(channel)}
-        />
-
-        {/* 2. Alert Event Subscriptions */}
-        <AlertRulesSection
-          rules={rules}
-          togglingRuleId={togglingRuleId}
-          onToggleRule={handleToggleRule}
+        {/* Alertmanager & Prometheus Integration Engine */}
+        <AlertmanagerIntegrationSection
+          overview={amOverview}
+          rules={amRules}
+          silences={amSilences}
+          loading={amLoading}
+          onRefresh={loadAlertmanagerData}
+          onConfigUpdated={() => {
+            setSuccessBanner('Đã cập nhật cấu hình kết nối Alertmanager');
+            setTimeout(() => setSuccessBanner(''), 3000);
+            loadAlertmanagerData();
+          }}
         />
       </div>
-
-      {/* SETUP MODAL */}
-      {activeSetupChannel && (
-        <ChannelSetupModal
-          channel={activeSetupChannel}
-          onClose={() => setActiveSetupChannel(null)}
-          onSaved={handleSaved}
-          onTestCompleted={handleTestCompleted}
-        />
-      )}
     </div>
   );
 }

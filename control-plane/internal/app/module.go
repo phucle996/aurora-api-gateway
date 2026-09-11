@@ -36,15 +36,14 @@ type Module struct {
 	UpstreamHandler      *handler.UpstreamHandler
 	SystemHandler        *handler.SystemHandler
 	SecurityHandler      *handler.SecurityHandler
-	NotificationHandler  *handler.NotificationHandler
-	NotificationService  port.NotificationService
-	NotificationWorker   *service.NotificationWorker
 	BackupHandler        *handler.BackupHandler
 	BackupScheduler      *service.BackupScheduler
 	ExtensionHandler     *handler.ExtensionHandler
 	ExtensionService     port.ExtensionService
 	L4Handler            *handler.L4Handler
 	L4Service            port.L4Service
+	AlertmanagerHandler  *handler.AlertmanagerHandler
+	AlertmanagerService  port.AlertmanagerService
 }
 
 
@@ -102,12 +101,6 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	securitySvc := service.NewSecurityService(securityRepo)
 	securityHdr := handler.NewSecurityHandler(securitySvc)
 
-	notificationRepo := repository.NewNotificationRepository(writerDB)
-	notificationProvider := provider.NewNotificationProvider()
-	notificationWorker := service.NewNotificationWorker(notificationRepo, notificationProvider, 256)
-	notificationSvc := service.NewNotificationService(notificationRepo, notificationProvider, notificationWorker)
-	notificationHdr := handler.NewNotificationHandler(notificationSvc)
-
 	backupRepo := repository.NewBackupRepository(writerDB)
 	backupSvc := service.NewBackupService(writerDB, backupRepo, cfg.SQLitePath)
 	backupHdr := handler.NewBackupHandler(backupSvc)
@@ -126,6 +119,10 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	l4Svc := service.NewL4Service(l4Repo, specTrigger)
 	l4Hdr := handler.NewL4Handler(l4Svc, upstreamRepo)
 
+	alertmanagerRepo := repository.NewAlertmanagerRepository(writerDB)
+	alertmanagerSvc := service.NewAlertmanagerService(alertmanagerRepo)
+	alertmanagerHdr := handler.NewAlertmanagerHandler(alertmanagerSvc)
+
 	return &Module{
 		GRPCHeartbeatHandler: grpcHeartbeatHdr,
 		GRPCSpecSyncHandler:  grpcSpecHdr,
@@ -136,6 +133,8 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 		ExtensionService:     extensionSvc,
 		L4Handler:            l4Hdr,
 		L4Service:            l4Svc,
+		AlertmanagerHandler:  alertmanagerHdr,
+		AlertmanagerService:  alertmanagerSvc,
 		HealthcheckHandler:   healthcheckHdr,
 
 		AuthHandler:          authHdr,
@@ -148,9 +147,6 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 		UpstreamHandler:      upstreamHdr,
 		SystemHandler:        systemHdr,
 		SecurityHandler:      securityHdr,
-		NotificationHandler:  notificationHdr,
-		NotificationService:  notificationSvc,
-		NotificationWorker:   notificationWorker,
 		BackupHandler:        backupHdr,
 		BackupScheduler:      backupScheduler,
 	}

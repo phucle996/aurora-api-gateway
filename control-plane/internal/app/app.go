@@ -33,7 +33,6 @@ type App struct {
 	grpcLis            net.Listener
 	analytics          port.AnalyticsService
 	backupScheduler    *service.BackupScheduler
-	notificationWorker *service.NotificationWorker
 	specScheduler      *provider.SpecScheduler
 	checkpointDone     chan struct{}
 }
@@ -114,9 +113,6 @@ func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
 	router.NoRoute(gin.WrapH(ui))
 
 	module.BackupScheduler.Start(context.Background())
-	if module.NotificationWorker != nil {
-		module.NotificationWorker.Start(context.Background())
-	}
 	if module.SpecScheduler != nil && module.SpecSyncRepo != nil {
 		module.SpecScheduler.Start(context.Background(), module.SpecSyncRepo)
 	}
@@ -159,7 +155,6 @@ func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
 		grpcLis:            grpcLis,
 		analytics:          module.AnalyticsService,
 		backupScheduler:    module.BackupScheduler,
-		notificationWorker: module.NotificationWorker,
 		specScheduler:      module.SpecScheduler,
 		checkpointDone:     checkpointDone,
 	}, nil
@@ -205,9 +200,6 @@ func (a *App) Close() error {
 	}
 	if a.backupScheduler != nil {
 		a.backupScheduler.Stop()
-	}
-	if a.notificationWorker != nil {
-		a.notificationWorker.Stop()
 	}
 	if a.specScheduler != nil {
 		a.specScheduler.Stop()

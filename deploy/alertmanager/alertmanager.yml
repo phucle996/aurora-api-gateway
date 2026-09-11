@@ -1,0 +1,29 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ['alertname', 'node_id', 'severity']
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 4h
+  receiver: 'default-receiver'
+  routes:
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      continue: true
+
+receivers:
+  - name: 'default-receiver'
+    webhook_configs: []
+    # Slack, Telegram, Email configs can be added here or dynamically configured via API
+
+  - name: 'critical-alerts'
+    webhook_configs: []
+
+inhibit_rules:
+  - source_match:
+      alert: 'AuroraNodeDown'
+    target_match_re:
+      alert: 'Aurora.*'
+    equal: ['node_id']
