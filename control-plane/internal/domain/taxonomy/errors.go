@@ -2,37 +2,6 @@ package taxonomy
 
 import "errors"
 
-// ─── Rule Domain Errors ───────────────────────────────────────────────────────
-
-var (
-	// ErrRuleInvalid phát sinh khi dữ liệu hoặc cấu hình rule không hợp lệ
-	ErrRuleInvalid = errors.New("invalid or unsupported rule")
-
-	// ErrRuleConflict phát sinh khi xung đột version (optimistic lock) hoặc idempotency key trùng với payload khác
-	ErrRuleConflict = errors.New("rule revision or idempotency conflict")
-
-	// ErrRuleNotFound phát sinh khi không tìm thấy rule trong database
-	ErrRuleNotFound = errors.New("rule not found")
-
-	// ErrPublishUnavailable phát sinh khi compiler không khả dụng hoặc reject cấu hình
-	ErrPublishUnavailable = errors.New("compiler unavailable or policy rejected")
-)
-
-// ─── Policy Domain Errors ─────────────────────────────────────────────────────
-
-var (
-	// ErrPolicyConflict phát sinh khi xung đột version policy hoặc cluster
-	ErrPolicyConflict = errors.New("policy or cluster revision changed; refresh before retrying")
-
-	// ErrPolicyInvalid phát sinh khi cấu hình policy không hợp lệ
-	ErrPolicyInvalid = errors.New("invalid policy: check name, scope, mode, priority and selected rules")
-
-	// ErrPolicyNotFound phát sinh khi không tìm thấy policy hoặc node
-	ErrPolicyNotFound = errors.New("policy or node not found")
-
-	// ErrPolicyUnsupported phát sinh khi phiên bản rule được chọn bị tắt hoặc không được runtime hỗ trợ
-	ErrPolicyUnsupported = errors.New("selected rule revision is disabled or unsupported by the runtime")
-)
 
 // ─── Access Domain Errors ─────────────────────────────────────────────────────
 

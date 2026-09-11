@@ -15,5 +15,6 @@ type NodeService interface {
 	TriggerRollingReload(ctx context.Context) (*entity.RollingStatus, error)
 	GetRollingStatus(ctx context.Context) (*entity.RollingStatus, error)
 	ListNodeSyncLogs(ctx context.Context, nodeID string, limit int) ([]entity.NodeSyncLogRecord, error)
+	DeleteNode(ctx context.Context, id string) error
 	SubscribeEvents() (<-chan entity.SSEMessage, func())
 }

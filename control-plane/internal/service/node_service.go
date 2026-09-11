@@ -102,6 +102,13 @@ func (s *nodeService) livenessReaper(interval time.Duration) {
 		}
 		s.nodesMu.Unlock()
 
+		// Garbage collect stale dead nodes from database (nodes with last_heartbeat older than 10 minutes)
+		if s.repo != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			_, _ = s.repo.PruneStaleNodes(ctx, 600)
+			cancel()
+		}
+
 		if len(offlineEvents) > 0 && s.eventHub != nil {
 			s.eventHub.Broadcast("nodes_heartbeat", offlineEvents)
 		}
@@ -816,4 +823,20 @@ func formatNodeUptime(createdAtStr string, now time.Time) string {
 		return fmt.Sprintf("%dm %ds", minutes, seconds)
 	}
 	return fmt.Sprintf("%ds", seconds)
+}
+
+// DeleteNode removes a node immediately from in-memory state and the persistent repository.
+func (s *nodeService) DeleteNode(ctx context.Context, id string) error {
+	s.nodesMu.Lock()
+	delete(s.nodes, id)
+	s.nodesMu.Unlock()
+
+	s.batchMu.Lock()
+	delete(s.pendingBeats, id)
+	s.batchMu.Unlock()
+
+	if s.repo != nil {
+		return s.repo.DeleteNode(ctx, id)
+	}
+	return nil
 }

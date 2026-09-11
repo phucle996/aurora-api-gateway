@@ -395,3 +395,22 @@ func (h *NodeHandler) GetConfig(c *gin.Context) {
 		"fetched_at": time.Now().UTC().Format(time.RFC3339),
 	})
 }
+
+// Delete deregisters or deletes a node from the cluster registry.
+func (h *NodeHandler) Delete(c *gin.Context) {
+	nodeID := c.Param("id")
+	if nodeID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "node ID cannot be empty"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), nodeQueryTimeout)
+	defer cancel()
+
+	if err := h.service.DeleteNode(ctx, nodeID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete node: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "deleted", "id": nodeID})
+}

@@ -103,14 +103,14 @@ func TestAuthLoginAndMeWorkflow(t *testing.T) {
 		t.Fatalf("expected username 'admin' from /me, got %q", meResp.User.Username)
 	}
 
-	// Case 3: Access protected rules route with HttpOnly cookie
-	rulesReq := httptest.NewRequest("GET", "/api/v1/rules/stats", nil)
-	rulesReq.AddCookie(authCookie)
-	rulesRec := httptest.NewRecorder()
-	handler.ServeHTTP(rulesRec, rulesReq)
+	// Case 3: Access protected route with HttpOnly cookie
+	protReq := httptest.NewRequest("GET", "/api/v1/extensions", nil)
+	protReq.AddCookie(authCookie)
+	protRec := httptest.NewRecorder()
+	handler.ServeHTTP(protRec, protReq)
 
-	if rulesRec.Code != http.StatusOK {
-		t.Fatalf("expected status 200 on /api/v1/rules/stats with cookie, got %d: %s", rulesRec.Code, rulesRec.Body.String())
+	if protRec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 on /api/v1/extensions with cookie, got %d: %s", protRec.Code, protRec.Body.String())
 	}
 
 	// Case 4: Logout clears HttpOnly cookie

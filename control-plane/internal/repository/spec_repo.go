@@ -27,7 +27,7 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 		NodeID: nodeID,
 	}
 
-	// 1. Check node existence and fetch WAF + Access releases using CTE
+	// 1. Check node existence and fetch Access releases using CTE
 	const authorityQuery = `
 	WITH node_auth AS (
 		SELECT id FROM cluster_nodes WHERE id = ?
@@ -37,13 +37,11 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 	)
 	SELECT 
 		n.id,
-		coalesce(ph.release_id, 0),
-		coalesce(pr.payload, ''),
+		0,
+		'',
 		coalesce(ah.release_id, 0),
 		coalesce(ar.payload, '')
 	FROM node_auth n
-	LEFT JOIN policy_cluster_head ph ON ph.singleton = 1
-	LEFT JOIN policy_cluster_releases pr ON pr.id = ph.release_id
 	LEFT JOIN access_head ah ON ah.singleton = 1
 	LEFT JOIN access_releases ar ON ar.id = ah.release_id
 	`

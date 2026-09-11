@@ -25,11 +25,9 @@ type Module struct {
 	SpecSyncRepo         repo.SpecSyncRepository
 	SpecScheduler        *provider.SpecScheduler
 	AccessHandler        *handler.AccessHandler
-	PolicyHandler        *handler.PolicyHandler
 	HealthcheckHandler   *handler.HealthcheckHandler
 	AuthHandler          *handler.AuthHandler
 	AuthService          port.AuthService // Xác thực JWT — cần tham chiếu trong middleware
-	RuleHandler          *handler.RuleHandler
 	NodeHandler          *handler.NodeHandler
 	AnalyticsHandler     *handler.AnalyticsHandler
 	AnalyticsService     port.AnalyticsService
@@ -64,17 +62,9 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	authSvc := service.NewAuthService(authRepo, cfg)
 	authHdr := handler.NewAuthHandler(authSvc)
 
-	ruleRepo := repository.NewRuleRepository(writerDB, readerDB)
-	ruleSvc := service.NewRuleService(ruleRepo, cfg.CompilerPath)
-	ruleHdr := handler.NewRuleHandler(ruleSvc)
-
 	specSyncRepo := repository.NewSpecSyncRepository(writerDB, readerDB)
 	specScheduler := provider.NewSpecScheduler(0, 0)
 	specTrigger := specScheduler.TriggerReconcile
-
-	policyRepo := repository.NewPolicyRepository(writerDB, readerDB)
-	policySvc := service.NewPolicyService(policyRepo, cfg.CompilerPath, specTrigger)
-	policyHdr := handler.NewPolicyHandler(policySvc)
 
 	accessRepo := repository.NewAccessRepository(writerDB, readerDB)
 	accessSvc := service.NewAccessService(accessRepo, cfg.CompilerPath, specTrigger)
@@ -142,11 +132,9 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 		ExtensionHandler:     extensionHdr,
 		ExtensionService:     extensionSvc,
 		AccessHandler:        accessHdr,
-		PolicyHandler:        policyHdr,
 		HealthcheckHandler:   healthcheckHdr,
 		AuthHandler:          authHdr,
 		AuthService:          authSvc,
-		RuleHandler:          ruleHdr,
 		NodeHandler:          nodeHdr,
 		AnalyticsHandler:     analyticsHdr,
 		AnalyticsService:     analyticsSvc,

@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { DashboardHeader } from './sections/DashboardHeader';
 import { DashboardMetrics } from './sections/DashboardMetrics';
-import { DashboardTrafficChart, type TelemetryPoint } from './sections/DashboardTrafficChart';
 import { DashboardSpecSyncPanel } from './sections/DashboardSpecSyncPanel';
 import { DashboardNodesSummary } from './sections/DashboardNodesSummary';
 import { DashboardClusterHealth } from './sections/DashboardClusterHealth';
@@ -18,11 +17,10 @@ export default function DashboardPage() {
   const [clusterSpec, setClusterSpec] = useState<ClusterSpecInfo | null>(null);
   const [streamState, setStreamState] = useState<'Live' | 'Polling' | 'Disconnected'>('Polling');
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [history, setHistory] = useState<TelemetryPoint[]>([]);
 
   const requestID = useRef(0);
 
-  // Fetch baseline snapshot
+  // Fetch baseline fleet snapshot
   const loadData = useCallback(async (showSpin = false) => {
     if (showSpin) setIsRefreshing(true);
     const reqId = ++requestID.current;
@@ -38,42 +36,6 @@ export default function DashboardPage() {
         setNodes(nodesData);
         setSystemInfo(infoData);
         setClusterSpec(specData);
-
-        // Record a telemetry point
-        const totalRps = nodesData.reduce(
-          (acc, n) => acc + (parseFloat(n.requestsPerSecond || '0') || 0),
-          0
-        );
-        const totalConns = nodesData.reduce(
-          (acc, n) => acc + (parseInt(n.activeConnections || '0', 10) || 0),
-          0
-        );
-        const avgCpu =
-          nodesData.length > 0
-            ? Math.round(
-                nodesData.reduce((acc, n) => acc + (n.cpuUsage || 0), 0) /
-                  nodesData.length
-              )
-            : 0;
-
-        const now = new Date();
-        const timeLabel = `${String(now.getHours()).padStart(2, '0')}:${String(
-          now.getMinutes()
-        ).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-
-        setHistory((prev) => {
-          const next = [
-            ...prev,
-            {
-              timestamp: Date.now(),
-              timeLabel,
-              rps: totalRps,
-              conns: totalConns,
-              cpu: avgCpu,
-            },
-          ];
-          return next.slice(-12); // keep rolling 12 points
-        });
       }
     } finally {
       if (showSpin && reqId === requestID.current) {
@@ -82,7 +44,7 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // Periodic polling fallback
+  // Periodic polling fallback (every 15 seconds)
   useEffect(() => {
     void loadData(false);
     const interval = setInterval(() => {
@@ -130,10 +92,6 @@ export default function DashboardPage() {
                 ...n,
                 ip: u.ip || n.ip,
                 status: u.status,
-                requestsPerSecond: u.rps !== undefined ? u.rps.toFixed(1) : n.requestsPerSecond,
-                activeConnections: u.active_conns !== undefined ? String(u.active_conns) : n.activeConnections,
-                cpuUsage: u.cpu_usage !== undefined ? u.cpu_usage : n.cpuUsage,
-                memoryUsage: u.memory_usage !== undefined ? u.memory_usage : n.memoryUsage,
                 sync: u.sync || n.sync,
                 ruleset: u.ruleset || n.ruleset,
                 lastHeartbeatTimestamp: u.timestamp * 1000,
@@ -142,7 +100,7 @@ export default function DashboardPage() {
           );
         }
       } catch {
-        // Ignore parse error, fallback polling reconciles
+        // Fallback polling reconciles
       }
     };
 
@@ -159,7 +117,7 @@ export default function DashboardPage() {
 
   return (
     <div className="p-6 w-full space-y-5">
-      {/* 1. Header with active cluster spec digest & live telemetry status */}
+      {/* 1. Header with Target Spec Release, SHA-256 Digest & Live Telemetry status */}
       <DashboardHeader
         clusterSpec={clusterSpec}
         streamState={streamState}
@@ -167,17 +125,21 @@ export default function DashboardPage() {
         isRefreshing={isRefreshing}
       />
 
-      {/* 2. Top 6 Operational KPI Cards */}
+      {/* 2. Top 4 Fleet & Spec KPI Cards */}
       <DashboardMetrics
         nodes={nodes}
-        systemInfo={systemInfo}
+        clusterSpec={clusterSpec}
         isLoading={isRefreshing}
       />
 
-      {/* 3. Middle Row: Capacity & Pressure Monitor (2 cols) + Spec Sync Panel (1 col) */}
+      {/* 3. Main Row: Fleet 3-Pillar Lifecycle Matrix (2 cols) + Declarative Spec Sync Panel (1 col) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2">
-          <DashboardTrafficChart nodes={nodes} history={history} />
+          <DashboardNodesSummary
+            nodes={nodes}
+            clusterSpec={clusterSpec}
+            onRefresh={() => void loadData(true)}
+          />
         </div>
         <div className="lg:col-span-1">
           <DashboardSpecSyncPanel
@@ -188,17 +150,12 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* 4. Bottom Row: Data Plane Nodes Matrix (2 cols) + Control Plane & Storage Health (1 col) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <div className="lg:col-span-2">
-          <DashboardNodesSummary nodes={nodes} />
-        </div>
-        <div className="lg:col-span-1">
-          <DashboardClusterHealth systemInfo={systemInfo} nodes={nodes} />
-        </div>
+      {/* 4. Bottom Row: Control Plane Runtime & Storage Persistence Health */}
+      <div className="grid grid-cols-1 gap-5">
+        <DashboardClusterHealth systemInfo={systemInfo} nodes={nodes} />
       </div>
 
-      {/* 5. Status Operational Footer Banner */}
+      {/* 5. Operational Status Banner */}
       <DashboardStatusBanner />
     </div>
   );

@@ -17,18 +17,7 @@ var Indexes string
 //go:embed 0003_triggers.sql
 var Triggers string
 
-// Seeds establishes initial seed records (sequence offsets, default admin user, local cluster node, system settings, auth providers, notifications, backup settings).
+// Seeds establishes initial seed records (default admin user, local cluster node, system settings, auth providers, notifications, backup settings, extension catalog & schemas).
 //
 //go:embed 0004_seeds.sql
 var Seeds string
-
-// ExtensionSchemas establishes 1:1 render schemas for all extensions.
-//
-//go:embed 0005_extension_schemas.sql
-var ExtensionSchemas string
-
-// RoutingAndCertificates establishes dedicated authority tables for Routing and SSL Certificates.
-//
-//go:embed 0006_routing_and_certificates.sql
-var RoutingAndCertificates string
-

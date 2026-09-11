@@ -62,7 +62,6 @@ func certificatesFixture(t *testing.T) (http.Handler, string) {
 
 	for _, m := range []string{
 		migrations.Tables,
-		migrations.RoutingAndCertificates,
 		migrations.Seeds,
 	} {
 		if _, err := db.Exec(m); err != nil {

@@ -43,17 +43,6 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	r.POST("/api/v1/access-sync/:node", authMidd, m.AccessHandler.Report)
 	r.POST("/api/v1/access-sync/:node/matches", authMidd, m.AccessHandler.Match)
 
-	r.GET("/api/v1/policies", authMidd, m.PolicyHandler.List)
-	r.GET("/api/v1/policies/catalog", authMidd, m.PolicyHandler.Catalog)
-	r.GET("/api/v1/policies/rule-catalog", authMidd, m.PolicyHandler.RuleCatalog)
-	r.GET("/api/v1/policies/cluster", authMidd, m.PolicyHandler.Cluster)
-	r.GET("/api/v1/policies/:id", authMidd, m.PolicyHandler.List)
-	r.POST("/api/v1/policies", authMidd, m.PolicyHandler.SaveDraft)
-	r.PUT("/api/v1/policies/:id", authMidd, m.PolicyHandler.SaveDraft)
-	r.POST("/api/v1/policies/:id/publish", authMidd, m.PolicyHandler.PublishDraft)
-	r.GET("/api/v1/policy-sync/:node", authMidd, m.PolicyHandler.Desired)
-	r.POST("/api/v1/policy-sync/:node", authMidd, m.PolicyHandler.Report)
-
 	// Unified Spec Sync
 	r.GET("/api/v1/sync/spec", authMidd, m.SpecHandler.GetSpec)
 	r.GET("/api/v1/sync/spec/:node", authMidd, m.SpecHandler.GetSpec)
@@ -93,32 +82,13 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	r.GET("/api/v1/upstream-sync/:node", authMidd, m.UpstreamHandler.Desired) // Đồng bộ cấu hình upstream tới NGINX Data Plane
 	r.POST("/api/v1/upstream-sync/:node", authMidd, m.UpstreamHandler.Report) // Node báo cáo kết quả đồng bộ upstream
 
-	// Quản lý Rule API v2 (schema mới, hỗ trợ điều kiện phức tạp)
-	r.POST("/api/v2/rules", authMidd, m.RuleHandler.CreateDefinition)
-	r.PUT("/api/v2/rules/:id", authMidd, m.RuleHandler.UpdateDefinition)
-	r.DELETE("/api/v1/rules/:id", authMidd, m.RuleHandler.Delete)
-
-	// Quản lý Rule API v1
-	r.GET("/api/v1/rules", authMidd, m.RuleHandler.List)                   // Danh sách rule (có filter, phân trang)
-	r.POST("/api/v1/rules", authMidd, m.RuleHandler.Create)                // Tạo rule mới
-	r.GET("/api/v1/rules/stats", authMidd, m.RuleHandler.Stats)            // Thống kê số lượng rule
-	r.GET("/api/v1/rules/:id", authMidd, m.RuleHandler.Detail)             // Chi tiết 1 rule
-	r.PUT("/api/v1/rules/:id", authMidd, m.RuleHandler.Update)             // Cập nhật rule
-	r.GET("/api/v1/rules/:id/history", authMidd, m.RuleHandler.History)    // Lịch sử thay đổi
-	r.POST("/api/v1/rules/:id/rollback", authMidd, m.RuleHandler.Rollback) // Khôi phục cấu hình về phiên bản cũ
-	r.POST("/api/v1/rules/test", authMidd, m.RuleHandler.Test)             // Kiểm thử & đánh giá request với tập luật WAF
-	r.POST("/api/v1/rules/:id/test", authMidd, m.RuleHandler.Test)         // Kiểm thử theo ID rule cụ thể
-
-	// Phát hành (publish) bộ rule để NGINX áp dụng
-	r.POST("/api/v1/rule-releases", authMidd, m.RuleHandler.Publish)          // Tạo release mới
-	r.GET("/api/v1/rule-releases/:id", authMidd, m.RuleHandler.ReleaseDetail) // Trạng thái release
-
 	// Quản lý Cluster Nodes (danh sách và trạng thái các NGINX data plane nodes)
 	r.GET("/api/v1/events/stream", authMidd, m.NodeHandler.EventsStream)            // Server-Sent Events (SSE) realtime metrics & liveness stream
 	r.GET("/api/v1/nodes", authMidd, m.NodeHandler.List)                            // Danh sách nodes trong cluster
 	r.GET("/api/v1/nodes/rolling-status", authMidd, m.NodeHandler.GetRollingStatus) // Trạng thái tiến trình rolling reload
 	r.POST("/api/v1/nodes/rolling-reload", authMidd, m.NodeHandler.RollingReload)   // Kích hoạt rolling reload tuần tự
 	r.GET("/api/v1/nodes/:id", authMidd, m.NodeHandler.GetByID)                     // Chi tiết 1 node
+	r.DELETE("/api/v1/nodes/:id", authMidd, m.NodeHandler.Delete)                   // Xóa / deregister node khỏi cluster
 	r.GET("/api/v1/nodes/:id/config", authMidd, m.NodeHandler.GetConfig)            // Kéo file cấu hình thực tế từ container node
 	r.POST("/api/v1/nodes/:id/reload", authMidd, m.NodeHandler.ReloadNode)          // Đặt lệnh reload cho 1 node
 	r.POST("/api/v1/nodes/:id/heartbeat", authMidd, m.NodeHandler.Heartbeat)        // Heartbeat telemetry đẩy từ Node (Protobuf binary)

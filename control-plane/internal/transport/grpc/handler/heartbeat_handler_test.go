@@ -44,6 +44,9 @@ func (m *mockHeartbeatNodeService) GetRollingStatus(ctx context.Context) (*entit
 func (m *mockHeartbeatNodeService) ListNodeSyncLogs(ctx context.Context, nodeID string, limit int) ([]entity.NodeSyncLogRecord, error) {
 	return nil, nil
 }
+func (m *mockHeartbeatNodeService) DeleteNode(ctx context.Context, id string) error {
+	return nil
+}
 func (m *mockHeartbeatNodeService) SubscribeEvents() (<-chan entity.SSEMessage, func()) {
 	return nil, func() {}
 }

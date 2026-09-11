@@ -20,9 +20,6 @@ func setupSpecTestDB(t *testing.T) *sql.DB {
 	if _, err := db.Exec(migrations.Tables); err != nil {
 		t.Fatalf("failed to execute migrations: %v", err)
 	}
-	if _, err := db.Exec(migrations.RoutingAndCertificates); err != nil {
-		t.Fatalf("failed to execute routing & certificates migrations: %v", err)
-	}
 	if _, err := db.Exec(migrations.Seeds); err != nil {
 		t.Fatalf("failed to execute seeds: %v", err)
 	}
@@ -31,11 +28,6 @@ func setupSpecTestDB(t *testing.T) *sql.DB {
 	_, err = db.Exec(`
 		INSERT INTO cluster_nodes (id, name, ip, hostname, role, status, sync_status)
 		VALUES ('node-test-1', 'Test Node 1', '10.0.0.1', 'edge-1', 'Edge Node', 'Ready', 'In Sync');
-
-		-- Seed WAF policy release
-		INSERT INTO policy_cluster_releases (id, payload, digest, membership, actor)
-		VALUES (10, '{"version":1,"waf_enabled":true}', 'digest-waf', '[]', 'admin');
-		INSERT INTO policy_cluster_head (singleton, release_id) VALUES (1, 10);
 
 		-- Seed Access release
 		INSERT INTO access_releases (id, payload, digest, actor)
@@ -72,12 +64,6 @@ func TestSpecSyncRepository_GetAuthorityData_Success(t *testing.T) {
 
 	if auth.NodeID != "node-test-1" {
 		t.Errorf("expected node ID node-test-1, got %s", auth.NodeID)
-	}
-	if auth.WAFReleaseID != 10 {
-		t.Errorf("expected WAF release 10, got %d", auth.WAFReleaseID)
-	}
-	if string(auth.WAFPayload) != `{"version":1,"waf_enabled":true}` {
-		t.Errorf("unexpected WAF payload: %s", string(auth.WAFPayload))
 	}
 	if auth.AccessReleaseID != 20 {
 		t.Errorf("expected Access release 20, got %d", auth.AccessReleaseID)

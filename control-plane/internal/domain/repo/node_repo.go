@@ -22,4 +22,6 @@ type NodeRepository interface {
 	InsertSyncLog(ctx context.Context, nodeID string, eventType string, releaseID *int64, message string) (*entity.NodeSyncLogRecord, error)
 	ListNodeSyncLogs(ctx context.Context, nodeID string, limit int) ([]entity.NodeSyncLogRecord, error)
 	EnsureNodeExists(ctx context.Context, nodeID, ip, hostname string) error
+	PruneStaleNodes(ctx context.Context, staleThresholdSecs int64) (int64, error)
+	DeleteNode(ctx context.Context, id string) error
 }

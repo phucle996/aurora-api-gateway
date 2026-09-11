@@ -62,5 +62,7 @@ export const nodesApi = {
     api.get<{ node_id: string; path: string; config: string; fetched_at: string }>(
       `/api/v1/nodes/${id}/config`
     ),
+  delete: (id: string) =>
+    api.delete<{ status: string; id: string }>(`/api/v1/nodes/${id}`),
 };
 
