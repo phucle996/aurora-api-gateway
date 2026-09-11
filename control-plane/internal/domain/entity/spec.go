@@ -71,15 +71,40 @@ type SpecExtensionRecord struct {
 	ConfigJSON string
 }
 
+// SpecUnifiedUpstreamRecord is the spec sync workflow's flat projection for an upstream pool.
+type SpecUnifiedUpstreamRecord struct {
+	ID          int64
+	Name        string
+	Algorithm   string
+	ServersJSON string
+}
+
+// SpecL4ServiceRecord is the spec sync workflow's flat projection for an L4 service.
+type SpecL4ServiceRecord struct {
+	ID                  string
+	Name                string
+	Protocol            string
+	ListenPort          int
+	ForwardTargetType   string
+	UpstreamName        string
+	DirectEndpoint      string
+	ACLRulesJSON        string
+	ProxyTimeout        string
+	ProxyConnectTimeout string
+	Enabled             bool
+}
+
 // SpecAuthorityData is the spec sync workflow's flat database authority projection.
 type SpecAuthorityData struct {
 	NodeID          string
 	WAFReleaseID    int64
 	WAFPayload      []byte
-	AccessReleaseID int64
-	AccessPayload   []byte
 	UpstreamsConf   string
 	RoutingRecords  []SpecRoutingRecord
 	Certificates    []SpecCertificateRecord
 	Extensions      []SpecExtensionRecord
+	UpstreamRecords []SpecUnifiedUpstreamRecord
+	L4Services      []SpecL4ServiceRecord
 }
+
+

@@ -12,7 +12,9 @@ import CertificatesPage from './pages/certificates/page';
 import UpstreamsPage from './pages/upstreams/page';
 import CreateUpstreamPage from './pages/upstreams/create/page';
 import EditUpstreamPage from './pages/upstreams/edit/page';
+import L4GatewayPage from './pages/l4/page';
 import ConsoleLayout from './layouts/ConsoleLayout';
+
 import { ThemeProvider } from './components/theme-provider';
 import './style.css';
 
@@ -40,7 +42,9 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/upstreams/add" element={<CreateUpstreamPage />} />
           <Route path="/upstreams/:id/edit" element={<EditUpstreamPage />} />
           <Route path="/upstreams/edit/:id" element={<EditUpstreamPage />} />
+          <Route path="/l4" element={<L4GatewayPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
+
           <Route path="/telemetry" element={<AnalyticsPage />} />
 
           {/* Cluster & Nodes */}

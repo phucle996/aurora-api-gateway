@@ -3,23 +3,8 @@ package taxonomy
 import "errors"
 
 
-// ─── Access Domain Errors ─────────────────────────────────────────────────────
-
-var (
-	// ErrAccessInvalid phát sinh khi cấu hình access control không hợp lệ
-	ErrAccessInvalid = errors.New("invalid access configuration")
-
-	// ErrAccessConflict phát sinh khi xung đột version access object
-	ErrAccessConflict = errors.New("access configuration changed; refresh before retrying")
-
-	// ErrAccessMissing phát sinh khi không tìm thấy resource access
-	ErrAccessMissing = errors.New("access resource not found")
-
-	// ErrAccessCompiler phát sinh khi access compiler reject snapshot hoặc không khả dụng
-	ErrAccessCompiler = errors.New("access compiler rejected snapshot or is unavailable")
-)
-
 // ─── Auth Domain Errors ───────────────────────────────────────────────────────
+
 
 var (
 	// ErrInvalidCredentials phát sinh khi tên đăng nhập hoặc mật khẩu không chính xác
@@ -51,3 +36,35 @@ var (
 	// ErrSettingsStorage phát sinh khi có lỗi truy vấn hoặc lưu trữ cấu hình hệ thống
 	ErrSettingsStorage = errors.New("system settings storage error")
 )
+
+// ─── L4 Gateway Domain Errors ─────────────────────────────────────────────────
+
+var (
+	// ErrL4UpstreamNotFound phát sinh khi không tìm thấy L4 upstream
+	ErrL4UpstreamNotFound = errors.New("l4 upstream not found")
+
+	// ErrL4UpstreamExists phát sinh khi trùng tên L4 upstream
+	ErrL4UpstreamExists = errors.New("l4 upstream already exists")
+
+	// ErrL4UpstreamInUse phát sinh khi xóa L4 upstream đang được liên kết bởi service
+	ErrL4UpstreamInUse = errors.New("l4 upstream is currently in use by active l4 services")
+
+	// ErrL4ServiceNotFound phát sinh khi không tìm thấy L4 service
+	ErrL4ServiceNotFound = errors.New("l4 service not found")
+
+	// ErrL4PortConflict phát sinh khi port và protocol đã được sử dụng bởi service khác
+	ErrL4PortConflict = errors.New("l4 service port and protocol already in use")
+
+	// ErrL4InvalidPort phát sinh khi port nằm ngoài dải 1-65535
+	ErrL4InvalidPort = errors.New("l4 port must be between 1 and 65535")
+
+	// ErrL4InvalidCIDR phát sinh khi CIDR trong ACL rule không đúng định dạng
+	ErrL4InvalidCIDR = errors.New("invalid cidr address format in l4 acl")
+
+	// ErrL4InvalidEndpoint phát sinh khi direct endpoint không đúng định dạng host:port
+	ErrL4InvalidEndpoint = errors.New("invalid direct endpoint format, expected host:port")
+
+	// ErrL4TargetRequired phát sinh khi không có upstream hoặc direct endpoint được chỉ định
+	ErrL4TargetRequired = errors.New("either upstream or direct endpoint must be specified")
+)
+

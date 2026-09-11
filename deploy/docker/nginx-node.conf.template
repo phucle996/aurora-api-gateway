@@ -89,3 +89,8 @@ http {
         location = /access-generation { return 200 "$aurora_access_generation"; }
     }
 }
+
+stream {
+    include /var/lib/aurora-routing/active-l4-streams.conf;
+}
+

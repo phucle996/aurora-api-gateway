@@ -66,69 +66,8 @@ CREATE TABLE IF NOT EXISTS node_sync_logs (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
-CREATE TABLE IF NOT EXISTS access_objects (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    kind TEXT NOT NULL CHECK(kind IN ('rule','group','dataset')),
-    version INTEGER NOT NULL,
-    document TEXT NOT NULL CHECK(json_valid(document)),
-    deleted INTEGER NOT NULL DEFAULT 0,
-    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
-
-CREATE TABLE IF NOT EXISTS access_revisions (
-    object_id INTEGER NOT NULL REFERENCES access_objects(id),
-    version INTEGER NOT NULL,
-    kind TEXT NOT NULL,
-    document TEXT NOT NULL,
-    deleted INTEGER NOT NULL,
-    actor TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-    PRIMARY KEY(object_id,version)
-);
-
-CREATE TABLE IF NOT EXISTS access_releases (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    payload BLOB NOT NULL,
-    digest TEXT NOT NULL,
-    actor TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
-
-CREATE TABLE IF NOT EXISTS access_head (
-    singleton INTEGER PRIMARY KEY CHECK(singleton=1),
-    release_id INTEGER NOT NULL REFERENCES access_releases(id)
-);
-
-CREATE TABLE IF NOT EXISTS access_receipts (
-    actor TEXT NOT NULL,
-    request_key TEXT NOT NULL,
-    request_hash TEXT NOT NULL,
-    result TEXT NOT NULL,
-    PRIMARY KEY(actor,request_key)
-);
-
-CREATE TABLE IF NOT EXISTS access_reports (
-    node_id TEXT PRIMARY KEY REFERENCES cluster_nodes(id) ON DELETE CASCADE,
-    release_id INTEGER NOT NULL REFERENCES access_releases(id),
-    phase TEXT NOT NULL,
-    message TEXT NOT NULL,
-    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
-
-CREATE TABLE IF NOT EXISTS access_events (
-    node_id TEXT NOT NULL,
-    event_key TEXT NOT NULL,
-    release_id INTEGER NOT NULL REFERENCES access_releases(id),
-    rule_id INTEGER NOT NULL,
-    ip TEXT NOT NULL,
-    action TEXT NOT NULL,
-    reputation INTEGER NOT NULL,
-    alert INTEGER NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-    PRIMARY KEY(node_id,event_key)
-);
-
 -- Routes table: flat entity with 1:1 upstream binding and 7-phase plugin pipeline
+
 CREATE TABLE IF NOT EXISTS routes (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -286,3 +225,23 @@ CREATE TABLE IF NOT EXISTS cluster_spec_head (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
     release_id INTEGER NOT NULL REFERENCES cluster_spec_releases(id)
 );
+
+-- L4 Services (TCP / UDP port listeners with L4 ACL and Upstream / Direct Endpoint forward)
+CREATE TABLE IF NOT EXISTS l4_services (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    protocol TEXT NOT NULL DEFAULT 'tcp' CHECK(protocol IN ('tcp', 'udp')),
+    listen_port INTEGER NOT NULL CHECK(listen_port >= 1 AND listen_port <= 65535),
+    forward_target_type TEXT NOT NULL DEFAULT 'upstream' CHECK(forward_target_type IN ('upstream', 'endpoint')),
+    upstream_name TEXT NOT NULL DEFAULT '',
+    direct_endpoint TEXT NOT NULL DEFAULT '',
+    acl_rules_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(acl_rules_json)),
+    proxy_timeout TEXT NOT NULL DEFAULT '1h',
+    proxy_connect_timeout TEXT NOT NULL DEFAULT '5s',
+    enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+    description TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    CONSTRAINT uq_l4_services_listen UNIQUE (protocol, listen_port)
+);
+

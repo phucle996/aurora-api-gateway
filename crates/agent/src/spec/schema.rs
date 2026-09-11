@@ -4,6 +4,7 @@ use sha2::{Digest, Sha256};
 use super::access::AccessSpec;
 use super::certificate::CertificateSpec;
 use super::extensions::ExtensionsSpec;
+use super::l4::L4Spec;
 use super::routing::RoutingSpec;
 use super::upstream::UpstreamSpec;
 use super::waf::WafSpec;
@@ -43,7 +44,11 @@ pub struct Spec {
 
     #[serde(default)]
     pub certificates: Vec<CertificateSpec>,
+
+    #[serde(default)]
+    pub l4: Option<L4Spec>,
 }
+
 
 impl Spec {
     pub fn parse_yaml(raw: &str) -> Result<Self, serde_yaml::Error> {

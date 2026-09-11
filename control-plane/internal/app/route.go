@@ -34,17 +34,9 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	// Nếu thiếu hoặc sai token, middleware trả về 401 và dừng request luôn.
 	authMidd := middleware.Auth(m.AuthService, token)
 
-	r.GET("/api/v1/access", authMidd, m.AccessHandler.Read)
-	r.GET("/api/v1/access/status", authMidd, m.AccessHandler.Status)
-	r.GET("/api/v1/access/activity", authMidd, m.AccessHandler.Activity)
-	r.GET("/api/v1/access/catalog", authMidd, m.AccessHandler.Catalog)
-	r.POST("/api/v1/access/changes", authMidd, m.AccessHandler.Change)
-	r.GET("/api/v1/access-sync/:node", authMidd, m.AccessHandler.Desired)
-	r.POST("/api/v1/access-sync/:node", authMidd, m.AccessHandler.Report)
-	r.POST("/api/v1/access-sync/:node/matches", authMidd, m.AccessHandler.Match)
-
 	// Unified Spec Sync
 	r.GET("/api/v1/sync/spec", authMidd, m.SpecHandler.GetSpec)
+
 	r.GET("/api/v1/sync/spec/:node", authMidd, m.SpecHandler.GetSpec)
 
 	// Extension Management API
@@ -81,6 +73,15 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	r.DELETE("/api/v1/upstreams/:id", authMidd, m.UpstreamHandler.Delete)     // Xóa upstream pool
 	r.GET("/api/v1/upstream-sync/:node", authMidd, m.UpstreamHandler.Desired) // Đồng bộ cấu hình upstream tới NGINX Data Plane
 	r.POST("/api/v1/upstream-sync/:node", authMidd, m.UpstreamHandler.Report) // Node báo cáo kết quả đồng bộ upstream
+
+	// Quản lý L4 Gateway (TCP / UDP Stream Proxying & L4 ACL)
+	r.GET("/api/v1/l4/services", authMidd, m.L4Handler.ListServices)
+	r.POST("/api/v1/l4/services", authMidd, m.L4Handler.CreateService)
+	r.GET("/api/v1/l4/services/:id", authMidd, m.L4Handler.GetService)
+	r.PUT("/api/v1/l4/services/:id", authMidd, m.L4Handler.UpdateService)
+	r.PUT("/api/v1/l4/services/:id/status", authMidd, m.L4Handler.ToggleService)
+	r.DELETE("/api/v1/l4/services/:id", authMidd, m.L4Handler.DeleteService)
+
 
 	// Quản lý Cluster Nodes (danh sách và trạng thái các NGINX data plane nodes)
 	r.GET("/api/v1/events/stream", authMidd, m.NodeHandler.EventsStream)            // Server-Sent Events (SSE) realtime metrics & liveness stream

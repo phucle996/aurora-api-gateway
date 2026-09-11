@@ -162,8 +162,6 @@ func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*Spec, 
 	if auth != nil {
 		if auth.WAFReleaseID > 0 {
 			releaseID = auth.WAFReleaseID
-		} else if auth.AccessReleaseID > 0 {
-			releaseID = auth.AccessReleaseID
 		}
 	}
 
@@ -181,11 +179,9 @@ func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*Spec, 
 		if len(auth.WAFPayload) > 0 {
 			doc.WAF.RawJSON = string(auth.WAFPayload)
 		}
-		if len(auth.AccessPayload) > 0 {
-			doc.Access.RawJSON = string(auth.AccessPayload)
-		}
 
 		doc.UpstreamsConf = auth.UpstreamsConf
+
 
 		if len(auth.RoutingRecords) > 0 {
 			domainMap := make(map[string][]LocationRoutingSpec)
@@ -261,7 +257,79 @@ func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*Spec, 
 				doc.Extensions = extensionsMap
 			}
 		}
+
+		if len(auth.L4Services) > 0 {
+			referencedUpstreams := make(map[string]bool)
+			for _, s := range auth.L4Services {
+				if (s.ForwardTargetType == "" || s.ForwardTargetType == "upstream") && s.UpstreamName != "" {
+					referencedUpstreams[s.UpstreamName] = true
+				}
+			}
+
+			l4Spec := &L4Spec{
+				Upstreams: make([]L4UpstreamSpec, 0, len(referencedUpstreams)),
+				Services:  make([]L4ServiceSpec, 0, len(auth.L4Services)),
+			}
+
+			for _, u := range auth.UpstreamRecords {
+				if referencedUpstreams[u.Name] {
+					var servers []struct {
+						Address     string `json:"address"`
+						Weight      int    `json:"weight"`
+						MaxFails    int    `json:"maxFails"`
+						FailTimeout string `json:"failTimeout"`
+					}
+					if err := json.Unmarshal([]byte(u.ServersJSON), &servers); err != nil {
+						servers = nil
+					}
+					l4Servers := make([]L4ServerSpec, 0, len(servers))
+					for _, srv := range servers {
+						l4Servers = append(l4Servers, L4ServerSpec{
+							Addr:        srv.Address,
+							Weight:      srv.Weight,
+							MaxFails:    srv.MaxFails,
+							FailTimeout: srv.FailTimeout,
+						})
+					}
+					algo := u.Algorithm
+					if algo == "" {
+						algo = "round_robin"
+					}
+					l4Spec.Upstreams = append(l4Spec.Upstreams, L4UpstreamSpec{
+						Name:      u.Name,
+						Protocol:  "tcp",
+						Algorithm: algo,
+						Servers:   l4Servers,
+					})
+				}
+			}
+
+			for _, s := range auth.L4Services {
+				var acls []L4ACLRuleSpec
+				if err := json.Unmarshal([]byte(s.ACLRulesJSON), &acls); err != nil {
+					acls = []L4ACLRuleSpec{}
+				}
+				targetType := s.ForwardTargetType
+				if targetType == "" {
+					targetType = "upstream"
+				}
+				l4Spec.Services = append(l4Spec.Services, L4ServiceSpec{
+					Name:                s.Name,
+					Protocol:            s.Protocol,
+					ListenPort:          s.ListenPort,
+					ForwardTargetType:   targetType,
+					Upstream:            s.UpstreamName,
+					Endpoint:            s.DirectEndpoint,
+					ACL:                 acls,
+					ProxyTimeout:        s.ProxyTimeout,
+					ProxyConnectTimeout: s.ProxyConnectTimeout,
+					Enabled:             s.Enabled,
+				})
+			}
+			doc.L4 = l4Spec
+		}
 	}
+
 
 	yamlBytes, err := yaml.Marshal(doc)
 	if err != nil {
@@ -305,12 +373,12 @@ type Spec struct {
 	GeneratedAt   string                            `yaml:"generated_at" json:"generated_at"`
 	Extensions    map[string]map[string]interface{} `yaml:"extensions" json:"extensions"`
 	WAF           WAFSpec                           `yaml:"waf" json:"waf"`
-	Access        AccessSpec                        `yaml:"access" json:"access"`
 	Upstreams     []UpstreamSpec                    `yaml:"upstreams,omitempty" json:"upstreams,omitempty"`
 	UpstreamsConf string                            `yaml:"upstreams_conf,omitempty" json:"upstreams_conf,omitempty"`
 	Routing       RoutingSpec                       `yaml:"routing,omitempty" json:"routing,omitempty"`
 	RoutingConf   string                            `yaml:"routing_conf,omitempty" json:"routing_conf,omitempty"`
 	Certificates  []CertificateSpec                 `yaml:"certificates,omitempty" json:"certificates,omitempty"`
+	L4            *L4Spec                           `yaml:"l4,omitempty" json:"l4,omitempty"`
 }
 
 type ExtensionsSpec struct {
@@ -342,12 +410,9 @@ type WAFSpec struct {
 	RawJSON    string   `yaml:"raw_json,omitempty" json:"raw_json,omitempty"`
 }
 
-type AccessSpec struct {
-	RawJSON string `yaml:"raw_json,omitempty" json:"raw_json,omitempty"`
-}
-
 type UpstreamSpec struct {
 	Name    string               `yaml:"name" json:"name"`
+
 	Servers []UpstreamServerSpec `yaml:"servers" json:"servers"`
 }
 
@@ -384,3 +449,41 @@ type CertificateSpec struct {
 	ClientCAPEM string   `yaml:"client_ca_pem,omitempty" json:"client_ca_pem,omitempty"`
 	VerifyDepth int      `yaml:"verify_depth,omitempty" json:"verify_depth,omitempty"`
 }
+
+type L4Spec struct {
+	Upstreams []L4UpstreamSpec `yaml:"upstreams,omitempty" json:"upstreams,omitempty"`
+	Services  []L4ServiceSpec  `yaml:"services,omitempty" json:"services,omitempty"`
+}
+
+type L4UpstreamSpec struct {
+	Name      string         `yaml:"name" json:"name"`
+	Protocol  string         `yaml:"protocol" json:"protocol"`
+	Algorithm string         `yaml:"algorithm" json:"algorithm"`
+	Servers   []L4ServerSpec `yaml:"servers,omitempty" json:"servers,omitempty"`
+}
+
+type L4ServerSpec struct {
+	Addr        string `yaml:"addr" json:"addr"`
+	Weight      int    `yaml:"weight,omitempty" json:"weight,omitempty"`
+	MaxFails    int    `yaml:"max_fails,omitempty" json:"max_fails,omitempty"`
+	FailTimeout string `yaml:"fail_timeout,omitempty" json:"fail_timeout,omitempty"`
+}
+
+type L4ServiceSpec struct {
+	Name                string          `yaml:"name" json:"name"`
+	Protocol            string          `yaml:"protocol" json:"protocol"`
+	ListenPort          int             `yaml:"listen_port" json:"listen_port"`
+	ForwardTargetType   string          `yaml:"forward_target_type,omitempty" json:"forward_target_type,omitempty"`
+	Upstream            string          `yaml:"upstream,omitempty" json:"upstream,omitempty"`
+	Endpoint            string          `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
+	ACL                 []L4ACLRuleSpec `yaml:"acl,omitempty" json:"acl,omitempty"`
+	ProxyTimeout        string          `yaml:"proxy_timeout,omitempty" json:"proxy_timeout,omitempty"`
+	ProxyConnectTimeout string          `yaml:"proxy_connect_timeout,omitempty" json:"proxy_connect_timeout,omitempty"`
+	Enabled             bool            `yaml:"enabled" json:"enabled"`
+}
+
+type L4ACLRuleSpec struct {
+	CIDR   string `yaml:"cidr" json:"cidr"`
+	Action string `yaml:"action" json:"action"`
+}
+

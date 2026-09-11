@@ -24,8 +24,8 @@ type Module struct {
 	SpecHandler          *handler.SpecHandler
 	SpecSyncRepo         repo.SpecSyncRepository
 	SpecScheduler        *provider.SpecScheduler
-	AccessHandler        *handler.AccessHandler
 	HealthcheckHandler   *handler.HealthcheckHandler
+
 	AuthHandler          *handler.AuthHandler
 	AuthService          port.AuthService // Xác thực JWT — cần tham chiếu trong middleware
 	NodeHandler          *handler.NodeHandler
@@ -43,7 +43,10 @@ type Module struct {
 	BackupScheduler      *service.BackupScheduler
 	ExtensionHandler     *handler.ExtensionHandler
 	ExtensionService     port.ExtensionService
+	L4Handler            *handler.L4Handler
+	L4Service            port.L4Service
 }
+
 
 // NewModule khởi tạo toàn bộ chuỗi dependency của ứng dụng theo thứ tự:
 //  1. Repository (sử dụng đúng writerDB hoặc readerDB tùy loại workflow)
@@ -66,11 +69,8 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	specScheduler := provider.NewSpecScheduler(0, 0)
 	specTrigger := specScheduler.TriggerReconcile
 
-	accessRepo := repository.NewAccessRepository(writerDB, readerDB)
-	accessSvc := service.NewAccessService(accessRepo, cfg.CompilerPath, specTrigger)
-	accessHdr := handler.NewAccessHandler(accessSvc)
-
 	upstreamRepo := repository.NewUpstreamRepository(writerDB, readerDB)
+
 	upstreamSvc := service.NewUpstreamService(upstreamRepo, specTrigger)
 	upstreamHdr := handler.NewUpstreamHandler(upstreamSvc)
 
@@ -123,6 +123,10 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 	extensionSvc := service.NewExtensionService(extensionRepo, specTrigger)
 	extensionHdr := handler.NewExtensionHandler(extensionSvc)
 
+	l4Repo := repository.NewL4Repository(writerDB, readerDB)
+	l4Svc := service.NewL4Service(l4Repo, specTrigger)
+	l4Hdr := handler.NewL4Handler(l4Svc, upstreamRepo)
+
 	return &Module{
 		GRPCHeartbeatHandler: grpcHeartbeatHdr,
 		GRPCSpecSyncHandler:  grpcSpecHdr,
@@ -131,8 +135,10 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 		SpecScheduler:        specScheduler,
 		ExtensionHandler:     extensionHdr,
 		ExtensionService:     extensionSvc,
-		AccessHandler:        accessHdr,
+		L4Handler:            l4Hdr,
+		L4Service:            l4Svc,
 		HealthcheckHandler:   healthcheckHdr,
+
 		AuthHandler:          authHdr,
 		AuthService:          authSvc,
 		NodeHandler:          nodeHdr,
@@ -150,3 +156,4 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 		BackupScheduler:      backupScheduler,
 	}
 }
+

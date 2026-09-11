@@ -6,6 +6,7 @@ import {
   Route,
   ShieldCheck,
   Server,
+  Network,
   Settings,
   Blocks,
   BarChart3,
@@ -13,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
+
 import { logout, getAuthUser } from '../lib/fetcher';
 
 interface ConsoleSidebarProps {
@@ -109,7 +111,14 @@ export function ConsoleSidebar({
       icon: <Server className="w-4 h-4 shrink-0" />,
     },
     {
+      label: 'L4 Gateway',
+      path: '/l4',
+      aliases: ['/l4/services', '/l4/upstreams'],
+      icon: <Network className="w-4 h-4 shrink-0 text-cyan-400" />,
+    },
+    {
       label: 'Analytics',
+
       path: '/analytics',
       aliases: ['/metrics', '/telemetry'],
       icon: <BarChart3 className="w-4 h-4 shrink-0 text-primary" />,

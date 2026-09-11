@@ -27,7 +27,7 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 		NodeID: nodeID,
 	}
 
-	// 1. Check node existence and fetch Access releases using CTE
+	// 1. Check node existence using CTE
 	const authorityQuery = `
 	WITH node_auth AS (
 		SELECT id FROM cluster_nodes WHERE id = ?
@@ -35,34 +35,19 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 		SELECT 'cluster' WHERE ? = '' OR ? = 'cluster'
 		LIMIT 1
 	)
-	SELECT 
-		n.id,
-		0,
-		'',
-		coalesce(ah.release_id, 0),
-		coalesce(ar.payload, '')
-	FROM node_auth n
-	LEFT JOIN access_head ah ON ah.singleton = 1
-	LEFT JOIN access_releases ar ON ar.id = ah.release_id
+	SELECT n.id
+	FROM node_auth n;
 	`
 
 	var id string
-	var wafPayload, accessPayload []byte
-	err := r.reader.QueryRowContext(ctx, authorityQuery, nodeID, nodeID, nodeID).Scan(
-		&id,
-		&out.WAFReleaseID,
-		&wafPayload,
-		&out.AccessReleaseID,
-		&accessPayload,
-	)
+	err := r.reader.QueryRowContext(ctx, authorityQuery, nodeID, nodeID, nodeID).Scan(&id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("unregistered node: %s", nodeID)
 		}
 		return nil, fmt.Errorf("query spec authority: %w", err)
 	}
-	out.WAFPayload = wafPayload
-	out.AccessPayload = accessPayload
+
 
 	// 2. Fetch latest Upstream release config
 	const upstreamsQuery = `
@@ -199,8 +184,53 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 		out.Extensions = extensions
 	}
 
+	// 6. Fetch Unified Upstreams & Active L4 Services
+	const unifiedUpstreamsQuery = `
+	SELECT id, name, algorithm, servers_json
+	FROM upstreams
+	ORDER BY name ASC
+	`
+	uRows, err := r.reader.QueryContext(ctx, unifiedUpstreamsQuery)
+	if err == nil {
+		defer uRows.Close()
+		var upstreams []entity.SpecUnifiedUpstreamRecord
+		for uRows.Next() {
+			var u entity.SpecUnifiedUpstreamRecord
+			if err := uRows.Scan(&u.ID, &u.Name, &u.Algorithm, &u.ServersJSON); err == nil {
+				upstreams = append(upstreams, u)
+			}
+		}
+		out.UpstreamRecords = upstreams
+	}
+
+	const l4ServicesQuery = `
+	SELECT id, name, protocol, listen_port, forward_target_type, upstream_name, direct_endpoint,
+	       acl_rules_json, proxy_timeout, proxy_connect_timeout, enabled
+	FROM l4_services
+	WHERE enabled = 1
+	ORDER BY listen_port ASC
+	`
+	l4sRows, err := r.reader.QueryContext(ctx, l4ServicesQuery)
+	if err == nil {
+		defer l4sRows.Close()
+		var l4services []entity.SpecL4ServiceRecord
+		for l4sRows.Next() {
+			var s entity.SpecL4ServiceRecord
+			var enabledInt int
+			if err := l4sRows.Scan(
+				&s.ID, &s.Name, &s.Protocol, &s.ListenPort, &s.ForwardTargetType, &s.UpstreamName, &s.DirectEndpoint,
+				&s.ACLRulesJSON, &s.ProxyTimeout, &s.ProxyConnectTimeout, &enabledInt,
+			); err == nil {
+				s.Enabled = enabledInt == 1
+				l4services = append(l4services, s)
+			}
+		}
+		out.L4Services = l4services
+	}
+
 	return out, nil
 }
+
 
 func (r *SpecSyncRepository) RecordReport(ctx context.Context, cmd entity.SpecReportCommand) error {
 	syncStatus := "Syncing"

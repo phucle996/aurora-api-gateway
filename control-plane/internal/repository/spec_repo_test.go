@@ -29,11 +29,6 @@ func setupSpecTestDB(t *testing.T) *sql.DB {
 		INSERT INTO cluster_nodes (id, name, ip, hostname, role, status, sync_status)
 		VALUES ('node-test-1', 'Test Node 1', '10.0.0.1', 'edge-1', 'Edge Node', 'Ready', 'In Sync');
 
-		-- Seed Access release
-		INSERT INTO access_releases (id, payload, digest, actor)
-		VALUES (20, '{"rules":[]}', 'digest-acc', 'admin');
-		INSERT INTO access_head (singleton, release_id) VALUES (1, 20);
-
 		-- Seed Upstream release
 		INSERT INTO upstream_releases (release_id, digest, config_content)
 		VALUES (30, 'digest-ups', 'upstream app { server 10.0.1.1:8080; }
@@ -65,12 +60,7 @@ func TestSpecSyncRepository_GetAuthorityData_Success(t *testing.T) {
 	if auth.NodeID != "node-test-1" {
 		t.Errorf("expected node ID node-test-1, got %s", auth.NodeID)
 	}
-	if auth.AccessReleaseID != 20 {
-		t.Errorf("expected Access release 20, got %d", auth.AccessReleaseID)
-	}
-	if string(auth.AccessPayload) != `{"rules":[]}` {
-		t.Errorf("unexpected Access payload: %s", string(auth.AccessPayload))
-	}
+
 	if auth.UpstreamsConf != "upstream app { server 10.0.1.1:8080; }\n" {
 		t.Errorf("unexpected UpstreamsConf: %s", auth.UpstreamsConf)
 	}
