@@ -238,30 +238,9 @@ func (s *UpstreamService) CreateUpstream(ctx context.Context, cmd entity.CreateU
 	if !primary {
 		return nil, fmt.Errorf("pool requires at least one primary backend")
 	}
-	// 5. Lấy danh sách upstreams hiện tại để sinh cấu hình NGINX tổng thể
-	allUpstreams, _, err := s.repo.List(ctx, entity.ListUpstreamsQuery{Limit: 1000})
-	if err != nil {
-		return nil, fmt.Errorf("tải danh sách upstream hiện tại: %w", err)
-	}
 
-	// Ghép upstream mới vào danh sách sinh config
-	newCandidate := entity.UpstreamItem{
-		Name:             cmd.Name,
-		ArchitectureType: cmd.ArchitectureType,
-		Algorithm:        cmd.Algorithm,
-		Servers:          cmd.Servers,
-		ExternalFQDN:     cmd.ExternalFQDN,
-		Transport:        cmd.Transport,
-		InternalSSL:      cmd.InternalSSL,
-	}
-	fullList := append(allUpstreams, newCandidate)
-
-	generatedConf := GenerateNginxUpstreamsConf(fullList)
-	hash := sha256.Sum256([]byte(generatedConf))
-	digest := hex.EncodeToString(hash[:])
-
-	// 6. Lưu vào DB và tạo release mới
-	created, err := s.repo.Create(ctx, cmd, generatedConf, digest)
+	// 5. Lưu vào DB
+	created, err := s.repo.Create(ctx, cmd)
 	if err != nil {
 		return nil, fmt.Errorf("lưu upstream: %w", err)
 	}
@@ -484,51 +463,9 @@ func (s *UpstreamService) UpdateUpstream(ctx context.Context, cmd entity.UpdateU
 	if !primary {
 		return nil, fmt.Errorf("pool requires at least one primary backend")
 	}
-	// 5. Tải danh sách upstreams để tái sinh toàn bộ cấu hình NGINX
-	allUpstreams, _, err := s.repo.List(ctx, entity.ListUpstreamsQuery{Limit: 1000})
-	if err != nil {
-		return nil, fmt.Errorf("tải danh sách upstream hiện tại: %w", err)
-	}
 
-	// Thay thế upstream tương ứng trong fullList
-	fullList := make([]entity.UpstreamItem, 0, len(allUpstreams))
-	found := false
-	for _, u := range allUpstreams {
-		if u.ID == cmd.ID {
-			fullList = append(fullList, entity.UpstreamItem{
-				ID:               cmd.ID,
-				Name:             cmd.Name,
-				ArchitectureType: cmd.ArchitectureType,
-				Algorithm:        cmd.Algorithm,
-				Servers:          cmd.Servers,
-				ExternalFQDN:     cmd.ExternalFQDN,
-				Transport:        cmd.Transport,
-				InternalSSL:      cmd.InternalSSL,
-			})
-			found = true
-		} else {
-			fullList = append(fullList, u)
-		}
-	}
-	if !found {
-		fullList = append(fullList, entity.UpstreamItem{
-			ID:               cmd.ID,
-			Name:             cmd.Name,
-			ArchitectureType: cmd.ArchitectureType,
-			Algorithm:        cmd.Algorithm,
-			Servers:          cmd.Servers,
-			ExternalFQDN:     cmd.ExternalFQDN,
-			Transport:        cmd.Transport,
-			InternalSSL:      cmd.InternalSSL,
-		})
-	}
-
-	generatedConf := GenerateNginxUpstreamsConf(fullList)
-	hash := sha256.Sum256([]byte(generatedConf))
-	digest := hex.EncodeToString(hash[:])
-
-	// 6. Ghi vào repo
-	updated, err := s.repo.Update(ctx, cmd, generatedConf, digest)
+	// 5. Ghi vào repo
+	updated, err := s.repo.Update(ctx, cmd)
 	if err != nil {
 		return nil, fmt.Errorf("cập nhật upstream: %w", err)
 	}
@@ -542,40 +479,14 @@ func (s *UpstreamService) GetUpstream(ctx context.Context, id int64) (*entity.Up
 	return s.repo.GetByID(ctx, id)
 }
 
-// DeleteUpstream kiểm tra, xóa upstream pool và sinh lại snapshot cấu hình NGINX.
+// DeleteUpstream kiểm tra và xóa upstream pool.
 func (s *UpstreamService) DeleteUpstream(ctx context.Context, id int64) error {
 	if id <= 0 {
 		return fmt.Errorf("id upstream không hợp lệ")
 	}
 
-	// 1. Tải danh sách upstreams hiện tại
-	all, _, err := s.repo.List(ctx, entity.ListUpstreamsQuery{Limit: 1000})
-	if err != nil {
-		return fmt.Errorf("tải danh sách upstream: %w", err)
-	}
-
-	// 2. Lọc bỏ upstream cần xóa để sinh cấu hình NGINX mới
-	var remaining []entity.UpstreamItem
-	found := false
-	for _, u := range all {
-		if u.ID == id {
-			found = true
-			continue
-		}
-		remaining = append(remaining, u)
-	}
-	if !found {
-		return fmt.Errorf("upstream not found")
-	}
-
-	// 3. Sinh cấu hình NGINX mới
-	generatedConf := GenerateNginxUpstreamsConf(remaining)
-	hasher := sha256.New()
-	hasher.Write([]byte(generatedConf))
-	digest := hex.EncodeToString(hasher.Sum(nil))
-
-	// 4. Xóa trong repo và ghi release snapshot
-	if err := s.repo.Delete(ctx, id, generatedConf, digest); err != nil {
+	// Xóa trong repo
+	if err := s.repo.Delete(ctx, id); err != nil {
 		return err
 	}
 	s.notifyMutation()
@@ -589,12 +500,24 @@ func (s *UpstreamService) ListUpstreams(ctx context.Context, query entity.ListUp
 
 // GetDesiredSnapshot lấy snapshot cho node NGINX.
 func (s *UpstreamService) GetDesiredSnapshot(ctx context.Context, nodeID string) (*entity.UpstreamSnapshot, error) {
-	return s.repo.GetLatestSnapshot(ctx)
-}
+	items, _, err := s.repo.List(ctx, entity.ListUpstreamsQuery{Limit: 1000})
+	if err != nil {
+		return nil, fmt.Errorf("load snapshot upstreams: %w", err)
+	}
 
-// ReportSyncStatus lưu kết quả đồng bộ từ node.
-func (s *UpstreamService) ReportSyncStatus(ctx context.Context, nodeID string, releaseID int64, phase, message string) error {
-	return s.repo.RecordNodeSync(ctx, nodeID, releaseID, phase, message)
+	configContent := GenerateNginxUpstreamsConf(items)
+	if len(items) == 0 {
+		configContent = "# No upstreams configured\n"
+	}
+	hash := sha256.Sum256([]byte(configContent))
+	digest := hex.EncodeToString(hash[:])
+
+	return &entity.UpstreamSnapshot{
+		ReleaseID:     1,
+		Digest:        digest,
+		Upstreams:     items,
+		ConfigContent: configContent,
+	}, nil
 }
 
 // GenerateNginxUpstreamsConf sinh nội dung file active-upstreams.conf cho NGINX.

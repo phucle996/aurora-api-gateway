@@ -21,14 +21,13 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS cluster_nodes (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
-    hostname TEXT NOT NULL DEFAULT 'localhost',
+    hostname TEXT NOT NULL,
     ip TEXT NOT NULL,
-    role TEXT NOT NULL DEFAULT 'Edge Node',
-    status TEXT NOT NULL DEFAULT 'Ready' CHECK(status IN ('Ready', 'Not Ready', 'Draining')),
-    version TEXT NOT NULL DEFAULT '0.4.1',
-    sync_status TEXT NOT NULL DEFAULT 'In Sync' CHECK(sync_status IN ('In Sync', 'Drift', 'Syncing')),
-    join_method TEXT NOT NULL DEFAULT 'Systemd Service',
-    certificate TEXT NOT NULL DEFAULT 'mTLS Enrolled',
+    status TEXT NOT NULL CHECK(status IN ('Ready', 'Not Ready', 'Draining')),
+    version TEXT NOT NULL,
+    sync_status TEXT NOT NULL CHECK(sync_status IN ('In Sync', 'Drift', 'Syncing')),
+    join_method TEXT NOT NULL,
+    certificate TEXT NOT NULL,
     last_heartbeat TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     pending_command TEXT NOT NULL DEFAULT 'none',
@@ -104,22 +103,6 @@ CREATE TABLE IF NOT EXISTS upstreams (
     transport_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(transport_json)),
     version INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
-
-CREATE TABLE IF NOT EXISTS upstream_releases (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    release_id INTEGER NOT NULL UNIQUE,
-    digest TEXT NOT NULL,
-    config_content TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
-
-CREATE TABLE IF NOT EXISTS upstream_node_sync (
-    node_id TEXT NOT NULL PRIMARY KEY,
-    release_id INTEGER NOT NULL,
-    phase TEXT NOT NULL DEFAULT 'observed',
-    message TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 

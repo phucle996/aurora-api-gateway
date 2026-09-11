@@ -62,7 +62,7 @@ func TestL4Handler_Validations(t *testing.T) {
 		Servers: []entity.UpstreamNode{
 			{Address: "127.0.0.1:6379", Weight: 1, Healthy: true},
 		},
-	}, "", "")
+	})
 	if err != nil {
 		t.Fatalf("seed upstream failed: %v", err)
 	}

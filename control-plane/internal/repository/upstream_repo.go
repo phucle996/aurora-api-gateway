@@ -2,9 +2,7 @@ package repository
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,25 +25,17 @@ func NewUpstreamRepository(writer, reader *sql.DB) repo.UpstreamRepository {
 	}
 }
 
-// Create thực thi transaction tạo mới upstream và sinh release mới cho Data Plane.
+// Create thực thi chèn bản ghi upstream mới theo cơ chế atomic single statement.
 func (r *UpstreamRepository) Create(
 	ctx context.Context,
 	cmd entity.CreateUpstreamCommand,
-	generatedConf string,
-	digest string,
 ) (*entity.UpstreamItem, error) {
-	tx, err := r.writer.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("begin transaction: %w", err)
-	}
-	defer tx.Rollback()
-
 	serversBytes, err := json.Marshal(toRepoNodes(cmd.Servers))
 	if err != nil {
 		return nil, fmt.Errorf("marshal servers: %w", err)
 	}
 
-	sslBytes, err := json.Marshal(toRepoInternalSSL(cmd.InternalSSL))
+	sslBytes, err := json.Marshal(repoUpstreamInternalSSL(cmd.InternalSSL))
 	if err != nil {
 		return nil, fmt.Errorf("marshal internal ssl: %w", err)
 	}
@@ -55,7 +45,7 @@ func (r *UpstreamRepository) Create(
 		return nil, fmt.Errorf("marshal probes: %w", err)
 	}
 
-	transportBytes, err := json.Marshal(toRepoTransport(cmd.Transport))
+	transportBytes, err := json.Marshal(repoUpstreamTransport(cmd.Transport))
 	if err != nil {
 		return nil, fmt.Errorf("marshal transport: %w", err)
 	}
@@ -69,7 +59,6 @@ func (r *UpstreamRepository) Create(
 		dynamicDNSInt = 1
 	}
 
-	// 1. Chèn bản ghi Upstream mới
 	const insertUpstreamSQL = `
 	INSERT INTO upstreams (
 		name, description, architecture_type, algorithm,
@@ -81,7 +70,7 @@ func (r *UpstreamRepository) Create(
 
 	var id int64
 	var createdAt, updatedAt string
-	err = tx.QueryRowContext(
+	err = r.writer.QueryRowContext(
 		ctx,
 		insertUpstreamSQL,
 		cmd.Name,
@@ -98,25 +87,6 @@ func (r *UpstreamRepository) Create(
 	).Scan(&id, &createdAt, &updatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("insert upstream: %w", err)
-	}
-
-	// 2. Tăng và lưu trữ upstream_releases ledger
-	const insertReleaseSQL = `
-	WITH next_release AS (
-		SELECT COALESCE(MAX(release_id), 0) + 1 AS new_id FROM upstream_releases
-	)
-	INSERT INTO upstream_releases (release_id, digest, config_content)
-	SELECT new_id, ?, ? FROM next_release
-	RETURNING release_id;
-	`
-	var newReleaseID int64
-	err = tx.QueryRowContext(ctx, insertReleaseSQL, digest, generatedConf).Scan(&newReleaseID)
-	if err != nil {
-		return nil, fmt.Errorf("record upstream release: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 
 	return &entity.UpstreamItem{
@@ -139,12 +109,10 @@ func (r *UpstreamRepository) Create(
 	}, nil
 }
 
-// Update cập nhật cấu hình upstream pool và ghi nhận snapshot release mới.
+// Update cập nhật cấu hình upstream pool, cascade rename cho routes/l4_services và kiểm tra optimistic concurrency.
 func (r *UpstreamRepository) Update(
 	ctx context.Context,
 	cmd entity.UpdateUpstreamCommand,
-	generatedConf string,
-	digest string,
 ) (*entity.UpstreamItem, error) {
 	tx, err := r.writer.BeginTx(ctx, nil)
 	if err != nil {
@@ -152,25 +120,26 @@ func (r *UpstreamRepository) Update(
 	}
 	defer tx.Rollback()
 
-	// 1. Kiểm tra tồn tại và lấy tên cũ
+	// 1. Kiểm tra tồn tại và OCC
 	var oldName string
 	var oldVersion int
 	const checkSQL = `SELECT name, version FROM upstreams WHERE id = ?;`
 	if err := tx.QueryRowContext(ctx, checkSQL, cmd.ID).Scan(&oldName, &oldVersion); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("không tìm thấy upstream có id=%d", cmd.ID)
 		}
-		return nil, fmt.Errorf("truy vấn upstream cũ: %w", err)
+		return nil, fmt.Errorf("truy vấn upstream: %w", err)
 	}
 
 	if cmd.ExpectedVersion > 0 && oldVersion != cmd.ExpectedVersion {
 		return nil, fmt.Errorf("upstream changed concurrently; reload before saving")
 	}
+
 	serversBytes, err := json.Marshal(toRepoNodes(cmd.Servers))
 	if err != nil {
 		return nil, fmt.Errorf("serialize servers: %w", err)
 	}
-	sslBytes, err := json.Marshal(toRepoInternalSSL(cmd.InternalSSL))
+	sslBytes, err := json.Marshal(repoUpstreamInternalSSL(cmd.InternalSSL))
 	if err != nil {
 		return nil, fmt.Errorf("serialize internal ssl: %w", err)
 	}
@@ -178,7 +147,7 @@ func (r *UpstreamRepository) Update(
 	if err != nil {
 		return nil, fmt.Errorf("serialize probes: %w", err)
 	}
-	transportBytes, err := json.Marshal(toRepoTransport(cmd.Transport))
+	transportBytes, err := json.Marshal(repoUpstreamTransport(cmd.Transport))
 	if err != nil {
 		return nil, fmt.Errorf("serialize transport: %w", err)
 	}
@@ -234,34 +203,24 @@ func (r *UpstreamRepository) Update(
 		return nil, fmt.Errorf("update upstream: %w", err)
 	}
 
-	// 3. Nếu tên upstream thay đổi, cập nhật các route đang tham chiếu
+	// 3. Nếu tên upstream thay đổi, cascade cập nhật các routes và l4_services đang liên kết
 	if oldName != cmd.Name {
 		const updateRoutesSQL = `UPDATE routes SET upstream_name = ? WHERE upstream_name = ?;`
 		if _, err := tx.ExecContext(ctx, updateRoutesSQL, cmd.Name, oldName); err != nil {
 			return nil, fmt.Errorf("cập nhật tham chiếu route: %w", err)
 		}
+
+		const updateL4SQL = `UPDATE l4_services SET upstream_name = ? WHERE upstream_name = ?;`
+		if _, err := tx.ExecContext(ctx, updateL4SQL, cmd.Name, oldName); err != nil {
+			return nil, fmt.Errorf("cập nhật tham chiếu l4 service: %w", err)
+		}
 	}
 
-	// 4. Lấy số lượng route đang liên kết
+	// 4. Lấy số lượng route đang liên kết (index-only count trên idx_routes_upstream)
 	var boundCount int
 	const countRoutesSQL = `SELECT COUNT(*) FROM routes WHERE upstream_name = ?;`
 	if err := tx.QueryRowContext(ctx, countRoutesSQL, cmd.Name).Scan(&boundCount); err != nil {
 		boundCount = 0
-	}
-
-	// 5. Ghi nhận snapshot release mới
-	const insertReleaseSQL = `
-	WITH next_release AS (
-		SELECT COALESCE(MAX(release_id), 0) + 1 AS new_id FROM upstream_releases
-	)
-	INSERT INTO upstream_releases (release_id, digest, config_content)
-	SELECT new_id, ?, ? FROM next_release
-	RETURNING release_id;
-	`
-	var newReleaseID int64
-	err = tx.QueryRowContext(ctx, insertReleaseSQL, digest, generatedConf).Scan(&newReleaseID)
-	if err != nil {
-		return nil, fmt.Errorf("record upstream release: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -288,7 +247,7 @@ func (r *UpstreamRepository) Update(
 	}, nil
 }
 
-// GetByID lấy chi tiết upstream theo ID.
+// GetByID lấy chi tiết upstream theo ID (sử dụng CTE và correlated scalar subquery tối ưu index).
 func (r *UpstreamRepository) GetByID(ctx context.Context, id int64) (*entity.UpstreamItem, error) {
 	const querySQL = `
 	WITH target_upstream AS (
@@ -297,13 +256,8 @@ func (r *UpstreamRepository) GetByID(ctx context.Context, id int64) (*entity.Ups
 			u.servers_json, u.external_fqdn, u.sni_override, u.dynamic_dns,
 			u.internal_ssl_json, u.probes_json, u.transport_json, u.version,
 			u.created_at, u.updated_at,
-			COALESCE(d.bound_count, 0) AS bound_domains_count
+			(SELECT COUNT(*) FROM routes WHERE upstream_name = u.name) AS bound_domains_count
 		FROM upstreams u
-		LEFT JOIN (
-			SELECT upstream_name AS upstream, COUNT(*) AS bound_count
-			FROM routes
-			GROUP BY upstream_name
-		) d ON d.upstream = u.name
 		WHERE u.id = ?
 	)
 	SELECT 
@@ -318,7 +272,7 @@ func (r *UpstreamRepository) GetByID(ctx context.Context, id int64) (*entity.Ups
 	return scanUpstreamItem(row)
 }
 
-// GetByName lấy chi tiết upstream theo tên.
+// GetByName lấy chi tiết upstream theo tên (sử dụng CTE và correlated scalar subquery tối ưu index).
 func (r *UpstreamRepository) GetByName(ctx context.Context, name string) (*entity.UpstreamItem, error) {
 	const querySQL = `
 	WITH target_upstream AS (
@@ -327,13 +281,8 @@ func (r *UpstreamRepository) GetByName(ctx context.Context, name string) (*entit
 			u.servers_json, u.external_fqdn, u.sni_override, u.dynamic_dns,
 			u.internal_ssl_json, u.probes_json, u.transport_json, u.version,
 			u.created_at, u.updated_at,
-			COALESCE(d.bound_count, 0) AS bound_domains_count
+			(SELECT COUNT(*) FROM routes WHERE upstream_name = u.name) AS bound_domains_count
 		FROM upstreams u
-		LEFT JOIN (
-			SELECT upstream_name AS upstream, COUNT(*) AS bound_count
-			FROM routes
-			GROUP BY upstream_name
-		) d ON d.upstream = u.name
 		WHERE u.name = ?
 	)
 	SELECT 
@@ -348,7 +297,7 @@ func (r *UpstreamRepository) GetByName(ctx context.Context, name string) (*entit
 	return scanUpstreamItem(row)
 }
 
-// List lấy danh sách upstreams theo CTE-first pattern.
+// List lấy danh sách upstreams theo CTE-first pattern kết hợp phân trang và index count.
 func (r *UpstreamRepository) List(ctx context.Context, query entity.ListUpstreamsQuery) ([]entity.UpstreamItem, int, error) {
 	limit := query.Limit
 	if limit <= 0 {
@@ -371,13 +320,8 @@ func (r *UpstreamRepository) List(ctx context.Context, query entity.ListUpstream
 			u.servers_json, u.external_fqdn, u.sni_override, u.dynamic_dns,
 			u.internal_ssl_json, u.probes_json, u.transport_json, u.version,
 			u.created_at, u.updated_at,
-			COALESCE(d.bound_count, 0) AS bound_domains_count
+			(SELECT COUNT(*) FROM routes WHERE upstream_name = u.name) AS bound_domains_count
 		FROM upstreams u
-		LEFT JOIN (
-			SELECT upstream_name AS upstream, COUNT(*) AS bound_count
-			FROM routes
-			GROUP BY upstream_name
-		) d ON d.upstream = u.name
 		WHERE (? = '' OR u.name LIKE ? OR u.description LIKE ? OR u.external_fqdn LIKE ?)
 		  AND (? = '' OR u.architecture_type = ?)
 	),
@@ -455,9 +399,9 @@ func (r *UpstreamRepository) List(ctx context.Context, query entity.ListUpstream
 		_ = json.Unmarshal([]byte(transportJSON), &repoTransport)
 
 		item.Servers = fromRepoNodes(repoServers)
-		item.InternalSSL = fromRepoInternalSSL(repoSSL)
+		item.InternalSSL = entity.UpstreamInternalSSL(repoSSL)
 		item.Probes = fromRepoProbes(repoProbes)
-		item.Transport = fromRepoTransport(repoTransport)
+		item.Transport = entity.UpstreamTransport(repoTransport)
 
 		items = append(items, item)
 	}
@@ -469,111 +413,45 @@ func (r *UpstreamRepository) List(ctx context.Context, query entity.ListUpstream
 	return items, total, nil
 }
 
-// GetLatestSnapshot lấy snapshot cấu hình mới nhất cho Data Plane nodes.
-func (r *UpstreamRepository) GetLatestSnapshot(ctx context.Context) (*entity.UpstreamSnapshot, error) {
-	const releaseSQL = `
-	SELECT release_id, digest, config_content 
-	FROM upstream_releases 
-	ORDER BY release_id DESC 
-	LIMIT 1;
-	`
-
-	var releaseID int64
-	var digest, configContent string
-	err := r.reader.QueryRowContext(ctx, releaseSQL).Scan(&releaseID, &digest, &configContent)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			// Chưa có release nào được tạo
-			return &entity.UpstreamSnapshot{
-				ReleaseID:     0,
-				Digest:        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-				Upstreams:     []entity.UpstreamItem{},
-				ConfigContent: "# No upstreams configured\n",
-			}, nil
-		}
-		return nil, fmt.Errorf("query latest upstream release: %w", err)
-	}
-
-	items, _, err := r.List(ctx, entity.ListUpstreamsQuery{Limit: 1000})
-	if err != nil {
-		return nil, fmt.Errorf("load snapshot upstreams: %w", err)
-	}
-
-	return &entity.UpstreamSnapshot{
-		ReleaseID:     releaseID,
-		Digest:        digest,
-		Upstreams:     items,
-		ConfigContent: configContent,
-	}, nil
-}
-
-// RecordNodeSync lưu nhật ký trạng thái đồng bộ từ node Data Plane.
-func (r *UpstreamRepository) RecordNodeSync(
-	ctx context.Context,
-	nodeID string,
-	releaseID int64,
-	phase, message string,
-) error {
-	const syncSQL = `
-	INSERT INTO upstream_node_sync (node_id, release_id, phase, message, updated_at)
-	VALUES (?, ?, ?, ?, (strftime('%Y-%m-%dT%H:%M:%fZ','now')))
-	ON CONFLICT(node_id) DO UPDATE SET
-		release_id = excluded.release_id,
-		phase = excluded.phase,
-		message = excluded.message,
-		updated_at = excluded.updated_at;
-	`
-	_, err := r.writer.ExecContext(ctx, syncSQL, nodeID, releaseID, phase, message)
-	if err != nil {
-		return fmt.Errorf("record upstream node sync: %w", err)
-	}
-	return nil
-}
-
-// Delete xóa upstream pool và ghi nhận snapshot release mới cho NGINX Data Plane.
-func (r *UpstreamRepository) Delete(ctx context.Context, id int64, generatedConf string, digest string) error {
+// Delete xóa upstream pool sau khi kiểm tra toàn vẹn cả routes lẫn l4_services qua single CTE query.
+func (r *UpstreamRepository) Delete(ctx context.Context, id int64) error {
 	tx, err := r.writer.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer tx.Rollback()
 
-	// 1. Kiểm tra tồn tại
+	// 1. Kiểm tra tồn tại và ràng buộc tham chiếu trên routes & l4_services trong 1 query
+	const checkSQL = `
+	WITH target AS (
+		SELECT name FROM upstreams WHERE id = ?
+	)
+	SELECT 
+		t.name,
+		EXISTS(SELECT 1 FROM routes WHERE upstream_name = t.name) AS in_routes,
+		EXISTS(SELECT 1 FROM l4_services WHERE upstream_name = t.name) AS in_l4
+	FROM target t;
+	`
 	var name string
-	const checkSQL = `SELECT name FROM upstreams WHERE id = ?;`
-	if err := tx.QueryRowContext(ctx, checkSQL, id).Scan(&name); err != nil {
+	var inRoutes, inL4 bool
+	if err := tx.QueryRowContext(ctx, checkSQL, id).Scan(&name, &inRoutes, &inL4); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("upstream not found")
 		}
 		return fmt.Errorf("kiểm tra upstream: %w", err)
 	}
 
-	var bound bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM routes WHERE upstream_name = ?)`, name).Scan(&bound); err != nil {
-		return err
-	}
-	if bound {
+	if inRoutes {
 		return fmt.Errorf("upstream is still referenced by routes; rebind or delete those routes first")
 	}
+	if inL4 {
+		return fmt.Errorf("upstream is still referenced by l4 services; rebind or delete those services first")
+	}
+
 	// 2. Xóa upstream
 	const deleteSQL = `DELETE FROM upstreams WHERE id = ?;`
 	if _, err := tx.ExecContext(ctx, deleteSQL, id); err != nil {
 		return fmt.Errorf("delete upstream: %w", err)
-	}
-
-	// 3. Ghi nhận snapshot release mới
-	const insertReleaseSQL = `
-	WITH next_release AS (
-		SELECT COALESCE(MAX(release_id), 0) + 1 AS new_id FROM upstream_releases
-	)
-	INSERT INTO upstream_releases (release_id, digest, config_content)
-	SELECT new_id, ?, ? FROM next_release
-	RETURNING release_id;
-	`
-	var newReleaseID int64
-	err = tx.QueryRowContext(ctx, insertReleaseSQL, digest, generatedConf).Scan(&newReleaseID)
-	if err != nil {
-		return fmt.Errorf("record upstream release: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -607,7 +485,7 @@ func scanUpstreamItem(scanner interface{ Scan(dest ...any) error }) (*entity.Ups
 		&item.BoundDomainsCount,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("scan upstream: %w", err)
@@ -627,22 +505,14 @@ func scanUpstreamItem(scanner interface{ Scan(dest ...any) error }) (*entity.Ups
 	_ = json.Unmarshal([]byte(transportJSON), &repoTransport)
 
 	item.Servers = fromRepoNodes(repoServers)
-	item.InternalSSL = fromRepoInternalSSL(repoSSL)
+	item.InternalSSL = entity.UpstreamInternalSSL(repoSSL)
 	item.Probes = fromRepoProbes(repoProbes)
-	item.Transport = fromRepoTransport(repoTransport)
+	item.Transport = entity.UpstreamTransport(repoTransport)
 
 	return &item, nil
 }
 
-// CalculateSHA256 tính toán mã SHA-256 dạng hex.
-func CalculateSHA256(data []byte) string {
-	h := sha256.Sum256(data)
-	return hex.EncodeToString(h[:])
-}
-
-// Các struct nội bộ đại diện cho dữ liệu lưu trữ JSON trong SQLite tables:
-// servers_json, transport_json, internal_ssl_json, probes_json.
-// Giúp cô lập hoàn toàn tầng domain entity khỏi định dạng lưu trữ persistence.
+// Các struct nội bộ đại diện cho định dạng lưu trữ JSON trong SQLite:
 type repoUpstreamNode struct {
 	ID          string `json:"id"`
 	Address     string `json:"address"`
@@ -687,131 +557,45 @@ type repoUpstreamTransport struct {
 }
 
 func toRepoNodes(nodes []entity.UpstreamNode) []repoUpstreamNode {
-	if nodes == nil {
+	if len(nodes) == 0 {
 		return []repoUpstreamNode{}
 	}
 	res := make([]repoUpstreamNode, len(nodes))
 	for i, n := range nodes {
-		res[i] = repoUpstreamNode{
-			ID:          n.ID,
-			Address:     n.Address,
-			Weight:      n.Weight,
-			MaxFails:    n.MaxFails,
-			FailTimeout: n.FailTimeout,
-			Backup:      n.Backup,
-			Healthy:     n.Healthy,
-		}
+		res[i] = repoUpstreamNode(n)
 	}
 	return res
 }
 
 func fromRepoNodes(nodes []repoUpstreamNode) []entity.UpstreamNode {
-	if nodes == nil {
+	if len(nodes) == 0 {
 		return []entity.UpstreamNode{}
 	}
 	res := make([]entity.UpstreamNode, len(nodes))
 	for i, n := range nodes {
-		res[i] = entity.UpstreamNode{
-			ID:          n.ID,
-			Address:     n.Address,
-			Weight:      n.Weight,
-			MaxFails:    n.MaxFails,
-			FailTimeout: n.FailTimeout,
-			Backup:      n.Backup,
-			Healthy:     n.Healthy,
-		}
+		res[i] = entity.UpstreamNode(n)
 	}
 	return res
 }
 
 func toRepoProbes(probes []entity.UpstreamProbe) []repoUpstreamProbe {
-	if probes == nil {
+	if len(probes) == 0 {
 		return []repoUpstreamProbe{}
 	}
 	res := make([]repoUpstreamProbe, len(probes))
 	for i, p := range probes {
-		res[i] = repoUpstreamProbe{
-			ID:             p.ID,
-			Type:           p.Type,
-			Path:           p.Path,
-			ExpectedStatus: p.ExpectedStatus,
-			IntervalSec:    p.IntervalSec,
-			TimeoutSec:     p.TimeoutSec,
-		}
+		res[i] = repoUpstreamProbe(p)
 	}
 	return res
 }
 
 func fromRepoProbes(probes []repoUpstreamProbe) []entity.UpstreamProbe {
-	if probes == nil {
+	if len(probes) == 0 {
 		return []entity.UpstreamProbe{}
 	}
 	res := make([]entity.UpstreamProbe, len(probes))
 	for i, p := range probes {
-		res[i] = entity.UpstreamProbe{
-			ID:             p.ID,
-			Type:           p.Type,
-			Path:           p.Path,
-			ExpectedStatus: p.ExpectedStatus,
-			IntervalSec:    p.IntervalSec,
-			TimeoutSec:     p.TimeoutSec,
-		}
+		res[i] = entity.UpstreamProbe(p)
 	}
 	return res
-}
-
-func toRepoInternalSSL(ssl entity.UpstreamInternalSSL) repoUpstreamInternalSSL {
-	return repoUpstreamInternalSSL{
-		Enabled:             ssl.Enabled,
-		VerifyCert:          ssl.VerifyCert,
-		SNIHost:             ssl.SNIHost,
-		CACert:              ssl.CACert,
-		MTLS:                ssl.MTLS,
-		ClientCertName:      ssl.ClientCertName,
-		ClientCert:          ssl.ClientCert,
-		ClientKey:           ssl.ClientKey,
-		ClientKeyConfigured: ssl.ClientKeyConfigured,
-	}
-}
-
-func fromRepoInternalSSL(ssl repoUpstreamInternalSSL) entity.UpstreamInternalSSL {
-	return entity.UpstreamInternalSSL{
-		Enabled:             ssl.Enabled,
-		VerifyCert:          ssl.VerifyCert,
-		SNIHost:             ssl.SNIHost,
-		CACert:              ssl.CACert,
-		MTLS:                ssl.MTLS,
-		ClientCertName:      ssl.ClientCertName,
-		ClientCert:          ssl.ClientCert,
-		ClientKey:           ssl.ClientKey,
-		ClientKeyConfigured: ssl.ClientKeyConfigured,
-	}
-}
-
-func toRepoTransport(t entity.UpstreamTransport) repoUpstreamTransport {
-	return repoUpstreamTransport{
-		RequestCompression:   t.RequestCompression,
-		CompressionMinBytes:  t.CompressionMinBytes,
-		CompressionLevel:     t.CompressionLevel,
-		HTTPVersion:          t.HTTPVersion,
-		EnableWebSocket:      t.EnableWebSocket,
-		EnableSSE:            t.EnableSSE,
-		EnableGRPC:           t.EnableGRPC,
-		KeepAliveConnections: t.KeepAliveConnections,
-		KeepAliveTimeout:     t.KeepAliveTimeout,
-	}
-}
-
-func fromRepoTransport(t repoUpstreamTransport) entity.UpstreamTransport {
-	return entity.UpstreamTransport{
-		RequestCompression:   t.RequestCompression,
-		CompressionMinBytes:  t.CompressionMinBytes,
-		CompressionLevel:     t.CompressionLevel,
-		HTTPVersion:          t.HTTPVersion,
-		EnableWebSocket:      t.EnableWebSocket,
-		EnableSSE:            t.EnableSSE,
-		EnableGRPC:           t.EnableGRPC,
-		KeepAliveConnections: t.KeepAliveConnections,
-		KeepAliveTimeout:     t.KeepAliveTimeout,
-	}
 }

@@ -721,7 +721,7 @@ func (h *UpstreamHandler) Delete(c *gin.Context) {
 			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "delete upstream timed out"})
 			return
 		}
-		if strings.Contains(err.Error(), "still referenced by routes") || strings.Contains(err.Error(), "still referenced by domains") {
+		if strings.Contains(err.Error(), "still referenced by") {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
@@ -863,52 +863,7 @@ func (h *UpstreamHandler) Desired(c *gin.Context) {
 	})
 }
 
-// Report receives upstream reload results from worker nodes.
+// Report receives upstream reload results from worker nodes (acknowledged for backwards compatibility).
 func (h *UpstreamHandler) Report(c *gin.Context) {
-	nodeID := c.Param("node")
-	if nodeID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "node ID cannot be empty"})
-		return
-	}
-
-	contentType := c.GetHeader("Content-Type")
-	if strings.Split(contentType, ";")[0] != "application/json" {
-		c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "application/json required"})
-		return
-	}
-
-	reader := http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
-	var req dto.UpstreamSyncReportRequest
-	decoder := json.NewDecoder(reader)
-	decoder.DisallowUnknownFields()
-
-	if err := decoder.Decode(&req); err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
-			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body exceeds 64KB limit"})
-			return
-		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid report data: " + err.Error()})
-		return
-	}
-
-	if err := decoder.Decode(new(any)); err != io.EOF {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "trailing JSON in request body"})
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(c.Request.Context(), upstreamSyncTimeout)
-	defer cancel()
-
-	err := h.service.ReportSyncStatus(ctx, nodeID, req.ReleaseID, req.Phase, req.Message)
-	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "record sync report timed out"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to record sync report: " + err.Error()})
-		return
-	}
-
 	c.Status(http.StatusNoContent)
 }

@@ -3,8 +3,10 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	"aurora-waf.local/control-plane/internal/domain/repo"
@@ -49,22 +51,84 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 	}
 
 
-	// 2. Fetch latest Upstream release config
+	// 2. Fetch Upstream definitions directly from upstreams table and render configuration
 	const upstreamsQuery = `
-	SELECT coalesce(config_content, '')
-	FROM upstream_releases
-	ORDER BY release_id DESC
-	LIMIT 1
+	SELECT name, architecture_type, algorithm, servers_json, transport_json
+	FROM upstreams
+	ORDER BY name ASC
 	`
-	var upstreamConf string
-	err = r.reader.QueryRowContext(ctx, upstreamsQuery).Scan(&upstreamConf)
+	uRows, err := r.reader.QueryContext(ctx, upstreamsQuery)
 	if err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("query upstream release: %w", err)
-		}
-		upstreamConf = "# No upstreams configured\n"
+		return nil, fmt.Errorf("query upstreams: %w", err)
 	}
-	out.UpstreamsConf = upstreamConf
+	defer uRows.Close()
+
+	var sb strings.Builder
+	sb.WriteString("# Auto-generated Aurora API Gateway Upstreams Configuration\n")
+	sb.WriteString("# Do not edit manually - managed by Aurora Control-Plane\n\n")
+
+	hasUpstreams := false
+	for uRows.Next() {
+		hasUpstreams = true
+		var name, archType, algo, srvJSON, transJSON string
+		if err := uRows.Scan(&name, &archType, &algo, &srvJSON, &transJSON); err != nil {
+			return nil, fmt.Errorf("scan upstream: %w", err)
+		}
+
+		sb.WriteString(fmt.Sprintf("upstream %s {\n", name))
+		if archType == "Load Balancer" && algo != "" && algo != "round_robin" {
+			sb.WriteString(fmt.Sprintf("    %s;\n", algo))
+		}
+
+		var servers []struct {
+			Address     string `json:"address"`
+			Weight      int    `json:"weight"`
+			MaxFails    int    `json:"maxFails"`
+			FailTimeout string `json:"failTimeout"`
+			Backup      bool   `json:"backup"`
+		}
+		_ = json.Unmarshal([]byte(srvJSON), &servers)
+		for _, srv := range servers {
+			var flags []string
+			if srv.Weight > 0 && archType == "Load Balancer" {
+				flags = append(flags, fmt.Sprintf("weight=%d", srv.Weight))
+			}
+			if srv.MaxFails > 0 {
+				flags = append(flags, fmt.Sprintf("max_fails=%d", srv.MaxFails))
+			}
+			if srv.FailTimeout != "" {
+				flags = append(flags, fmt.Sprintf("fail_timeout=%s", srv.FailTimeout))
+			}
+			if srv.Backup {
+				flags = append(flags, "backup")
+			}
+			flagStr := ""
+			if len(flags) > 0 {
+				flagStr = " " + strings.Join(flags, " ")
+			}
+			sb.WriteString(fmt.Sprintf("    server %s%s;\n", srv.Address, flagStr))
+		}
+
+		var transport struct {
+			KeepAliveConnections int `json:"keepAliveConnections"`
+		}
+		_ = json.Unmarshal([]byte(transJSON), &transport)
+		keepalive := transport.KeepAliveConnections
+		if keepalive <= 0 {
+			keepalive = 32
+		}
+		sb.WriteString(fmt.Sprintf("    keepalive %d;\n", keepalive))
+		sb.WriteString("}\n\n")
+	}
+	if err := uRows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate upstreams: %w", err)
+	}
+
+	if !hasUpstreams {
+		out.UpstreamsConf = "# No upstreams configured\n"
+	} else {
+		out.UpstreamsConf = sb.String()
+	}
 
 	// 3. Fetch Routing records from routes table
 	const routingQuery = `
@@ -190,7 +254,7 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 	FROM upstreams
 	ORDER BY name ASC
 	`
-	uRows, err := r.reader.QueryContext(ctx, unifiedUpstreamsQuery)
+	uRows, err = r.reader.QueryContext(ctx, unifiedUpstreamsQuery)
 	if err == nil {
 		defer uRows.Close()
 		var upstreams []entity.SpecUnifiedUpstreamRecord

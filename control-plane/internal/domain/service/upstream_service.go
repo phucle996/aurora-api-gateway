@@ -20,6 +20,4 @@ type UpstreamService interface {
 	DeleteUpstream(ctx context.Context, id int64) error
 	// GetDesiredSnapshot lấy cấu hình snapshot upstreams cho node NGINX.
 	GetDesiredSnapshot(ctx context.Context, nodeID string) (*entity.UpstreamSnapshot, error)
-	// ReportSyncStatus lưu trạng thái đồng bộ nhận từ node.
-	ReportSyncStatus(ctx context.Context, nodeID string, releaseID int64, phase, message string) error
 }

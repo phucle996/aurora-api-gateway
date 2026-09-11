@@ -35,7 +35,7 @@ func rollingFixture(t *testing.T) (*infra.DBPool, http.Handler) {
 	t.Cleanup(func() { pools.Close() })
 
 	router := gin.New()
-	pools.Writer.Exec("INSERT INTO cluster_nodes (id, name, hostname, ip, role, status, version, sync_status, join_method, certificate) VALUES ('node-local-01', 'node-local-01', '', '127.0.0.1', 'Edge Node', 'Ready', '0.4.1', 'In Sync', 'Unknown', 'Unknown')")
+	pools.Writer.Exec("INSERT INTO cluster_nodes (id, name, hostname, ip, status, version, sync_status, join_method, certificate) VALUES ('node-local-01', 'node-local-01', '', '127.0.0.1', 'Ready', '0.4.1', 'In Sync', 'Unknown', 'Unknown')")
 	module := app.NewModule(pools.Writer, pools.Reader, config.Config{})
 	app.RegisterRoutes(router, module, rollingTestToken)
 	return pools, router
@@ -104,9 +104,9 @@ func TestRollingReloadQueue(t *testing.T) {
 
 	// Thêm node 2 và node 3 vào SQLite
 	_, err := pools.Writer.Exec(`
-		INSERT INTO cluster_nodes (id, name, ip, status)
-		VALUES ('node-local-02', 'node-local-02', '127.0.0.2', 'Ready'),
-		       ('node-local-03', 'node-local-03', '127.0.0.3', 'Ready');
+		INSERT INTO cluster_nodes (id, name, hostname, ip, status, version, sync_status, join_method, certificate)
+		VALUES ('node-local-02', 'node-local-02', '', '127.0.0.2', 'Ready', '1.0.0', 'In Sync', 'manual', 'Valid'),
+		       ('node-local-03', 'node-local-03', '', '127.0.0.3', 'Ready', '1.0.0', 'In Sync', 'manual', 'Valid');
 	`)
 	if err != nil {
 		t.Fatal(err)

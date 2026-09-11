@@ -3,6 +3,7 @@ package repository_test
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"testing"
 
 	"aurora-waf.local/control-plane/internal/domain/entity"
@@ -26,13 +27,12 @@ func setupSpecTestDB(t *testing.T) *sql.DB {
 
 	// Seed cluster node
 	_, err = db.Exec(`
-		INSERT INTO cluster_nodes (id, name, ip, hostname, role, status, sync_status)
-		VALUES ('node-test-1', 'Test Node 1', '10.0.0.1', 'edge-1', 'Edge Node', 'Ready', 'In Sync');
+		INSERT INTO cluster_nodes (id, name, ip, hostname, status, version, sync_status, join_method, certificate)
+		VALUES ('node-test-1', 'Test Node 1', '10.0.0.1', 'edge-1', 'Ready', '1.0.0', 'In Sync', 'manual', 'Valid');
 
-		-- Seed Upstream release
-		INSERT INTO upstream_releases (release_id, digest, config_content)
-		VALUES (30, 'digest-ups', 'upstream app { server 10.0.1.1:8080; }
-');
+		-- Seed Upstream
+		INSERT INTO upstreams (name, architecture_type, algorithm, servers_json, transport_json)
+		VALUES ('app', 'Load Balancer', 'round_robin', '[{"address":"10.0.1.1:8080"}]', '{"keepAliveConnections":32}');
 
 		-- Seed Route
 		INSERT INTO routes (id, name, host, path, upstream_name, enabled)
@@ -61,7 +61,7 @@ func TestSpecSyncRepository_GetAuthorityData_Success(t *testing.T) {
 		t.Errorf("expected node ID node-test-1, got %s", auth.NodeID)
 	}
 
-	if auth.UpstreamsConf != "upstream app { server 10.0.1.1:8080; }\n" {
+	if !strings.Contains(auth.UpstreamsConf, "upstream app") || !strings.Contains(auth.UpstreamsConf, "server 10.0.1.1:8080;") {
 		t.Errorf("unexpected UpstreamsConf: %s", auth.UpstreamsConf)
 	}
 	if len(auth.RoutingRecords) != 1 || auth.RoutingRecords[0].Host != "service.local" {
