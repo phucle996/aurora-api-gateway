@@ -55,35 +55,6 @@ static ngx_command_t ngx_http_gateway_commands[] = {
       offsetof(ngx_http_gateway_conf_t, mode),
       ngx_http_gateway_modes },
 
-    /* Control Plane Directives */
-    { ngx_string("gateway_controller"),
-      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_str_slot,
-      NGX_HTTP_LOC_CONF_OFFSET,
-      offsetof(ngx_http_gateway_conf_t, controller),
-      NULL },
-
-    { ngx_string("gateway_node_id"),
-      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_str_slot,
-      NGX_HTTP_LOC_CONF_OFFSET,
-      offsetof(ngx_http_gateway_conf_t, node_id),
-      NULL },
-
-    { ngx_string("gateway_token"),
-      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_str_slot,
-      NGX_HTTP_LOC_CONF_OFFSET,
-      offsetof(ngx_http_gateway_conf_t, token),
-      NULL },
-
-    { ngx_string("gateway_heartbeat_interval"),
-      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_num_slot,
-      NGX_HTTP_LOC_CONF_OFFSET,
-      offsetof(ngx_http_gateway_conf_t, interval),
-      NULL },
-
     /* Metrics Directive */
     { ngx_string("gateway_metrics"),
       NGX_HTTP_LOC_CONF|NGX_CONF_NOARGS,
@@ -129,7 +100,6 @@ ngx_http_gateway_create_conf(ngx_conf_t *cf)
     if (conf == NULL) { return NULL; }
     conf->enabled = NGX_CONF_UNSET;
     conf->mode = NGX_CONF_UNSET_UINT;
-    conf->interval = NGX_CONF_UNSET_UINT;
     return conf;
 }
 
@@ -142,10 +112,6 @@ ngx_http_gateway_merge_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_conf_merge_value(conf->enabled, prev->enabled, 0);
     ngx_conf_merge_uint_value(conf->mode, prev->mode, 0);
     ngx_conf_merge_str_value(conf->policy, prev->policy, "");
-    ngx_conf_merge_str_value(conf->controller, prev->controller, "");
-    ngx_conf_merge_str_value(conf->node_id, prev->node_id, "");
-    ngx_conf_merge_str_value(conf->token, prev->token, "");
-    ngx_conf_merge_uint_value(conf->interval, prev->interval, 10);
 
     /* Merge từng extension độc lập */
     if (ngx_http_gateway_merge_access(cf, prev, conf) != NGX_CONF_OK) { return NGX_CONF_ERROR; }
@@ -181,85 +147,13 @@ ngx_http_gateway_init(ngx_conf_t *cf)
 static ngx_int_t
 ngx_http_gateway_init_process(ngx_cycle_t *cycle)
 {
-    if (gateway_telemetry_zone == NULL) { return NGX_OK; }
+    (void) cycle;
+    if (gateway_telemetry_zone == NULL || gateway_telemetry_zone->data == NULL) {
+        return NGX_OK;
+    }
     if (sizeof(ngx_atomic_t) != sizeof(uint64_t) ||
         aurora_waf_bind_telemetry(gateway_telemetry_zone->data, 64, (void *) ngx_stat_active) != 0) {
         return NGX_ERROR;
-    }
-    {
-        uint32_t is_leader = (ngx_process == NGX_PROCESS_SINGLE || ngx_worker == 0) ? 1 : 0;
-        char *controller = NULL;
-        char *node_id = NULL;
-        char *token = NULL;
-        char *policy_path = NULL;
-        char *access_path = NULL;
-        uint32_t interval = 5;
-        int64_t release_id = 0;
-
-        if (cycle->conf_ctx) {
-            ngx_http_conf_ctx_t *ctx = (ngx_http_conf_ctx_t *) cycle->conf_ctx[ngx_http_module.index];
-            if (ctx) {
-                ngx_http_gateway_conf_t *conf = NULL;
-                if (ctx->loc_conf) {
-                    conf = ctx->loc_conf[ngx_http_gateway_module.ctx_index];
-                }
-                if ((!conf || conf->controller.len == 0) && ctx->main_conf) {
-                    ngx_http_core_main_conf_t *cmcf = ctx->main_conf[ngx_http_core_module.ctx_index];
-                    if (cmcf && cmcf->servers.nelts > 0) {
-                        ngx_http_core_srv_conf_t **cscfp = cmcf->servers.elts;
-                        if (cscfp && cscfp[0] && cscfp[0]->ctx && cscfp[0]->ctx->loc_conf) {
-                            conf = cscfp[0]->ctx->loc_conf[ngx_http_gateway_module.ctx_index];
-                        }
-                    }
-                }
-
-                if (conf) {
-                    if (conf->controller.len > 0) {
-                        u_char *c = ngx_pcalloc(cycle->pool, conf->controller.len + 1);
-                        if (c) {
-                            ngx_memcpy(c, conf->controller.data, conf->controller.len);
-                            controller = (char *) c;
-                        }
-                    }
-                    if (conf->node_id.len > 0) {
-                        u_char *n = ngx_pcalloc(cycle->pool, conf->node_id.len + 1);
-                        if (n) {
-                            ngx_memcpy(n, conf->node_id.data, conf->node_id.len);
-                            node_id = (char *) n;
-                        }
-                    }
-                    if (conf->token.len > 0) {
-                        u_char *t = ngx_pcalloc(cycle->pool, conf->token.len + 1);
-                        if (t) {
-                            ngx_memcpy(t, conf->token.data, conf->token.len);
-                            token = (char *) t;
-                        }
-                    }
-                    if (conf->policy.len > 0) {
-                        u_char *p = ngx_pcalloc(cycle->pool, conf->policy.len + 1);
-                        if (p) {
-                            ngx_memcpy(p, conf->policy.data, conf->policy.len);
-                            policy_path = (char *) p;
-                        }
-                    }
-                    if (conf->access_policy.len > 0) {
-                        u_char *a = ngx_pcalloc(cycle->pool, conf->access_policy.len + 1);
-                        if (a) {
-                            ngx_memcpy(a, conf->access_policy.data, conf->access_policy.len);
-                            access_path = (char *) a;
-                        }
-                    }
-                    if (conf->interval != NGX_CONF_UNSET_UINT && conf->interval > 0) {
-                        interval = (uint32_t) conf->interval;
-                    }
-                    if (conf->engine) {
-                        release_id = (int64_t) aurora_waf_generation(conf->engine);
-                    }
-                }
-            }
-        }
-
-        aurora_waf_start_runtime(controller, node_id, token, interval, release_id, policy_path, access_path, is_leader);
     }
     return NGX_OK;
 }

@@ -27,125 +27,38 @@ pub(crate) const INVALID: u32 = 1;
 #[allow(dead_code)]
 pub(crate) const PANIC: u32 = 2;
 
-/// Khởi chạy In-Process Runtime Thread (Đồng bộ Policy/Access, In-memory Hot-swap, Flush Match events và Heartbeat).
-///
-/// # Safety
-/// Các con trỏ chuỗi C phải kết thúc bằng '\0' hoặc là null pointer.
+/// Deprecated no-op: Runtime and control-plane synchronization is now handled out-of-process
+/// by aurora-agent. Retained for C ABI symbol backward-compatibility.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn aurora_waf_start_runtime(
-    controller_url: *const std::ffi::c_char,
-    node_id: *const std::ffi::c_char,
-    token: *const std::ffi::c_char,
-    interval_seconds: u32,
-    active_release_id: i64,
-    policy_path: *const std::ffi::c_char,
-    access_path: *const std::ffi::c_char,
-    is_leader: u32,
+pub extern "C" fn aurora_waf_start_runtime(
+    _controller_url: *const std::ffi::c_char,
+    _node_id: *const std::ffi::c_char,
+    _token: *const std::ffi::c_char,
+    _interval_seconds: u32,
+    _active_release_id: i64,
+    _policy_path: *const std::ffi::c_char,
+    _access_path: *const std::ffi::c_char,
+    _is_leader: u32,
 ) -> u32 {
-    let _ = catch_unwind(AssertUnwindSafe(|| {
-        let url = if !controller_url.is_null() {
-            unsafe {
-                std::ffi::CStr::from_ptr(controller_url)
-                    .to_string_lossy()
-                    .to_string()
-            }
-        } else {
-            std::env::var("AURORA_SERVER_URL").unwrap_or_else(|_| "http://127.0.0.1:8080".into())
-        };
-
-        let nid = if !node_id.is_null() {
-            unsafe {
-                std::ffi::CStr::from_ptr(node_id)
-                    .to_string_lossy()
-                    .to_string()
-            }
-        } else {
-            std::env::var("AURORA_NODE_ID").unwrap_or_else(|_| "node-local-01".into())
-        };
-
-        let tok = if !token.is_null() {
-            unsafe {
-                std::ffi::CStr::from_ptr(token)
-                    .to_string_lossy()
-                    .to_string()
-            }
-        } else {
-            std::env::var("AURORA_AUTH_TOKEN").unwrap_or_default()
-        };
-
-        let interval = if interval_seconds > 0 {
-            interval_seconds
-        } else {
-            std::env::var("AURORA_HEARTBEAT_INTERVAL")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(5)
-        };
-
-        let pol_file = if !policy_path.is_null() {
-            unsafe {
-                std::ffi::CStr::from_ptr(policy_path)
-                    .to_string_lossy()
-                    .to_string()
-            }
-        } else {
-            std::env::var("AURORA_POLICY_PATH").unwrap_or_default()
-        };
-
-        let acc_file = if !access_path.is_null() {
-            unsafe {
-                std::ffi::CStr::from_ptr(access_path)
-                    .to_string_lossy()
-                    .to_string()
-            }
-        } else {
-            std::env::var("AURORA_ACCESS_POLICY_PATH").unwrap_or_default()
-        };
-
-        telemetry::start_runtime(telemetry::RuntimeConfig {
-            controller_url: &url,
-            node_id: &nid,
-            token: &tok,
-            interval_seconds: interval,
-            active_release_id,
-            policy_path: &pol_file,
-            access_path: &acc_file,
-            is_leader: is_leader != 0,
-        });
-    }));
     OK
 }
 
-/// Khởi chạy Background Telemetry Thread từ NGINX Worker 0 (backward compatibility).
-///
-/// # Safety
-/// - `controller_url`, `node_id`, `token` là chuỗi C kết thúc bằng null ('\0') hoặc null.
+/// Deprecated no-op: Retained for C ABI symbol backward-compatibility.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn aurora_waf_start_telemetry(
-    controller_url: *const std::ffi::c_char,
-    node_id: *const std::ffi::c_char,
-    token: *const std::ffi::c_char,
-    interval_seconds: u32,
-    active_release_id: i64,
+pub extern "C" fn aurora_waf_start_telemetry(
+    _controller_url: *const std::ffi::c_char,
+    _node_id: *const std::ffi::c_char,
+    _token: *const std::ffi::c_char,
+    _interval_seconds: u32,
+    _active_release_id: i64,
 ) -> u32 {
-    unsafe {
-        aurora_waf_start_runtime(
-            controller_url,
-            node_id,
-            token,
-            interval_seconds,
-            active_release_id,
-            std::ptr::null(),
-            std::ptr::null(),
-            1,
-        )
-    }
+    OK
 }
 
-/// Dừng Background Telemetry Thread khi NGINX Worker tắt.
+/// Deprecated no-op: Retained for C ABI symbol backward-compatibility.
 #[unsafe(no_mangle)]
 pub extern "C" fn aurora_waf_stop_telemetry() {
-    let _ = catch_unwind(AssertUnwindSafe(telemetry::stop_telemetry));
+    telemetry::stop_telemetry();
 }
 
 /// Bind adapter-owned shared telemetry counters before starting worker threads.

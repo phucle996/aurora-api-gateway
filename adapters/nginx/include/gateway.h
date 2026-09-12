@@ -19,10 +19,6 @@ typedef struct {
     ngx_str_t rate_limit_policy;
     AuroraRateLimitEngine *rate_limit_engine;
     ngx_str_t policy;        /* Đường dẫn tới file WAF policy snapshot */
-    ngx_str_t controller;    /* URL của Control Plane (VD: http://127.0.0.1:8080) */
-    ngx_str_t node_id;       /* ID của Gateway Node (VD: node-local-01) */
-    ngx_str_t token;         /* Bearer token xác thực */
-    ngx_uint_t interval;     /* Chu kỳ gửi heartbeat (giây) */
     AuroraEngine *engine;    /* Con trỏ tới instance Rust WAF engine */
 } ngx_http_gateway_conf_t;
 

@@ -1,7 +1,7 @@
 use crate::extensions::rate_limit::algorithm::AlgorithmState;
 use crate::extensions::rate_limit::types::{
-    ActionOnExceeded, CompiledRule, EvictionPolicy, OverflowStrategy, RateLimitAlgorithm,
-    RateLimitDecision, NUM_SHARDS,
+    ActionOnExceeded, CompiledRule, EvictionPolicy, NUM_SHARDS, OverflowStrategy,
+    RateLimitAlgorithm, RateLimitDecision,
 };
 use std::collections::HashMap;
 

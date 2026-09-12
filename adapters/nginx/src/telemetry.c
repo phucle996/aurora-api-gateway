@@ -77,10 +77,8 @@ ngx_http_gateway_metrics_handler(ngx_http_request_t *r)
     ngx_int_t                 rc;
     ngx_buf_t                *b;
     ngx_chain_t               out;
-    ngx_http_gateway_conf_t  *alcf;
     u_char                   *metrics_buf;
     size_t                    written = 0;
-    char                      node_id_buf[256];
 
     /* Chỉ chấp nhận GET hoặc HEAD */
     if (!(r->method & (NGX_HTTP_GET|NGX_HTTP_HEAD))) {
@@ -92,22 +90,13 @@ ngx_http_gateway_metrics_handler(ngx_http_request_t *r)
         return rc;
     }
 
-    alcf = ngx_http_get_module_loc_conf(r, ngx_http_gateway_module);
-
-    node_id_buf[0] = '\0';
-    if (alcf && alcf->node_id.len > 0 && alcf->node_id.len < sizeof(node_id_buf)) {
-        ngx_memcpy(node_id_buf, alcf->node_id.data, alcf->node_id.len);
-        node_id_buf[alcf->node_id.len] = '\0';
-    }
-
     /* Cấp phát buffer 4096 bytes trong request pool */
     metrics_buf = ngx_pcalloc(r->pool, 4096);
     if (metrics_buf == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
-    if (aurora_waf_format_prometheus_metrics(node_id_buf[0] ? node_id_buf : NULL,
-                                            metrics_buf, 4096, &written) != 0) {
+    if (aurora_waf_format_prometheus_metrics(NULL, metrics_buf, 4096, &written) != 0) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
