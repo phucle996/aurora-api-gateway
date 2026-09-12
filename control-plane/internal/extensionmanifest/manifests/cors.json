@@ -1,0 +1,73 @@
+{
+  "key": "builtin/cors",
+  "version": 1,
+  "id": "cors",
+  "name": "CORS",
+  "category": "authorization_security",
+  "description": "CORS response headers and preflight handling.",
+  "renderer": "nginx-cors",
+  "builtin": true,
+  "default_config": {
+    "allow_origins": [
+      "*"
+    ],
+    "allow_methods": [
+      "GET",
+      "POST",
+      "OPTIONS"
+    ],
+    "allow_headers": [],
+    "allow_credentials": false,
+    "max_age": 86400
+  },
+  "ui_schema": {
+    "layout_type": "form",
+    "fields": []
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "allow_origins": {
+        "type": "array",
+        "maxItems": 64,
+        "items": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "allow_methods": {
+        "type": "array",
+        "maxItems": 16,
+        "items": {
+          "type": "string",
+          "maxLength": 16
+        }
+      },
+      "allow_headers": {
+        "type": "array",
+        "maxItems": 128,
+        "items": {
+          "type": "string",
+          "maxLength": 128
+        }
+      },
+      "expose_headers": {
+        "type": "array",
+        "maxItems": 128,
+        "items": {
+          "type": "string",
+          "maxLength": 128
+        }
+      },
+      "allow_credentials": {
+        "type": "boolean"
+      },
+      "max_age": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 86400
+      }
+    }
+  }
+}

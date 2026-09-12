@@ -262,6 +262,7 @@ func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*Spec, 
 					InstanceID:     ext.ID,
 					Key:            ext.ManifestKey,
 					Version:        ext.ManifestVersion,
+					Renderer:       manifest.Renderer,
 					ManifestDigest: manifestDigest,
 					ConfigJSON:     canonicalConfig,
 				})
@@ -385,7 +386,8 @@ type ExtensionInstanceSpec struct {
 	InstanceID     string `yaml:"instance_id" json:"instance_id"`
 	Key            string `yaml:"key" json:"key"`
 	Version        uint32 `yaml:"version" json:"version"`
-	ManifestDigest string `yaml:"manifest_digest" json:"manifest_digest"`
+	Renderer       string `yaml:"renderer" json:"renderer"`
+	ManifestDigest string `yaml:"manifest_digest,omitempty" json:"manifest_digest,omitempty"`
 	ConfigJSON     string `yaml:"config_json" json:"config_json"`
 }
 

@@ -1,0 +1,34 @@
+{
+  "key": "builtin/connection-limit",
+  "version": 1,
+  "id": "connection-limit",
+  "name": "Connection Limit",
+  "category": "traffic_control",
+  "description": "Per-client concurrent connection limiting.",
+  "renderer": "nginx-connection-limit",
+  "builtin": true,
+  "default_config": {
+    "max_connections_per_ip": 50,
+    "rejected_code": 503
+  },
+  "ui_schema": {
+    "layout_type": "form",
+    "fields": []
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "max_connections_per_ip": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1000000
+      },
+      "rejected_code": {
+        "type": "integer",
+        "minimum": 400,
+        "maximum": 599
+      }
+    }
+  }
+}

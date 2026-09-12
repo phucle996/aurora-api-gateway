@@ -64,34 +64,37 @@ async fn test_materialize_nginx_files() {
 
 #[test]
 fn test_extensions_generation() {
-    let digest = crate::extension::manifest::catalog_digest().unwrap();
     let extensions = vec![
         crate::spec::extensions::ExtensionInstanceSpec {
             instance_id: "rate-limit".to_string(),
             key: "builtin/rate-limit".to_string(),
             version: 1,
-            manifest_digest: digest.clone(),
+            renderer: "rate-limit".to_string(),
+            manifest_digest: String::new(),
             config_json: r#"{"algorithm":"token_bucket","memory_size_mb":16,"max_keys":100000,"eviction_policy":"lru","overflow_strategy":"evict_and_track","rules":[{"id":"r1","host":"*","path_prefix":"/","limit_by":"client_ip","rate":50,"burst":100,"period_secs":1,"action_on_exceeded":"throttle","rejected_code":429}]}"#.to_string(),
         },
         crate::spec::extensions::ExtensionInstanceSpec {
             instance_id: "cors".to_string(),
             key: "builtin/cors".to_string(),
             version: 1,
-            manifest_digest: digest.clone(),
+            renderer: "nginx-cors".to_string(),
+            manifest_digest: String::new(),
             config_json: r#"{"allow_origins":["https://example.com"],"allow_methods":["GET","POST"],"allow_headers":["Authorization","Content-Type"],"allow_credentials":true,"max_age":3600}"#.to_string(),
         },
         crate::spec::extensions::ExtensionInstanceSpec {
             instance_id: "maintenance".to_string(),
             key: "builtin/maintenance-mode".to_string(),
             version: 1,
-            manifest_digest: digest,
+            renderer: "nginx-maintenance".to_string(),
+            manifest_digest: String::new(),
             config_json: r#"{"status_code":503,"bypass_header":"X-Bypass","retry_after_secs":120,"message":"Under upgrade"}"#.to_string(),
         },
         crate::spec::extensions::ExtensionInstanceSpec {
             instance_id: "jwt-authentication".to_string(),
             key: "builtin/jwt-authentication".to_string(),
             version: 1,
-            manifest_digest: crate::extension::manifest::catalog_digest().unwrap(),
+            renderer: "engine-jwt-rs256".to_string(),
+            manifest_digest: String::new(),
             config_json: r#"{"rules":[{"id":"api","host":"api.example.test","path_prefix":"/api","public_key_pem":"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A\n-----END PUBLIC KEY-----","issuer":"https://issuer.example.test","audience":"gateway"}]}"#.to_string(),
         },
     ];
@@ -99,7 +102,10 @@ fn test_extensions_generation() {
     assert!(rendered.rate_limit_policy.is_some());
 
     let server_conf = rendered.server_conf;
-    assert!(server_conf.contains("gateway_rate_limit_policy /var/lib/aurora-policy/active-rate-limit.json;"));
+    assert!(
+        server_conf
+            .contains("gateway_rate_limit_policy /var/lib/aurora-policy/active-rate-limit.json;")
+    );
     assert!(
         server_conf.contains("add_header Access-Control-Allow-Origin \"$http_origin\" always;")
     );
@@ -112,22 +118,24 @@ fn test_extensions_generation() {
         rendered.jwt_policy.unwrap()["rules"][0]["host"],
         "api.example.test"
     );
+    assert_eq!(rendered.access_rules.len(), 0);
 }
 
 #[tokio::test]
 async fn test_jwt_extension_materializes_and_removes_ffi_snapshot() {
-    let base = std::env::temp_dir().join(format!("aurora-jwt-materialize-{}", std::process::id()));
+    let base =
+        std::env::temp_dir().join(format!("materialize-jwt-snapshot-{}", std::process::id()));
     let policy_dir = base.join("policy");
     let routing_dir = base.join("routing");
     let _ = tokio::fs::remove_dir_all(&base).await;
-    let digest = crate::extension::manifest::catalog_digest().unwrap();
     let spec = Spec {
         release_id: 91,
         extensions: vec![crate::spec::extensions::ExtensionInstanceSpec {
             instance_id: "jwt-authentication".to_string(),
             key: "builtin/jwt-authentication".to_string(),
             version: 1,
-            manifest_digest: digest,
+            renderer: "engine-jwt-rs256".to_string(),
+            manifest_digest: String::new(),
             config_json: r#"{"rules":[{"id":"api","host":"api.example.test","path_prefix":"/","public_key_pem":"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A\n-----END PUBLIC KEY-----"}]}"#.to_string(),
         }],
         ..Default::default()
@@ -156,18 +164,21 @@ async fn test_jwt_extension_materializes_and_removes_ffi_snapshot() {
 
 #[tokio::test]
 async fn test_rate_limit_extension_materializes_and_removes_ffi_snapshot() {
-    let base = std::env::temp_dir().join(format!("materialize-rate-limit-snapshot-{}", std::process::id()));
+    let base = std::env::temp_dir().join(format!(
+        "materialize-rate-limit-snapshot-{}",
+        std::process::id()
+    ));
     let policy_dir = base.join("policy");
     let routing_dir = base.join("routing");
     let _ = tokio::fs::remove_dir_all(&base).await;
-    let digest = crate::extension::manifest::catalog_digest().unwrap();
     let spec = Spec {
         release_id: 88,
         extensions: vec![crate::spec::extensions::ExtensionInstanceSpec {
             instance_id: "rate-limit".to_string(),
             key: "builtin/rate-limit".to_string(),
             version: 1,
-            manifest_digest: digest,
+            renderer: "rate-limit".to_string(),
+            manifest_digest: String::new(),
             config_json: r#"{"algorithm":"token_bucket","memory_size_mb":16,"max_keys":100000,"eviction_policy":"lru","overflow_strategy":"evict_and_track","rules":[{"id":"r1","host":"*","path_prefix":"/api","limit_by":"client_ip","rate":100,"period_secs":1,"action_on_exceeded":"throttle"}]}"#.to_string(),
         }],
         ..Default::default()
@@ -201,7 +212,8 @@ fn test_access_policy_renderer_generates_cidr_rules_from_instance_config() {
         instance_id: "office-network".to_string(),
         key: "builtin/ip-restriction".to_string(),
         version: 1,
-        manifest_digest: crate::extension::manifest::catalog_digest().unwrap(),
+        renderer: "access-policy".to_string(),
+        manifest_digest: String::new(),
         config_json: r#"{"whitelist":["198.51.100.0/24"],"blacklist":["192.0.2.10/32"],"rules":[{"id":"admin-block","cidr":"203.0.113.0/24","type":"blacklist","match_value":"/admin","action":"block","priority":7}]}"#.to_string(),
     };
 
@@ -216,12 +228,13 @@ fn test_access_policy_renderer_generates_cidr_rules_from_instance_config() {
 }
 
 #[test]
-fn test_extension_renderer_rejects_catalog_digest_mismatch() {
+fn test_extension_renderer_rejects_unknown_renderer() {
     let instance = crate::spec::extensions::ExtensionInstanceSpec {
         instance_id: "ip-restriction".to_string(),
         key: "builtin/ip-restriction".to_string(),
         version: 1,
-        manifest_digest: "wrong-catalog".to_string(),
+        renderer: "unknown-renderer".to_string(),
+        manifest_digest: String::new(),
         config_json: r#"{"whitelist":[],"blacklist":[],"rules":[]}"#.to_string(),
     };
     assert!(render_extensions(&[instance]).is_err());
@@ -233,7 +246,8 @@ fn test_access_policy_renderer_rejects_ipv4_mapped_ipv6() {
         instance_id: "ip-restriction".to_string(),
         key: "builtin/ip-restriction".to_string(),
         version: 1,
-        manifest_digest: crate::extension::manifest::catalog_digest().unwrap(),
+        renderer: "access-policy".to_string(),
+        manifest_digest: String::new(),
         config_json: r#"{"whitelist":["::ffff:192.0.2.1/128"],"blacklist":[],"rules":[]}"#
             .to_string(),
     };

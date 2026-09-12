@@ -12,10 +12,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("cargo:rerun-if-changed=../../proto/sync/v1");
-    // The catalog is shared with the Go controller and embedded by
-    // extension::manifest. Cargo cannot infer this dynamically assembled path,
-    // so declare it explicitly to prevent a stale agent catalog digest.
-    println!("cargo:rerun-if-changed=../../control-plane/internal/extensionmanifest/catalog.json");
     println!("cargo:rerun-if-changed=build.rs");
 
     tonic_build::configure()

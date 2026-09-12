@@ -1,0 +1,45 @@
+{
+  "key": "builtin/uri-rewrite",
+  "version": 1,
+  "id": "uri-rewrite",
+  "name": "URI Rewrite",
+  "category": "request_transformation",
+  "description": "Applies configured URI rewrite rules.",
+  "renderer": "nginx-uri-rewrite",
+  "builtin": true,
+  "default_config": {
+    "rules": []
+  },
+  "ui_schema": {
+    "layout_type": "table",
+    "fields": []
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "rules": {
+        "type": "array",
+        "maxItems": 128,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "pattern",
+            "replacement"
+          ],
+          "properties": {
+            "pattern": {
+              "type": "string",
+              "maxLength": 1024
+            },
+            "replacement": {
+              "type": "string",
+              "maxLength": 1024
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,4 +1,3 @@
-use super::manifest::resolve;
 use super::metrics::{MetricsManager, OtlpExporter, PrometheusExporter};
 use crate::spec::extensions::{ExtensionInstanceSpec, MetricsExtensionSpec};
 use std::sync::Arc;
@@ -25,8 +24,7 @@ impl ExtensionDispatcher {
     pub async fn apply_spec(&mut self, instances: &[ExtensionInstanceSpec]) -> Result<(), String> {
         let mut metrics = None;
         for instance in instances {
-            let manifest = resolve(instance)?;
-            if manifest.renderer != "agent-metrics" {
+            if instance.renderer != "agent-metrics" {
                 continue;
             }
             if metrics.is_some() {
@@ -124,7 +122,6 @@ impl ExtensionDispatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::extension::manifest::catalog_digest;
     use crate::spec::extensions::ExtensionInstanceSpec;
 
     #[tokio::test]
@@ -134,7 +131,8 @@ mod tests {
             instance_id: "prometheus".to_string(),
             key: "builtin/prometheus".to_string(),
             version: 1,
-            manifest_digest: catalog_digest().unwrap(),
+            renderer: "agent-metrics".to_string(),
+            manifest_digest: String::new(),
             config_json: r#"{"port":19145,"prometheus":{"enabled":true,"path":"/metrics"}}"#
                 .to_string(),
         }];

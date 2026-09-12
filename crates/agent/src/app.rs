@@ -112,8 +112,8 @@ impl App {
                     instance_id: "bootstrap-prometheus".to_string(),
                     key: "builtin/prometheus".to_string(),
                     version: 1,
-                    manifest_digest: crate::extension::manifest::catalog_digest()
-                        .map_err(anyhow::Error::msg)?,
+                    renderer: "agent-metrics".to_string(),
+                    manifest_digest: String::new(),
                     config_json: serde_json::json!({
                         "port": self.cfg.metrics_port,
                         "stub_status_url": self.cfg.nginx_stub_status_url,

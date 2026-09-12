@@ -103,6 +103,9 @@ func TestSpecScheduler_WarmupAndReconcile(t *testing.T) {
 	if !strings.Contains(active.SpecJSON, "\"key\": \"builtin/prometheus\"") {
 		t.Fatalf("expected spec JSON to contain prometheus instance envelope")
 	}
+	if !strings.Contains(active.SpecJSON, "\"renderer\": \"agent-metrics\"") {
+		t.Fatalf("expected spec JSON to contain renderer agent-metrics")
+	}
 
 	// Calling Reconcile with unchanged authority should NOT publish a duplicate release
 	rel, err := scheduler.Reconcile(ctx)

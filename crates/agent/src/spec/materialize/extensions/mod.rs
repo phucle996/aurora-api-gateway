@@ -6,7 +6,6 @@ pub mod nginx;
 #[path = "rate-limit/mod.rs"]
 pub mod rate_limit;
 
-use crate::extension::manifest::resolve;
 use crate::spec::extensions::ExtensionInstanceSpec;
 use nginx::NginxDirectiveSink;
 use serde_json::Value;
@@ -39,7 +38,13 @@ pub fn render_extensions(
     let mut rate_limit_policy = None;
 
     for instance in instances {
-        let manifest = resolve(instance)?;
+        if instance.renderer.trim().is_empty() {
+            return Err(format!(
+                "extension instance {} has empty renderer",
+                instance.instance_id
+            ));
+        }
+
         let config = serde_json::from_str::<Value>(&instance.config_json)
             .map_err(|error| {
                 format!(
@@ -56,7 +61,7 @@ pub fn render_extensions(
                 )
             })?;
 
-        match manifest.renderer.as_str() {
+        match instance.renderer.as_str() {
             "access-policy" => access::materialize(
                 instance,
                 &config,

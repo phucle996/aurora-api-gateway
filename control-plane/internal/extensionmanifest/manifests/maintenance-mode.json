@@ -1,0 +1,58 @@
+{
+  "key": "builtin/maintenance-mode",
+  "version": 1,
+  "id": "maintenance-mode",
+  "name": "Maintenance Mode",
+  "category": "traffic_control",
+  "description": "Returns a controlled maintenance response.",
+  "renderer": "nginx-maintenance",
+  "builtin": true,
+  "default_config": {
+    "status_code": 503,
+    "retry_after_secs": 300,
+    "message": "Service undergoing planned maintenance."
+  },
+  "ui_schema": {
+    "layout_type": "form",
+    "fields": [
+      {
+        "key": "status_code",
+        "label": "Status code",
+        "type": "number"
+      },
+      {
+        "key": "message",
+        "label": "Message",
+        "type": "text"
+      }
+    ]
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "status_code",
+      "message"
+    ],
+    "properties": {
+      "status_code": {
+        "type": "integer",
+        "minimum": 200,
+        "maximum": 599
+      },
+      "retry_after_secs": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 86400
+      },
+      "message": {
+        "type": "string",
+        "maxLength": 1024
+      },
+      "bypass_header": {
+        "type": "string",
+        "maxLength": 128
+      }
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "key": "builtin/timeout-policy",
+  "version": 1,
+  "id": "timeout-policy",
+  "name": "Timeout Policy",
+  "category": "resilience_upstream",
+  "description": "Sets upstream connection and I/O timeouts.",
+  "renderer": "nginx-timeout-policy",
+  "builtin": true,
+  "default_config": {},
+  "ui_schema": {
+    "layout_type": "form",
+    "fields": []
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "connect_timeout_ms": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 3600000
+      },
+      "read_timeout_ms": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 3600000
+      },
+      "write_timeout_ms": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 3600000
+      }
+    }
+  }
+}

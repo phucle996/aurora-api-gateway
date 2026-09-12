@@ -1,0 +1,28 @@
+{
+  "key": "builtin/compression-gzip",
+  "version": 1,
+  "id": "compression-gzip",
+  "name": "Gzip Compression",
+  "category": "response_transformation",
+  "description": "Enables gzip response compression.",
+  "renderer": "nginx-gzip",
+  "builtin": true,
+  "default_config": {
+    "level": 4
+  },
+  "ui_schema": {
+    "layout_type": "form",
+    "fields": []
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "level": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9
+      }
+    }
+  }
+}

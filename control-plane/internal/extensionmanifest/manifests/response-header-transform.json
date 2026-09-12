@@ -1,0 +1,37 @@
+{
+  "key": "builtin/response-header-transform",
+  "version": 1,
+  "id": "response-header-transform",
+  "name": "Response Header Transform",
+  "category": "response_transformation",
+  "description": "Adds and removes response headers.",
+  "renderer": "nginx-response-header-transform",
+  "builtin": true,
+  "default_config": {
+    "add_headers": {},
+    "remove_headers": []
+  },
+  "ui_schema": {
+    "layout_type": "form",
+    "fields": []
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "add_headers": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {}
+      },
+      "remove_headers": {
+        "type": "array",
+        "maxItems": 128,
+        "items": {
+          "type": "string",
+          "maxLength": 128
+        }
+      }
+    }
+  }
+}

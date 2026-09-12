@@ -1,0 +1,147 @@
+{
+  "key": "builtin/jwt-authentication",
+  "version": 1,
+  "id": "jwt-authentication",
+  "name": "JWT Authentication (RS256)",
+  "category": "authorization_security",
+  "description": "Validates scoped RS256 bearer tokens in the NGINX access phase.",
+  "renderer": "engine-jwt-rs256",
+  "builtin": true,
+  "default_config": {
+    "rules": []
+  },
+  "required_for_enable": [
+    "rules"
+  ],
+  "ui_schema": {
+    "layout_type": "table",
+    "fields": [],
+    "table_columns": [
+      {
+        "key": "id",
+        "label": "Rule ID"
+      },
+      {
+        "key": "host",
+        "label": "Host"
+      },
+      {
+        "key": "path_prefix",
+        "label": "Path prefix"
+      },
+      {
+        "key": "issuer",
+        "label": "Issuer"
+      },
+      {
+        "key": "audience",
+        "label": "Audience"
+      }
+    ],
+    "row_fields": [
+      {
+        "key": "id",
+        "label": "Rule ID",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "priority",
+        "label": "Priority",
+        "type": "number"
+      },
+      {
+        "key": "host",
+        "label": "Host",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "path_prefix",
+        "label": "Path prefix",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "public_key_pem",
+        "label": "RSA public key PEM",
+        "type": "textarea_code",
+        "required": true
+      },
+      {
+        "key": "issuer",
+        "label": "Issuer",
+        "type": "text"
+      },
+      {
+        "key": "audience",
+        "label": "Audience",
+        "type": "text"
+      },
+      {
+        "key": "clock_skew_secs",
+        "label": "Clock skew (seconds)",
+        "type": "number"
+      }
+    ]
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "rules"
+    ],
+    "properties": {
+      "rules": {
+        "type": "array",
+        "maxItems": 8,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "host",
+            "path_prefix",
+            "public_key_pem"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "priority": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "host": {
+              "type": "string",
+              "maxLength": 253
+            },
+            "path_prefix": {
+              "type": "string",
+              "maxLength": 8192
+            },
+            "public_key_pem": {
+              "type": "string",
+              "maxLength": 8192
+            },
+            "issuer": {
+              "type": "string",
+              "maxLength": 512
+            },
+            "audience": {
+              "type": "string",
+              "maxLength": 512
+            },
+            "clock_skew_secs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 300
+            }
+          }
+        }
+      }
+    }
+  }
+}

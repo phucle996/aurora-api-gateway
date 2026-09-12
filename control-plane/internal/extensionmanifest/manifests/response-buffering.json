@@ -1,0 +1,20 @@
+{
+  "key": "builtin/response-buffering",
+  "version": 1,
+  "id": "response-buffering",
+  "name": "Response Buffering",
+  "category": "response_transformation",
+  "description": "Controls upstream response buffering.",
+  "renderer": "nginx-response-buffering",
+  "builtin": true,
+  "default_config": {},
+  "ui_schema": {
+    "layout_type": "form",
+    "fields": []
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "key": "builtin/ip-restriction",
+  "version": 1,
+  "id": "ip-restriction",
+  "name": "IP CIDR Whitelist & Blacklist",
+  "category": "authorization_security",
+  "description": "High-speed radix tree client IP filtering.",
+  "renderer": "access-policy",
+  "builtin": true,
+  "default_config": {
+    "whitelist": [],
+    "blacklist": [],
+    "rules": []
+  },
+  "ui_schema": {
+    "layout_type": "table",
+    "fields": [],
+    "table_columns": [
+      {
+        "key": "cidr",
+        "label": "CIDR"
+      },
+      {
+        "key": "type",
+        "label": "Type"
+      },
+      {
+        "key": "match_value",
+        "label": "Path"
+      },
+      {
+        "key": "action",
+        "label": "Action"
+      }
+    ]
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "whitelist": {
+        "type": "array",
+        "maxItems": 512,
+        "items": {
+          "type": "string",
+          "maxLength": 64
+        }
+      },
+      "blacklist": {
+        "type": "array",
+        "maxItems": 512,
+        "items": {
+          "type": "string",
+          "maxLength": 64
+        }
+      },
+      "rules": {
+        "type": "array",
+        "maxItems": 512,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "cidr",
+            "type",
+            "match_value",
+            "action"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "cidr": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "whitelist",
+                "blacklist"
+              ]
+            },
+            "match_value": {
+              "type": "string",
+              "maxLength": 8192
+            },
+            "action": {
+              "type": "string",
+              "enum": [
+                "allow",
+                "block"
+              ]
+            },
+            "priority": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "enabled": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    }
+  }
+}

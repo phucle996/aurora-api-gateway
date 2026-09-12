@@ -6,6 +6,9 @@ pub struct ExtensionInstanceSpec {
     pub instance_id: String,
     pub key: String,
     pub version: u32,
+    #[serde(default)]
+    pub renderer: String,
+    #[serde(default)]
     pub manifest_digest: String,
     pub config_json: String,
 }

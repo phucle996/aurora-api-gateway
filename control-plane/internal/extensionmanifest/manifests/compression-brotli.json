@@ -1,0 +1,28 @@
+{
+  "key": "builtin/compression-brotli",
+  "version": 1,
+  "id": "compression-brotli",
+  "name": "Brotli Compression",
+  "category": "response_transformation",
+  "description": "Enables Brotli module and response compression.",
+  "renderer": "nginx-brotli",
+  "builtin": true,
+  "default_config": {
+    "quality": 4
+  },
+  "ui_schema": {
+    "layout_type": "form",
+    "fields": []
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "quality": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 11
+      }
+    }
+  }
+}

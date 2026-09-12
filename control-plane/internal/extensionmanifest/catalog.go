@@ -2,18 +2,19 @@ package extensionmanifest
 
 import (
 	"crypto/sha256"
-	_ "embed"
+	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 )
 
-//go:embed catalog.json
-var catalogJSON []byte
+//go:embed manifests/*.json
+var manifestsFS embed.FS
 
 // Manifest is the immutable runtime contract shipped with both the controller
 // and agent. It is intentionally separate from extension instance data.
@@ -42,14 +43,32 @@ var catalog struct {
 
 func load() error {
 	catalog.once.Do(func() {
-		if err := json.Unmarshal(catalogJSON, &catalog.manifests); err != nil {
-			catalog.err = fmt.Errorf("decode extension manifest catalog: %w", err)
+		entries, err := manifestsFS.ReadDir("manifests")
+		if err != nil {
+			catalog.err = fmt.Errorf("read extension manifests directory: %w", err)
 			return
 		}
-		catalog.byKey = make(map[string]Manifest, len(catalog.manifests))
-		for _, manifest := range catalog.manifests {
+
+		catalog.manifests = make([]Manifest, 0, len(entries))
+		catalog.byKey = make(map[string]Manifest, len(entries))
+
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+				continue
+			}
+			content, err := manifestsFS.ReadFile("manifests/" + entry.Name())
+			if err != nil {
+				catalog.err = fmt.Errorf("read manifest file %s: %w", entry.Name(), err)
+				return
+			}
+			var manifest Manifest
+			if err := json.Unmarshal(content, &manifest); err != nil {
+				catalog.err = fmt.Errorf("decode extension manifest %s: %w", entry.Name(), err)
+				return
+			}
+
 			if manifest.Key == "" || manifest.ID == "" || manifest.Version == 0 || manifest.Renderer == "" || len(manifest.ConfigSchema) == 0 || len(manifest.DefaultConfig) == 0 {
-				catalog.err = fmt.Errorf("invalid extension manifest %q", manifest.Key)
+				catalog.err = fmt.Errorf("invalid extension manifest %q in %s", manifest.Key, entry.Name())
 				return
 			}
 			var configSchema struct {
@@ -71,8 +90,23 @@ func load() error {
 				return
 			}
 			catalog.byKey[identity] = manifest
+			catalog.manifests = append(catalog.manifests, manifest)
 		}
-		sum := sha256.Sum256(catalogJSON)
+
+		// Sort manifests deterministically by key, then version
+		sort.Slice(catalog.manifests, func(i, j int) bool {
+			if catalog.manifests[i].Key != catalog.manifests[j].Key {
+				return catalog.manifests[i].Key < catalog.manifests[j].Key
+			}
+			return catalog.manifests[i].Version < catalog.manifests[j].Version
+		})
+
+		canonicalJSON, err := json.Marshal(catalog.manifests)
+		if err != nil {
+			catalog.err = fmt.Errorf("marshal canonical manifests: %w", err)
+			return
+		}
+		sum := sha256.Sum256(canonicalJSON)
 		catalog.digest = hex.EncodeToString(sum[:])
 	})
 	return catalog.err

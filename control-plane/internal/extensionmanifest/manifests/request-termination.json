@@ -1,0 +1,38 @@
+{
+  "key": "builtin/request-termination",
+  "version": 1,
+  "id": "request-termination",
+  "name": "Request Termination",
+  "category": "traffic_control",
+  "description": "Returns a configured response without proxying.",
+  "renderer": "nginx-request-termination",
+  "builtin": true,
+  "default_config": {
+    "status_code": 200,
+    "body": "{\"status\":\"mocked\"}"
+  },
+  "ui_schema": {
+    "layout_type": "form",
+    "fields": []
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "status_code": {
+        "type": "integer",
+        "minimum": 200,
+        "maximum": 599
+      },
+      "body": {
+        "type": "string",
+        "maxLength": 8192
+      },
+      "headers": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {}
+      }
+    }
+  }
+}

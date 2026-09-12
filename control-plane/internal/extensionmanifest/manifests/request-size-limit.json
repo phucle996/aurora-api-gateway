@@ -1,0 +1,31 @@
+{
+  "key": "builtin/request-size-limit",
+  "version": 1,
+  "id": "request-size-limit",
+  "name": "Request Size Limit",
+  "category": "traffic_control",
+  "description": "Limits request body size.",
+  "renderer": "nginx-request-size-limit",
+  "builtin": true,
+  "default_config": {
+    "max_body_bytes": 1048576
+  },
+  "ui_schema": {
+    "layout_type": "form",
+    "fields": []
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "max_body_bytes"
+    ],
+    "properties": {
+      "max_body_bytes": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1073741824
+      }
+    }
+  }
+}
