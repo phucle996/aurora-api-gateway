@@ -97,11 +97,11 @@ func TestSpecScheduler_WarmupAndReconcile(t *testing.T) {
 	if publishedCount != 1 {
 		t.Fatalf("expected exactly 1 published release, got %d", publishedCount)
 	}
-	if !strings.Contains(active.SpecYAML, "test.local") {
-		t.Fatalf("expected spec YAML to contain test.local")
+	if !strings.Contains(active.SpecJSON, "test.local") {
+		t.Fatalf("expected spec JSON to contain test.local")
 	}
-	if !strings.Contains(active.SpecYAML, "key: builtin/prometheus") {
-		t.Fatalf("expected spec YAML to contain prometheus instance envelope")
+	if !strings.Contains(active.SpecJSON, "\"key\": \"builtin/prometheus\"") {
+		t.Fatalf("expected spec JSON to contain prometheus instance envelope")
 	}
 
 	// Calling Reconcile with unchanged authority should NOT publish a duplicate release
@@ -150,15 +150,15 @@ func TestSpecScheduler_WarmupAndReconcile(t *testing.T) {
 		mockRepo.mu.Unlock()
 	}
 
-	if !strings.Contains(updated.SpecYAML, "updated.local") {
-		t.Fatalf("expected updated spec YAML to contain updated.local")
+	if !strings.Contains(updated.SpecJSON, "updated.local") {
+		t.Fatalf("expected updated spec JSON to contain updated.local")
 	}
-	if !strings.Contains(updated.SpecYAML, "http://new_backend") {
-		t.Fatalf("expected spec YAML to contain http://new_backend")
+	if !strings.Contains(updated.SpecJSON, "http://new_backend") {
+		t.Fatalf("expected spec JSON to contain http://new_backend")
 	}
 }
 
-func TestSpecScheduler_DeclarativeRoutingYAML(t *testing.T) {
+func TestSpecScheduler_DeclarativeRoutingJSON(t *testing.T) {
 	mockRepo := &mockSpecSyncRepo{
 		authorityData: &entity.SpecAuthorityData{
 			RoutingRecords: []entity.SpecRoutingRecord{
@@ -182,12 +182,12 @@ func TestSpecScheduler_DeclarativeRoutingYAML(t *testing.T) {
 		t.Fatalf("unexpected reconcile error: %v", err)
 	}
 
-	// Verify declarative YAML structure
-	if !strings.Contains(rel.SpecYAML, "host: secure-service.internal") {
-		t.Fatalf("expected host in declarative YAML: %s", rel.SpecYAML)
+	// Verify declarative JSON structure
+	if !strings.Contains(rel.SpecJSON, "\"host\": \"secure-service.internal\"") {
+		t.Fatalf("expected host in declarative JSON: %s", rel.SpecJSON)
 	}
-	if !strings.Contains(rel.SpecYAML, "upstream: http://backend-upstream") {
-		t.Fatalf("expected upstream in declarative YAML: %s", rel.SpecYAML)
+	if !strings.Contains(rel.SpecJSON, "\"upstream\": \"http://backend-upstream\"") {
+		t.Fatalf("expected upstream in declarative JSON: %s", rel.SpecJSON)
 	}
 }
 
@@ -217,13 +217,13 @@ func TestSpecScheduler_CompilesOriginTLS(t *testing.T) {
 		t.Fatal("expected a compiled spec release")
 	}
 	for _, expected := range []string{
-		"origin_tls:",
-		"verify_cert: true",
-		"sni_host: origin.internal",
-		"client_key: CLIENT_KEY",
+		"\"origin_tls\":",
+		"\"verify_cert\": true",
+		"\"sni_host\": \"origin.internal\"",
+		"\"client_key\": \"CLIENT_KEY\"",
 	} {
-		if !strings.Contains(active.SpecYAML, expected) {
-			t.Fatalf("expected compiled spec to contain %q:\n%s", expected, active.SpecYAML)
+		if !strings.Contains(active.SpecJSON, expected) {
+			t.Fatalf("expected compiled spec to contain %q:\n%s", expected, active.SpecJSON)
 		}
 	}
 }
@@ -262,13 +262,13 @@ func TestSpecScheduler_PreservesL4UpstreamBackupPeer(t *testing.T) {
 	if active == nil {
 		t.Fatal("expected L4 authority to publish a spec release")
 	}
-	if !strings.Contains(active.SpecYAML, "addr: 10.10.0.11:9000") || !strings.Contains(active.SpecYAML, "backup: true") {
-		t.Fatalf("expected L4 backup peer in NodeSpec, got:\n%s", active.SpecYAML)
+	if !strings.Contains(active.SpecJSON, "\"addr\": \"10.10.0.11:9000\"") || !strings.Contains(active.SpecJSON, "\"backup\": true") {
+		t.Fatalf("expected L4 backup peer in NodeSpec, got:\n%s", active.SpecJSON)
 	}
-	allowPriority := strings.Index(active.SpecYAML, "priority: 100")
-	denyPriority := strings.Index(active.SpecYAML, "priority: 1")
+	allowPriority := strings.Index(active.SpecJSON, "\"priority\": 100")
+	denyPriority := strings.Index(active.SpecJSON, "\"priority\": 1")
 	if allowPriority == -1 || denyPriority == -1 || allowPriority > denyPriority {
-		t.Fatalf("expected higher L4 ACL priority to appear first in NodeSpec, got:\n%s", active.SpecYAML)
+		t.Fatalf("expected higher L4 ACL priority to appear first in NodeSpec, got:\n%s", active.SpecJSON)
 	}
 }
 
@@ -300,17 +300,17 @@ func TestSpecScheduler_CompilesExtensionInstanceEnvelope(t *testing.T) {
 		t.Fatal("expected an extension instance release")
 	}
 	for _, expected := range []string{
-		"instance_id: test-cidr-extension",
-		"key: builtin/ip-restriction",
-		"version: 1",
-		"manifest_digest:",
-		"config_json:",
+		"\"instance_id\": \"test-cidr-extension\"",
+		"\"key\": \"builtin/ip-restriction\"",
+		"\"version\": 1",
+		"\"manifest_digest\":",
+		"\"config_json\":",
 	} {
-		if !strings.Contains(active.SpecYAML, expected) {
-			t.Fatalf("expected extension instance envelope to contain %q:\n%s", expected, active.SpecYAML)
+		if !strings.Contains(active.SpecJSON, expected) {
+			t.Fatalf("expected extension instance envelope to contain %q:\n%s", expected, active.SpecJSON)
 		}
 	}
-	if strings.Contains(active.SpecYAML, "\naccess:") {
-		t.Fatalf("controller must not compile extension-specific access policy:\n%s", active.SpecYAML)
+	if strings.Contains(active.SpecJSON, "\"access\":") {
+		t.Fatalf("controller must not compile extension-specific access policy:\n%s", active.SpecJSON)
 	}
 }

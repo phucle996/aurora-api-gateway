@@ -46,20 +46,21 @@ func TestSpecSyncService_InSyncAndMismatch(t *testing.T) {
 		activeRelease: &entity.ClusterSpecRelease{
 			ID:     1,
 			Digest: "abcd1234efgh5678",
-			SpecYAML: `version: 1
-release_id: 1
-routing_conf: |
-  upstream backend { server 127.0.0.1:8080; }
-  server { server_name example.com; }
-extensions:
-  metrics:
-    port: 9145
-`,
+			SpecJSON: `{
+  "version": 1,
+  "release_id": 1,
+  "routing_conf": "upstream backend { server 127.0.0.1:8080; }\nserver { server_name example.com; }",
+  "extensions": [
+    {
+      "key": "builtin/metrics"
+    }
+  ]
+}`,
 		},
 	}
 	svc := service.NewSpecSyncService(mockRepo)
 
-	// 1. Query with empty/mismatch hash -> returns full YAML and InSync=false
+	// 1. Query with empty/mismatch hash -> returns full JSON and InSync=false
 	res1, err := svc.SyncSpec(context.Background(), entity.SpecSyncQuery{
 		NodeID:      "node-01",
 		CurrentHash: "",
@@ -73,25 +74,25 @@ extensions:
 	if res1.Hash != "abcd1234efgh5678" {
 		t.Fatalf("expected hash 'abcd1234efgh5678', got %q", res1.Hash)
 	}
-	if res1.SpecYAML == "" {
-		t.Fatalf("expected non-empty SpecYAML")
+	if res1.SpecJSON == "" {
+		t.Fatalf("expected non-empty SpecJSON")
 	}
 	if res1.ReleaseID != 1 {
 		t.Fatalf("expected ReleaseID=1, got %d", res1.ReleaseID)
 	}
 
-	// Verify YAML content has authority items
-	if !strings.Contains(res1.SpecYAML, "upstream backend") {
-		t.Fatalf("expected SpecYAML to contain upstreams config")
+	// Verify JSON content has authority items
+	if !strings.Contains(res1.SpecJSON, "upstream backend") {
+		t.Fatalf("expected SpecJSON to contain upstreams config")
 	}
-	if !strings.Contains(res1.SpecYAML, "example.com") {
-		t.Fatalf("expected SpecYAML to contain routing for example.com")
+	if !strings.Contains(res1.SpecJSON, "example.com") {
+		t.Fatalf("expected SpecJSON to contain routing for example.com")
 	}
-	if !strings.Contains(res1.SpecYAML, "metrics:") {
-		t.Fatalf("expected SpecYAML to contain extensions.metrics config")
+	if !strings.Contains(res1.SpecJSON, "builtin/metrics") {
+		t.Fatalf("expected SpecJSON to contain extensions.metrics config")
 	}
 
-	// 2. Query with matching hash -> returns InSync=true, SpecYAML="" (0 bytes payload)
+	// 2. Query with matching hash -> returns InSync=true, SpecJSON="" (0 bytes payload)
 	res2, err := svc.SyncSpec(context.Background(), entity.SpecSyncQuery{
 		NodeID:      "node-01",
 		CurrentHash: res1.Hash,
@@ -102,8 +103,8 @@ extensions:
 	if !res2.InSync {
 		t.Fatalf("expected InSync=true when hash matches")
 	}
-	if res2.SpecYAML != "" {
-		t.Fatalf("expected empty SpecYAML when InSync=true, got %q", res2.SpecYAML)
+	if res2.SpecJSON != "" {
+		t.Fatalf("expected empty SpecJSON when InSync=true, got %q", res2.SpecJSON)
 	}
 	if res2.Hash != res1.Hash {
 		t.Fatalf("expected matching hash, got %s vs %s", res2.Hash, res1.Hash)

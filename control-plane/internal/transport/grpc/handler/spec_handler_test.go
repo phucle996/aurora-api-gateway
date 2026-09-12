@@ -35,7 +35,7 @@ func TestSpecSyncHandler_SyncSpec(t *testing.T) {
 			if q.CurrentHash == "valid-hash" {
 				return &entity.SpecSyncResult{InSync: true, ReleaseID: 42, Hash: "valid-hash"}, nil
 			}
-			return &entity.SpecSyncResult{InSync: false, ReleaseID: 42, Hash: "new-hash", SpecYAML: "version: 1"}, nil
+			return &entity.SpecSyncResult{InSync: false, ReleaseID: 42, Hash: "new-hash", SpecJSON: "version: 1"}, nil
 		},
 	}
 
@@ -64,7 +64,7 @@ func TestSpecSyncHandler_SyncSpec(t *testing.T) {
 	if resp2.InSync {
 		t.Fatalf("expected InSync=false")
 	}
-	if resp2.SpecYaml != "version: 1" {
-		t.Fatalf("expected SpecYaml='version: 1', got %s", resp2.SpecYaml)
+	if resp2.SpecJson != "version: 1" {
+		t.Fatalf("expected SpecJson='version: 1', got %s", resp2.SpecJson)
 	}
 }

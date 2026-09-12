@@ -10,7 +10,7 @@ This document provides a technical specification of the configuration synchroniz
    - The entire system configuration—including virtual hosts, routing trees, upstream clusters, SSL certificates, WAF mitigation rules, IP access control lists, and all 115 modular extensions—is modeled as a single declarative data structure named `Spec`.
    - Fragmented entity taxonomies such as `NodeSpec`, `RuleSpec`, or `RoutingSpec` are strictly eliminated in favor of a single unified model.
 2. **Digest-Driven Delta Evaluation**:
-   - Every published `Spec` release is cryptographically identified by a deterministic SHA-256 digest calculated over its normalized YAML payload.
+   - Every published `Spec` release is cryptographically identified by a deterministic SHA-256 digest calculated over its normalized JSON payload.
    - Nodes evaluate incoming releases against their local runtime hash in memory and bypass disk writes or process reloads if the digest is identical.
 3. **Zero-Downtime Reload via Worker Connection Draining**:
    - NGINX data-path updates are applied via graceful master reloads (`SIGHUP` / `nginx -s reload`). Existing worker processes transition to a draining state, completing active in-flight HTTP/TCP connections before terminating, while newly spawned workers immediately serve subsequent traffic using the latest configuration.
@@ -155,9 +155,9 @@ extensions:
    - `SpecScheduler` periodically evaluates the authoritative database state to ensure consistency across cluster partitions.
 2. **Compilation & Hashing**:
    - The scheduler queries tables: `domains`, `routes`, `upstreams`, `waf_rules`, `access_rules`, and `extensions`.
-   - It normalizes records into the canonical YAML format.
+   - It normalizes records into the canonical JSON format.
    - Computes the SHA-256 Digest:
-     $$\text{Digest} = \text{SHA256}(\text{SpecYAML})$$
+     $$\text{Digest} = \text{SHA256}(\text{SpecJSON})$$
 3. **Idempotent Release Management (`spec_repo.go`)**:
    - The repository verifies whether this digest already exists in `cluster_spec_releases`:
      - **If new**: Inserts a new immutable row into `cluster_spec_releases`.
@@ -291,7 +291,7 @@ sequenceDiagram
 docker logs -f aurora-node
 
 # 2. Inspect active Spec digest loaded on the Node
-cat /var/lib/aurora-policy/node-spec.yaml | grep digest
+cat /var/lib/aurora-policy/node-spec.json | grep release_id
 
 # 3. Inspect dynamically loaded C modules in NGINX
 docker exec aurora-node /extension-modules.sh check

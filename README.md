@@ -57,16 +57,16 @@ Aurora API Gateway is organized into four decoupled layers:
       │          │ IPC      │                   │          │ IPC      │
       │          ▼          │                   │          ▼          │
       │   Dataplane Agent   │                   │   Dataplane Agent   │
-      │  (YAML Materializer)│                   │  (YAML Materializer)│
+      │  (JSON Materializer)│                   │  (JSON Materializer)│
       └──────────▲──────────┘                   └──────────▲──────────┘
                  │                                         │
-                 │ ── gRPC Declarative YAML Spec Sync ──── │
+                 │ ── gRPC Declarative JSON Spec Sync ──── │
                  │        (:9090 - Protobuf Stream)        │
                  │                                         │
       ┌──────────┴─────────────────────────────────────────┴──────────┐
       │                   Aurora Control Plane                        │
       │            Go Daemon + Embedded SQLite (:8080, :9090)         │
-      │  - CTE-First Repositories        - SpecScheduler (YAML Comp)  │
+      │  - CTE-First Repositories        - SpecScheduler (JSON Comp)  │
       │  - gRPC Sync Server (:9090)      - AWS S3 Disaster Recovery   │
       └───────────────────────────────▲───────────────────────────────┘
                                       │
@@ -85,8 +85,8 @@ Aurora API Gateway is organized into four decoupled layers:
 | **Core Engine** | Rust (Edition 2024) | [`crates/engine`](crates/engine) | Zero-allocation request evaluation, exact-path & Aho-Corasick matching, token bucket, IP reputation. |
 | **C ABI Boundary** | Rust / C FFI | [`crates/ffi`](crates/ffi) | C-compatible stable ABI boundary (v3) for native NGINX module integration. |
 | **NGINX Adapter** | C | [`adapters/nginx`](adapters/nginx) | Native NGINX dynamic HTTP module hooking into the `NGX_HTTP_ACCESS_PHASE`. |
-| **Dataplane Agent** | Rust (Edition 2024) | [`crates/agent`](crates/agent) | High-performance gRPC client, declarative **YAML Spec materializer**, and 115 modular extensions runtime. |
-| **Control Plane** | Go 1.27 | [`control-plane`](control-plane) | Cluster management, **gRPC declarative YAML Spec scheduler (:9090)**, rule compiler, REST API (:8080), S3 backup. |
+| **Dataplane Agent** | Rust (Edition 2024) | [`crates/agent`](crates/agent) | High-performance gRPC client, declarative **JSON Spec materializer**, and 115 modular extensions runtime. |
+| **Control Plane** | Go 1.27 | [`control-plane`](control-plane) | Cluster management, **gRPC declarative JSON Spec scheduler (:9090)**, rule compiler, REST API (:8080), S3 backup. |
 | **Console UI** | React / TypeScript | [`ui`](ui) | Modern management dashboard for domains, WAF policies, extensions (with visual rules builder & raw JSON modes), and analytics. |
 
 ---
@@ -104,10 +104,10 @@ Aurora API Gateway is organized into four decoupled layers:
 - **Origin Security**: Upstream TLS verification and mutual TLS (**mTLS**) authentication with custom CA bundles and client certificates.
 - **Health Probing**: Active HTTP/HTTPS health checks with configurable intervals, probe paths, and failure thresholds.
 
-### ⚡ Declarative YAML Spec Engine & gRPC Synchronization
-- **Unified Declarative `Spec` in YAML**: The entire cluster configuration (WAF mitigation rules, Radix IP access tree, Upstream pools, Domain routing, and all 115 modular extensions) is compiled into a single unified, deterministic **YAML** manifest.
+### ⚡ Declarative JSON Spec Engine & gRPC Synchronization
+- **Unified Declarative `Spec` in JSON**: The entire cluster configuration (WAF mitigation rules, Radix IP access tree, Upstream pools, Domain routing, and all 115 modular extensions) is compiled into a single unified, deterministic **JSON** manifest.
 - **High-Performance gRPC Pipeline (`:9090`)**: Worker nodes connect over persistent HTTP/2 gRPC channels using Protobuf (`sync.v1.SpecSyncService`), eliminating polling overhead and stale states.
-- **Cryptographic SHA-256 Digest Validation**: Changes take effect with sub-second latency only when the YAML digest changes, avoiding redundant reloads and preventing thundering herds via jitter-based reconciliation.
+- **Cryptographic SHA-256 Digest Validation**: Changes take effect with sub-second latency only when the JSON digest changes, avoiding redundant reloads and preventing thundering herds via jitter-based reconciliation.
 - **In-Process Modular Extensions (115 Extensions)**: Modular capabilities (Rate Limiting, Bot Detection, Header Transformation, Authentication, etc.) dynamically managed with cooperative cancellation tokens and configurable via Visual UI Builder or raw JSON.
 
 ### 📊 Comprehensive Analytics & Prometheus Telemetry
@@ -157,7 +157,7 @@ Once started, the following services are available:
 | Service | Address | Protocol | Description |
 | :--- | :--- | :--- | :--- |
 | **Aurora Console** | [http://localhost:8080](http://localhost:8080) | HTTP / REST | Control Plane Management UI & REST API |
-| **Aurora Spec Sync** | `localhost:9090` | gRPC / Protobuf | Declarative YAML Spec & Heartbeat streaming |
+| **Aurora Spec Sync** | `localhost:9090` | gRPC / Protobuf | Declarative JSON Spec & Heartbeat streaming |
 | **Cluster Load Balancer** | [http://localhost:8090](http://localhost:8090) | HTTP | Fronting ingress routing to WAF nodes |
 | **WAF Node 01** | [http://localhost:8091](http://localhost:8091) | HTTP | Standalone Data Plane Node 1 |
 | **WAF Node 02** | [http://localhost:8092](http://localhost:8092) | HTTP | Standalone Data Plane Node 2 |

@@ -329,7 +329,7 @@ func (r *SpecSyncRepository) GetActiveSpecRelease(ctx context.Context) (*entity.
 	WITH active_spec AS (
 		SELECT release_id FROM cluster_spec_head WHERE singleton = 1
 	)
-	SELECT r.id, r.digest, r.spec_yaml, r.actor, r.change_summary, r.created_at
+	SELECT r.id, r.digest, r.spec_json, r.actor, r.change_summary, r.created_at
 	FROM active_spec h
 	JOIN cluster_spec_releases r ON r.id = h.release_id;
 	`
@@ -337,7 +337,7 @@ func (r *SpecSyncRepository) GetActiveSpecRelease(ctx context.Context) (*entity.
 	err := r.reader.QueryRowContext(ctx, activeQuery).Scan(
 		&out.ID,
 		&out.Digest,
-		&out.SpecYAML,
+		&out.SpecJSON,
 		&out.Actor,
 		&out.ChangeSummary,
 		&out.CreatedAt,
@@ -376,10 +376,10 @@ func (r *SpecSyncRepository) PublishSpecRelease(ctx context.Context, release ent
 		actor = existingActor
 	} else {
 		const insertReleaseSQL = `
-		INSERT INTO cluster_spec_releases (digest, spec_yaml, actor, change_summary)
+		INSERT INTO cluster_spec_releases (digest, spec_json, actor, change_summary)
 		VALUES (?, ?, ?, ?);
 		`
-		res, err := tx.ExecContext(ctx, insertReleaseSQL, release.Digest, release.SpecYAML, actor, release.ChangeSummary)
+		res, err := tx.ExecContext(ctx, insertReleaseSQL, release.Digest, release.SpecJSON, actor, release.ChangeSummary)
 		if err != nil {
 			return nil, fmt.Errorf("insert cluster spec release: %w", err)
 		}

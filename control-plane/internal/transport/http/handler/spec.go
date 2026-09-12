@@ -50,8 +50,8 @@ func (h *SpecHandler) GetSpec(c *gin.Context) {
 		return
 	}
 
-	c.Header("Content-Type", "application/yaml")
+	c.Header("Content-Type", "application/json")
 	c.Header("X-Aurora-Spec-Hash", res.Hash)
 	c.Header("X-Aurora-Release-ID", fmt.Sprintf("%d", res.ReleaseID))
-	c.String(http.StatusOK, res.SpecYAML)
+	c.String(http.StatusOK, res.SpecJSON)
 }

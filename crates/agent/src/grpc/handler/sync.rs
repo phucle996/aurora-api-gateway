@@ -36,9 +36,9 @@ impl SpecGrpcHandler {
 
         // Validate response
         if !resp.in_sync {
-            if resp.spec_yaml.trim().is_empty() {
+            if resp.spec_json.trim().is_empty() {
                 return Err(
-                    "Control Plane returned empty spec_yaml when in_sync is false".to_string(),
+                    "Control Plane returned empty spec_json when in_sync is false".to_string(),
                 );
             }
             if resp.hash.len() != 64 || !resp.hash.chars().all(|c| c.is_ascii_hexdigit()) {

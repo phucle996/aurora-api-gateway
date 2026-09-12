@@ -145,7 +145,7 @@ func TestSpecSyncRepository_SpecRelease_Lifecycle(t *testing.T) {
 	// 2. Publish Revision 1
 	rel1, err := repo.PublishSpecRelease(ctx, entity.ClusterSpecRelease{
 		Digest:        "hash-revision-1",
-		SpecYAML:      "version: 1\n",
+		SpecJSON:      "version: 1\n",
 		Actor:         "admin",
 		ChangeSummary: "Initial baseline",
 	})
@@ -161,14 +161,14 @@ func TestSpecSyncRepository_SpecRelease_Lifecycle(t *testing.T) {
 	if err != nil || active1 == nil {
 		t.Fatalf("failed to get active release 1: %v", err)
 	}
-	if active1.ID != 1 || active1.Digest != "hash-revision-1" || active1.SpecYAML != "version: 1\n" {
+	if active1.ID != 1 || active1.Digest != "hash-revision-1" || active1.SpecJSON != "version: 1\n" {
 		t.Errorf("unexpected active 1: %+v", active1)
 	}
 
 	// 4. Publish Revision 2
 	rel2, err := repo.PublishSpecRelease(ctx, entity.ClusterSpecRelease{
 		Digest:        "hash-revision-2",
-		SpecYAML:      "version: 2\n",
+		SpecJSON:      "version: 2\n",
 		Actor:         "secops",
 		ChangeSummary: "Update rules",
 	})

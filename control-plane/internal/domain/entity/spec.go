@@ -9,7 +9,7 @@ type SpecSyncResult struct {
 	InSync    bool
 	ReleaseID int64
 	Hash      string
-	SpecYAML  string
+	SpecJSON  string
 }
 
 type SpecReportCommand struct {
@@ -24,7 +24,7 @@ type SpecReportCommand struct {
 type ClusterSpecRelease struct {
 	ID            int64  `json:"id"`
 	Digest        string `json:"digest"`
-	SpecYAML      string `json:"spec_yaml"`
+	SpecJSON      string `json:"spec_json"`
 	Actor         string `json:"actor"`
 	ChangeSummary string `json:"change_summary"`
 	CreatedAt     string `json:"created_at"`

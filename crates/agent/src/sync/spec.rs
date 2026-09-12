@@ -27,7 +27,7 @@ impl SpecSyncRunner {
         dispatcher: Arc<Mutex<ExtensionDispatcher>>,
         grpc: GrpcClient,
     ) -> Self {
-        let spec_path = cfg.policy_dir.join("node-spec.yaml");
+        let spec_path = cfg.policy_dir.join("node-spec.json");
         Self {
             cfg,
             nginx,
@@ -38,14 +38,14 @@ impl SpecSyncRunner {
         }
     }
 
-    /// Bootstrap from existing local node-spec.yaml on disk if present.
+    /// Bootstrap from existing local node-spec.json on disk if present.
     pub async fn bootstrap(&self) {
         if self.spec_path.exists()
             && let Ok(raw) = tokio::fs::read_to_string(&self.spec_path).await
         {
             let hash = compute_sha256(raw.as_bytes());
-            info!(hash = %hash, path = %self.spec_path.display(), "Loading baseline node-spec.yaml from disk");
-            if let Ok(spec) = Spec::parse_yaml(&raw) {
+            info!(hash = %hash, path = %self.spec_path.display(), "Loading baseline node-spec.json from disk");
+            if let Ok(spec) = Spec::parse_json(&raw) {
                 if let Err(err) = self.materialize_and_activate(&spec).await {
                     error!(error = %err, "Failed to activate baseline NodeSpec; keeping it out of sync");
                     return;
@@ -62,7 +62,7 @@ impl SpecSyncRunner {
                 }
                 *self.current_hash.lock().await = hash;
             } else {
-                warn!("Failed to parse local node-spec.yaml, will wait for Controller sync");
+                warn!("Failed to parse local node-spec.json, will wait for Controller sync");
             }
         }
     }
@@ -89,7 +89,7 @@ impl SpecSyncRunner {
         Ok(())
     }
 
-    /// Apply and materialize new YAML specification content safely (Fault-tolerant / Never-crash).
+    /// Apply and materialize new JSON specification content safely (Fault-tolerant / Never-crash).
     async fn apply_spec_content(&self, body: &str, expected_hash: &str) -> Result<i64, String> {
         let calculated_hash = compute_sha256(body.as_bytes());
         if !expected_hash.is_empty() && calculated_hash != expected_hash {
@@ -99,9 +99,9 @@ impl SpecSyncRunner {
             ));
         }
 
-        let spec = Spec::parse_yaml(body).map_err(|e| format!("YAML parse error: {}", e))?;
+        let spec = Spec::parse_json(body).map_err(|e| format!("JSON parse error: {}", e))?;
 
-        // 1. Write atomic node-spec.yaml
+        // 1. Write atomic node-spec.json
         let tmp_path = self
             .spec_path
             .with_extension(format!("tmp.{}", std::process::id()));
@@ -110,7 +110,7 @@ impl SpecSyncRunner {
             .map_err(|e| format!("Failed to write temp spec: {}", e))?;
         tokio::fs::rename(&tmp_path, &self.spec_path)
             .await
-            .map_err(|e| format!("Failed to commit node-spec.yaml: {}", e))?;
+            .map_err(|e| format!("Failed to commit node-spec.json: {}", e))?;
 
         // 2. Materialize and activate NGINX before acknowledging the new hash.
         self.materialize_and_activate(&spec).await?;
@@ -146,7 +146,7 @@ impl SpecSyncRunner {
                     return;
                 }
 
-                match self.apply_spec_content(&res.spec_yaml, &res.hash).await {
+                match self.apply_spec_content(&res.spec_json, &res.hash).await {
                     Ok(release_id) => {
                         let _ = handler
                             .report_spec(
@@ -253,7 +253,7 @@ mod tests {
             .expect("create lazy grpc client");
         let runner = SpecSyncRunner::new(cfg, nginx, dispatcher, grpc);
 
-        let body = "version: 1\nrelease_id: 7\n";
+        let body = r#"{"version": 1, "release_id": 7}"#;
         let err = runner
             .apply_spec_content(body, &compute_sha256(body.as_bytes()))
             .await

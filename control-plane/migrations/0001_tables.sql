@@ -173,7 +173,7 @@ CREATE TABLE IF NOT EXISTS extensions (
 CREATE TABLE IF NOT EXISTS cluster_spec_releases (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     digest TEXT NOT NULL UNIQUE,
-    spec_yaml TEXT NOT NULL,
+    spec_json TEXT NOT NULL,
     actor TEXT NOT NULL DEFAULT 'system',
     change_summary TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))

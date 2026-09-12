@@ -47,8 +47,8 @@ pub struct Spec {
 }
 
 impl Spec {
-    pub fn parse_yaml(raw: &str) -> Result<Self, serde_yaml::Error> {
-        serde_yaml::from_str(raw)
+    pub fn parse_json(raw: &str) -> Result<Self, serde_json::Error> {
+        serde_json::from_str(raw)
     }
 }
 
@@ -64,36 +64,54 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_spec_yaml_roundtrip() {
-        let yaml = r#"
-version: 1
-release_id: 100
-node_id: "node-01"
-extensions:
-  - instance_id: "prometheus"
-    key: "builtin/prometheus"
-    version: 1
-    manifest_digest: "catalog-digest"
-    config_json: '{"port":9145,"stub_status_url":"http://127.0.0.1:80/stub_status","prometheus":{"enabled":true,"path":"/metrics"},"otlp":{"enabled":true,"endpoint":"http://otel-collector:4317","interval_secs":15}}'
-waf:
-  mode: "enforce"
-  block_paths:
-    - "/blocked"
-    - "/__aurora_blocked"
-upstreams:
-  - name: "api_backend"
-    servers:
-      - addr: "10.0.0.1:8080"
-        weight: 1
-routing:
-  domains:
-    - host: "example.com"
-      locations:
-        - path: "/"
-          upstream: "api_backend"
-"#;
+    fn test_spec_json_roundtrip() {
+        let json_str = r#"{
+  "version": 1,
+  "release_id": 100,
+  "node_id": "node-01",
+  "extensions": [
+    {
+      "instance_id": "prometheus",
+      "key": "builtin/prometheus",
+      "version": 1,
+      "manifest_digest": "catalog-digest",
+      "config_json": "{\"port\":9145,\"stub_status_url\":\"http://127.0.0.1:80/stub_status\",\"prometheus\":{\"enabled\":true,\"path\":\"/metrics\"},\"otlp\":{\"enabled\":true,\"endpoint\":\"http://otel-collector:4317\",\"interval_secs\":15}}"
+    }
+  ],
+  "waf": {
+    "mode": "enforce",
+    "block_paths": [
+      "/blocked",
+      "/__aurora_blocked"
+    ]
+  },
+  "upstreams": [
+    {
+      "name": "api_backend",
+      "servers": [
+        {
+          "addr": "10.0.0.1:8080",
+          "weight": 1
+        }
+      ]
+    }
+  ],
+  "routing": {
+    "domains": [
+      {
+        "host": "example.com",
+        "locations": [
+          {
+            "path": "/",
+            "upstream": "api_backend"
+          }
+        ]
+      }
+    ]
+  }
+}"#;
 
-        let spec = Spec::parse_yaml(yaml).expect("parse yaml");
+        let spec = Spec::parse_json(json_str).expect("parse json");
         assert_eq!(spec.release_id, 100);
         assert_eq!(spec.node_id, "node-01");
         assert_eq!(spec.extensions.len(), 1);
@@ -104,8 +122,8 @@ routing:
         assert_eq!(spec.upstreams.len(), 1);
         assert_eq!(spec.routing.domains.len(), 1);
 
-        let hash1 = compute_sha256(yaml.as_bytes());
-        let hash2 = compute_sha256(yaml.as_bytes());
+        let hash1 = compute_sha256(json_str.as_bytes());
+        let hash2 = compute_sha256(json_str.as_bytes());
         assert_eq!(hash1, hash2);
         assert_eq!(hash1.len(), 64);
     }

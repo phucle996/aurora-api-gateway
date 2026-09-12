@@ -43,7 +43,7 @@ func (s *SpecSyncService) SyncSpec(ctx context.Context, q entity.SpecSyncQuery) 
 			InSync:    false,
 			ReleaseID: 0,
 			Hash:      "",
-			SpecYAML:  "",
+			SpecJSON:  "",
 		}, nil
 	}
 
@@ -52,7 +52,7 @@ func (s *SpecSyncService) SyncSpec(ctx context.Context, q entity.SpecSyncQuery) 
 			InSync:    true,
 			ReleaseID: active.ID,
 			Hash:      active.Digest,
-			SpecYAML:  "",
+			SpecJSON:  "",
 		}, nil
 	}
 
@@ -60,7 +60,7 @@ func (s *SpecSyncService) SyncSpec(ctx context.Context, q entity.SpecSyncQuery) 
 		InSync:    false,
 		ReleaseID: active.ID,
 		Hash:      active.Digest,
-		SpecYAML:  active.SpecYAML,
+		SpecJSON:  active.SpecJSON,
 	}, nil
 }
 

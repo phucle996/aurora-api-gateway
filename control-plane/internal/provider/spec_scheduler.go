@@ -15,7 +15,6 @@ import (
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	"aurora-waf.local/control-plane/internal/domain/repo"
 	"aurora-waf.local/control-plane/internal/extensionmanifest"
-	"github.com/goccy/go-yaml"
 )
 
 // SpecScheduler is an autonomous background provider that periodically compiles
@@ -131,7 +130,7 @@ func (s *SpecScheduler) Reconcile(ctx context.Context) (*entity.ClusterSpecRelea
 		return nil, fmt.Errorf("failed to get authority data: %w", err)
 	}
 
-	doc, yamlStr, calculatedHash, err := s.compileDocument(auth)
+	doc, jsonStr, calculatedHash, err := s.compileDocument(auth)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compile document: %w", err)
 	}
@@ -147,7 +146,7 @@ func (s *SpecScheduler) Reconcile(ctx context.Context) (*entity.ClusterSpecRelea
 
 	newRelease, err := r.PublishSpecRelease(ctx, entity.ClusterSpecRelease{
 		Digest:        calculatedHash,
-		SpecYAML:      yamlStr,
+		SpecJSON:      jsonStr,
 		Actor:         "spec-scheduler",
 		ChangeSummary: fmt.Sprintf("Cluster Spec compiled with %d extensions, %d routes", len(doc.Extensions), len(auth.RoutingRecords)),
 	})
@@ -350,15 +349,15 @@ func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*Spec, 
 		}
 	}
 
-	yamlBytes, err := yaml.Marshal(doc)
+	jsonBytes, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
-		return nil, "", "", fmt.Errorf("failed to marshal node spec YAML: %w", err)
+		return nil, "", "", fmt.Errorf("failed to marshal node spec JSON: %w", err)
 	}
 
-	h := sha256.Sum256(yamlBytes)
+	h := sha256.Sum256(jsonBytes)
 	hashStr := hex.EncodeToString(h[:])
 
-	return &doc, string(yamlBytes), hashStr, nil
+	return &doc, string(jsonBytes), hashStr, nil
 }
 
 // Spec represents the declarative specification for the Aurora gateway cluster.
@@ -422,12 +421,48 @@ type LocationRoutingSpec struct {
 
 type OriginTLSSpec struct {
 	Enabled    bool   `yaml:"enabled" json:"enabled"`
-	VerifyCert bool   `yaml:"verify_cert" json:"verifyCert"`
-	SNIHost    string `yaml:"sni_host,omitempty" json:"sniHost,omitempty"`
-	CACert     string `yaml:"ca_cert,omitempty" json:"caCert,omitempty"`
-	MTLS       bool   `yaml:"mtls" json:"mTLS"`
-	ClientCert string `yaml:"client_cert,omitempty" json:"clientCert,omitempty"`
-	ClientKey  string `yaml:"client_key,omitempty" json:"clientKey,omitempty"`
+	VerifyCert bool   `yaml:"verify_cert" json:"verify_cert"`
+	SNIHost    string `yaml:"sni_host,omitempty" json:"sni_host,omitempty"`
+	CACert     string `yaml:"ca_cert,omitempty" json:"ca_cert,omitempty"`
+	MTLS       bool   `yaml:"mtls" json:"mtls"`
+	ClientCert string `yaml:"client_cert,omitempty" json:"client_cert,omitempty"`
+	ClientKey  string `yaml:"client_key,omitempty" json:"client_key,omitempty"`
+}
+
+func (o *OriginTLSSpec) UnmarshalJSON(data []byte) error {
+	type Alias OriginTLSSpec
+	var aux struct {
+		Alias
+		VerifyCertCamel *bool   `json:"verifyCert"`
+		SNIHostCamel    *string `json:"sniHost"`
+		CACertCamel     *string `json:"caCert"`
+		MTLSCamel       *bool   `json:"mTLS"`
+		ClientCertCamel *string `json:"clientCert"`
+		ClientKeyCamel  *string `json:"clientKey"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	*o = OriginTLSSpec(aux.Alias)
+	if aux.VerifyCertCamel != nil {
+		o.VerifyCert = *aux.VerifyCertCamel
+	}
+	if aux.SNIHostCamel != nil {
+		o.SNIHost = *aux.SNIHostCamel
+	}
+	if aux.CACertCamel != nil {
+		o.CACert = *aux.CACertCamel
+	}
+	if aux.MTLSCamel != nil {
+		o.MTLS = *aux.MTLSCamel
+	}
+	if aux.ClientCertCamel != nil {
+		o.ClientCert = *aux.ClientCertCamel
+	}
+	if aux.ClientKeyCamel != nil {
+		o.ClientKey = *aux.ClientKeyCamel
+	}
+	return nil
 }
 
 type CertificateSpec struct {

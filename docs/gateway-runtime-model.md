@@ -19,7 +19,7 @@ Hệ thống được tổ chức thành 5 vòng độc lập nhằm đảm bả
 │ 2. CONTROL PLANE (Go Controller)                                       │
 │    - Authority Source (SQLite Database)                                │
 │    - Validator, Normalizer, Conflict Detection                         │
-│    - Snapshot Compiler (Biên dịch DB -> Immutable node-spec.yaml)      │
+│    - Snapshot Compiler (Biên dịch DB -> Immutable node-spec.json)      │
 │    - Spec Distributor (Push / Polling qua versioned stream)            │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ Versioned Snapshot (SHA256, Release ID)
@@ -128,7 +128,7 @@ Mỗi request đi qua Gateway được phân định qua **7 Phase cố định*
 | Phase | Thời điểm thực thi | Nhiệm vụ kỹ thuật | Extensions phụ trách tiêu biểu |
 | :--- | :--- | :--- | :--- |
 | **`0. init`** *(Hook)* | Gateway khởi động | Khởi tạo worker, nạp shared memory, liên kết OpenSSL | N/A |
-| **`0. configure`** *(Hook)* | Khi Spec thay đổi | Parse YAML, validate schema, nạp cert vào đĩa, reload | N/A |
+| **`0. configure`** *(Hook)* | Khi Spec thay đổi | Parse JSON, validate schema, nạp cert vào đĩa, reload | N/A |
 | **`1. pre-routing`** | Ngay khi nhận socket HTTP | Bóc tách Real Client IP, sinh `X-Request-ID`, khởi tạo trace context | `request-id`, `real-ip` |
 | **`2. rewrite`** | Sau khi match Route | Viết lại URI, chuẩn hóa host, can thiệp query params, **match header để rewrite path** trước khi vào logic bảo mật | `uri-rewrite`, `host-rewrite`, `method-rewrite`, `request-query-transform` |
 | **`3. access`** | Trọng tài bảo mật & lưu lượng | **Gatekeeper:** Xác thực danh tính $\rightarrow$ Phân quyền $\rightarrow$ Kiểm soát tần suất $\rightarrow$ Quét lỗ hổng WAF. Ngắt ngay nếu vi phạm! | • **Auth:** `jwt-auth`, `key-auth`, `basic-auth`, `oauth2-auth`<br>• **Authz:** `acl`, `rbac`, `ip-restriction`, `geo-restriction`<br>• **Rate Limit:** `rate-limit`, `rate-limit-distributed`<br>• **WAF:** `waf-core`, `sqli-protection`, `xss-protection`, `bot-detection` |

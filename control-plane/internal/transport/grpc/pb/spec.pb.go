@@ -78,7 +78,7 @@ type SyncSpecResponse struct {
 	InSync        bool                   `protobuf:"varint,1,opt,name=in_sync,json=inSync,proto3" json:"in_sync,omitempty"`
 	ReleaseId     int64                  `protobuf:"varint,2,opt,name=release_id,json=releaseId,proto3" json:"release_id,omitempty"`
 	Hash          string                 `protobuf:"bytes,3,opt,name=hash,proto3" json:"hash,omitempty"`
-	SpecYaml      string                 `protobuf:"bytes,4,opt,name=spec_yaml,json=specYaml,proto3" json:"spec_yaml,omitempty"`
+	SpecJson      string                 `protobuf:"bytes,4,opt,name=spec_json,json=specJson,proto3" json:"spec_json,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -134,9 +134,9 @@ func (x *SyncSpecResponse) GetHash() string {
 	return ""
 }
 
-func (x *SyncSpecResponse) GetSpecYaml() string {
+func (x *SyncSpecResponse) GetSpecJson() string {
 	if x != nil {
-		return x.SpecYaml
+		return x.SpecJson
 	}
 	return ""
 }
@@ -274,7 +274,7 @@ const file_sync_v1_spec_proto_rawDesc = "" +
 	"\n" +
 	"release_id\x18\x02 \x01(\x03R\treleaseId\x12\x12\n" +
 	"\x04hash\x18\x03 \x01(\tR\x04hash\x12\x1b\n" +
-	"\tspec_yaml\x18\x04 \x01(\tR\bspecYaml\"\x91\x01\n" +
+	"\tspec_json\x18\x04 \x01(\tR\bspecJson\"\x91\x01\n" +
 	"\x11ReportSpecRequest\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x1d\n" +
 	"\n" +

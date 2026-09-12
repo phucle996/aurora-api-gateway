@@ -41,7 +41,7 @@ func (h *SpecSyncHandler) SyncSpec(ctx context.Context, req *pb.SyncSpecRequest)
 		InSync:    res.InSync,
 		ReleaseId: res.ReleaseID,
 		Hash:      res.Hash,
-		SpecYaml:  res.SpecYAML,
+		SpecJson:  res.SpecJSON,
 	}, nil
 }
 
