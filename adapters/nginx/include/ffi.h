@@ -160,6 +160,30 @@ uint32_t aurora_conn_limit_acquire(const AuroraConnectionLimitEngine *engine,
 uint32_t aurora_conn_limit_release(const AuroraConnectionLimitEngine *engine,
     const AuroraConnLimitToken *token);
 
+/* ========================================================================== */
+/* Extension: Traffic Shaper Types & FFI                                      */
+/* ========================================================================== */
+
+typedef struct AuroraTrafficShaperEngine AuroraTrafficShaperEngine;
+
+typedef struct {
+    uint64_t rate_bytes_per_sec;
+    uint64_t burst_bytes;
+    uint32_t matched;
+    uint32_t rule_id_len;
+    char rule_id[128];
+} AuroraTrafficShaperDecision;
+
+uint32_t aurora_traffic_shaper_create(const uint8_t *data, size_t len, AuroraTrafficShaperEngine **out);
+void aurora_traffic_shaper_destroy(AuroraTrafficShaperEngine *engine);
+uint32_t aurora_traffic_shaper_evaluate(const AuroraTrafficShaperEngine *engine,
+    const uint8_t *host, size_t host_len,
+    const uint8_t *path, size_t path_len,
+    const uint8_t *client_ip, size_t client_ip_len,
+    void *lookup_ctx,
+    aurora_header_lookup_fn lookup_fn,
+    AuroraTrafficShaperDecision *out_decision);
+
 /* Control Plane Runtime & Telemetry */
 uint32_t aurora_waf_start_runtime(
     const char *controller_url,

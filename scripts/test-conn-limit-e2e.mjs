@@ -101,15 +101,29 @@ function stopRedisDocker() {
 async function waitForRedis() {
   for (let i = 0; i < 30; i++) {
     try {
-      const socket = net.createConnection({ port: REDIS_PORT, host: '127.0.0.1' });
-      await once(socket, 'connect');
-      socket.write('PING\r\n');
-      const [data] = await once(socket, 'data');
-      socket.destroy();
-      if (data.toString().includes('PONG')) {
-        console.log('[Redis] Connected successfully!');
-        return;
-      }
+      await new Promise((resolve, reject) => {
+        const socket = net.createConnection({ port: REDIS_PORT, host: '127.0.0.1' });
+        const timer = setTimeout(() => {
+          socket.destroy();
+          reject(new Error('timeout'));
+        }, 500);
+        socket.on('connect', () => socket.write('PING\r\n'));
+        socket.on('data', (data) => {
+          clearTimeout(timer);
+          socket.destroy();
+          if (data.toString().includes('PONG')) {
+            resolve();
+          } else {
+            reject(new Error('unexpected response'));
+          }
+        });
+        socket.on('error', (err) => {
+          clearTimeout(timer);
+          reject(err);
+        });
+      });
+      console.log('[Redis] Connected successfully!');
+      return;
     } catch { }
     await sleep(200);
   }

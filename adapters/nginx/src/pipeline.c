@@ -51,6 +51,12 @@ ngx_http_gateway_handler(ngx_http_request_t *r)
         return rc;
     }
 
+    /* Stage 6: In-process Traffic Shaper */
+    rc = ngx_http_gateway_eval_traffic_shaper(r, conf, host);
+    if (rc != NGX_DECLINED) {
+        return rc;
+    }
+
     /* All checks passed: Cho phép request đi tiếp */
     return NGX_DECLINED;
 }

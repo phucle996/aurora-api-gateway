@@ -250,6 +250,54 @@ async fn test_connection_limit_extension_materializes_and_removes_ffi_snapshot()
     let _ = tokio::fs::remove_dir_all(base).await;
 }
 
+#[tokio::test]
+async fn test_traffic_shaper_extension_materializes_and_removes_snapshot() {
+    let base = std::env::temp_dir().join(format!(
+        "aurora-ts-mat-test-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let policy_dir = base.join("policy");
+    let routing_dir = base.join("routing");
+    let _ = tokio::fs::remove_dir_all(&base).await;
+    let spec = Spec {
+        release_id: 88,
+        extensions: vec![crate::spec::extensions::ExtensionInstanceSpec {
+            instance_id: "traffic-shaper".to_string(),
+            key: "builtin/traffic-shaper".to_string(),
+            version: 1,
+            renderer: "traffic-shaper".to_string(),
+            manifest_digest: String::new(),
+            config_json: r#"{"rules":[{"id":"ts-1","host":"*","path_prefix":"/download","limit_by":"client_ip","rate_kb_per_sec":1024,"burst_kb":2048}]}"#.to_string(),
+        }],
+        ..Default::default()
+    };
+
+    materialize_nginx(&spec, &policy_dir, &routing_dir)
+        .await
+        .expect("materialize traffic-shaper snapshot");
+    let ts = tokio::fs::read_to_string(policy_dir.join("active-traffic-shaper.json"))
+        .await
+        .expect("read traffic-shaper snapshot");
+    assert!(ts.contains("\"generation\": 88"));
+    assert!(ts.contains("\"rate_kb_per_sec\": 1024"));
+    assert!(ts.contains("\"burst_kb\": 2048"));
+    assert!(ts.contains("\"/download\""));
+
+    let disabled = Spec {
+        release_id: 89,
+        ..Default::default()
+    };
+    let result = materialize_nginx(&disabled, &policy_dir, &routing_dir)
+        .await
+        .expect("remove traffic-shaper snapshot");
+    assert!(result.nginx_changed);
+    assert!(!policy_dir.join("active-traffic-shaper.json").exists());
+    let _ = tokio::fs::remove_dir_all(base).await;
+}
+
 #[test]
 fn test_access_policy_renderer_generates_cidr_rules_from_instance_config() {
     let instance = crate::spec::extensions::ExtensionInstanceSpec {

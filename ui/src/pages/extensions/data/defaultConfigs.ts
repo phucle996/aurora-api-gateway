@@ -415,11 +415,33 @@ export const EXTENSION_DEFAULT_CONFIGS: Record<string, Record<string, any>> = {
     burst: 10,
     rejected_code: 503
   },
+  'traffic-shaper': {
+    enabled: true,
+    rules: [
+      {
+        id: 'default-shaper',
+        priority: 100,
+        host: '*',
+        path_prefix: '/',
+        limit_by: 'client_ip',
+        rate_kb_per_sec: 2048,
+        burst_kb: 4096
+      }
+    ]
+  },
   'bandwidth-limit': {
     enabled: true,
-    rate_kb_per_sec: 1024,
-    burst_kb: 2048,
-    limit_by: 'ip'
+    rules: [
+      {
+        id: 'default-shaper',
+        priority: 100,
+        host: '*',
+        path_prefix: '/',
+        limit_by: 'client_ip',
+        rate_kb_per_sec: 2048,
+        burst_kb: 4096
+      }
+    ]
   },
   'request-size-limit': {
     enabled: true,

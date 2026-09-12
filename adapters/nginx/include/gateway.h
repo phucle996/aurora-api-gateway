@@ -20,6 +20,8 @@ typedef struct {
     AuroraRateLimitEngine *rate_limit_engine;
     ngx_str_t conn_limit_policy;
     AuroraConnectionLimitEngine *conn_limit_engine;
+    ngx_str_t traffic_shaper_policy;
+    AuroraTrafficShaperEngine *traffic_shaper_engine;
     ngx_str_t policy;        /* Đường dẫn tới file WAF policy snapshot */
     AuroraEngine *engine;    /* Con trỏ tới instance Rust WAF engine */
 } ngx_http_gateway_conf_t;
@@ -51,6 +53,10 @@ ngx_int_t ngx_http_gateway_eval_rate_limit(ngx_http_request_t *r, ngx_http_gatew
 /* Extension: Connection Limit */
 char *ngx_http_gateway_merge_conn_limit(ngx_conf_t *cf, ngx_http_gateway_conf_t *prev, ngx_http_gateway_conf_t *conf);
 ngx_int_t ngx_http_gateway_eval_conn_limit(ngx_http_request_t *r, ngx_http_gateway_conf_t *conf, ngx_str_t host);
+
+/* Extension: Traffic Shaper */
+char *ngx_http_gateway_merge_traffic_shaper(ngx_conf_t *cf, ngx_http_gateway_conf_t *prev, ngx_http_gateway_conf_t *conf);
+ngx_int_t ngx_http_gateway_eval_traffic_shaper(ngx_http_request_t *r, ngx_http_gateway_conf_t *conf, ngx_str_t host);
 
 /* Extension: Core WAF */
 char *ngx_http_gateway_merge_waf(ngx_conf_t *cf, ngx_http_gateway_conf_t *prev, ngx_http_gateway_conf_t *conf);

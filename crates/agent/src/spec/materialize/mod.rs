@@ -157,7 +157,29 @@ pub async fn materialize_nginx(
         }
     }
 
-    // 6. Upstreams Config
+    // 6. Traffic Shaper snapshot.
+    let traffic_shaper_path = policy_dir.join("active-traffic-shaper.json");
+    if let Some(ts_config) = rendered_extensions.traffic_shaper_policy.as_ref() {
+        let mut ts_obj = ts_config
+            .as_object()
+            .ok_or_else(|| "traffic-shaper config must be a JSON object".to_string())?
+            .clone();
+        ts_obj.insert("schema_version".to_string(), serde_json::json!(1));
+        ts_obj.insert("generation".to_string(), serde_json::json!(spec.release_id));
+        let ts_json = serde_json::to_string_pretty(&serde_json::Value::Object(ts_obj))?;
+        if atomic_write_if_changed(&traffic_shaper_path, ts_json.as_bytes()).await? {
+            info!("Updated active-traffic-shaper.json");
+            changed = true;
+        }
+    } else {
+        match tokio::fs::remove_file(&traffic_shaper_path).await {
+            Ok(()) => changed = true,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(Box::new(error)),
+        }
+    }
+
+    // 7. Upstreams Config
     let upstreams_path = policy_dir.join("active-upstreams.conf");
     let upstreams_content = if let Some(ref raw) = spec.upstreams_conf {
         raw.clone()

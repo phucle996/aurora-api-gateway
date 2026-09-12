@@ -67,14 +67,6 @@ pub fn materialize(
                 unsigned_or(config, "max_connections_per_ip", 50)
             ));
         }
-        "nginx-bandwidth-limit" => {
-            if let Some(rate) = unsigned(config, "rate_kb_per_sec") {
-                sink.push_server(&format!("limit_rate {rate}k;\n"));
-            }
-            if let Some(burst) = unsigned(config, "burst_kb") {
-                sink.push_server(&format!("limit_rate_after {burst}k;\n"));
-            }
-        }
         "nginx-cors" => {
             let allow_credentials = boolean(config, "allow_credentials").unwrap_or(false);
             let origin = if allow_credentials {

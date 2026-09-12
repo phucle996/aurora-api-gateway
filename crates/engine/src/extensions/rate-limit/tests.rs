@@ -85,13 +85,13 @@ fn test_fixed_window_rate_limiting() {
         }
     };
 
-    let d1 = engine.evaluate(host, path, ip, &lookup).unwrap();
+    let d1 = engine.evaluate(host, path, ip, lookup).unwrap();
     assert!(d1.allowed);
 
-    let d2 = engine.evaluate(host, path, ip, &lookup).unwrap();
+    let d2 = engine.evaluate(host, path, ip, lookup).unwrap();
     assert!(d2.allowed);
 
-    let d3 = engine.evaluate(host, path, ip, &lookup).unwrap();
+    let d3 = engine.evaluate(host, path, ip, lookup).unwrap();
     assert!(!d3.allowed);
 }
 

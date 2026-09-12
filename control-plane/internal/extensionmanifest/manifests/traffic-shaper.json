@@ -1,0 +1,92 @@
+{
+  "key": "builtin/traffic-shaper",
+  "version": 1,
+  "id": "traffic-shaper",
+  "name": "Traffic Shaper",
+  "category": "traffic_control",
+  "description": "Dynamic response bandwidth shaping with initial burst allowance.",
+  "renderer": "traffic-shaper",
+  "builtin": true,
+  "default_config": {
+    "rules": [
+      {
+        "id": "default-shaper",
+        "priority": 100,
+        "host": "*",
+        "path_prefix": "/",
+        "limit_by": "client_ip",
+        "rate_kb_per_sec": 2048,
+        "burst_kb": 4096
+      }
+    ]
+  },
+  "ui_schema": {
+    "layout_type": "form",
+    "fields": []
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "rules"
+    ],
+    "properties": {
+      "rules": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 64,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "rate_kb_per_sec"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "priority": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000
+            },
+            "host": {
+              "type": "string",
+              "maxLength": 253
+            },
+            "path_prefix": {
+              "type": "string",
+              "maxLength": 8192
+            },
+            "limit_by": {
+              "type": "string",
+              "enum": [
+                "client_ip",
+                "header",
+                "route_path"
+              ]
+            },
+            "header_name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "rate_kb_per_sec": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000000
+            },
+            "burst_kb": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000000
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -239,8 +239,9 @@ export function ExtensionIcon({ id, category, className = 'w-5 h-5' }: Extension
     // 4. Traffic Control (14) - All Unique
     case 'rate-limit': // đã imple 
       return <Gauge className={className} />;
-    case 'connection-limit':
+    case 'connection-limit': // đã imple 
       return <Split className={className} />;
+    case 'traffic-shaper': // đã imple 
     case 'bandwidth-limit':
       return <Wifi className={className} />;
     case 'request-size-limit':

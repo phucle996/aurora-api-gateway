@@ -128,10 +128,7 @@ pub fn validate_connection_limit_config(
         }
 
         if let Some(limit_by) = string(rule, "limit_by") {
-            if !matches!(
-                limit_by,
-                "ip" | "client_ip" | "header" | "route_path"
-            ) {
+            if !matches!(limit_by, "client_ip" | "header" | "route_path") {
                 return Err(format!(
                     "connection-limit extension {} rule '{id}' has invalid limit_by: {limit_by}",
                     instance.instance_id

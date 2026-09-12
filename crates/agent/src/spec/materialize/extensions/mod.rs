@@ -7,6 +7,8 @@ pub mod metrics;
 pub mod nginx;
 #[path = "rate-limit/mod.rs"]
 pub mod rate_limit;
+#[path = "traffic-shaper/mod.rs"]
+pub mod traffic_shaper;
 
 use crate::spec::extensions::ExtensionInstanceSpec;
 use nginx::NginxDirectiveSink;
@@ -21,6 +23,7 @@ pub struct RenderedExtensions {
     pub jwt_policy: Option<Value>,
     pub rate_limit_policy: Option<Value>,
     pub conn_limit_policy: Option<Value>,
+    pub traffic_shaper_policy: Option<Value>,
 }
 
 pub fn render_extensions(
@@ -40,6 +43,7 @@ pub fn render_extensions(
     let mut jwt_policy = None;
     let mut rate_limit_policy = None;
     let mut conn_limit_policy = None;
+    let mut traffic_shaper_policy = None;
 
     for instance in instances {
         if instance.renderer.trim().is_empty() {
@@ -94,6 +98,13 @@ pub fn render_extensions(
                 &mut server,
                 &mut has_server,
             )?,
+            "traffic-shaper" | "bandwidth-limit" => traffic_shaper::materialize(
+                instance,
+                config,
+                &mut traffic_shaper_policy,
+                &mut server,
+                &mut has_server,
+            )?,
             renderer if renderer.starts_with("nginx-") => {
                 let mut sink = NginxDirectiveSink {
                     modules: &mut modules,
@@ -131,5 +142,6 @@ pub fn render_extensions(
         jwt_policy,
         rate_limit_policy,
         conn_limit_policy,
+        traffic_shaper_policy,
     })
 }
