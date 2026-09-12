@@ -184,10 +184,14 @@
               "type": "string",
               "enum": [
                 "client_ip",
-                "api_key",
-                "authorization",
+                "header",
                 "route_path"
               ]
+            },
+            "header_name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
             },
             "max_connections": {
               "type": "integer",

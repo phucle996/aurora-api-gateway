@@ -16,7 +16,7 @@ import http from 'node:http';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import {
-  mkdtempSync, writeFileSync, rmSync, mkdirSync,
+  mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync,
 } from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
@@ -531,6 +531,8 @@ async function run() {
       algorithm: 'token_bucket',
       memory_size_mb: 16,
       max_keys: 100000,
+      eviction_policy: 'lru',
+      overflow_strategy: 'evict_and_track',
       redis: {
         endpoint: `redis://127.0.0.1:${REDIS_PORT}`,
         timeout_ms: 100,
@@ -591,14 +593,105 @@ async function run() {
     assert.equal(okCount + limitedCount, 15, 'All requests handled with 0 socket drops or crashes');
     console.log('✓ Phase 6 passed: Multi-extension Redis connection pool reuse validated!');
 
+    // Reset rate-limit back to clean local passthrough before stopping Redis
+    writeFileSync(rlPolicyPath, JSON.stringify({
+      schema_version: 1,
+      generation: 20,
+      mode: 'local',
+      algorithm: 'token_bucket',
+      memory_size_mb: 16,
+      max_keys: 100000,
+      eviction_policy: 'lru',
+      overflow_strategy: 'evict_and_track',
+      rules: [{
+        id: 'disabled-passthrough',
+        host: '*',
+        path_prefix: '/',
+        limit_by: 'client_ip',
+        rate: 999999,
+        burst: 999999,
+        period_secs: 1,
+        action_on_exceeded: 'throttle'
+      }]
+    }));
+
     stopRedisDocker();
   } else {
     console.log('\n[Note] Docker not available: skipping Phases 4, 5, 6 (Live Redis tests)');
   }
 
+  // ─── PHASE 7: Dynamic Header and Route Path Dimensions ───────────
+  console.log('\n--- Phase 7: Dynamic Header & Route Path Limiting Dimensions ---');
+  {
+    writeConnLimitPolicy({
+      mode: 'local',
+      rules: [
+        {
+          id: 'rule-header-tenant',
+          priority: 1,
+          host: '*',
+          path_prefix: '/tenant',
+          limit_by: 'header',
+          header_name: 'x-tenant-id',
+          max_connections: 1,
+          action_on_exceeded: 'throttle',
+          rejected_code: 429,
+        },
+        {
+          id: 'rule-route-path',
+          priority: 2,
+          host: '*',
+          path_prefix: '/route-limited',
+          limit_by: 'route_path',
+          max_connections: 1,
+          action_on_exceeded: 'block',
+          rejected_code: 403,
+        }
+      ]
+    });
+    reloadNginx();
+    await sleep(200);
+
+    // 1. Test LimitBy::Header with X-Tenant-ID
+    // Tenant Alpha occupies slot with 300ms request
+    const pAlpha1 = makeRequest('/tenant/data?ms=300', { headers: { 'x-tenant-id': 'alpha' } });
+    await sleep(50);
+
+    // Concurrent Tenant Alpha request -> should be rejected (429)
+    const pAlpha2 = await makeRequest('/tenant/data?ms=10', { headers: { 'x-tenant-id': 'alpha' } });
+    assert.equal(pAlpha2.statusCode, 429, 'Tenant Alpha should be throttled with 429');
+
+    // Concurrent Tenant Beta request -> should succeed (200) because limit is per-header-value!
+    const pBeta1 = await makeRequest('/tenant/data?ms=10', { headers: { 'x-tenant-id': 'beta' } });
+    assert.equal(pBeta1.statusCode, 200, 'Tenant Beta should not be throttled');
+
+    await pAlpha1;
+
+    // After Alpha frees slot, a new Alpha request should succeed (200)
+    const pAlpha3 = await makeRequest('/tenant/data?ms=10', { headers: { 'x-tenant-id': 'alpha' } });
+    assert.equal(pAlpha3.statusCode, 200, 'Tenant Alpha should succeed after slot released');
+
+    // 2. Test LimitBy::RoutePath
+    // /route-limited/reportA occupies slot
+    const pRouteA1 = makeRequest('/route-limited/reportA?ms=300');
+    await sleep(50);
+
+    // Concurrent request to same route -> rejected (403)
+    const pRouteA2 = await makeRequest('/route-limited/reportA?ms=10');
+    assert.equal(pRouteA2.statusCode, 403, 'Same route path should be blocked with 403');
+
+    // Concurrent request to different route -> allowed (200)
+    const pRouteB1 = await makeRequest('/route-limited/reportB?ms=10');
+    assert.equal(pRouteB1.statusCode, 200, 'Different route path should not be blocked');
+
+    await pRouteA1;
+
+    console.log('✓ Phase 7 passed: Header (X-Tenant-ID) and Route Path limiting dimensions fully verified!');
+  }
+
   // ─── Cleanup ─────────────────────────────────────────────────────
   console.log('\n================================================================');
-  console.log('  ALL CONNECTION LIMIT TESTS PASSED SUCCESSFULLY! (6/6 PHASES)');
+  console.log('  ALL CONNECTION LIMIT TESTS PASSED SUCCESSFULLY! (7/7 PHASES)');
   console.log('================================================================');
 
   stopNginx();

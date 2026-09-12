@@ -15,6 +15,14 @@ use std::{
 pub const AURORA_CONN_LIMIT_MAX_HEADERS: usize = 8;
 pub const AURORA_CONN_LIMIT_MAX_BODY: usize = 2048;
 
+pub type AuroraHeaderLookupFn = unsafe extern "C" fn(
+    ctx: *mut std::ffi::c_void,
+    name: *const u8,
+    name_len: usize,
+    out_val: *mut *const u8,
+    out_val_len: *mut usize,
+) -> u32;
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AuroraConnLimitHeader {
@@ -101,10 +109,8 @@ pub unsafe extern "C" fn aurora_conn_limit_acquire(
     path_len: usize,
     client_ip: *const u8,
     client_ip_len: usize,
-    api_key: *const u8,
-    api_key_len: usize,
-    authorization: *const u8,
-    authorization_len: usize,
+    lookup_ctx: *mut std::ffi::c_void,
+    lookup_fn: Option<AuroraHeaderLookupFn>,
     out_decision: *mut AuroraConnLimitDecision,
 ) -> u32 {
     if engine.is_null()
@@ -118,10 +124,6 @@ pub unsafe extern "C" fn aurora_conn_limit_acquire(
         || client_ip.is_null()
         || client_ip_len == 0
         || client_ip_len > 64
-        || (api_key.is_null() && api_key_len != 0)
-        || api_key_len > 1_024
-        || (authorization.is_null() && authorization_len != 0)
-        || authorization_len > 16_384
     {
         return 1;
     }
@@ -130,18 +132,20 @@ pub unsafe extern "C" fn aurora_conn_limit_acquire(
         let host_slice = unsafe { slice::from_raw_parts(host, host_len) };
         let path_slice = unsafe { slice::from_raw_parts(path, path_len) };
         let ip_slice = unsafe { slice::from_raw_parts(client_ip, client_ip_len) };
-        let api_key_opt = if api_key.is_null() || api_key_len == 0 {
-            None
-        } else {
-            Some(unsafe { slice::from_raw_parts(api_key, api_key_len) })
-        };
-        let auth_opt = if authorization.is_null() || authorization_len == 0 {
-            None
-        } else {
-            Some(unsafe { slice::from_raw_parts(authorization, authorization_len) })
+
+        let header_lookup = |name: &str| -> Option<&[u8]> {
+            let f = lookup_fn?;
+            let mut val_ptr: *const u8 = ptr::null();
+            let mut val_len: usize = 0;
+            let rc = unsafe { f(lookup_ctx, name.as_ptr(), name.len(), &mut val_ptr, &mut val_len) };
+            if rc == 0 && !val_ptr.is_null() && val_len > 0 && val_len <= 16_384 {
+                Some(unsafe { slice::from_raw_parts(val_ptr, val_len) })
+            } else {
+                None
+            }
         };
 
-        unsafe { &*engine }.acquire(host_slice, path_slice, ip_slice, api_key_opt, auth_opt)
+        unsafe { &*engine }.acquire(host_slice, path_slice, ip_slice, header_lookup)
     })) {
         Ok(Ok(decision)) => {
             let action_num = match decision.action {
@@ -323,10 +327,8 @@ mod tests {
                 path.len(),
                 ip.as_ptr(),
                 ip.len(),
-                ptr::null(),
-                0,
-                ptr::null(),
-                0,
+                ptr::null_mut(),
+                None,
                 &mut decision,
             )
         };
@@ -346,10 +348,8 @@ mod tests {
                 path.len(),
                 ip.as_ptr(),
                 ip.len(),
-                ptr::null(),
-                0,
-                ptr::null(),
-                0,
+                ptr::null_mut(),
+                None,
                 &mut decision,
             )
         };
@@ -371,15 +371,116 @@ mod tests {
                 path.len(),
                 ip.as_ptr(),
                 ip.len(),
-                ptr::null(),
-                0,
-                ptr::null(),
-                0,
+                ptr::null_mut(),
+                None,
                 &mut decision,
             )
         };
         assert_eq!(rc, 0);
         assert_eq!(decision.allowed, 1);
+
+        unsafe { aurora_conn_limit_destroy(engine_ptr) };
+    }
+
+    unsafe extern "C" fn mock_header_lookup(
+        ctx: *mut std::ffi::c_void,
+        name: *const u8,
+        name_len: usize,
+        out_val: *mut *const u8,
+        out_val_len: *mut usize,
+    ) -> u32 {
+        if ctx.is_null() || name.is_null() || out_val.is_null() || out_val_len.is_null() {
+            return 1;
+        }
+        let name_slice = unsafe { slice::from_raw_parts(name, name_len) };
+        if name_slice == b"x-api-key" {
+            let val = b"secret-token-123";
+            unsafe {
+                *out_val = val.as_ptr();
+                *out_val_len = val.len();
+            }
+            0
+        } else {
+            1
+        }
+    }
+
+    #[test]
+    fn test_c_abi_header_lookup() {
+        let policy = json!({
+            "schema_version": 1,
+            "generation": 1,
+            "mode": "local",
+            "rules": [
+                {
+                    "id": "rule-header-1",
+                    "host": "*",
+                    "path_prefix": "/api",
+                    "limit_by": "header",
+                    "header_name": "x-api-key",
+                    "max_connections": 1,
+                    "action_on_exceeded": "throttle"
+                }
+            ]
+        });
+        let bytes = serde_json::to_vec(&policy).unwrap();
+
+        let mut engine_ptr: *mut ConnectionLimitEngine = ptr::null_mut();
+        let rc = unsafe { aurora_conn_limit_create(bytes.as_ptr(), bytes.len(), &mut engine_ptr) };
+        assert_eq!(rc, 0);
+
+        let host = b"example.com";
+        let path = b"/api/test";
+        let ip = b"127.0.0.1";
+
+        let mut decision = AuroraConnLimitDecision {
+            allowed: 0,
+            action: 0,
+            status_code: 0,
+            current_connections: 0,
+            max_connections: 0,
+            has_token: 0,
+            token: AuroraConnLimitToken {
+                is_redis: 0,
+                rule_id_len: 0,
+                rule_id: [0u8; 128],
+                identifier_len: 0,
+                identifier: [0u8; 128],
+            },
+            headers_count: 0,
+            headers: [AuroraConnLimitHeader {
+                name_len: 0,
+                value_len: 0,
+                name: [0u8; 64],
+                value: [0u8; 256],
+            }; AURORA_CONN_LIMIT_MAX_HEADERS],
+            body_len: 0,
+            body: [0u8; AURORA_CONN_LIMIT_MAX_BODY],
+        };
+
+        let mut dummy_ctx: u32 = 42;
+        let ctx_ptr = &mut dummy_ctx as *mut u32 as *mut std::ffi::c_void;
+
+        let rc = unsafe {
+            aurora_conn_limit_acquire(
+                engine_ptr,
+                host.as_ptr(),
+                host.len(),
+                path.as_ptr(),
+                path.len(),
+                ip.as_ptr(),
+                ip.len(),
+                ctx_ptr,
+                Some(mock_header_lookup),
+                &mut decision,
+            )
+        };
+        assert_eq!(rc, 0);
+        assert_eq!(decision.allowed, 1);
+        assert_eq!(decision.has_token, 1);
+
+        let id_slice = &decision.token.identifier[..decision.token.identifier_len as usize];
+        assert_eq!(id_slice, b"secret-token-123");
 
         unsafe { aurora_conn_limit_destroy(engine_ptr) };
     }

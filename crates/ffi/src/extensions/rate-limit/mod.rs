@@ -4,6 +4,7 @@
 //! the in-process rate limiting engine. All functions are wrapped in catch_unwind
 //! to prevent panics from crossing the foreign function boundary.
 
+use crate::extensions::connection_limit::AuroraHeaderLookupFn;
 use aurora_engine::rate_limit::{ActionOnExceeded, RateLimitEngine};
 use std::{
     panic::{AssertUnwindSafe, catch_unwind},
@@ -90,10 +91,8 @@ pub unsafe extern "C" fn aurora_rate_limit_evaluate(
     path_len: usize,
     client_ip: *const u8,
     client_ip_len: usize,
-    api_key: *const u8,
-    api_key_len: usize,
-    authorization: *const u8,
-    authorization_len: usize,
+    lookup_ctx: *mut std::ffi::c_void,
+    lookup_fn: Option<AuroraHeaderLookupFn>,
     out_decision: *mut AuroraRateLimitDecision,
 ) -> u32 {
     if engine.is_null()
@@ -107,10 +106,6 @@ pub unsafe extern "C" fn aurora_rate_limit_evaluate(
         || client_ip.is_null()
         || client_ip_len == 0
         || client_ip_len > 64
-        || (api_key.is_null() && api_key_len != 0)
-        || api_key_len > 1_024
-        || (authorization.is_null() && authorization_len != 0)
-        || authorization_len > 16_384
     {
         return 1;
     }
@@ -119,18 +114,28 @@ pub unsafe extern "C" fn aurora_rate_limit_evaluate(
         let host_slice = unsafe { slice::from_raw_parts(host, host_len) };
         let path_slice = unsafe { slice::from_raw_parts(path, path_len) };
         let ip_slice = unsafe { slice::from_raw_parts(client_ip, client_ip_len) };
-        let api_key_opt = if api_key.is_null() || api_key_len == 0 {
-            None
-        } else {
-            Some(unsafe { slice::from_raw_parts(api_key, api_key_len) })
-        };
-        let auth_opt = if authorization.is_null() || authorization_len == 0 {
-            None
-        } else {
-            Some(unsafe { slice::from_raw_parts(authorization, authorization_len) })
+
+        let header_lookup = |name: &str| -> Option<&[u8]> {
+            let f = lookup_fn?;
+            let mut val_ptr: *const u8 = ptr::null();
+            let mut val_len: usize = 0;
+            let rc = unsafe {
+                f(
+                    lookup_ctx,
+                    name.as_ptr(),
+                    name.len(),
+                    &mut val_ptr,
+                    &mut val_len,
+                )
+            };
+            if rc == 0 && !val_ptr.is_null() && val_len > 0 && val_len <= 16_384 {
+                Some(unsafe { slice::from_raw_parts(val_ptr, val_len) })
+            } else {
+                None
+            }
         };
 
-        unsafe { &*engine }.evaluate(host_slice, path_slice, ip_slice, api_key_opt, auth_opt)
+        unsafe { &*engine }.evaluate(host_slice, path_slice, ip_slice, header_lookup)
     })) {
         Ok(Ok(decision)) => {
             let action_num = match decision.action {
@@ -260,10 +265,8 @@ mod tests {
                 path.len(),
                 ip.as_ptr(),
                 ip.len(),
-                ptr::null(),
-                0,
-                ptr::null(),
-                0,
+                ptr::null_mut(),
+                None,
                 &mut decision,
             )
         };
@@ -280,10 +283,8 @@ mod tests {
                 path.len(),
                 ip.as_ptr(),
                 ip.len(),
-                ptr::null(),
-                0,
-                ptr::null(),
-                0,
+                ptr::null_mut(),
+                None,
                 &mut decision,
             )
         };
@@ -349,10 +350,8 @@ mod tests {
                 path.len(),
                 ip.as_ptr(),
                 ip.len(),
-                ptr::null(),
-                0,
-                ptr::null(),
-                0,
+                ptr::null_mut(),
+                None,
                 &mut decision,
             )
         };
@@ -369,10 +368,8 @@ mod tests {
                 path.len(),
                 ip.as_ptr(),
                 ip.len(),
-                ptr::null(),
-                0,
-                ptr::null(),
-                0,
+                ptr::null_mut(),
+                None,
                 &mut decision,
             )
         };

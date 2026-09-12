@@ -155,11 +155,25 @@ impl ConnectionLimitEngine {
                 None => Vec::new(),
             };
 
-            let limit_by = match rule.limit_by.trim().to_ascii_lowercase().as_str() {
-                "client_ip" => LimitBy::ClientIp,
-                "api_key" => LimitBy::ApiKey,
-                "authorization" => LimitBy::Authorization,
-                "route_path" => LimitBy::RoutePath,
+            let (limit_by, header_name) = match rule.limit_by.trim().to_ascii_lowercase().as_str() {
+                "client_ip" => (LimitBy::ClientIp, None),
+                "route_path" => (LimitBy::RoutePath, None),
+                "header" => {
+                    let h_name = rule
+                        .header_name
+                        .as_ref()
+                        .map(|s| s.trim().to_ascii_lowercase())
+                        .filter(|s| !s.is_empty())
+                        .ok_or(Error::InvalidPolicy)?;
+                    if h_name.len() > 64
+                        || !h_name
+                            .bytes()
+                            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+                    {
+                        return Err(Error::InvalidPolicy);
+                    }
+                    (LimitBy::Header, Some(h_name))
+                }
                 _ => return Err(Error::InvalidPolicy),
             };
 
@@ -168,6 +182,7 @@ impl ConnectionLimitEngine {
                 host: rule.host,
                 path_prefix: rule.path_prefix,
                 limit_by,
+                header_name,
                 max_connections: rule.max_connections,
                 action_on_exceeded: rule.action_on_exceeded,
                 rejected_code,
@@ -197,13 +212,12 @@ impl ConnectionLimitEngine {
         self.generation
     }
 
-    pub fn acquire(
+    pub fn acquire<'a>(
         &self,
         host: &[u8],
         path: &[u8],
         client_ip: &[u8],
-        api_key: Option<&[u8]>,
-        authorization: Option<&[u8]>,
+        header_lookup: impl Fn(&str) -> Option<&'a [u8]>,
     ) -> Result<ConnLimitDecision, Error> {
         if host.is_empty()
             || host.len() > 253
@@ -226,9 +240,14 @@ impl ConnectionLimitEngine {
 
             let identifier = match rule.limit_by {
                 LimitBy::ClientIp => client_ip,
-                LimitBy::ApiKey => api_key.unwrap_or(client_ip),
-                LimitBy::Authorization => authorization.unwrap_or(client_ip),
                 LimitBy::RoutePath => path,
+                LimitBy::Header => {
+                    if let Some(ref h_name) = rule.header_name {
+                        header_lookup(h_name).unwrap_or(client_ip)
+                    } else {
+                        client_ip
+                    }
+                }
             };
 
             let mut tracker_key = Vec::with_capacity(rule.id.len() + 1 + identifier.len());

@@ -100,9 +100,9 @@ int main(void) {
     assert(rl_engine != NULL);
     AuroraRateLimitDecision rl_dec;
     memset(&rl_dec, 0, sizeof(rl_dec));
-    assert(aurora_rate_limit_evaluate(rl_engine, (const uint8_t *)"test.local", 10, (const uint8_t *)"/rl/test", 8, (const uint8_t *)"10.0.0.1", 8, NULL, 0, NULL, 0, &rl_dec) == 0);
+    assert(aurora_rate_limit_evaluate(rl_engine, (const uint8_t *)"test.local", 10, (const uint8_t *)"/rl/test", 8, (const uint8_t *)"10.0.0.1", 8, NULL, NULL, &rl_dec) == 0);
     assert(rl_dec.allowed == 1);
-    assert(aurora_rate_limit_evaluate(rl_engine, (const uint8_t *)"test.local", 10, (const uint8_t *)"/rl/test", 8, (const uint8_t *)"10.0.0.1", 8, NULL, 0, NULL, 0, &rl_dec) == 0);
+    assert(aurora_rate_limit_evaluate(rl_engine, (const uint8_t *)"test.local", 10, (const uint8_t *)"/rl/test", 8, (const uint8_t *)"10.0.0.1", 8, NULL, NULL, &rl_dec) == 0);
     assert(rl_dec.allowed == 0 && rl_dec.action == 1 && rl_dec.status_code == 429);
     aurora_rate_limit_destroy(rl_engine);
     puts("Aurora Rate Limit FFI: create, evaluate 1st allow, 2nd throttle, destroy pass");

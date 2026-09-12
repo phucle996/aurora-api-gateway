@@ -127,16 +127,30 @@ pub fn validate_connection_limit_config(
             ));
         }
 
-        if let Some(limit_by) = string(rule, "limit_by")
-            && !matches!(
+        if let Some(limit_by) = string(rule, "limit_by") {
+            if !matches!(
                 limit_by,
-                "client_ip" | "api_key" | "authorization" | "route_path"
-            )
-        {
-            return Err(format!(
-                "connection-limit extension {} rule '{id}' has invalid limit_by: {limit_by}",
-                instance.instance_id
-            ));
+                "ip" | "client_ip" | "header" | "route_path"
+            ) {
+                return Err(format!(
+                    "connection-limit extension {} rule '{id}' has invalid limit_by: {limit_by}",
+                    instance.instance_id
+                ));
+            }
+            if limit_by == "header" {
+                let header_name = string(rule, "header_name").unwrap_or("");
+                if header_name.trim().is_empty()
+                    || header_name.len() > 64
+                    || !header_name
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+                {
+                    return Err(format!(
+                        "connection-limit extension {} rule '{id}' limit_by 'header' requires valid header_name (1..=64 alphanumeric, '-' or '_')",
+                        instance.instance_id
+                    ));
+                }
+            }
         }
 
         if let Some(host) = string(rule, "host") {

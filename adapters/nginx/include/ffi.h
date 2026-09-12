@@ -71,6 +71,12 @@ uint32_t aurora_jwt_evaluate(const AuroraJwtEngine *engine,
     const uint8_t *authorization, size_t authorization_len,
     AuroraJwtDecision *out_decision);
 
+/* Shared: Header lookup callback type for dynamic header inspection */
+typedef uint32_t (*aurora_header_lookup_fn)(
+    void *ctx,
+    const uint8_t *name, size_t name_len,
+    const uint8_t **out_val, size_t *out_val_len);
+
 /* Extension: Rate Limiting */
 #define AURORA_RATE_LIMIT_MAX_HEADERS 8
 #define AURORA_RATE_LIMIT_MAX_BODY 2048
@@ -102,8 +108,8 @@ uint32_t aurora_rate_limit_evaluate(const AuroraRateLimitEngine *engine,
     const uint8_t *host, size_t host_len,
     const uint8_t *path, size_t path_len,
     const uint8_t *client_ip, size_t client_ip_len,
-    const uint8_t *api_key, size_t api_key_len,
-    const uint8_t *authorization, size_t authorization_len,
+    void *lookup_ctx,
+    aurora_header_lookup_fn lookup_fn,
     AuroraRateLimitDecision *out_decision);
 
 /* Extension: Connection Limiting */
@@ -141,14 +147,15 @@ typedef struct {
     uint8_t body[AURORA_CONN_LIMIT_MAX_BODY];
 } AuroraConnLimitDecision;
 
+
 uint32_t aurora_conn_limit_create(const uint8_t *data, size_t len, AuroraConnectionLimitEngine **out);
 void aurora_conn_limit_destroy(AuroraConnectionLimitEngine *engine);
 uint32_t aurora_conn_limit_acquire(const AuroraConnectionLimitEngine *engine,
     const uint8_t *host, size_t host_len,
     const uint8_t *path, size_t path_len,
     const uint8_t *client_ip, size_t client_ip_len,
-    const uint8_t *api_key, size_t api_key_len,
-    const uint8_t *authorization, size_t authorization_len,
+    void *lookup_ctx,
+    aurora_header_lookup_fn lookup_fn,
     AuroraConnLimitDecision *out_decision);
 uint32_t aurora_conn_limit_release(const AuroraConnectionLimitEngine *engine,
     const AuroraConnLimitToken *token);

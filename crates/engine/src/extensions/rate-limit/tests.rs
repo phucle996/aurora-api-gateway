@@ -37,19 +37,19 @@ fn test_token_bucket_rate_limiting() {
     let path = b"/api/v1/resource";
 
     // 1st request -> allow
-    let d1 = engine.evaluate(host, path, ip, None, None).unwrap();
+    let d1 = engine.evaluate(host, path, ip, |_| None).unwrap();
     assert!(d1.allowed);
 
     // 2nd request -> allow
-    let d2 = engine.evaluate(host, path, ip, None, None).unwrap();
+    let d2 = engine.evaluate(host, path, ip, |_| None).unwrap();
     assert!(d2.allowed);
 
     // 3rd request -> allow (burst = 3)
-    let d3 = engine.evaluate(host, path, ip, None, None).unwrap();
+    let d3 = engine.evaluate(host, path, ip, |_| None).unwrap();
     assert!(d3.allowed);
 
     // 4th request -> throttle (burst exceeded)
-    let d4 = engine.evaluate(host, path, ip, None, None).unwrap();
+    let d4 = engine.evaluate(host, path, ip, |_| None).unwrap();
     assert!(!d4.allowed);
     assert_eq!(d4.status_code, 429);
     assert!(d4.retry_after_secs >= 1);
@@ -61,7 +61,8 @@ fn test_fixed_window_rate_limiting() {
         "id": "test_fw",
         "host": "*",
         "path_prefix": "/fw",
-        "limit_by": "api_key",
+        "limit_by": "header",
+        "header_name": "x-api-key",
         "rate": 2,
         "period_secs": 10,
         "action_on_exceeded": "throttle"
@@ -74,15 +75,23 @@ fn test_fixed_window_rate_limiting() {
     let ip = b"10.0.0.1";
     let host = b"example.com";
     let path = b"/fw/test";
-    let key = Some(&b"sec-key-123"[..]);
+    let key_val: &[u8] = b"sec-key-123";
 
-    let d1 = engine.evaluate(host, path, ip, key, None).unwrap();
+    let lookup = |name: &str| -> Option<&[u8]> {
+        if name == "x-api-key" {
+            Some(key_val)
+        } else {
+            None
+        }
+    };
+
+    let d1 = engine.evaluate(host, path, ip, &lookup).unwrap();
     assert!(d1.allowed);
 
-    let d2 = engine.evaluate(host, path, ip, key, None).unwrap();
+    let d2 = engine.evaluate(host, path, ip, &lookup).unwrap();
     assert!(d2.allowed);
 
-    let d3 = engine.evaluate(host, path, ip, key, None).unwrap();
+    let d3 = engine.evaluate(host, path, ip, &lookup).unwrap();
     assert!(!d3.allowed);
 }
 
@@ -106,10 +115,10 @@ fn test_audit_mode_allows_and_marks_action() {
     let host = b"audit.local";
     let path = b"/test";
 
-    let d1 = engine.evaluate(host, path, ip, None, None).unwrap();
+    let d1 = engine.evaluate(host, path, ip, |_| None).unwrap();
     assert!(d1.allowed);
 
-    let d2 = engine.evaluate(host, path, ip, None, None).unwrap();
+    let d2 = engine.evaluate(host, path, ip, |_| None).unwrap();
     // In audit mode, request is still allowed!
     assert!(d2.allowed);
     assert_eq!(d2.action, ActionOnExceeded::Audit);
@@ -137,14 +146,14 @@ fn test_overflow_strategy_drop_new() {
     // Fill up shard entries by using multiple different IPs
     for i in 0..100 {
         let ip = format!("10.0.{}.{}", i / 256, i % 256);
-        let _ = engine.evaluate(b"example.com", b"/test", ip.as_bytes(), None, None);
+        let _ = engine.evaluate(b"example.com", b"/test", ip.as_bytes(), |_| None);
     }
 
     let mut had_dropped = false;
     for i in 100..200 {
         let ip = format!("192.168.{}.{}", i / 256, i % 256);
         let d = engine
-            .evaluate(b"example.com", b"/test", ip.as_bytes(), None, None)
+            .evaluate(b"example.com", b"/test", ip.as_bytes(), |_| None)
             .unwrap();
         if !d.allowed {
             had_dropped = true;
@@ -179,19 +188,19 @@ fn test_leaky_bucket_rate_limiting() {
     let path = b"/leaky/data";
 
     // 1st request -> allowed (water = 1.0)
-    let d1 = engine.evaluate(host, path, ip, None, None).unwrap();
+    let d1 = engine.evaluate(host, path, ip, |_| None).unwrap();
     assert!(d1.allowed);
 
     // 2nd request -> allowed (water = 2.0)
-    let d2 = engine.evaluate(host, path, ip, None, None).unwrap();
+    let d2 = engine.evaluate(host, path, ip, |_| None).unwrap();
     assert!(d2.allowed);
 
     // 3rd request -> allowed (water = 3.0 = capacity)
-    let d3 = engine.evaluate(host, path, ip, None, None).unwrap();
+    let d3 = engine.evaluate(host, path, ip, |_| None).unwrap();
     assert!(d3.allowed);
 
     // 4th request -> throttle (water 4.0 > capacity 3.0)
-    let d4 = engine.evaluate(host, path, ip, None, None).unwrap();
+    let d4 = engine.evaluate(host, path, ip, |_| None).unwrap();
     assert!(!d4.allowed);
     assert_eq!(d4.status_code, 429);
 }
@@ -216,13 +225,13 @@ fn test_sliding_window_rate_limiting() {
     let host = b"example.com";
     let path = b"/sw/api";
 
-    let d1 = engine.evaluate(host, path, ip, None, None).unwrap();
+    let d1 = engine.evaluate(host, path, ip, |_| None).unwrap();
     assert!(d1.allowed);
 
-    let d2 = engine.evaluate(host, path, ip, None, None).unwrap();
+    let d2 = engine.evaluate(host, path, ip, |_| None).unwrap();
     assert!(d2.allowed);
 
-    let d3 = engine.evaluate(host, path, ip, None, None).unwrap();
+    let d3 = engine.evaluate(host, path, ip, |_| None).unwrap();
     assert!(!d3.allowed);
     assert_eq!(d3.status_code, 403); // action_on_exceeded is block
     assert_eq!(d3.action, ActionOnExceeded::Block);
@@ -349,7 +358,8 @@ fn test_request_evaluation_fails_without_fallback() {
             "id": "api_key_rule",
             "host": "*",
             "path_prefix": "/api",
-            "limit_by": "api_key",
+            "limit_by": "header",
+            "header_name": "x-api-key",
             "rate": 10,
             "period_secs": 1,
             "action_on_exceeded": "throttle"
@@ -358,7 +368,8 @@ fn test_request_evaluation_fails_without_fallback() {
             "id": "auth_rule",
             "host": "*",
             "path_prefix": "/secure",
-            "limit_by": "authorization",
+            "limit_by": "header",
+            "header_name": "authorization",
             "rate": 10,
             "period_secs": 1,
             "action_on_exceeded": "throttle"
@@ -369,18 +380,30 @@ fn test_request_evaluation_fails_without_fallback() {
         .expect("load engine");
 
     // Missing client_ip must fail with InvalidRequest, not fallback to 127.0.0.1
-    let err_ip = engine.evaluate(b"example.com", b"/api/test", b"", Some(b"key-1"), None);
+    let err_ip = engine.evaluate(b"example.com", b"/api/test", b"", |name: &str| {
+        if name == "x-api-key" {
+            Some(b"key-1" as &[u8])
+        } else {
+            None
+        }
+    });
     assert!(matches!(err_ip, Err(Error::InvalidRequest)));
 
-    // Missing api_key on api_key rule must fail with InvalidRequest, not fallback to anonymous
-    let err_key = engine.evaluate(b"example.com", b"/api/test", b"1.2.3.4", None, None);
+    // Missing header on header rule must fail with InvalidRequest, not fallback to anonymous
+    let err_key = engine.evaluate(b"example.com", b"/api/test", b"1.2.3.4", |_| None);
     assert!(matches!(err_key, Err(Error::InvalidRequest)));
 
-    let err_empty_key = engine.evaluate(b"example.com", b"/api/test", b"1.2.3.4", Some(b""), None);
+    let err_empty_key = engine.evaluate(b"example.com", b"/api/test", b"1.2.3.4", |name: &str| {
+        if name == "x-api-key" {
+            Some(b"" as &[u8])
+        } else {
+            None
+        }
+    });
     assert!(matches!(err_empty_key, Err(Error::InvalidRequest)));
 
-    // Missing authorization on authorization rule must fail with InvalidRequest, not fallback to anonymous
-    let err_auth = engine.evaluate(b"example.com", b"/secure/data", b"1.2.3.4", None, None);
+    // Missing authorization header must fail with InvalidRequest, not fallback to anonymous
+    let err_auth = engine.evaluate(b"example.com", b"/secure/data", b"1.2.3.4", |_| None);
     assert!(matches!(err_auth, Err(Error::InvalidRequest)));
 }
 
@@ -419,19 +442,19 @@ fn test_distributed_mode_fallback_local_on_error() {
 
     // Redis port 59999 is down, so on_error = "fallback_local" must use local in-memory shards:
     let r1 = engine
-        .evaluate(b"example.com", b"/api/v1", b"10.0.0.1", None, None)
+        .evaluate(b"example.com", b"/api/v1", b"10.0.0.1", |_| None)
         .unwrap();
     assert!(r1.allowed);
     assert_eq!(r1.remaining, 1);
 
     let r2 = engine
-        .evaluate(b"example.com", b"/api/v1", b"10.0.0.1", None, None)
+        .evaluate(b"example.com", b"/api/v1", b"10.0.0.1", |_| None)
         .unwrap();
     assert!(r2.allowed);
     assert_eq!(r2.remaining, 0);
 
     let r3 = engine
-        .evaluate(b"example.com", b"/api/v1", b"10.0.0.1", None, None)
+        .evaluate(b"example.com", b"/api/v1", b"10.0.0.1", |_| None)
         .unwrap();
     assert!(!r3.allowed);
     assert_eq!(r3.status_code, 429);
@@ -473,7 +496,7 @@ fn test_distributed_mode_pass_on_error() {
     // Redis is down, on_error = "pass" allows all requests through (Fail-Open):
     for _ in 0..5 {
         let r = engine
-            .evaluate(b"example.com", b"/api/v1", b"10.0.0.2", None, None)
+            .evaluate(b"example.com", b"/api/v1", b"10.0.0.2", |_| None)
             .unwrap();
         assert!(r.allowed);
         assert_eq!(r.status_code, 200);
@@ -515,7 +538,7 @@ fn test_distributed_mode_block_on_error() {
 
     // Redis is down, on_error = "block" rejects requests immediately (Fail-Closed):
     let r = engine
-        .evaluate(b"example.com", b"/api/v1", b"10.0.0.3", None, None)
+        .evaluate(b"example.com", b"/api/v1", b"10.0.0.3", |_| None)
         .unwrap();
     assert!(!r.allowed);
     assert_eq!(r.status_code, 429);
@@ -676,14 +699,14 @@ fn test_custom_message_and_headers_interpolation() {
 
     // Request 1: allowed
     let r1 = engine
-        .evaluate(b"api.example.com", b"/api/v1/users", ip, None, None)
+        .evaluate(b"api.example.com", b"/api/v1/users", ip, |_| None)
         .unwrap();
     assert!(r1.allowed);
     assert_eq!(r1.remaining, 0);
 
     // Request 2: throttled, custom response and headers rendered
     let r2 = engine
-        .evaluate(b"api.example.com", b"/api/v1/users", ip, None, None)
+        .evaluate(b"api.example.com", b"/api/v1/users", ip, |_| None)
         .unwrap();
     assert!(!r2.allowed);
     assert_eq!(r2.status_code, 429);

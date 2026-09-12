@@ -211,11 +211,25 @@ impl RateLimitEngine {
                 None => Vec::new(),
             };
 
-            let limit_by = match rule.limit_by.trim().to_ascii_lowercase().as_str() {
-                "client_ip" => LimitBy::ClientIp,
-                "api_key" => LimitBy::ApiKey,
-                "authorization" => LimitBy::Authorization,
-                "route_path" => LimitBy::RoutePath,
+            let (limit_by, header_name) = match rule.limit_by.trim().to_ascii_lowercase().as_str() {
+                "client_ip" => (LimitBy::ClientIp, None),
+                "route_path" => (LimitBy::RoutePath, None),
+                "header" => {
+                    let h_name = rule
+                        .header_name
+                        .as_ref()
+                        .map(|s| s.trim().to_ascii_lowercase())
+                        .filter(|s| !s.is_empty())
+                        .ok_or(Error::InvalidPolicy)?;
+                    if h_name.len() > 64
+                        || !h_name
+                            .bytes()
+                            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+                    {
+                        return Err(Error::InvalidPolicy);
+                    }
+                    (LimitBy::Header, Some(h_name))
+                }
                 _ => return Err(Error::InvalidPolicy),
             };
 
@@ -231,6 +245,7 @@ impl RateLimitEngine {
                 host: rule.host.into_bytes(),
                 path_prefix: rule.path_prefix.into_bytes(),
                 limit_by,
+                header_name,
                 rate: rule.rate,
                 period_secs: rule.period_secs,
                 burst,
@@ -272,13 +287,12 @@ impl RateLimitEngine {
         self.generation
     }
 
-    pub fn evaluate(
+    pub fn evaluate<'a>(
         &self,
         host: &[u8],
         path: &[u8],
         client_ip: &[u8],
-        api_key: Option<&[u8]>,
-        authorization: Option<&[u8]>,
+        header_lookup: impl Fn(&str) -> Option<&'a [u8]>,
     ) -> Result<RateLimitDecision, Error> {
         if host.len() > 253
             || host.contains(&0)
@@ -309,14 +323,13 @@ impl RateLimitEngine {
             let identifier: &[u8] = match &rule.limit_by {
                 LimitBy::ClientIp => client_ip,
                 LimitBy::RoutePath => path,
-                LimitBy::ApiKey => match api_key {
-                    Some(k) if !k.is_empty() => k,
-                    _ => return Err(Error::InvalidRequest),
-                },
-                LimitBy::Authorization => match authorization {
-                    Some(a) if !a.is_empty() => a,
-                    _ => return Err(Error::InvalidRequest),
-                },
+                LimitBy::Header => {
+                    let h_name = rule.header_name.as_deref().ok_or(Error::InvalidRequest)?;
+                    match header_lookup(h_name) {
+                        Some(v) if !v.is_empty() => v,
+                        _ => return Err(Error::InvalidRequest),
+                    }
+                }
             };
 
             let mut decision = if self.mode == RateLimitMode::Distributed {

@@ -19,8 +19,7 @@ pub enum ActionOnExceeded {
 pub enum LimitBy {
     #[default]
     ClientIp,
-    ApiKey,
-    Authorization,
+    Header,
     RoutePath,
 }
 
@@ -103,6 +102,8 @@ pub(crate) struct RuleInput {
     pub path_prefix: String,
     #[serde(default = "default_limit_by")]
     pub limit_by: String,
+    #[serde(default)]
+    pub header_name: Option<String>,
     pub max_connections: u32,
     #[serde(default)]
     pub action_on_exceeded: ActionOnExceeded,
@@ -146,6 +147,7 @@ pub(crate) struct CompiledRule {
     pub host: String,
     pub path_prefix: String,
     pub limit_by: LimitBy,
+    pub header_name: Option<String>,
     pub max_connections: u32,
     pub action_on_exceeded: ActionOnExceeded,
     pub rejected_code: u16,

@@ -30,19 +30,19 @@ fn test_local_connection_limit_acquire_and_release() {
     let ip = b"192.168.1.100";
 
     // Request 1: Should succeed
-    let d1 = engine.acquire(host, path, ip, None, None).unwrap();
+    let d1 = engine.acquire(host, path, ip, |_| None).unwrap();
     assert!(d1.allowed);
     assert_eq!(d1.current_connections, 1);
     let token1 = d1.token.expect("expected token for request 1");
 
     // Request 2: Should succeed
-    let d2 = engine.acquire(host, path, ip, None, None).unwrap();
+    let d2 = engine.acquire(host, path, ip, |_| None).unwrap();
     assert!(d2.allowed);
     assert_eq!(d2.current_connections, 2);
     let token2 = d2.token.expect("expected token for request 2");
 
     // Request 3: Exceeds max_connections (2) -> Should be rejected
-    let d3 = engine.acquire(host, path, ip, None, None).unwrap();
+    let d3 = engine.acquire(host, path, ip, |_| None).unwrap();
     assert!(!d3.allowed);
     assert_eq!(d3.status_code, 503);
     assert!(d3.token.is_none());
@@ -51,7 +51,7 @@ fn test_local_connection_limit_acquire_and_release() {
     engine.release(&token1);
 
     // Request 4 (retry): Now should succeed because 1 slot was freed
-    let d4 = engine.acquire(host, path, ip, None, None).unwrap();
+    let d4 = engine.acquire(host, path, ip, |_| None).unwrap();
     assert!(d4.allowed);
     assert_eq!(d4.current_connections, 2);
     let token4 = d4.token.expect("expected token for request 4");
@@ -97,11 +97,11 @@ fn test_custom_response_headers_and_body_interpolation() {
     let path = b"/download/file.zip";
     let ip = b"10.0.0.1";
 
-    let d1 = engine.acquire(host, path, ip, None, None).unwrap();
+    let d1 = engine.acquire(host, path, ip, |_| None).unwrap();
     assert!(d1.allowed);
     let token1 = d1.token.unwrap();
 
-    let d2 = engine.acquire(host, path, ip, None, None).unwrap();
+    let d2 = engine.acquire(host, path, ip, |_| None).unwrap();
     assert!(!d2.allowed);
     assert_eq!(d2.status_code, 429);
 
@@ -193,21 +193,123 @@ fn test_distributed_mode_failover_and_pool_reuse() {
     let ip = b"1.2.3.4";
 
     // Engine 1 uses fallback_local on Redis error
-    let d1 = engine1.acquire(host, path, ip, None, None).unwrap();
+    let d1 = engine1.acquire(host, path, ip, |_| None).unwrap();
     assert!(d1.allowed);
     let token1 = d1.token.unwrap();
 
-    let d2 = engine1.acquire(host, path, ip, None, None).unwrap();
+    let d2 = engine1.acquire(host, path, ip, |_| None).unwrap();
     assert!(d2.allowed);
     let token2 = d2.token.unwrap();
 
-    let d3 = engine1.acquire(host, path, ip, None, None).unwrap();
+    let d3 = engine1.acquire(host, path, ip, |_| None).unwrap();
     assert!(!d3.allowed);
 
     engine1.release(&token1);
     engine1.release(&token2);
 
     // Engine 2 uses pass on Redis error
-    let d_pass = engine2.acquire(host, path, ip, None, None).unwrap();
+    let d_pass = engine2.acquire(host, path, ip, |_| None).unwrap();
     assert!(d_pass.allowed);
+}
+
+#[test]
+fn test_header_and_route_path_connection_limiting() {
+    let policy = json!({
+        "schema_version": 1,
+        "generation": 1,
+        "mode": "local",
+        "rules": [
+            {
+                "id": "rule-header-tenant",
+                "priority": 1,
+                "host": "*",
+                "path_prefix": "/tenant",
+                "limit_by": "header",
+                "header_name": "x-tenant-id",
+                "max_connections": 1,
+                "action_on_exceeded": "throttle",
+                "rejected_code": 429
+            },
+            {
+                "id": "rule-route-path",
+                "priority": 2,
+                "host": "*",
+                "path_prefix": "/shared-path",
+                "limit_by": "route_path",
+                "max_connections": 1,
+                "action_on_exceeded": "throttle",
+                "rejected_code": 503
+            }
+        ]
+    });
+
+    let bytes = serde_json::to_vec(&policy).unwrap();
+    let engine = ConnectionLimitEngine::from_snapshot(&bytes).unwrap();
+
+    let host = b"api.example.com";
+    let path_tenant = b"/tenant/orders";
+    let ip1 = b"10.0.0.1";
+    let ip2 = b"10.0.0.2";
+
+    // Tenant Alpha request 1
+    let d_alpha1 = engine
+        .acquire(host, path_tenant, ip1, |name| {
+            if name == "x-tenant-id" {
+                Some(b"tenant-alpha")
+            } else {
+                None
+            }
+        })
+        .unwrap();
+    assert!(d_alpha1.allowed);
+    let tok_alpha1 = d_alpha1.token.unwrap();
+
+    // Tenant Alpha request 2 from DIFFERENT IP -> should be blocked because max_connections is 1 per tenant
+    let d_alpha2 = engine
+        .acquire(host, path_tenant, ip2, |name| {
+            if name == "x-tenant-id" {
+                Some(b"tenant-alpha")
+            } else {
+                None
+            }
+        })
+        .unwrap();
+    assert!(!d_alpha2.allowed);
+    assert_eq!(d_alpha2.status_code, 429);
+
+    // Tenant Beta request 1 -> should succeed (different header value)
+    let d_beta1 = engine
+        .acquire(host, path_tenant, ip1, |name| {
+            if name == "x-tenant-id" {
+                Some(b"tenant-beta")
+            } else {
+                None
+            }
+        })
+        .unwrap();
+    assert!(d_beta1.allowed);
+    let tok_beta1 = d_beta1.token.unwrap();
+
+    // Request missing x-tenant-id header -> falls back to client_ip
+    let d_fallback = engine
+        .acquire(host, path_tenant, ip1, |_| None)
+        .unwrap();
+    assert!(d_fallback.allowed);
+    let tok_fallback = d_fallback.token.unwrap();
+
+    // Route path rule test
+    let path_shared = b"/shared-path/report";
+    let d_path1 = engine.acquire(host, path_shared, ip1, |_| None).unwrap();
+    assert!(d_path1.allowed);
+    let tok_path1 = d_path1.token.unwrap();
+
+    // Second request to same path from different IP -> blocked (limit_by route_path)
+    let d_path2 = engine.acquire(host, path_shared, ip2, |_| None).unwrap();
+    assert!(!d_path2.allowed);
+    assert_eq!(d_path2.status_code, 503);
+
+    engine.release(&tok_alpha1);
+    engine.release(&tok_beta1);
+    engine.release(&tok_fallback);
+    engine.release(&tok_path1);
 }

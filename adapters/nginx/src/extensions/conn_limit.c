@@ -79,6 +79,48 @@ ngx_http_gateway_merge_conn_limit(ngx_conf_t *cf, ngx_http_gateway_conf_t *prev,
     return NGX_CONF_OK;
 }
 
+uint32_t
+ngx_http_gateway_header_lookup(void *ctx,
+    const uint8_t *name, size_t name_len,
+    const uint8_t **out_val, size_t *out_val_len)
+{
+    ngx_http_request_t *r = (ngx_http_request_t *) ctx;
+    if (r == NULL || name == NULL || name_len == 0 || out_val == NULL || out_val_len == NULL) {
+        return 1;
+    }
+
+    /* Fast path for common single-header pointers if matched */
+    if (name_len == 13 && ngx_strncasecmp((u_char *) name, (u_char *) "authorization", 13) == 0) {
+        if (r->headers_in.authorization && r->headers_in.authorization->value.len > 0) {
+            *out_val = r->headers_in.authorization->value.data;
+            *out_val_len = r->headers_in.authorization->value.len;
+            return 0;
+        }
+    }
+
+    ngx_list_part_t *part = &r->headers_in.headers.part;
+    ngx_table_elt_t *header = part->elts;
+    ngx_uint_t i;
+
+    for (i = 0; /* void */; i++) {
+        if (i >= part->nelts) {
+            if (part->next == NULL) { break; }
+            part = part->next;
+            header = part->elts;
+            i = 0;
+        }
+        if (header[i].key.len == name_len &&
+            ngx_strncasecmp(header[i].key.data, (u_char *) name, name_len) == 0)
+        {
+            *out_val = header[i].value.data;
+            *out_val_len = header[i].value.len;
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
 ngx_int_t
 ngx_http_gateway_eval_conn_limit(ngx_http_request_t *r, ngx_http_gateway_conf_t *conf, ngx_str_t host)
 {
@@ -90,29 +132,6 @@ ngx_http_gateway_eval_conn_limit(ngx_http_request_t *r, ngx_http_gateway_conf_t 
     if (client_ip.len == 0) {
         return NGX_HTTP_BAD_REQUEST;
     }
-    ngx_table_elt_t *authorization = r->headers_in.authorization;
-    const u_char *auth_data = authorization ? authorization->value.data : NULL;
-    size_t auth_len = authorization ? authorization->value.len : 0;
-
-    /* Extract X-API-Key if present */
-    const u_char *api_key_data = NULL;
-    size_t api_key_len = 0;
-    ngx_list_part_t *part = &r->headers_in.headers.part;
-    ngx_table_elt_t *header = part->elts;
-    ngx_uint_t i;
-    for (i = 0; /* void */; i++) {
-        if (i >= part->nelts) {
-            if (part->next == NULL) { break; }
-            part = part->next;
-            header = part->elts;
-            i = 0;
-        }
-        if (header[i].key.len == 9 && ngx_strncasecmp(header[i].key.data, (u_char *) "x-api-key", 9) == 0) {
-            api_key_data = header[i].value.data;
-            api_key_len = header[i].value.len;
-            break;
-        }
-    }
 
     AuroraConnLimitDecision decision;
     ngx_memzero(&decision, sizeof(decision));
@@ -121,8 +140,8 @@ ngx_http_gateway_eval_conn_limit(ngx_http_request_t *r, ngx_http_gateway_conf_t 
                                                host.data, host.len,
                                                r->uri.data, r->uri.len,
                                                client_ip.data, client_ip.len,
-                                               api_key_data, api_key_len,
-                                               auth_data, auth_len,
+                                               r,
+                                               ngx_http_gateway_header_lookup,
                                                &decision);
     if (status == 1) {
         ngx_log_t log = *r->connection->log;

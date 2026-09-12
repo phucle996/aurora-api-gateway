@@ -76,30 +76,6 @@ ngx_http_gateway_eval_rate_limit(ngx_http_request_t *r, ngx_http_gateway_conf_t 
     if (client_ip.len == 0) {
         return NGX_HTTP_BAD_REQUEST;
     }
-    ngx_table_elt_t *authorization = r->headers_in.authorization;
-    const u_char *auth_data = authorization ? authorization->value.data : NULL;
-    size_t auth_len = authorization ? authorization->value.len : 0;
-
-    /* Extract X-API-Key if present */
-    const u_char *api_key_data = NULL;
-    size_t api_key_len = 0;
-    ngx_list_part_t *part = &r->headers_in.headers.part;
-    ngx_table_elt_t *header = part->elts;
-    ngx_uint_t i;
-    for (i = 0; /* void */; i++) {
-        if (i >= part->nelts) {
-            if (part->next == NULL) { break; }
-            part = part->next;
-            header = part->elts;
-            i = 0;
-        }
-        if (header[i].key.len == 9 && ngx_strncasecmp(header[i].key.data, (u_char *) "x-api-key", 9) == 0) {
-            api_key_data = header[i].value.data;
-            api_key_len = header[i].value.len;
-            break;
-        }
-    }
-
     AuroraRateLimitDecision decision;
     ngx_memzero(&decision, sizeof(decision));
 
@@ -107,8 +83,8 @@ ngx_http_gateway_eval_rate_limit(ngx_http_request_t *r, ngx_http_gateway_conf_t 
                                                 host.data, host.len,
                                                 r->uri.data, r->uri.len,
                                                 client_ip.data, client_ip.len,
-                                                api_key_data, api_key_len,
-                                                auth_data, auth_len,
+                                                r,
+                                                ngx_http_gateway_header_lookup,
                                                 &decision);
     if (status == 1) {
         ngx_log_t log = *r->connection->log;

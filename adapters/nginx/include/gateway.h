@@ -39,6 +39,11 @@ ngx_int_t ngx_http_gateway_eval_access(ngx_http_request_t *r, ngx_http_gateway_c
 char *ngx_http_gateway_merge_jwt(ngx_conf_t *cf, ngx_http_gateway_conf_t *prev, ngx_http_gateway_conf_t *conf);
 ngx_int_t ngx_http_gateway_eval_jwt(ngx_http_request_t *r, ngx_http_gateway_conf_t *conf, ngx_str_t host);
 
+/* Shared: header lookup callback for extensions */
+uint32_t ngx_http_gateway_header_lookup(void *ctx,
+    const uint8_t *name, size_t name_len,
+    const uint8_t **out_val, size_t *out_val_len);
+
 /* Extension: Rate Limit */
 char *ngx_http_gateway_merge_rate_limit(ngx_conf_t *cf, ngx_http_gateway_conf_t *prev, ngx_http_gateway_conf_t *conf);
 ngx_int_t ngx_http_gateway_eval_rate_limit(ngx_http_request_t *r, ngx_http_gateway_conf_t *conf, ngx_str_t host);

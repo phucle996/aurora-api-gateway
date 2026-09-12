@@ -159,7 +159,9 @@ pub(crate) fn build_exceeded_decision(
         ActionOnExceeded::Audit => (true, ActionOnExceeded::Audit, 200),
         ActionOnExceeded::Block => (false, ActionOnExceeded::Block, rule.rejected_code),
         ActionOnExceeded::Throttle => (false, ActionOnExceeded::Throttle, rule.rejected_code),
-        ActionOnExceeded::CustomResponse => (false, ActionOnExceeded::CustomResponse, rule.rejected_code),
+        ActionOnExceeded::CustomResponse => {
+            (false, ActionOnExceeded::CustomResponse, rule.rejected_code)
+        }
     };
     RateLimitDecision {
         allowed,

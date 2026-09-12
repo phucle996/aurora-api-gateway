@@ -215,7 +215,7 @@ pub fn validate_rate_limit_config(
             })?;
         if !matches!(
             limit_by,
-            "client_ip" | "api_key" | "authorization" | "route_path"
+            "client_ip" | "ip" | "api_key" | "authorization" | "route_path"
         ) {
             return Err(format!(
                 "rate-limit extension {} rule {id} invalid limit_by: {limit_by}",
