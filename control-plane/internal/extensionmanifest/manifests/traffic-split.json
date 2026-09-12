@@ -76,7 +76,6 @@
               "enum": [
                 "client_ip",
                 "header",
-                "cookie",
                 "random"
               ]
             },

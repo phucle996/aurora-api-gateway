@@ -11,6 +11,10 @@ pub mod rate_limit;
 pub mod traffic_shaper;
 #[path = "request-size-limit/mod.rs"]
 pub mod request_size_limit;
+#[path = "traffic-split/mod.rs"]
+pub mod traffic_split;
+#[path = "canary-release/mod.rs"]
+pub mod canary_release;
 
 use crate::spec::extensions::ExtensionInstanceSpec;
 use nginx::NginxDirectiveSink;
@@ -27,6 +31,8 @@ pub struct RenderedExtensions {
     pub conn_limit_policy: Option<Value>,
     pub traffic_shaper_policy: Option<Value>,
     pub request_size_limit_policy: Option<Value>,
+    pub traffic_split_policy: Option<Value>,
+    pub canary_release_policy: Option<Value>,
 }
 
 pub fn render_extensions(
@@ -48,6 +54,8 @@ pub fn render_extensions(
     let mut conn_limit_policy = None;
     let mut traffic_shaper_policy = None;
     let mut request_size_limit_policy = None;
+    let mut traffic_split_policy = None;
+    let mut canary_release_policy = None;
 
     for instance in instances {
         if instance.renderer.trim().is_empty() {
@@ -116,6 +124,20 @@ pub fn render_extensions(
                 &mut server,
                 &mut has_server,
             )?,
+            "traffic-split" => traffic_split::materialize(
+                instance,
+                config,
+                &mut traffic_split_policy,
+                &mut server,
+                &mut has_server,
+            )?,
+            "canary-release" => canary_release::materialize(
+                instance,
+                config,
+                &mut canary_release_policy,
+                &mut server,
+                &mut has_server,
+            )?,
             renderer if renderer.starts_with("nginx-") => {
                 let mut sink = NginxDirectiveSink {
                     modules: &mut modules,
@@ -155,5 +177,7 @@ pub fn render_extensions(
         conn_limit_policy,
         traffic_shaper_policy,
         request_size_limit_policy,
+        traffic_split_policy,
+        canary_release_policy,
     })
 }

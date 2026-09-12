@@ -461,19 +461,47 @@ export const EXTENSION_DEFAULT_CONFIGS: Record<string, Record<string, any>> = {
     ]
   },
   'traffic-split': {
-    enabled: true,
-    splits: [
-      { upstream: 'backend_v1', weight: 90 },
-      { upstream: 'backend_v2', weight: 10 }
+    rules: [
+      {
+        id: 'default-split',
+        priority: 100,
+        origin: '*',
+        path_prefix: '/',
+        split_by: 'client_ip',
+        splits: [
+          { upstream: 'backend_v1', weight: 80 },
+          { upstream: 'backend_v2', weight: 20 }
+        ]
+      }
     ]
   },
   'canary-release': {
-    enabled: true,
-    canary_upstream: 'app_canary',
-    weight_percentage: 10,
-    cookie_override: 'canary_user',
-    header_override: 'X-Canary',
-    header_values: ['always', 'beta']
+    rules: [
+      {
+        id: 'default-canary',
+        priority: 100,
+        origin: '*',
+        path_prefix: '/',
+        baseline_upstream: 'backend_baseline',
+        canary_upstream: 'backend_canary',
+        match_conditions: [
+          {
+            target: 'header',
+            key: 'X-Canary',
+            regex: '^(true|always|beta)$',
+          },
+        ],
+        weight_percentage: 10,
+        split_by: 'client_ip',
+        canary_upstream_headers: [
+          {
+            name: 'X-Canary',
+            value: 'true',
+          },
+        ],
+        baseline_upstream_headers: [],
+      },
+    ],
   },
   'blue-green': {
     enabled: true,

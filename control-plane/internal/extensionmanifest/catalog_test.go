@@ -7,8 +7,8 @@ func TestCatalogDefaultsMatchTheirRuntimeSchemas(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load catalog: %v", err)
 	}
-	if len(manifests) != 17 {
-		t.Fatalf("expected 17 packaged manifests, got %d", len(manifests))
+	if len(manifests) != 19 {
+		t.Fatalf("expected 19 packaged manifests, got %d", len(manifests))
 	}
 	digest, err := Digest()
 	if err != nil || len(digest) != 64 {
@@ -18,6 +18,39 @@ func TestCatalogDefaultsMatchTheirRuntimeSchemas(t *testing.T) {
 		if _, err := ValidateConfig(manifest, string(manifest.DefaultConfig)); err != nil {
 			t.Fatalf("validate default for %s: %v", manifest.Key, err)
 		}
+	}
+}
+
+func TestCanaryReleaseManifestValidation(t *testing.T) {
+	manifest, ok := Find("builtin/canary-release", 1)
+	if !ok {
+		t.Fatal("Canary Release manifest not installed")
+	}
+	valid := `{"rules":[{"id":"canary-v1","priority":10,"origin":"*","path_prefix":"/","baseline_upstream":"backend_baseline","canary_upstream":"backend_canary","match_conditions":[{"target":"header","key":"x-canary","regex":"^true$"}],"weight_percentage":20,"split_by":"client_ip","canary_upstream_headers":[{"name":"x-canary-routed","value":"1"}],"baseline_upstream_headers":[]}]}`
+	if _, err := ValidateConfig(manifest, valid); err != nil {
+		t.Fatalf("expected valid canary release config: %v", err)
+	}
+	// Missing required field (canary_upstream) should fail
+	invalid := `{"rules":[{"id":"canary-v1","baseline_upstream":"backend_baseline"}]}`
+	if _, err := ValidateConfig(manifest, invalid); err == nil {
+		t.Fatal("expected config missing canary_upstream to be rejected")
+	}
+}
+
+func TestTrafficSplitManifestValidation(t *testing.T) {
+	manifest, ok := Find("builtin/traffic-split", 1)
+	if !ok {
+		t.Fatal("Traffic Split manifest not installed")
+	}
+	// Valid 80/20 split config
+	valid := `{"rules":[{"id":"canary-v2","priority":10,"origin":"*","path_prefix":"/","split_by":"client_ip","splits":[{"upstream":"backend_v1","weight":80},{"upstream":"backend_v2","weight":20}]}]}`
+	if _, err := ValidateConfig(manifest, valid); err != nil {
+		t.Fatalf("expected valid traffic split config: %v", err)
+	}
+	// Missing splits (< 2 targets) should be rejected by schema
+	invalidMinItems := `{"rules":[{"id":"canary-v2","splits":[{"upstream":"backend_v1","weight":100}]}]}`
+	if _, err := ValidateConfig(manifest, invalidMinItems); err == nil {
+		t.Fatal("expected config with < 2 splits to be rejected by schema")
 	}
 }
 

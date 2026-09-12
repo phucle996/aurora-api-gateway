@@ -245,10 +245,9 @@ export function ExtensionIcon({ id, category, className = 'w-5 h-5' }: Extension
       return <Wifi className={className} />;
     case 'request-size-limit': // đã imple 
       return <Shrink className={className} />;
-    case 'traffic-split':
+    case 'traffic-split': // đã imple 
       return <GitFork className={className} />;
-    case 'canary-release':
-    case 'canary_routing':
+    case 'canary-release': // đã imple
       return <GitBranch className={className} />;
     case 'blue-green':
       return <Shuffle className={className} />;

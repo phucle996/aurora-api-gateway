@@ -10,4 +10,8 @@ pub mod rate_limit;
 pub mod traffic_shaper;
 #[path = "request-size-limit/mod.rs"]
 pub mod request_size_limit;
+#[path = "traffic-split/mod.rs"]
+pub mod traffic_split;
+#[path = "canary-release/mod.rs"]
+pub mod canary_release;
 pub mod waf;

@@ -366,6 +366,140 @@ async fn test_materialize_nginx_request_size_limit_snapshot_lifecycle() {
     let _ = tokio::fs::remove_dir_all(base).await;
 }
 
+#[tokio::test]
+async fn test_materialize_nginx_traffic_split_snapshot_lifecycle() {
+    let base = std::env::temp_dir().join(format!(
+        "aurora-agent-test-tsplit-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let policy_dir = base.join("policy");
+    let routing_dir = base.join("routing");
+    let _ = tokio::fs::remove_dir_all(&base).await;
+
+    let spec = Spec {
+        release_id: 101,
+        extensions: vec![crate::spec::extensions::ExtensionInstanceSpec {
+            instance_id: "split-1".to_string(),
+            key: "builtin/traffic-split".to_string(),
+            version: 1,
+            renderer: "traffic-split".to_string(),
+            manifest_digest: String::new(),
+            config_json: r#"{
+                "rules": [
+                    {
+                        "id": "checkout-split",
+                        "priority": 10,
+                        "origin": "shop.example.com",
+                        "path_prefix": "/checkout",
+                        "split_by": "client_ip",
+                        "splits": [
+                            { "upstream": "checkout_v1", "weight": 70 },
+                            { "upstream": "checkout_v2", "weight": 30 }
+                        ]
+                    }
+                ]
+            }"#
+            .to_string(),
+        }],
+        ..Default::default()
+    };
+
+    materialize_nginx(&spec, &policy_dir, &routing_dir)
+        .await
+        .expect("materialize traffic-split snapshot");
+    let ts = tokio::fs::read_to_string(policy_dir.join("active-traffic-split.json"))
+        .await
+        .expect("read traffic-split snapshot");
+    assert!(ts.contains("\"generation\": 101"));
+    assert!(ts.contains("\"checkout_v1\""));
+    assert!(ts.contains("\"weight\": 70"));
+    assert!(ts.contains("\"checkout_v2\""));
+    assert!(ts.contains("\"weight\": 30"));
+
+    let disabled = Spec {
+        release_id: 102,
+        ..Default::default()
+    };
+    let result = materialize_nginx(&disabled, &policy_dir, &routing_dir)
+        .await
+        .expect("remove traffic-split snapshot");
+    assert!(result.nginx_changed);
+    let _ = tokio::fs::remove_dir_all(base).await;
+}
+
+#[tokio::test]
+async fn test_materialize_nginx_writes_and_removes_canary_release_snapshot() {
+    let base = std::env::temp_dir().join(format!(
+        "aurora-agent-test-canary-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let policy_dir = base.join("policy");
+    let routing_dir = base.join("routing");
+    let _ = tokio::fs::remove_dir_all(&base).await;
+
+    let spec = Spec {
+        release_id: 201,
+        extensions: vec![crate::spec::extensions::ExtensionInstanceSpec {
+            instance_id: "canary-1".to_string(),
+            key: "builtin/canary-release".to_string(),
+            version: 1,
+            renderer: "canary-release".to_string(),
+            manifest_digest: String::new(),
+            config_json: r#"{
+                "rules": [
+                    {
+                        "id": "canary-rule-1",
+                        "priority": 10,
+                        "origin": "api.example.com",
+                        "path_prefix": "/v2",
+                        "baseline_upstream": "backend_v1",
+                        "canary_upstream": "backend_v2",
+                        "match_conditions": [
+                            { "target": "header", "key": "X-Beta", "regex": "^1$" }
+                        ],
+                        "weight_percentage": 25,
+                        "split_by": "client_ip",
+                        "canary_upstream_headers": [
+                            { "name": "X-Track", "value": "canary" }
+                        ],
+                        "baseline_upstream_headers": []
+                    }
+                ]
+            }"#
+            .to_string(),
+        }],
+        ..Default::default()
+    };
+
+    materialize_nginx(&spec, &policy_dir, &routing_dir)
+        .await
+        .expect("materialize canary-release snapshot");
+    let cr = tokio::fs::read_to_string(policy_dir.join("active-canary-release.json"))
+        .await
+        .expect("read canary-release snapshot");
+    assert!(cr.contains("\"generation\": 201"));
+    assert!(cr.contains("\"backend_v1\""));
+    assert!(cr.contains("\"backend_v2\""));
+    assert!(cr.contains("\"weight_percentage\": 25"));
+
+    let disabled = Spec {
+        release_id: 202,
+        ..Default::default()
+    };
+    let result = materialize_nginx(&disabled, &policy_dir, &routing_dir)
+        .await
+        .expect("remove canary-release snapshot");
+    assert!(result.nginx_changed);
+    assert!(!policy_dir.join("active-canary-release.json").exists());
+    let _ = tokio::fs::remove_dir_all(base).await;
+}
+
 #[test]
 fn test_access_policy_renderer_generates_cidr_rules_from_instance_config() {
     let instance = crate::spec::extensions::ExtensionInstanceSpec {

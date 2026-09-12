@@ -1,0 +1,193 @@
+{
+  "key": "builtin/canary-release",
+  "version": 1,
+  "id": "canary-release",
+  "name": "Canary Release",
+  "category": "traffic_control",
+  "description": "Canary deployment routing with regex matching (headers, uri, query), percentage rollout, and upstream header forwarding.",
+  "renderer": "canary-release",
+  "builtin": true,
+  "default_config": {
+    "rules": [
+      {
+        "id": "default-canary",
+        "priority": 100,
+        "origin": "*",
+        "path_prefix": "/",
+        "baseline_upstream": "backend_baseline",
+        "canary_upstream": "backend_canary",
+        "match_conditions": [
+          {
+            "target": "header",
+            "key": "X-Canary",
+            "regex": "^(true|always|beta)$"
+          }
+        ],
+        "weight_percentage": 10,
+        "split_by": "client_ip",
+        "canary_upstream_headers": [
+          {
+            "name": "X-Canary",
+            "value": "true"
+          }
+        ],
+        "baseline_upstream_headers": []
+      }
+    ]
+  },
+  "ui_schema": {
+    "layout_type": "form",
+    "fields": []
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "rules"
+    ],
+    "properties": {
+      "rules": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 64,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "baseline_upstream",
+            "canary_upstream"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "priority": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000
+            },
+            "origin": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 253
+            },
+            "path_prefix": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "baseline_upstream": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "canary_upstream": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "match_conditions": {
+              "type": "array",
+              "maxItems": 16,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "target",
+                  "regex"
+                ],
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "header",
+                      "uri",
+                      "query"
+                    ]
+                  },
+                  "key": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "regex": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  }
+                }
+              }
+            },
+            "weight_percentage": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "split_by": {
+              "type": "string",
+              "enum": [
+                "client_ip",
+                "header",
+                "random"
+              ]
+            },
+            "header_name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "canary_upstream_headers": {
+              "type": "array",
+              "maxItems": 16,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "value"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "value": {
+                    "type": "string",
+                    "maxLength": 256
+                  }
+                }
+              }
+            },
+            "baseline_upstream_headers": {
+              "type": "array",
+              "maxItems": 16,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "value"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "value": {
+                    "type": "string",
+                    "maxLength": 256
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

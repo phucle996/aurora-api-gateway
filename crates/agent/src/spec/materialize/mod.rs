@@ -201,7 +201,51 @@ pub async fn materialize_nginx(
         }
     }
 
-    // 8. Upstreams Config
+    // 8. Traffic Split snapshot.
+    let traffic_split_path = policy_dir.join("active-traffic-split.json");
+    if let Some(ts_config) = rendered_extensions.traffic_split_policy.as_ref() {
+        let mut ts_obj = ts_config
+            .as_object()
+            .ok_or_else(|| "traffic-split config must be a JSON object".to_string())?
+            .clone();
+        ts_obj.insert("schema_version".to_string(), serde_json::json!(1));
+        ts_obj.insert("generation".to_string(), serde_json::json!(spec.release_id));
+        let ts_json = serde_json::to_string_pretty(&serde_json::Value::Object(ts_obj))?;
+        if atomic_write_if_changed(&traffic_split_path, ts_json.as_bytes()).await? {
+            info!("Updated active-traffic-split.json");
+            changed = true;
+        }
+    } else {
+        match tokio::fs::remove_file(&traffic_split_path).await {
+            Ok(()) => changed = true,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(Box::new(error)),
+        }
+    }
+
+    // 9. Canary Release snapshot.
+    let canary_release_path = policy_dir.join("active-canary-release.json");
+    if let Some(cr_config) = rendered_extensions.canary_release_policy.as_ref() {
+        let mut cr_obj = cr_config
+            .as_object()
+            .ok_or_else(|| "canary-release config must be a JSON object".to_string())?
+            .clone();
+        cr_obj.insert("schema_version".to_string(), serde_json::json!(1));
+        cr_obj.insert("generation".to_string(), serde_json::json!(spec.release_id));
+        let cr_json = serde_json::to_string_pretty(&serde_json::Value::Object(cr_obj))?;
+        if atomic_write_if_changed(&canary_release_path, cr_json.as_bytes()).await? {
+            info!("Updated active-canary-release.json");
+            changed = true;
+        }
+    } else {
+        match tokio::fs::remove_file(&canary_release_path).await {
+            Ok(()) => changed = true,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(Box::new(error)),
+        }
+    }
+
+    // 9. Upstreams Config
     let upstreams_path = policy_dir.join("active-upstreams.conf");
     let upstreams_content = if let Some(ref raw) = spec.upstreams_conf {
         raw.clone()

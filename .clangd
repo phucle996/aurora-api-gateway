@@ -1,0 +1,12 @@
+CompileFlags:
+  Add:
+    - -I/home/phucle/Desktop/aurora-waf/adapters/nginx/include
+    - -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/core
+    - -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event
+    - -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event/modules
+    - -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/os/unix
+    - -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http
+    - -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http/modules
+    - -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/objs
+    - -I/home/phucle/Desktop/aurora-waf/build/nginx-deps/root/usr/include
+    - -DNGX_HAVE_CONFIG_H
