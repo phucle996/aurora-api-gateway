@@ -72,14 +72,7 @@ impl AlgorithmState {
                     *tokens -= 1.0;
                     let remaining = tokens.floor() as u32;
                     let reset_epoch = now_secs + ((capacity - *tokens) / refill_rate).ceil() as u64;
-                    RateLimitDecision {
-                        allowed: true,
-                        action: ActionOnExceeded::Throttle,
-                        status_code: 200,
-                        retry_after_secs: 0,
-                        remaining,
-                        reset_epoch_secs: reset_epoch,
-                    }
+                    RateLimitDecision::allow(remaining, reset_epoch)
                 } else {
                     let retry_after = ((1.0 - *tokens) / refill_rate).ceil().max(1.0) as u32;
                     build_exceeded_decision(rule, retry_after, now_secs + retry_after as u64)
@@ -99,14 +92,7 @@ impl AlgorithmState {
                     *water_level += 1.0;
                     let remaining = (capacity - *water_level).floor() as u32;
                     let reset_epoch = now_secs + (*water_level / leak_rate).ceil() as u64;
-                    RateLimitDecision {
-                        allowed: true,
-                        action: ActionOnExceeded::Throttle,
-                        status_code: 200,
-                        retry_after_secs: 0,
-                        remaining,
-                        reset_epoch_secs: reset_epoch,
-                    }
+                    RateLimitDecision::allow(remaining, reset_epoch)
                 } else {
                     let retry_after = ((*water_level + 1.0 - capacity) / leak_rate)
                         .ceil()
@@ -124,14 +110,7 @@ impl AlgorithmState {
                 if *count < rule.rate {
                     *count += 1;
                     let remaining = (rule.rate - *count) as u32;
-                    RateLimitDecision {
-                        allowed: true,
-                        action: ActionOnExceeded::Throttle,
-                        status_code: 200,
-                        retry_after_secs: 0,
-                        remaining,
-                        reset_epoch_secs: reset_epoch,
-                    }
+                    RateLimitDecision::allow(remaining, reset_epoch)
                 } else {
                     let retry_after = reset_epoch.saturating_sub(now_secs).max(1) as u32;
                     build_exceeded_decision(rule, retry_after, reset_epoch)
@@ -161,14 +140,7 @@ impl AlgorithmState {
                 if estimated_count + 1.0 <= rule.rate as f64 {
                     *current_count += 1;
                     let remaining = (rule.rate as f64 - estimated_count - 1.0).max(0.0) as u32;
-                    RateLimitDecision {
-                        allowed: true,
-                        action: ActionOnExceeded::Throttle,
-                        status_code: 200,
-                        retry_after_secs: 0,
-                        remaining,
-                        reset_epoch_secs: reset_epoch,
-                    }
+                    RateLimitDecision::allow(remaining, reset_epoch)
                 } else {
                     let retry_after = reset_epoch.saturating_sub(now_secs).max(1) as u32;
                     build_exceeded_decision(rule, retry_after, reset_epoch)
@@ -183,38 +155,21 @@ pub(crate) fn build_exceeded_decision(
     retry_after: u32,
     reset_epoch: u64,
 ) -> RateLimitDecision {
-    match rule.action_on_exceeded {
-        ActionOnExceeded::Audit => RateLimitDecision {
-            allowed: true,
-            action: ActionOnExceeded::Audit,
-            status_code: 200,
-            retry_after_secs: retry_after,
-            remaining: 0,
-            reset_epoch_secs: reset_epoch,
-        },
-        ActionOnExceeded::Block => RateLimitDecision {
-            allowed: false,
-            action: ActionOnExceeded::Block,
-            status_code: rule.rejected_code,
-            retry_after_secs: retry_after,
-            remaining: 0,
-            reset_epoch_secs: reset_epoch,
-        },
-        ActionOnExceeded::Throttle => RateLimitDecision {
-            allowed: false,
-            action: ActionOnExceeded::Throttle,
-            status_code: rule.rejected_code,
-            retry_after_secs: retry_after,
-            remaining: 0,
-            reset_epoch_secs: reset_epoch,
-        },
-        ActionOnExceeded::CustomResponse => RateLimitDecision {
-            allowed: false,
-            action: ActionOnExceeded::CustomResponse,
-            status_code: rule.rejected_code,
-            retry_after_secs: retry_after,
-            remaining: 0,
-            reset_epoch_secs: reset_epoch,
-        },
+    let (allowed, action, status_code) = match rule.action_on_exceeded {
+        ActionOnExceeded::Audit => (true, ActionOnExceeded::Audit, 200),
+        ActionOnExceeded::Block => (false, ActionOnExceeded::Block, rule.rejected_code),
+        ActionOnExceeded::Throttle => (false, ActionOnExceeded::Throttle, rule.rejected_code),
+        ActionOnExceeded::CustomResponse => (false, ActionOnExceeded::CustomResponse, rule.rejected_code),
+    };
+    RateLimitDecision {
+        allowed,
+        action,
+        status_code,
+        retry_after_secs: retry_after,
+        remaining: 0,
+        reset_epoch_secs: reset_epoch,
+        custom_reason: None,
+        headers: Vec::new(),
+        body: None,
     }
 }

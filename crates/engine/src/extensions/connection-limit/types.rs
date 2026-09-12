@@ -1,36 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 pub const NUM_SHARDS: usize = 16;
-pub const MAX_RATE_LIMIT_RULES: usize = 64;
-pub const MAX_RATE_LIMIT_POLICY_BYTES: usize = 131_072; // 128KB
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum RateLimitAlgorithm {
-    #[default]
-    TokenBucket,
-    LeakyBucket,
-    FixedWindow,
-    SlidingWindow,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum EvictionPolicy {
-    #[default]
-    Lru,
-    Lfu,
-    Fifo,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum OverflowStrategy {
-    #[default]
-    EvictAndTrack,
-    DropNew,
-    BypassNew,
-}
+pub const MAX_CONN_LIMIT_RULES: usize = 64;
+pub const MAX_CONN_LIMIT_POLICY_BYTES: usize = 131_072; // 128KB
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, Default)]
 #[serde(rename_all = "snake_case")]
@@ -54,7 +26,7 @@ pub enum LimitBy {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, Default)]
 #[serde(rename_all = "snake_case")]
-pub enum RateLimitMode {
+pub enum ConnLimitMode {
     #[default]
     Local,
     Distributed,
@@ -96,34 +68,22 @@ pub(crate) struct RedisConfigInput {
     pub pool_size: usize,
     #[serde(default)]
     pub on_error: OnErrorAction,
-    #[serde(default)]
-    pub custom_lua_script: Option<String>,
+    #[serde(default = "default_lease_ttl_secs")]
+    pub lease_ttl_secs: u32,
     #[serde(default)]
     pub tls: Option<TlsConfigInput>,
 }
 
 fn default_redis_timeout_ms() -> u64 {
-    10
+    50
 }
 
 fn default_redis_pool_size() -> usize {
     8
 }
 
-#[derive(Deserialize)]
-pub(crate) struct Snapshot {
-    pub schema_version: u32,
-    pub generation: u64,
-    #[serde(default)]
-    pub mode: RateLimitMode,
-    pub algorithm: RateLimitAlgorithm,
-    pub memory_size_mb: u32,
-    pub max_keys: usize,
-    pub eviction_policy: EvictionPolicy,
-    pub overflow_strategy: OverflowStrategy,
-    #[serde(default)]
-    pub redis: Option<RedisConfigInput>,
-    pub rules: Vec<RuleInput>,
+fn default_lease_ttl_secs() -> u32 {
+    60
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -132,10 +92,72 @@ pub(crate) struct HeaderInput {
     pub value: String,
 }
 
+#[derive(Deserialize, Clone, Debug)]
+pub(crate) struct RuleInput {
+    pub id: String,
+    #[serde(default)]
+    pub priority: u32,
+    #[serde(default = "default_host")]
+    pub host: String,
+    #[serde(default = "default_path_prefix")]
+    pub path_prefix: String,
+    #[serde(default = "default_limit_by")]
+    pub limit_by: String,
+    pub max_connections: u32,
+    #[serde(default)]
+    pub action_on_exceeded: ActionOnExceeded,
+    pub rejected_code: Option<u16>,
+    pub response_headers: Option<Vec<HeaderInput>>,
+    pub response_body: Option<String>,
+}
+
+fn default_host() -> String {
+    "*".to_string()
+}
+
+fn default_path_prefix() -> String {
+    "/".to_string()
+}
+
+fn default_limit_by() -> String {
+    "client_ip".to_string()
+}
+
+#[derive(Deserialize)]
+pub(crate) struct ConnLimitSnapshot {
+    pub schema_version: u32,
+    pub generation: u64,
+    #[serde(default)]
+    pub mode: ConnLimitMode,
+    #[serde(default)]
+    pub redis: Option<RedisConfigInput>,
+    pub rules: Vec<RuleInput>,
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct CompiledHeader {
     pub name: String,
     pub value: String,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct CompiledRule {
+    pub id: String,
+    pub host: String,
+    pub path_prefix: String,
+    pub limit_by: LimitBy,
+    pub max_connections: u32,
+    pub action_on_exceeded: ActionOnExceeded,
+    pub rejected_code: u16,
+    pub response_headers: Vec<CompiledHeader>,
+    pub response_body: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConnLimitToken {
+    pub rule_id: String,
+    pub identifier: Vec<u8>,
+    pub is_redis: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -144,67 +166,14 @@ pub struct ResolvedHeader {
     pub value: String,
 }
 
-#[derive(Deserialize, Clone)]
-pub(crate) struct RuleInput {
-    pub id: String,
-    #[serde(default)]
-    pub priority: u32,
-    pub host: String,
-    pub path_prefix: String,
-    pub limit_by: String,
-    pub rate: u64,
-    pub period_secs: u64,
-    #[serde(default)]
-    pub burst: Option<u64>,
-    pub action_on_exceeded: ActionOnExceeded,
-    #[serde(default)]
-    pub rejected_code: Option<u16>,
-    #[serde(default)]
-    pub custom_message: Option<String>,
-    #[serde(default)]
-    pub response_headers: Option<Vec<HeaderInput>>,
-}
-
-#[derive(Clone)]
-pub(crate) struct CompiledRule {
-    pub id: String,
-    pub host: Vec<u8>,
-    pub path_prefix: Vec<u8>,
-    pub limit_by: LimitBy,
-    pub rate: u64,
-    pub period_secs: u64,
-    pub burst: u64,
-    pub action_on_exceeded: ActionOnExceeded,
-    pub rejected_code: u16,
-    pub custom_message: Option<String>,
-    pub response_headers: Vec<CompiledHeader>,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RateLimitDecision {
+pub struct ConnLimitDecision {
     pub allowed: bool,
     pub action: ActionOnExceeded,
     pub status_code: u16,
-    pub retry_after_secs: u32,
-    pub remaining: u32,
-    pub reset_epoch_secs: u64,
-    pub custom_reason: Option<String>,
+    pub current_connections: u32,
+    pub max_connections: u32,
+    pub token: Option<ConnLimitToken>,
     pub headers: Vec<ResolvedHeader>,
     pub body: Option<Vec<u8>>,
-}
-
-impl RateLimitDecision {
-    pub fn allow(remaining: u32, reset_epoch_secs: u64) -> Self {
-        Self {
-            allowed: true,
-            action: ActionOnExceeded::Throttle,
-            status_code: 200,
-            retry_after_secs: 0,
-            remaining,
-            reset_epoch_secs,
-            custom_reason: None,
-            headers: Vec::new(),
-            body: None,
-        }
-    }
 }

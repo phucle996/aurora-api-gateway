@@ -14,6 +14,7 @@ pub mod upstream;
 
 pub use aurora_engine::Decision;
 pub use extensions::access;
+pub use extensions::connection_limit;
 pub use extensions::jwt;
 pub use extensions::rate_limit;
 pub use extensions::waf;

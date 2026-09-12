@@ -4,30 +4,238 @@
   "id": "connection-limit",
   "name": "Connection Limit",
   "category": "traffic_control",
-  "description": "Per-client concurrent connection limiting.",
-  "renderer": "nginx-connection-limit",
+  "description": "High-performance in-process concurrent connection limiting with local and distributed modes.",
+  "renderer": "connection-limit",
   "builtin": true,
   "default_config": {
-    "max_connections_per_ip": 50,
-    "rejected_code": 503
+    "mode": "local",
+    "redis": {
+      "endpoint": "redis://127.0.0.1:6379",
+      "timeout_ms": 50,
+      "pool_size": 8,
+      "on_error": "fallback_local",
+      "lease_ttl_secs": 60
+    },
+    "rules": []
   },
   "ui_schema": {
-    "layout_type": "form",
-    "fields": []
+    "layout_type": "table",
+    "fields": [
+      {
+        "key": "mode",
+        "label": "Deployment Mode",
+        "type": "select",
+        "options": [
+          {
+            "label": "Local (In-Memory)",
+            "value": "local"
+          },
+          {
+            "label": "Distributed (Redis Cluster)",
+            "value": "distributed"
+          }
+        ]
+      },
+      {
+        "key": "redis.endpoint",
+        "label": "Redis Endpoint",
+        "type": "text"
+      },
+      {
+        "key": "redis.on_error",
+        "label": "Action on Redis Failure",
+        "type": "select",
+        "options": [
+          {
+            "label": "Fallback to Local (In-Memory)",
+            "value": "fallback_local"
+          },
+          {
+            "label": "Pass (Fail-Open)",
+            "value": "pass"
+          },
+          {
+            "label": "Block (Fail-Closed)",
+            "value": "block"
+          }
+        ]
+      },
+      {
+        "key": "redis.timeout_ms",
+        "label": "Redis Timeout (ms)",
+        "type": "number"
+      },
+      {
+        "key": "redis.pool_size",
+        "label": "Redis Pool Size",
+        "type": "number"
+      },
+      {
+        "key": "redis.lease_ttl_secs",
+        "label": "Lease TTL (seconds)",
+        "type": "number"
+      }
+    ]
   },
   "config_schema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {
-      "max_connections_per_ip": {
-        "type": "integer",
-        "minimum": 1,
-        "maximum": 1000000
+      "mode": {
+        "type": "string",
+        "enum": [
+          "local",
+          "distributed"
+        ]
       },
-      "rejected_code": {
-        "type": "integer",
-        "minimum": 400,
-        "maximum": 599
+      "redis": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "endpoint": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "db": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 15
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5000
+          },
+          "pool_size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 64
+          },
+          "lease_ttl_secs": {
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 86400
+          },
+          "on_error": {
+            "type": "string",
+            "enum": [
+              "fallback_local",
+              "pass",
+              "block"
+            ]
+          },
+          "tls": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "ca_cert_pem": {
+                "type": "string"
+              },
+              "client_cert_pem": {
+                "type": "string"
+              },
+              "client_key_pem": {
+                "type": "string"
+              },
+              "insecure_skip_verify": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "required": [
+          "endpoint"
+        ]
+      },
+      "rules": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "max_connections"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "priority": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000
+            },
+            "host": {
+              "type": "string",
+              "maxLength": 253
+            },
+            "path_prefix": {
+              "type": "string",
+              "maxLength": 8192
+            },
+            "limit_by": {
+              "type": "string",
+              "enum": [
+                "client_ip",
+                "api_key",
+                "authorization",
+                "route_path"
+              ]
+            },
+            "max_connections": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000
+            },
+            "action_on_exceeded": {
+              "type": "string",
+              "enum": [
+                "throttle",
+                "block",
+                "audit",
+                "custom_response"
+              ]
+            },
+            "rejected_code": {
+              "type": "integer",
+              "minimum": 200,
+              "maximum": 599
+            },
+            "response_headers": {
+              "type": "array",
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "value"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 64
+                  },
+                  "value": {
+                    "type": "string",
+                    "maxLength": 256
+                  }
+                }
+              }
+            },
+            "response_body": {
+              "type": "string",
+              "maxLength": 2048
+            }
+          }
+        }
       }
     }
   }

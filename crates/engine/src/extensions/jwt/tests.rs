@@ -222,8 +222,10 @@ fn test_key_rotation_with_kid_lookup() {
     let engine = JwtEngine::from_snapshot(policy_json.to_string().as_bytes()).unwrap();
 
     // Token signed with Key 1
-    let mut h1 = Header::default();
-    h1.kid = Some("key-1".to_string());
+    let h1 = Header {
+        kid: Some("key-1".to_string()),
+        ..Default::default()
+    };
     let t1 = encode(
         &h1,
         &serde_json::json!({"sub":"user1", "exp":2000000000}),
@@ -240,8 +242,10 @@ fn test_key_rotation_with_kid_lookup() {
     assert!(matches!(r1, JwtDecision::Allow { .. }));
 
     // Token signed with Key 2
-    let mut h2 = Header::default();
-    h2.kid = Some("key-2".to_string());
+    let h2 = Header {
+        kid: Some("key-2".to_string()),
+        ..Default::default()
+    };
     let t2 = encode(
         &h2,
         &serde_json::json!({"sub":"user2", "exp":2000000000}),
@@ -258,8 +262,10 @@ fn test_key_rotation_with_kid_lookup() {
     assert!(matches!(r2, JwtDecision::Allow { .. }));
 
     // Token with unknown kid falls back to primary key (Key 2)
-    let mut h_unknown = Header::default();
-    h_unknown.kid = Some("unknown-key".to_string());
+    let h_unknown = Header {
+        kid: Some("unknown-key".to_string()),
+        ..Default::default()
+    };
     let t_unknown_signed_by_key2 = encode(
         &h_unknown,
         &serde_json::json!({"sub":"user3", "exp":2000000000}),

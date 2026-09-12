@@ -1,5 +1,7 @@
 pub mod access;
 pub mod common;
+#[path = "connection-limit/mod.rs"]
+pub mod connection_limit;
 pub mod jwt;
 pub mod metrics;
 pub mod nginx;
@@ -18,6 +20,7 @@ pub struct RenderedExtensions {
     pub access_rules: Vec<Value>,
     pub jwt_policy: Option<Value>,
     pub rate_limit_policy: Option<Value>,
+    pub conn_limit_policy: Option<Value>,
 }
 
 pub fn render_extensions(
@@ -36,6 +39,7 @@ pub fn render_extensions(
     let mut metrics_instances = 0;
     let mut jwt_policy = None;
     let mut rate_limit_policy = None;
+    let mut conn_limit_policy = None;
 
     for instance in instances {
         if instance.renderer.trim().is_empty() {
@@ -83,6 +87,13 @@ pub fn render_extensions(
                 &mut server,
                 &mut has_server,
             )?,
+            "connection-limit" => connection_limit::materialize(
+                instance,
+                config,
+                &mut conn_limit_policy,
+                &mut server,
+                &mut has_server,
+            )?,
             renderer if renderer.starts_with("nginx-") => {
                 let mut sink = NginxDirectiveSink {
                     modules: &mut modules,
@@ -119,5 +130,6 @@ pub fn render_extensions(
         access_rules,
         jwt_policy,
         rate_limit_policy,
+        conn_limit_policy,
     })
 }

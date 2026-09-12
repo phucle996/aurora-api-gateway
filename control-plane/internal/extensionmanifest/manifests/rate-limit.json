@@ -8,16 +8,78 @@
   "renderer": "rate-limit",
   "builtin": true,
   "default_config": {
+    "mode": "local",
     "algorithm": "token_bucket",
     "memory_size_mb": 16,
     "max_keys": 100000,
     "eviction_policy": "lru",
     "overflow_strategy": "evict_and_track",
+    "redis": {
+      "endpoint": "redis://127.0.0.1:6379",
+      "timeout_ms": 10,
+      "pool_size": 8,
+      "on_error": "fallback_local",
+      "reconnect_interval_secs": 5
+    },
     "rules": []
   },
   "ui_schema": {
     "layout_type": "table",
     "fields": [
+      {
+        "key": "mode",
+        "label": "Deployment Mode",
+        "type": "select",
+        "options": [
+          {
+            "label": "Local (In-Memory)",
+            "value": "local"
+          },
+          {
+            "label": "Distributed (Redis Cluster)",
+            "value": "distributed"
+          }
+        ]
+      },
+      {
+        "key": "redis.endpoint",
+        "label": "Redis Endpoint",
+        "type": "text"
+      },
+      {
+        "key": "redis.on_error",
+        "label": "Action on Redis Failure",
+        "type": "select",
+        "options": [
+          {
+            "label": "Fallback to Local (In-Memory)",
+            "value": "fallback_local"
+          },
+          {
+            "label": "Pass (Fail-Open)",
+            "value": "pass"
+          },
+          {
+            "label": "Block (Fail-Closed)",
+            "value": "block"
+          }
+        ]
+      },
+      {
+        "key": "redis.timeout_ms",
+        "label": "Redis Timeout (ms)",
+        "type": "number"
+      },
+      {
+        "key": "redis.pool_size",
+        "label": "Redis Pool Size",
+        "type": "number"
+      },
+      {
+        "key": "redis.custom_lua_script",
+        "label": "Custom Redis Lua Script",
+        "type": "text"
+      },
       {
         "key": "algorithm",
         "label": "Algorithm",
@@ -211,6 +273,11 @@
         "key": "custom_message",
         "label": "Custom Message",
         "type": "text"
+      },
+      {
+        "key": "response_headers",
+        "label": "Response Headers",
+        "type": "key_value"
       }
     ]
   },
@@ -218,6 +285,77 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {
+      "mode": {
+        "type": "string",
+        "enum": [
+          "local",
+          "distributed"
+        ]
+      },
+      "redis": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "endpoint": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "db": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5000
+          },
+          "on_error": {
+            "type": "string",
+            "enum": [
+              "fallback_local",
+              "pass",
+              "block"
+            ]
+          },
+          "reconnect_interval_secs": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 60
+          },
+          "pool_size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 64
+          },
+          "custom_lua_script": {
+            "type": "string"
+          },
+          "tls": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "ca_cert_pem": {
+                "type": "string"
+              },
+              "client_cert_pem": {
+                "type": "string"
+              },
+              "client_key_pem": {
+                "type": "string"
+              },
+              "insecure_skip_verify": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
       "algorithm": {
         "type": "string",
         "enum": [
@@ -323,7 +461,31 @@
             },
             "custom_message": {
               "type": "string",
-              "maxLength": 1024
+              "maxLength": 2048
+            },
+            "response_headers": {
+              "type": "array",
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "value"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "value": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                }
+              }
             }
           }
         }

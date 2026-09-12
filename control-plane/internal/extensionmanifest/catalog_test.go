@@ -7,8 +7,8 @@ func TestCatalogDefaultsMatchTheirRuntimeSchemas(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load catalog: %v", err)
 	}
-	if len(manifests) != 18 {
-		t.Fatalf("expected 18 packaged manifests, got %d", len(manifests))
+	if len(manifests) != 17 {
+		t.Fatalf("expected 17 packaged manifests, got %d", len(manifests))
 	}
 	digest, err := Digest()
 	if err != nil || len(digest) != 64 {

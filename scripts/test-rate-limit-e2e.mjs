@@ -115,11 +115,12 @@ async function syncRateLimitPolicy(base) {
 
 async function reloadNginx(child) {
   child.kill('SIGHUP');
-  await sleep(300);
+  await sleep(500);
 }
 
 function buildConfig(rules, opts = {}) {
-  return {
+  const cfg = {
+    mode: opts.mode || 'local',
     algorithm: opts.algorithm || 'token_bucket',
     memory_size_mb: opts.memory_size_mb || 16,
     max_keys: opts.max_keys || 100000,
@@ -127,6 +128,10 @@ function buildConfig(rules, opts = {}) {
     overflow_strategy: opts.overflow_strategy || 'evict_and_track',
     rules
   };
+  if (opts.redis) {
+    cfg.redis = opts.redis;
+  }
+  return cfg;
 }
 
 // ─── Rapid burst helper ────────────────────────────────────────────
@@ -134,7 +139,8 @@ async function burst(proxyBase, urlPath, count, extraHeaders = {}) {
   const results = { ok: 0, limited: 0, blocked: 0, other: 0, retryAfter: false, auditHeader: false };
   for (let i = 0; i < count; i++) {
     const res = await fetch(`${proxyBase}${urlPath}`, {
-      headers: { Connection: 'close', ...extraHeaders }
+      headers: { Connection: 'close', ...extraHeaders },
+      signal: AbortSignal.timeout(3000)
     });
     await res.text();
     if (res.status === 200) results.ok++;
@@ -199,7 +205,45 @@ for (let i = 0; i < 80; i++) {
 }
 console.log(`      Control Plane:  ${cpBase}`);
 
-// 1c. NGINX Gateway
+// 1c. Distributed Redis Cluster Node (Docker redis:7-alpine)
+const redisPort = await getFreePort();
+const redisContainer = `aurora-rl-redis-${randomBytes(4).toString('hex')}`;
+console.log(`      Redis Docker:   Starting container "${redisContainer}" on 127.0.0.1:${redisPort}...`);
+
+const runRes = spawnSync('docker', [
+  'run', '-d', '--rm',
+  '--name', redisContainer,
+  '-p', `127.0.0.1:${redisPort}:6379`,
+  'redis:7-alpine'
+], { encoding: 'utf8' });
+
+if (runRes.status !== 0) {
+  throw new Error(`Failed to start Redis docker container: ${runRes.stderr}`);
+}
+
+function cleanupRedis() {
+  try {
+    spawnSync('docker', ['stop', redisContainer], { stdio: 'ignore' });
+  } catch { }
+}
+process.on('exit', cleanupRedis);
+process.on('SIGINT', () => { cleanupRedis(); process.exit(1); });
+process.on('SIGTERM', () => { cleanupRedis(); process.exit(1); });
+
+// Wait for Redis to accept connections
+for (let i = 0; i < 50; i++) {
+  try {
+    const s = net.createConnection({ port: redisPort, host: '127.0.0.1' });
+    await once(s, 'connect');
+    s.end();
+    break;
+  } catch { }
+  if (i === 49) throw new Error('Redis container port connection timeout');
+  await sleep(100);
+}
+console.log(`      Redis Instance: redis://127.0.0.1:${redisPort} (READY ✅)`);
+
+// 1d. NGINX Gateway
 const nginxPort = await getFreePort();
 const proxyBase = `http://127.0.0.1:${nginxPort}`;
 mkdirSync(`${dir}/html`, { recursive: true });
@@ -497,6 +541,52 @@ const bOn = await burst(proxyBase, '/api/test', 5);
 assert.ok(bOn.limited > 0 || bOn.blocked > 0, 'Rate limiting should be active again');
 console.log(`      Re-enabled: Burst 5 → ${bOn.ok} ok, ${bOn.limited} throttled ✅\n`);
 
+// --- 4i: Custom Response with dynamic headers & JSON body template interpolation ---
+console.log(`[Phase 4i] 🔧 Custom Response: rejected_code 429, dynamic headers & JSON body template interpolation...`);
+await mutate('custom-response', [
+  {
+    id: 'api-custom', host: '*', path_prefix: '/api/custom', limit_by: 'client_ip',
+    rate: 1, burst: 1, period_secs: 60,
+    action_on_exceeded: 'custom_response',
+    rejected_code: 429,
+    custom_message: '{"error":"too_many_requests","remaining":$remaining,"limit":$limit,"retry_after":$retry_after}',
+    response_headers: [
+      { name: 'X-RateLimit-Reset', value: '$reset_epoch' },
+      { name: 'X-Custom-Reject', value: 'aurora-waf-rl' }
+    ]
+  }
+]);
+
+// 1st request -> allowed (200 OK from backend)
+const cr1 = await fetch(`${proxyBase}/api/custom/resource`, { headers: { Connection: 'close' } });
+assert.equal(cr1.status, 200, `First request should be 200 OK: ${cr1.status}`);
+await cr1.text();
+
+// 2nd request -> custom rejected directly by gateway
+const cr2 = await fetch(`${proxyBase}/api/custom/resource`, { headers: { Connection: 'close' } });
+assert.equal(cr2.status, 429, `Expected HTTP 429 custom status, got ${cr2.status}`);
+assert.equal(cr2.headers.get('x-custom-reject'), 'aurora-waf-rl', 'Missing or mismatch X-Custom-Reject header');
+const resetHeader = cr2.headers.get('x-ratelimit-reset');
+assert.ok(resetHeader && !isNaN(Number(resetHeader)), `Expected numeric X-RateLimit-Reset header, got: ${resetHeader}`);
+assert.ok(cr2.headers.get('retry-after'), 'Expected default Retry-After header');
+const contentType = cr2.headers.get('content-type');
+assert.ok(contentType && contentType.includes('application/json'), `Expected JSON content-type, got: ${contentType}`);
+
+const cr2Body = await cr2.text();
+let cr2Json;
+try {
+  cr2Json = JSON.parse(cr2Body);
+} catch (e) {
+  assert.fail(`Response body is not valid JSON: "${cr2Body}"`);
+}
+assert.equal(cr2Json.error, 'too_many_requests');
+assert.equal(cr2Json.remaining, 0);
+assert.equal(cr2Json.limit, 1);
+assert.ok(typeof cr2Json.retry_after === 'number' && cr2Json.retry_after >= 1, `Invalid retry_after: ${cr2Json.retry_after}`);
+console.log(`      Custom Response: 429 status ✅`);
+console.log(`      Custom Headers:  X-Custom-Reject="${cr2.headers.get('x-custom-reject')}", X-RateLimit-Reset="${resetHeader}" ✅`);
+console.log(`      Interpolated JSON Body: ${cr2Body} ✅\n`);
+
 // ═══════════════════════════════════════════════════════════════════
 //  PHASE 5: SUSTAINED TRAFFIC STRESS + LIVE CONFIG CYCLING
 // ═══════════════════════════════════════════════════════════════════
@@ -519,7 +609,10 @@ const trafficLoop = async (workerId) => {
       const headers = { Connection: 'close' };
       if (key) headers['x-api-key'] = key;
 
-      const res = await fetch(`${proxyBase}${p}`, { headers });
+      const res = await fetch(`${proxyBase}${p}`, {
+        headers,
+        signal: AbortSignal.timeout(2000)
+      });
       await res.text();
       trafficStats.total++;
       if (res.status === 200) {
@@ -535,22 +628,32 @@ const trafficLoop = async (workerId) => {
     } catch {
       trafficStats.errors++;
     }
+    await sleep(2);
   }
 };
 
 const workers = [trafficLoop(0), trafficLoop(1), trafficLoop(2), trafficLoop(3)];
 
-// Rapidly cycle through permutations under fire
+const redisConfig = (extra = {}) => ({
+  endpoint: `redis://127.0.0.1:${redisPort}`,
+  timeout_ms: 100,
+  pool_size: 8,
+  on_error: 'fallback_local',
+  ...extra
+});
+
+// Rapidly cycle through permutations under fire (including hot-swap between Local & Redis Distributed)
 const mutations = [
-  { label: 'token-bucket-tight', algorithm: 'token_bucket', rate: 5, burst: 5, action: 'throttle', eviction: 'lru', overflow: 'evict_and_track' },
-  { label: 'fixed-window-medium', algorithm: 'fixed_window', rate: 20, burst: 25, action: 'throttle', eviction: 'lfu', overflow: 'evict_and_track' },
-  { label: 'sliding-window-block', algorithm: 'sliding_window', rate: 10, burst: 10, action: 'block', eviction: 'lru', overflow: 'drop_new' },
-  { label: 'leaky-bucket-smooth', algorithm: 'leaky_bucket', rate: 8, burst: 12, action: 'throttle', eviction: 'fifo', overflow: 'bypass_new' },
-  { label: 'audit-inspection', algorithm: 'token_bucket', rate: 15, burst: 20, action: 'audit', eviction: 'lru', overflow: 'evict_and_track' },
-  { label: 'multi-rule-mixed', algorithm: 'sliding_window', multiRule: true, eviction: 'lru', overflow: 'evict_and_track' },
-  { label: 'high-capacity-burst', algorithm: 'token_bucket', rate: 100, burst: 150, action: 'throttle', eviction: 'lfu', overflow: 'evict_and_track' },
-  { label: 'strict-lockdown', algorithm: 'fixed_window', rate: 2, burst: 2, action: 'block', eviction: 'fifo', overflow: 'drop_new' },
-  { label: 'final-recovery', algorithm: 'token_bucket', rate: 30, burst: 40, action: 'throttle', eviction: 'lru', overflow: 'evict_and_track' },
+  { label: 'token-bucket-tight', mode: 'local', algorithm: 'token_bucket', rate: 5, burst: 5, action: 'throttle', eviction: 'lru', overflow: 'evict_and_track' },
+  { label: 'redis-sliding-window', mode: 'distributed', algorithm: 'sliding_window', rate: 15, burst: 15, action: 'throttle', eviction: 'lru', overflow: 'evict_and_track', isRedis: true },
+  { label: 'fixed-window-medium', mode: 'local', algorithm: 'fixed_window', rate: 20, burst: 25, action: 'throttle', eviction: 'lfu', overflow: 'evict_and_track' },
+  { label: 'redis-token-bucket-custom', mode: 'distributed', algorithm: 'token_bucket', rate: 15, burst: 20, action: 'custom_response', rejected_code: 429, eviction: 'lru', overflow: 'evict_and_track', isRedis: true },
+  { label: 'leaky-bucket-smooth', mode: 'local', algorithm: 'leaky_bucket', rate: 8, burst: 12, action: 'throttle', eviction: 'fifo', overflow: 'bypass_new' },
+  { label: 'multi-rule-mixed', mode: 'local', algorithm: 'sliding_window', multiRule: true, eviction: 'lru', overflow: 'evict_and_track' },
+  { label: 'redis-fixed-window-block', mode: 'distributed', algorithm: 'fixed_window', rate: 5, burst: 5, action: 'block', eviction: 'fifo', overflow: 'drop_new', isRedis: true },
+  { label: 'high-capacity-burst', mode: 'local', algorithm: 'token_bucket', rate: 100, burst: 150, action: 'throttle', eviction: 'lfu', overflow: 'evict_and_track' },
+  { label: 'redis-leaky-bucket', mode: 'distributed', algorithm: 'leaky_bucket', rate: 10, burst: 10, action: 'throttle', eviction: 'fifo', overflow: 'drop_new', isRedis: true },
+  { label: 'final-recovery', mode: 'local', algorithm: 'token_bucket', rate: 30, burst: 40, action: 'throttle', eviction: 'lru', overflow: 'evict_and_track' },
 ];
 
 const sleepPerCycle = parseInt(process.env.CYCLE_SLEEP_MS || '700', 10);
@@ -564,18 +667,24 @@ for (const m of mutations) {
       { id: 'rule-fallback', host: '*', path_prefix: '/api', limit_by: 'client_ip', rate: 50, burst: 50, period_secs: 60, action_on_exceeded: 'audit' }
     ];
   } else {
-    rules = [
-      { id: 'rule-sustained', host: '*', path_prefix: '/api', limit_by: 'client_ip', rate: m.rate, burst: m.burst, period_secs: 60, action_on_exceeded: m.action }
-    ];
+    const r = { id: 'rule-sustained', host: '*', path_prefix: '/api', limit_by: 'client_ip', rate: m.rate, burst: m.burst, period_secs: 60, action_on_exceeded: m.action };
+    if (m.rejected_code) r.rejected_code = m.rejected_code;
+    rules = [r];
   }
 
-  await mutate(`stress-${m.label}`, rules, {
+  const opts = {
+    mode: m.mode || 'local',
     algorithm: m.algorithm,
     eviction_policy: m.eviction,
     overflow_strategy: m.overflow
-  });
+  };
+  if (m.isRedis) {
+    opts.redis = redisConfig();
+  }
+
+  await mutate(`stress-${m.label}`, rules, opts);
   trafficStats.mutations++;
-  console.log(`      Mutation ${trafficStats.mutations}/${mutations.length}: ${m.label} (${m.algorithm}, ${m.eviction}/${m.overflow}) — traffic: ${trafficStats.total} reqs`);
+  console.log(`      Mutation ${trafficStats.mutations}/${mutations.length}: ${m.label} (${opts.mode}, ${m.algorithm}, ${m.eviction}/${m.overflow}) — traffic: ${trafficStats.total} reqs`);
   await sleep(sleepPerCycle);
 }
 
@@ -605,7 +714,10 @@ await mutate('concurrency-test', [
 const concResults = { ok: 0, limited: 0, errors: 0 };
 await Promise.all(Array.from({ length: 200 }, async () => {
   try {
-    const res = await fetch(`${proxyBase}/api/burst`, { headers: { Connection: 'close' } });
+    const res = await fetch(`${proxyBase}/api/burst`, {
+      headers: { Connection: 'close' },
+      signal: AbortSignal.timeout(3000)
+    });
     await res.text();
     if (res.status === 200) concResults.ok++;
     else if (res.status === 429) concResults.limited++;
@@ -623,6 +735,237 @@ assert.ok(!/signal 11|segmentation fault|worker process .* exited with code [1-9
 console.log(`      No NGINX crashes or worker abnormal exits ✅\n`);
 
 // ═══════════════════════════════════════════════════════════════════
+//  PHASE 7: DISTRIBUTED REDIS CLUSTERING & MULTI-ALGORITHM VERIFICATION
+// ═══════════════════════════════════════════════════════════════════
+console.log(`[Phase 7] 🌐 Distributed Redis Clustering & Multi-Algorithm Verification...`);
+
+// 7a. Distributed Token Bucket on Redis
+console.log(`[Phase 7a] 🔧 Redis Distributed: Token Bucket (rate 3, burst 3)...`);
+await mutate('redis-token-bucket', [
+  {
+    id: 'redis-rule-tb', host: '*', path_prefix: '/api/redis', limit_by: 'client_ip',
+    rate: 3, burst: 3, period_secs: 60, action_on_exceeded: 'throttle'
+  }
+], { mode: 'distributed', algorithm: 'token_bucket', redis: redisConfig() });
+
+const b7a = await burst(proxyBase, '/api/redis/tb', 5);
+assert.equal(b7a.ok, 3, `Expected 3 allowed on Redis token bucket, got ${b7a.ok}`);
+assert.equal(b7a.limited, 2, `Expected 2 throttled on Redis token bucket, got ${b7a.limited}`);
+assert.ok(b7a.retryAfter, 'Missing Retry-After in Redis response');
+console.log(`      Burst 5 → ${b7a.ok} ok, ${b7a.limited} throttled (429) via Redis Token Bucket ✅`);
+
+// 7b. Distributed Sliding Window on Redis
+console.log(`[Phase 7b] 🔧 Redis Distributed: Sliding Window (rate 2, burst 2)...`);
+await mutate('redis-sliding-window', [
+  {
+    id: 'redis-rule-sw', host: '*', path_prefix: '/api/redis', limit_by: 'client_ip',
+    rate: 2, burst: 2, period_secs: 60, action_on_exceeded: 'throttle'
+  }
+], { mode: 'distributed', algorithm: 'sliding_window', redis: redisConfig() });
+
+const b7b = await burst(proxyBase, '/api/redis/sw', 4);
+assert.equal(b7b.ok, 2, `Expected 2 allowed on Redis sliding window, got ${b7b.ok}`);
+assert.equal(b7b.limited, 2, `Expected 2 throttled on Redis sliding window, got ${b7b.limited}`);
+console.log(`      Burst 4 → ${b7b.ok} ok, ${b7b.limited} throttled (429) via Redis Sliding Window ✅`);
+
+// 7c. Distributed Fixed Window & Leaky Bucket on Redis
+console.log(`[Phase 7c] 🔧 Redis Distributed: Fixed Window & Leaky Bucket algorithm cycling...`);
+await mutate('redis-fixed-window', [
+  {
+    id: 'redis-rule-fw', host: '*', path_prefix: '/api/redis', limit_by: 'client_ip',
+    rate: 2, burst: 2, period_secs: 60, action_on_exceeded: 'block'
+  }
+], { mode: 'distributed', algorithm: 'fixed_window', redis: redisConfig() });
+
+const b7c1 = await burst(proxyBase, '/api/redis/fw', 3);
+assert.equal(b7c1.ok, 2);
+assert.equal(b7c1.blocked, 1);
+console.log(`      Fixed Window: Burst 3 → ${b7c1.ok} ok, ${b7c1.blocked} blocked (403) ✅`);
+
+await mutate('redis-leaky-bucket', [
+  {
+    id: 'redis-rule-lb', host: '*', path_prefix: '/api/redis', limit_by: 'client_ip',
+    rate: 2, burst: 2, period_secs: 60, action_on_exceeded: 'throttle'
+  }
+], { mode: 'distributed', algorithm: 'leaky_bucket', redis: redisConfig() });
+
+const b7c2 = await burst(proxyBase, '/api/redis/lb', 3);
+assert.equal(b7c2.ok, 2);
+assert.equal(b7c2.limited, 1);
+console.log(`      Leaky Bucket: Burst 3 → ${b7c2.ok} ok, ${b7c2.limited} throttled (429) ✅`);
+
+// 7d. Redis Custom Lua Script with Custom Reason & Dynamic Headers/Body
+console.log(`[Phase 7d] 🔧 Redis Custom Lua Script with Custom Reason & Dynamic Headers/Body...`);
+const customLua = `local key = KEYS[1]
+local rate = tonumber(ARGV[1])
+local count = redis.call('INCR', key)
+if count == 1 then
+    redis.call('EXPIRE', key, 60)
+end
+if count <= rate then
+    return {1, rate - count, 0, 0, "OK"}
+else
+    return {0, 0, 60, 0, "vip_tier_quota_exhausted"}
+end
+`;
+
+await mutate('redis-custom-lua', [
+  {
+    id: 'redis-custom-rule', host: '*', path_prefix: '/api/custom-lua', limit_by: 'client_ip',
+    rate: 1, burst: 1, period_secs: 60,
+    action_on_exceeded: 'custom_response',
+    rejected_code: 429,
+    custom_message: '{"status":"rate_limited","reason":"$custom_reason","remaining":$remaining}',
+    response_headers: [
+      { name: 'X-RateLimit-Reason', value: '$custom_reason' },
+      { name: 'X-RateLimit-Mode', value: 'redis-distributed' }
+    ]
+  }
+], {
+  mode: 'distributed',
+  algorithm: 'token_bucket',
+  redis: redisConfig({ custom_lua_script: customLua })
+});
+
+const cl1 = await fetch(`${proxyBase}/api/custom-lua/test`, { headers: { Connection: 'close' } });
+assert.equal(cl1.status, 200, `First request should pass: ${cl1.status}`);
+await cl1.text();
+
+const cl2 = await fetch(`${proxyBase}/api/custom-lua/test`, { headers: { Connection: 'close' } });
+assert.equal(cl2.status, 429, `Second request should be 429: ${cl2.status}`);
+assert.equal(cl2.headers.get('x-ratelimit-reason'), 'vip_tier_quota_exhausted', 'Mismatch X-RateLimit-Reason header');
+assert.equal(cl2.headers.get('x-ratelimit-mode'), 'redis-distributed');
+const cl2Body = await cl2.json();
+assert.equal(cl2Body.status, 'rate_limited');
+assert.equal(cl2Body.reason, 'vip_tier_quota_exhausted');
+assert.equal(cl2Body.remaining, 0);
+console.log(`      Custom Lua in Redis returned custom reason: "${cl2Body.reason}" ✅`);
+console.log(`      Headers: X-RateLimit-Reason="${cl2.headers.get('x-ratelimit-reason')}", X-RateLimit-Mode="${cl2.headers.get('x-ratelimit-mode')}" ✅`);
+console.log(`      Body: ${JSON.stringify(cl2Body)} ✅`);
+
+// 7e. Redis Failure Modes: fallback_local, pass, block
+console.log(`[Phase 7e] 🔧 Redis Failure Resiliency (Pause container → test fallback_local / pass / block)...`);
+
+// Test 1: fallback_local
+await mutate('redis-err-fallback', [
+  {
+    id: 'redis-fallback-rule', host: '*', path_prefix: '/api/failover', limit_by: 'client_ip',
+    rate: 2, burst: 2, period_secs: 60, action_on_exceeded: 'throttle'
+  }
+], {
+  mode: 'distributed',
+  algorithm: 'token_bucket',
+  redis: redisConfig({ on_error: 'fallback_local', timeout_ms: 50 })
+});
+
+spawnSync('docker', ['pause', redisContainer], { stdio: 'ignore' });
+try {
+  const bFailLocal = await burst(proxyBase, '/api/failover/test', 4);
+  assert.equal(bFailLocal.ok, 2, `Fallback local should allow 2, got ${bFailLocal.ok}`);
+  assert.equal(bFailLocal.limited, 2, `Fallback local should throttle 2, got ${bFailLocal.limited}`);
+  assert.equal(bFailLocal.other, 0, 'No 500 errors during Redis outage with fallback_local');
+  console.log(`      Redis PAUSED → fallback_local active: ${bFailLocal.ok} ok, ${bFailLocal.limited} throttled (0 server errors) ✅`);
+} finally {
+  spawnSync('docker', ['unpause', redisContainer], { stdio: 'ignore' });
+}
+
+// Test 2: pass (fail-open)
+await mutate('redis-err-pass', [
+  {
+    id: 'redis-pass-rule', host: '*', path_prefix: '/api/failover-pass', limit_by: 'client_ip',
+    rate: 1, burst: 1, period_secs: 60, action_on_exceeded: 'throttle'
+  }
+], {
+  mode: 'distributed',
+  algorithm: 'token_bucket',
+  redis: redisConfig({ on_error: 'pass', timeout_ms: 50 })
+});
+
+spawnSync('docker', ['pause', redisContainer], { stdio: 'ignore' });
+try {
+  const bPass = await burst(proxyBase, '/api/failover-pass/test', 5);
+  assert.equal(bPass.ok, 5, 'Fail-open should allow all requests');
+  assert.equal(bPass.other, 0, 'No errors during fail-open');
+  console.log(`      Redis PAUSED → on_error=pass (fail-open): 5/5 passed ✅`);
+} finally {
+  spawnSync('docker', ['unpause', redisContainer], { stdio: 'ignore' });
+}
+
+// Test 3: block (fail-closed)
+await mutate('redis-err-block', [
+  {
+    id: 'redis-block-rule', host: '*', path_prefix: '/api/failover-block', limit_by: 'client_ip',
+    rate: 1, burst: 1, period_secs: 60, action_on_exceeded: 'block', rejected_code: 503
+  }
+], {
+  mode: 'distributed',
+  algorithm: 'token_bucket',
+  redis: redisConfig({ on_error: 'block', timeout_ms: 50 })
+});
+
+spawnSync('docker', ['pause', redisContainer], { stdio: 'ignore' });
+try {
+  const resBlock = await fetch(`${proxyBase}/api/failover-block/test`, { headers: { Connection: 'close' } });
+  assert.equal(resBlock.status, 503, `Expected 503 from on_error=block, got ${resBlock.status}`);
+  console.log(`      Redis PAUSED → on_error=block (fail-closed): HTTP 503 received ✅`);
+} finally {
+  spawnSync('docker', ['unpause', redisContainer], { stdio: 'ignore' });
+}
+
+// 7f. Live Mode Swapping: Local In-Memory <--> Distributed Redis
+console.log(`[Phase 7f] 🔧 Live Mode Swapping: Distributed Redis <--> Local In-Memory...`);
+await mutate('swap-to-local', [
+  {
+    id: 'mode-swap-rule', host: '*', path_prefix: '/api/swap', limit_by: 'client_ip',
+    rate: 2, burst: 2, period_secs: 60, action_on_exceeded: 'throttle'
+  }
+], { mode: 'local', algorithm: 'token_bucket' });
+
+const bSwapLocal = await burst(proxyBase, '/api/swap', 3);
+assert.equal(bSwapLocal.ok, 2);
+assert.equal(bSwapLocal.limited, 1);
+console.log(`      Swapped to Local mode: 2 ok, 1 throttled ✅`);
+
+await mutate('swap-to-redis', [
+  {
+    id: 'mode-swap-rule', host: '*', path_prefix: '/api/swap', limit_by: 'client_ip',
+    rate: 3, burst: 3, period_secs: 60, action_on_exceeded: 'throttle'
+  }
+], { mode: 'distributed', algorithm: 'token_bucket', redis: redisConfig() });
+
+const bSwapRedis = await burst(proxyBase, '/api/swap', 4);
+assert.equal(bSwapRedis.ok, 3);
+assert.equal(bSwapRedis.limited, 1);
+console.log(`      Swapped back to Distributed Redis: 3 ok, 1 throttled ✅`);
+
+// 7g. High Concurrency Burst against Distributed Redis
+console.log(`[Phase 7g] 💥 High Concurrency Burst against Distributed Redis (200 parallel requests)...`);
+await mutate('redis-burst', [
+  {
+    id: 'redis-burst-rule', host: '*', path_prefix: '/api/redis-burst', limit_by: 'client_ip',
+    rate: 10, burst: 10, period_secs: 60, action_on_exceeded: 'throttle'
+  }
+], { mode: 'distributed', algorithm: 'token_bucket', redis: redisConfig({ pool_size: 16 }) });
+
+const redisBurstResults = { ok: 0, limited: 0, errors: 0 };
+await Promise.all(Array.from({ length: 200 }, async () => {
+  try {
+    const res = await fetch(`${proxyBase}/api/redis-burst`, {
+      headers: { Connection: 'close' },
+      signal: AbortSignal.timeout(3000)
+    });
+    await res.text();
+    if (res.status === 200) redisBurstResults.ok++;
+    else if (res.status === 429) redisBurstResults.limited++;
+    else redisBurstResults.errors++;
+  } catch { redisBurstResults.errors++; }
+}));
+assert.ok(redisBurstResults.ok <= 12, `Expected <=12 allowed in Redis burst, got ${redisBurstResults.ok}`);
+assert.ok(redisBurstResults.limited >= 188, `Expected >=188 throttled in Redis burst, got ${redisBurstResults.limited}`);
+assert.equal(redisBurstResults.errors, 0, `${redisBurstResults.errors} errors in concurrent Redis burst`);
+console.log(`      Redis Burst: ${redisBurstResults.ok} allowed / ${redisBurstResults.limited} throttled (429) / 0 errors ✅\n`);
+
+// ═══════════════════════════════════════════════════════════════════
 //  FINAL REPORT
 // ═══════════════════════════════════════════════════════════════════
 console.log(`${'═'.repeat(70)}`);
@@ -633,14 +976,17 @@ console.table({
   'Total traffic requests': { value: trafficStats.total.toLocaleString() },
   'Config mutations under load': { value: trafficStats.mutations },
   'Generations synced': { value: generation },
-  'Algorithms tested': { value: 'token_bucket, fixed_window, sliding_window, leaky_bucket' },
-  'Actions tested': { value: 'throttle (429), block (403), audit (200+header)' },
+  'Modes tested': { value: 'local (in-memory 16 shards), distributed (Redis cluster node)' },
+  'Redis algorithms': { value: 'token_bucket, fixed_window, sliding_window, leaky_bucket, custom_lua' },
+  'Redis failure modes': { value: 'fallback_local, pass, block (verified via docker pause)' },
+  'Custom Lua engine': { value: 'Dynamic $custom_reason returned from Redis Lua script' },
+  'Actions tested': { value: 'throttle (429), block (403), audit (200+header), custom_response (status/headers/json body)' },
   'Limit-by tested': { value: 'client_ip, api_key' },
   'Overflow strategies': { value: 'evict_and_track, drop_new, bypass_new' },
   'Eviction policies': { value: 'lru, lfu, fifo' },
   'Disable/enable toggle': { value: 'Verified ✅' },
   'Path isolation': { value: 'Verified (/api vs /admin) ✅' },
-  'Concurrent burst': { value: `200 parallel → ${concResults.ok} ok, ${concResults.limited} limited` },
+  'Concurrent bursts': { value: `200 parallel (Local) & 200 parallel (Redis) → 0 errors` },
   'Errors': { value: '0' },
   'NGINX crashes': { value: 'none' },
 });
@@ -657,3 +1003,4 @@ backend.close();
 cpProcess.kill('SIGTERM');
 await sleep(300);
 if (cpProcess.exitCode === null) cpProcess.kill('SIGKILL');
+cleanupRedis();

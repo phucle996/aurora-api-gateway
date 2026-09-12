@@ -188,23 +188,23 @@ impl JwtEngine {
         match decode::<serde_json::Value>(token_str, decoding_key, &origin.validation) {
             Ok(token_data) => {
                 let mut forwarded_headers = Vec::new();
-                if !origin.forward_headers.is_empty() {
-                    if let Some(payload_obj) = token_data.claims.as_object() {
-                        for fwd in &origin.forward_headers {
-                            if let Some(val) = payload_obj.get(&fwd.payload_key) {
-                                let val_str = match val {
-                                    serde_json::Value::String(s) => s.clone(),
-                                    serde_json::Value::Number(n) => n.to_string(),
-                                    serde_json::Value::Bool(b) => b.to_string(),
-                                    other => other.to_string(),
-                                };
-                                let matched = match fwd.regex {
-                                    Some(ref re) => re.is_match(&val_str),
-                                    None => true,
-                                };
-                                if matched {
-                                    forwarded_headers.push((fwd.header_key.clone(), val_str));
-                                }
+                if !origin.forward_headers.is_empty()
+                    && let Some(payload_obj) = token_data.claims.as_object()
+                {
+                    for fwd in &origin.forward_headers {
+                        if let Some(val) = payload_obj.get(&fwd.payload_key) {
+                            let val_str = match val {
+                                serde_json::Value::String(s) => s.clone(),
+                                serde_json::Value::Number(n) => n.to_string(),
+                                serde_json::Value::Bool(b) => b.to_string(),
+                                other => other.to_string(),
+                            };
+                            let matched = match fwd.regex {
+                                Some(ref re) => re.is_match(&val_str),
+                                None => true,
+                            };
+                            if matched {
+                                forwarded_headers.push((fwd.header_key.clone(), val_str));
                             }
                         }
                     }

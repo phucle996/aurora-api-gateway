@@ -3,14 +3,28 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+typedef struct {
+    AuroraConnectionLimitEngine *engine;
+    AuroraConnLimitToken token;
+} ngx_http_gateway_conn_limit_ctx_t;
+
 static void
-ngx_http_gateway_rate_limit_cleanup(void *data)
+ngx_http_gateway_conn_limit_req_cleanup(void *data)
 {
-    aurora_rate_limit_destroy(data);
+    ngx_http_gateway_conn_limit_ctx_t *ctx = data;
+    if (ctx && ctx->engine) {
+        aurora_conn_limit_release(ctx->engine, &ctx->token);
+    }
+}
+
+static void
+ngx_http_gateway_conn_limit_cleanup(void *data)
+{
+    aurora_conn_limit_destroy(data);
 }
 
 char *
-ngx_http_gateway_merge_rate_limit(ngx_conf_t *cf, ngx_http_gateway_conf_t *prev, ngx_http_gateway_conf_t *conf)
+ngx_http_gateway_merge_conn_limit(ngx_conf_t *cf, ngx_http_gateway_conf_t *prev, ngx_http_gateway_conf_t *conf)
 {
     ngx_pool_cleanup_t *cleanup;
     struct stat st;
@@ -20,26 +34,26 @@ ngx_http_gateway_merge_rate_limit(ngx_conf_t *cf, ngx_http_gateway_conf_t *prev,
     u_char *bytes;
     uint32_t status;
 
-    ngx_conf_merge_str_value(conf->rate_limit_policy, prev->rate_limit_policy, "");
-    if (conf->rate_limit_policy.len == 0) { return NGX_CONF_OK; }
+    ngx_conf_merge_str_value(conf->conn_limit_policy, prev->conn_limit_policy, "");
+    if (conf->conn_limit_policy.len == 0) { return NGX_CONF_OK; }
     if (((ngx_http_core_loc_conf_t *) ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module))->satisfy == NGX_HTTP_SATISFY_ANY) {
-        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "Gateway rate limit requires satisfy all");
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "Gateway connection limit requires satisfy all");
         return NGX_CONF_ERROR;
     }
-    if (prev->rate_limit_engine && conf->rate_limit_policy.data == prev->rate_limit_policy.data) {
-        conf->rate_limit_engine = prev->rate_limit_engine;
+    if (prev->conn_limit_engine && conf->conn_limit_policy.data == prev->conn_limit_policy.data) {
+        conf->conn_limit_engine = prev->conn_limit_engine;
         return NGX_CONF_OK;
     }
-    if (ngx_conf_full_name(cf->cycle, &conf->rate_limit_policy, 0) != NGX_OK) { return NGX_CONF_ERROR; }
+    if (ngx_conf_full_name(cf->cycle, &conf->conn_limit_policy, 0) != NGX_OK) { return NGX_CONF_ERROR; }
 
-    fd = open((char *) conf->rate_limit_policy.data, O_RDONLY|O_NONBLOCK);
+    fd = open((char *) conf->conn_limit_policy.data, O_RDONLY|O_NONBLOCK);
     if (fd == -1) {
-        ngx_conf_log_error(NGX_LOG_EMERG, cf, ngx_errno, "cannot open Gateway rate limit policy %V", &conf->rate_limit_policy);
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, ngx_errno, "cannot open Gateway connection limit policy %V", &conf->conn_limit_policy);
         return NGX_CONF_ERROR;
     }
     if (fstat(fd, &st) == -1 || !S_ISREG(st.st_mode) || st.st_size <= 0 || st.st_size > 131072) {
         close(fd);
-        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "Gateway rate limit policy must be a regular file of 1..131072 bytes");
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "Gateway connection limit policy must be a regular file of 1..131072 bytes");
         return NGX_CONF_ERROR;
     }
     bytes = ngx_pnalloc(cf->temp_pool, 131073);
@@ -55,20 +69,20 @@ ngx_http_gateway_merge_rate_limit(ngx_conf_t *cf, ngx_http_gateway_conf_t *prev,
 
     cleanup = ngx_pool_cleanup_add(cf->pool, 0);
     if (cleanup == NULL) { return NGX_CONF_ERROR; }
-    status = aurora_rate_limit_create(bytes, used, &conf->rate_limit_engine);
+    status = aurora_conn_limit_create(bytes, used, &conf->conn_limit_engine);
     if (status != 0) {
-        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "invalid Gateway rate limit policy %V (status %ui)", &conf->rate_limit_policy, (ngx_uint_t) status);
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "invalid Gateway connection limit policy %V (status %ui)", &conf->conn_limit_policy, (ngx_uint_t) status);
         return NGX_CONF_ERROR;
     }
-    cleanup->handler = ngx_http_gateway_rate_limit_cleanup;
-    cleanup->data = conf->rate_limit_engine;
+    cleanup->handler = ngx_http_gateway_conn_limit_cleanup;
+    cleanup->data = conf->conn_limit_engine;
     return NGX_CONF_OK;
 }
 
 ngx_int_t
-ngx_http_gateway_eval_rate_limit(ngx_http_request_t *r, ngx_http_gateway_conf_t *conf, ngx_str_t host)
+ngx_http_gateway_eval_conn_limit(ngx_http_request_t *r, ngx_http_gateway_conf_t *conf, ngx_str_t host)
 {
-    if (!conf->rate_limit_engine) {
+    if (!conf->conn_limit_engine) {
         return NGX_DECLINED;
     }
 
@@ -100,47 +114,46 @@ ngx_http_gateway_eval_rate_limit(ngx_http_request_t *r, ngx_http_gateway_conf_t 
         }
     }
 
-    AuroraRateLimitDecision decision;
+    AuroraConnLimitDecision decision;
     ngx_memzero(&decision, sizeof(decision));
 
-    uint32_t status = aurora_rate_limit_evaluate(conf->rate_limit_engine,
-                                                host.data, host.len,
-                                                r->uri.data, r->uri.len,
-                                                client_ip.data, client_ip.len,
-                                                api_key_data, api_key_len,
-                                                auth_data, auth_len,
-                                                &decision);
+    uint32_t status = aurora_conn_limit_acquire(conf->conn_limit_engine,
+                                               host.data, host.len,
+                                               r->uri.data, r->uri.len,
+                                               client_ip.data, client_ip.len,
+                                               api_key_data, api_key_len,
+                                               auth_data, auth_len,
+                                               &decision);
     if (status == 1) {
         ngx_log_t log = *r->connection->log;
         log.handler = NULL;
-        ngx_log_error(NGX_LOG_ERR, &log, 0, "Gateway rate limit invalid request: %ui", (ngx_uint_t) status);
+        ngx_log_error(NGX_LOG_ERR, &log, 0, "Gateway connection limit invalid request: %ui", (ngx_uint_t) status);
         return NGX_HTTP_BAD_REQUEST;
     }
     if (status != 0) {
         ngx_log_t log = *r->connection->log;
         log.handler = NULL;
-        ngx_log_error(NGX_LOG_ERR, &log, 0, "Gateway rate limit internal failure: %ui", (ngx_uint_t) status);
+        ngx_log_error(NGX_LOG_ERR, &log, 0, "Gateway connection limit internal failure: %ui", (ngx_uint_t) status);
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
     if (decision.action == 3) {
-        /* Audit mode: Warn and tag request without blocking */
+        /* Audit mode */
         ngx_table_elt_t *h = ngx_list_push(&r->headers_out.headers);
         if (h) {
             h->hash = 1;
-            ngx_str_set(&h->key, "X-RateLimit-Exceeded");
+            ngx_str_set(&h->key, "X-ConnLimit-Exceeded");
             ngx_str_set(&h->value, "1");
         }
         ngx_log_t log = *r->connection->log;
         log.handler = NULL;
-        ngx_log_error(NGX_LOG_NOTICE, &log, 0, "Gateway rate limit audit: would limit path %V", &r->uri);
+        ngx_log_error(NGX_LOG_NOTICE, &log, 0, "Gateway connection limit audit: would limit path %V", &r->uri);
     } else if (!decision.allowed) {
         ngx_uint_t h_idx;
-        ngx_uint_t retry_after_set = 0;
 
         /* Append custom headers defined by client policy */
-        for (h_idx = 0; h_idx < decision.headers_count && h_idx < AURORA_RATE_LIMIT_MAX_HEADERS; h_idx++) {
-            AuroraRateLimitHeader *dh = &decision.headers[h_idx];
+        for (h_idx = 0; h_idx < decision.headers_count && h_idx < AURORA_CONN_LIMIT_MAX_HEADERS; h_idx++) {
+            AuroraConnLimitHeader *dh = &decision.headers[h_idx];
             if (dh->name_len == 0) {
                 continue;
             }
@@ -167,28 +180,11 @@ ngx_http_gateway_eval_rate_limit(ngx_http_request_t *r, ngx_http_gateway_conf_t 
                 r->headers_out.content_type.len = dh->value_len;
                 r->headers_out.content_type.data = h->value.data;
             }
-            if (dh->name_len == 11 && ngx_strncasecmp(dh->name, (u_char *) "retry-after", 11) == 0) {
-                retry_after_set = 1;
-            }
-        }
-
-        /* Default Retry-After if not explicitly overridden in custom headers */
-        if (!retry_after_set && decision.retry_after_secs > 0) {
-            ngx_table_elt_t *retry_after = ngx_list_push(&r->headers_out.headers);
-            if (retry_after) {
-                retry_after->hash = 1;
-                ngx_str_set(&retry_after->key, "Retry-After");
-                u_char *buf = ngx_pcalloc(r->pool, 16);
-                if (buf) {
-                    retry_after->value.len = ngx_snprintf(buf, 16, "%ud", decision.retry_after_secs) - buf;
-                    retry_after->value.data = buf;
-                }
-            }
         }
 
         /* If custom body is configured, emit response directly and terminate phase */
         if (decision.body_len > 0) {
-            r->headers_out.status = (decision.status_code > 0) ? (ngx_uint_t) decision.status_code : NGX_HTTP_TOO_MANY_REQUESTS;
+            r->headers_out.status = (decision.status_code > 0) ? (ngx_uint_t) decision.status_code : NGX_HTTP_SERVICE_UNAVAILABLE;
             r->headers_out.content_length_n = decision.body_len;
 
             if (r->headers_out.content_type.len == 0) {
@@ -230,7 +226,18 @@ ngx_http_gateway_eval_rate_limit(ngx_http_request_t *r, ngx_http_gateway_conf_t 
             return NGX_DONE;
         }
 
-        return (decision.status_code > 0) ? (ngx_int_t) decision.status_code : NGX_HTTP_TOO_MANY_REQUESTS;
+        return (decision.status_code > 0) ? (ngx_int_t) decision.status_code : NGX_HTTP_SERVICE_UNAVAILABLE;
+    } else if (decision.has_token) {
+        /* Allowed: Attach cleanup to request pool to guarantee slot release on finish or disconnect */
+        ngx_pool_cleanup_t *cln = ngx_pool_cleanup_add(r->pool, sizeof(ngx_http_gateway_conn_limit_ctx_t));
+        if (cln == NULL) {
+            aurora_conn_limit_release(conf->conn_limit_engine, &decision.token);
+            return NGX_HTTP_INTERNAL_SERVER_ERROR;
+        }
+        ngx_http_gateway_conn_limit_ctx_t *ctx = cln->data;
+        ctx->engine = conf->conn_limit_engine;
+        ctx->token = decision.token;
+        cln->handler = ngx_http_gateway_conn_limit_req_cleanup;
     }
 
     return NGX_DECLINED;

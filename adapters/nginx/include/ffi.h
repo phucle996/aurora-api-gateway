@@ -72,6 +72,16 @@ uint32_t aurora_jwt_evaluate(const AuroraJwtEngine *engine,
     AuroraJwtDecision *out_decision);
 
 /* Extension: Rate Limiting */
+#define AURORA_RATE_LIMIT_MAX_HEADERS 8
+#define AURORA_RATE_LIMIT_MAX_BODY 2048
+
+typedef struct {
+    uint32_t name_len;
+    uint32_t value_len;
+    uint8_t name[64];
+    uint8_t value[256];
+} AuroraRateLimitHeader;
+
 typedef struct AuroraRateLimitEngine AuroraRateLimitEngine;
 typedef struct {
     uint32_t allowed;
@@ -80,6 +90,10 @@ typedef struct {
     uint32_t retry_after_secs;
     uint32_t remaining;
     uint64_t reset_epoch_secs;
+    uint32_t headers_count;
+    AuroraRateLimitHeader headers[AURORA_RATE_LIMIT_MAX_HEADERS];
+    uint32_t body_len;
+    uint8_t body[AURORA_RATE_LIMIT_MAX_BODY];
 } AuroraRateLimitDecision;
 
 uint32_t aurora_rate_limit_create(const uint8_t *data, size_t len, AuroraRateLimitEngine **out);
@@ -91,6 +105,53 @@ uint32_t aurora_rate_limit_evaluate(const AuroraRateLimitEngine *engine,
     const uint8_t *api_key, size_t api_key_len,
     const uint8_t *authorization, size_t authorization_len,
     AuroraRateLimitDecision *out_decision);
+
+/* Extension: Connection Limiting */
+#define AURORA_CONN_LIMIT_MAX_HEADERS 8
+#define AURORA_CONN_LIMIT_MAX_BODY 2048
+
+typedef struct {
+    uint32_t name_len;
+    uint32_t value_len;
+    uint8_t name[64];
+    uint8_t value[256];
+} AuroraConnLimitHeader;
+
+typedef struct {
+    uint32_t is_redis;
+    uint32_t rule_id_len;
+    uint8_t rule_id[128];
+    uint32_t identifier_len;
+    uint8_t identifier[128];
+} AuroraConnLimitToken;
+
+typedef struct AuroraConnectionLimitEngine AuroraConnectionLimitEngine;
+
+typedef struct {
+    uint32_t allowed;
+    uint32_t action;
+    uint32_t status_code;
+    uint32_t current_connections;
+    uint32_t max_connections;
+    uint32_t has_token;
+    AuroraConnLimitToken token;
+    uint32_t headers_count;
+    AuroraConnLimitHeader headers[AURORA_CONN_LIMIT_MAX_HEADERS];
+    uint32_t body_len;
+    uint8_t body[AURORA_CONN_LIMIT_MAX_BODY];
+} AuroraConnLimitDecision;
+
+uint32_t aurora_conn_limit_create(const uint8_t *data, size_t len, AuroraConnectionLimitEngine **out);
+void aurora_conn_limit_destroy(AuroraConnectionLimitEngine *engine);
+uint32_t aurora_conn_limit_acquire(const AuroraConnectionLimitEngine *engine,
+    const uint8_t *host, size_t host_len,
+    const uint8_t *path, size_t path_len,
+    const uint8_t *client_ip, size_t client_ip_len,
+    const uint8_t *api_key, size_t api_key_len,
+    const uint8_t *authorization, size_t authorization_len,
+    AuroraConnLimitDecision *out_decision);
+uint32_t aurora_conn_limit_release(const AuroraConnectionLimitEngine *engine,
+    const AuroraConnLimitToken *token);
 
 /* Control Plane Runtime & Telemetry */
 uint32_t aurora_waf_start_runtime(

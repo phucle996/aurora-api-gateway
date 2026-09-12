@@ -1,7 +1,7 @@
 use crate::extensions::rate_limit::algorithm::AlgorithmState;
 use crate::extensions::rate_limit::types::{
-    ActionOnExceeded, CompiledRule, EvictionPolicy, NUM_SHARDS, OverflowStrategy,
-    RateLimitAlgorithm, RateLimitDecision,
+    CompiledRule, EvictionPolicy, NUM_SHARDS, OverflowStrategy, RateLimitAlgorithm,
+    RateLimitDecision,
 };
 use std::collections::HashMap;
 
@@ -60,14 +60,7 @@ pub(crate) fn ensure_shard_capacity_and_entry<'a>(
             if shard.entries.len() >= cfg.max_keys_per_shard {
                 match cfg.overflow_strategy {
                     OverflowStrategy::BypassNew => {
-                        return Err(RateLimitDecision {
-                            allowed: true,
-                            action: ActionOnExceeded::Throttle,
-                            status_code: 200,
-                            retry_after_secs: 0,
-                            remaining: 1,
-                            reset_epoch_secs: now_secs + rule.period_secs,
-                        });
+                        return Err(RateLimitDecision::allow(1, now_secs + rule.period_secs));
                     }
                     OverflowStrategy::DropNew => {
                         return Err(RateLimitDecision {
@@ -77,6 +70,9 @@ pub(crate) fn ensure_shard_capacity_and_entry<'a>(
                             retry_after_secs: rule.period_secs as u32,
                             remaining: 0,
                             reset_epoch_secs: now_secs + rule.period_secs,
+                            custom_reason: None,
+                            headers: Vec::new(),
+                            body: None,
                         });
                     }
                     OverflowStrategy::EvictAndTrack => {

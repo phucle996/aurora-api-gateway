@@ -19,6 +19,71 @@ pub fn validate_rate_limit_config(
             instance.instance_id
         ));
     }
+    if let Some(mode) = string(config, "mode") {
+        if !matches!(mode, "local" | "distributed") {
+            return Err(format!(
+                "rate-limit extension {} has invalid mode: {mode} (must be 'local' or 'distributed')",
+                instance.instance_id
+            ));
+        }
+        if mode == "distributed" {
+            if let Some(redis) = config.get("redis").and_then(Value::as_object) {
+                let endpoint = redis.get("endpoint").and_then(Value::as_str).unwrap_or("");
+                if endpoint.trim().is_empty() {
+                    return Err(format!(
+                        "rate-limit extension {} distributed mode requires non-empty redis.endpoint",
+                        instance.instance_id
+                    ));
+                }
+                if let Some(on_error) = redis.get("on_error").and_then(Value::as_str)
+                    && !matches!(on_error, "fallback_local" | "pass" | "block")
+                {
+                    return Err(format!(
+                        "rate-limit extension {} has invalid redis.on_error: {on_error}",
+                        instance.instance_id
+                    ));
+                }
+                if let Some(timeout_ms) = redis.get("timeout_ms").and_then(Value::as_u64)
+                    && (timeout_ms == 0 || timeout_ms > 5000)
+                {
+                    return Err(format!(
+                        "rate-limit extension {} redis.timeout_ms must be 1..=5000",
+                        instance.instance_id
+                    ));
+                }
+                if let Some(pool_size) = redis.get("pool_size").and_then(Value::as_u64)
+                    && (pool_size == 0 || pool_size > 64)
+                {
+                    return Err(format!(
+                        "rate-limit extension {} redis.pool_size must be 1..=64",
+                        instance.instance_id
+                    ));
+                }
+                if let Some(custom_lua) = redis.get("custom_lua_script").and_then(Value::as_str)
+                    && (custom_lua.trim().is_empty() || custom_lua.len() > 65536)
+                {
+                    return Err(format!(
+                        "rate-limit extension {} redis.custom_lua_script cannot be empty or exceed 64KB",
+                        instance.instance_id
+                    ));
+                }
+                if let Some(tls) = redis.get("tls").and_then(Value::as_object)
+                    && let Some(ca) = tls.get("ca_cert_pem").and_then(Value::as_str)
+                    && (ca.trim().is_empty() || ca.len() > 32768)
+                {
+                    return Err(format!(
+                        "rate-limit extension {} redis.tls.ca_cert_pem cannot be empty or exceed 32KB",
+                        instance.instance_id
+                    ));
+                }
+            } else {
+                return Err(format!(
+                    "rate-limit extension {} in distributed mode requires a 'redis' config object",
+                    instance.instance_id
+                ));
+            }
+        }
+    }
     let algorithm = string(config, "algorithm").ok_or_else(|| {
         format!(
             "decode rate-limit extension {} config: missing algorithm",
@@ -211,6 +276,44 @@ pub fn validate_rate_limit_config(
                 "rate-limit extension {} rule {id} invalid rejected_code",
                 instance.instance_id
             ));
+        }
+        if let Some(msg) = r_obj.get("custom_message").and_then(|v| v.as_str())
+            && msg.len() > 2048
+        {
+            return Err(format!(
+                "rate-limit extension {} rule {id} custom_message exceeds 2048 bytes",
+                instance.instance_id
+            ));
+        }
+        if let Some(headers) = r_obj.get("response_headers").and_then(|v| v.as_array()) {
+            if headers.len() > 8 {
+                return Err(format!(
+                    "rate-limit extension {} rule {id} response_headers exceeds maximum of 8 headers",
+                    instance.instance_id
+                ));
+            }
+            for (h_idx, h_val) in headers.iter().enumerate() {
+                let h_obj = h_val.as_object().ok_or_else(|| {
+                    format!(
+                        "rate-limit extension {} rule {id} header #{h_idx} must be an object",
+                        instance.instance_id
+                    )
+                })?;
+                let name = h_obj.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                let value = h_obj.get("value").and_then(|v| v.as_str()).unwrap_or("");
+                if name.trim().is_empty() || name.len() > 64 {
+                    return Err(format!(
+                        "rate-limit extension {} rule {id} header #{h_idx} name must be 1..=64 characters",
+                        instance.instance_id
+                    ));
+                }
+                if value.len() > 256 {
+                    return Err(format!(
+                        "rate-limit extension {} rule {id} header #{h_idx} value exceeds 256 characters",
+                        instance.instance_id
+                    ));
+                }
+            }
         }
     }
 

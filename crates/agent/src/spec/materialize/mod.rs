@@ -135,7 +135,29 @@ pub async fn materialize_nginx(
         }
     }
 
-    // 5. Upstreams Config
+    // 5. Connection Limiting snapshot.
+    let conn_limit_path = policy_dir.join("active-connection-limit.json");
+    if let Some(cl_config) = rendered_extensions.conn_limit_policy.as_ref() {
+        let mut cl_obj = cl_config
+            .as_object()
+            .ok_or_else(|| "connection-limit config must be a JSON object".to_string())?
+            .clone();
+        cl_obj.insert("schema_version".to_string(), serde_json::json!(1));
+        cl_obj.insert("generation".to_string(), serde_json::json!(spec.release_id));
+        let cl_json = serde_json::to_string_pretty(&serde_json::Value::Object(cl_obj))?;
+        if atomic_write_if_changed(&conn_limit_path, cl_json.as_bytes()).await? {
+            info!("Updated active-connection-limit.json");
+            changed = true;
+        }
+    } else {
+        match tokio::fs::remove_file(&conn_limit_path).await {
+            Ok(()) => changed = true,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(Box::new(error)),
+        }
+    }
+
+    // 6. Upstreams Config
     let upstreams_path = policy_dir.join("active-upstreams.conf");
     let upstreams_content = if let Some(ref raw) = spec.upstreams_conf {
         raw.clone()

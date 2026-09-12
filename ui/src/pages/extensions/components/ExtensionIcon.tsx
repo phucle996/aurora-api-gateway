@@ -188,7 +188,7 @@ export function ExtensionIcon({ id, category, className = 'w-5 h-5' }: Extension
     case 'key-auth':
     case 'api_key_auth':
       return <Key className={className} />;
-    case 'jwt-authentication':
+    case 'jwt-authentication': // đã imple
       return <Ticket className={className} />;
     case 'hmac-auth':
       return <Hash className={className} />;
@@ -237,13 +237,8 @@ export function ExtensionIcon({ id, category, className = 'w-5 h-5' }: Extension
       return <BadgeCheck className={className} />;
 
     // 4. Traffic Control (14) - All Unique
-    case 'rate-limit':
-    case 'rate_limiter':
+    case 'rate-limit': // đã imple 
       return <Gauge className={className} />;
-    case 'rate-limit-local':
-      return <Timer className={className} />;
-    case 'rate-limit-distributed':
-      return <Cpu className={className} />;
     case 'connection-limit':
       return <Split className={className} />;
     case 'bandwidth-limit':

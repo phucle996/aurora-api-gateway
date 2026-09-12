@@ -206,6 +206,50 @@ async fn test_rate_limit_extension_materializes_and_removes_ffi_snapshot() {
     let _ = tokio::fs::remove_dir_all(base).await;
 }
 
+#[tokio::test]
+async fn test_connection_limit_extension_materializes_and_removes_ffi_snapshot() {
+    let base = std::env::temp_dir().join(format!(
+        "materialize-conn-limit-snapshot-{}",
+        std::process::id()
+    ));
+    let policy_dir = base.join("policy");
+    let routing_dir = base.join("routing");
+    let _ = tokio::fs::remove_dir_all(&base).await;
+    let spec = Spec {
+        release_id: 99,
+        extensions: vec![crate::spec::extensions::ExtensionInstanceSpec {
+            instance_id: "connection-limit".to_string(),
+            key: "builtin/connection-limit".to_string(),
+            version: 1,
+            renderer: "connection-limit".to_string(),
+            manifest_digest: String::new(),
+            config_json: r#"{"mode":"local","rules":[{"id":"cl-1","host":"*","path_prefix":"/stream","limit_by":"client_ip","max_connections":5,"action_on_exceeded":"throttle","rejected_code":503}]}"#.to_string(),
+        }],
+        ..Default::default()
+    };
+
+    materialize_nginx(&spec, &policy_dir, &routing_dir)
+        .await
+        .expect("materialize connection-limit snapshot");
+    let cl = tokio::fs::read_to_string(policy_dir.join("active-connection-limit.json"))
+        .await
+        .expect("read connection-limit snapshot");
+    assert!(cl.contains("\"generation\": 99"));
+    assert!(cl.contains("\"max_connections\": 5"));
+    assert!(cl.contains("\"/stream\""));
+
+    let disabled = Spec {
+        release_id: 100,
+        ..Default::default()
+    };
+    let result = materialize_nginx(&disabled, &policy_dir, &routing_dir)
+        .await
+        .expect("remove connection-limit snapshot");
+    assert!(result.nginx_changed);
+    assert!(!policy_dir.join("active-connection-limit.json").exists());
+    let _ = tokio::fs::remove_dir_all(base).await;
+}
+
 #[test]
 fn test_access_policy_renderer_generates_cidr_rules_from_instance_config() {
     let instance = crate::spec::extensions::ExtensionInstanceSpec {

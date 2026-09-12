@@ -9,6 +9,7 @@
 
 mod algorithm;
 mod engine;
+mod redis;
 mod shard;
 mod types;
 
@@ -18,5 +19,6 @@ mod tests;
 pub use engine::RateLimitEngine;
 pub use types::{
     ActionOnExceeded, EvictionPolicy, LimitBy, MAX_RATE_LIMIT_POLICY_BYTES, MAX_RATE_LIMIT_RULES,
-    NUM_SHARDS, OverflowStrategy, RateLimitAlgorithm, RateLimitDecision,
+    NUM_SHARDS, OnErrorAction, OverflowStrategy, RateLimitAlgorithm, RateLimitDecision,
+    RateLimitMode, ResolvedHeader,
 };
