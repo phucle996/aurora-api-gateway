@@ -298,6 +298,74 @@ async fn test_traffic_shaper_extension_materializes_and_removes_snapshot() {
     let _ = tokio::fs::remove_dir_all(base).await;
 }
 
+#[tokio::test]
+async fn test_materialize_nginx_request_size_limit_snapshot_lifecycle() {
+    let base = std::env::temp_dir().join(format!(
+        "aurora-agent-test-rsl-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let policy_dir = base.join("policy");
+    let routing_dir = base.join("routing");
+    let _ = tokio::fs::remove_dir_all(&base).await;
+
+    let spec = Spec {
+        release_id: 99,
+        extensions: vec![crate::spec::extensions::ExtensionInstanceSpec {
+            instance_id: "rsl-1".to_string(),
+            key: "builtin/request-size-limit".to_string(),
+            version: 1,
+            renderer: "request-size-limit".to_string(),
+            manifest_digest: String::new(),
+            config_json: r#"{
+                "rules": [
+                    {
+                        "id": "limit-api",
+                        "priority": 10,
+                        "origin": "api.example.com",
+                        "path_prefix": "/upload",
+                        "limit_by": "header",
+                        "header_name": "x-role",
+                        "match_value": "^(admin|vip)$",
+                        "max_request_bytes": 52428800,
+                        "max_header_bytes": 32768,
+                        "max_body_bytes": 52428800,
+                        "rejected_code": 413,
+                        "response_body": "{\"error\":\"custom_large\"}"
+                    }
+                ]
+            }"#
+            .to_string(),
+        }],
+        ..Default::default()
+    };
+
+    materialize_nginx(&spec, &policy_dir, &routing_dir)
+        .await
+        .expect("materialize request-size-limit snapshot");
+    let rsl = tokio::fs::read_to_string(policy_dir.join("active-request-size-limit.json"))
+        .await
+        .expect("read request-size-limit snapshot");
+    assert!(rsl.contains("\"generation\": 99"));
+    assert!(rsl.contains("\"max_request_bytes\": 52428800"));
+    assert!(rsl.contains("\"origin\": \"api.example.com\""));
+    assert!(rsl.contains("\"match_value\": \"^(admin|vip)$\""));
+    assert!(rsl.contains("\"/upload\""));
+
+    let disabled = Spec {
+        release_id: 100,
+        ..Default::default()
+    };
+    let result = materialize_nginx(&disabled, &policy_dir, &routing_dir)
+        .await
+        .expect("remove request-size-limit snapshot");
+    assert!(result.nginx_changed);
+    assert!(!policy_dir.join("active-request-size-limit.json").exists());
+    let _ = tokio::fs::remove_dir_all(base).await;
+}
+
 #[test]
 fn test_access_policy_renderer_generates_cidr_rules_from_instance_config() {
     let instance = crate::spec::extensions::ExtensionInstanceSpec {

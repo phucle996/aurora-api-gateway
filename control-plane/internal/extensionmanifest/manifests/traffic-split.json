@@ -1,26 +1,30 @@
 {
-  "key": "builtin/request-size-limit",
+  "key": "builtin/traffic-split",
   "version": 1,
-  "id": "request-size-limit",
-  "name": "Request Size Limit",
+  "id": "traffic-split",
+  "name": "Traffic Split",
   "category": "traffic_control",
-  "description": "Guards gateway against oversized requests and header bombing with configurable total, header, and body size limits.",
-  "renderer": "request-size-limit",
+  "description": "Weighted upstream traffic splitting for canary releases, A/B testing, and multi-version routing.",
+  "renderer": "traffic-split",
   "builtin": true,
   "default_config": {
     "rules": [
       {
-        "id": "default-limit",
+        "id": "default-split",
         "priority": 100,
         "origin": "*",
         "path_prefix": "/",
-        "limit_by": "client_ip",
-        "match_value": "*",
-        "max_request_bytes": 10485760,
-        "max_header_bytes": 65536,
-        "max_body_bytes": 10485760,
-        "rejected_code": 413,
-        "response_body": "{\"error\":\"payload_too_large\",\"message\":\"Request size exceeds limit\"}"
+        "split_by": "client_ip",
+        "splits": [
+          {
+            "upstream": "backend_v1",
+            "weight": 80
+          },
+          {
+            "upstream": "backend_v2",
+            "weight": 20
+          }
+        ]
       }
     ]
   },
@@ -44,7 +48,7 @@
           "additionalProperties": false,
           "required": [
             "id",
-            "max_request_bytes"
+            "splits"
           ],
           "properties": {
             "id": {
@@ -67,12 +71,13 @@
               "minLength": 1,
               "maxLength": 8192
             },
-            "limit_by": {
+            "split_by": {
               "type": "string",
               "enum": [
                 "client_ip",
                 "header",
-                "route_path"
+                "cookie",
+                "random"
               ]
             },
             "header_name": {
@@ -80,34 +85,30 @@
               "minLength": 1,
               "maxLength": 64
             },
-            "match_value": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 256
-            },
-            "max_request_bytes": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 10737418240
-            },
-            "max_header_bytes": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 10485760
-            },
-            "max_body_bytes": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 10737418240
-            },
-            "rejected_code": {
-              "type": "integer",
-              "minimum": 400,
-              "maximum": 599
-            },
-            "response_body": {
-              "type": "string",
-              "maxLength": 4096
+            "splits": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 16,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "upstream",
+                  "weight"
+                ],
+                "properties": {
+                  "upstream": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "weight": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 99
+                  }
+                }
+              }
             }
           }
         }

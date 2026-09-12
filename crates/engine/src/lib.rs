@@ -7,6 +7,7 @@ pub use extensions::access;
 pub use extensions::connection_limit;
 pub use extensions::jwt;
 pub use extensions::rate_limit;
+pub use extensions::request_size_limit;
 pub use extensions::traffic_shaper;
 pub use extensions::waf;
 
@@ -15,6 +16,7 @@ pub use extensions::access::AccessEngine;
 pub use extensions::connection_limit::ConnectionLimitEngine;
 pub use extensions::jwt::JwtEngine;
 pub use extensions::rate_limit::RateLimitEngine;
+pub use extensions::request_size_limit::RequestSizeLimitEngine;
 pub use extensions::traffic_shaper::TrafficShaperEngine;
 pub use extensions::waf::{
     Action, Decision, Engine, Error, MAX_PATH_BYTES, MAX_POLICY_BYTES, host_matches,

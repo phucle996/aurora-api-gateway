@@ -57,6 +57,12 @@ ngx_http_gateway_handler(ngx_http_request_t *r)
         return rc;
     }
 
+    /* Stage 7: In-process Request Size Limit */
+    rc = ngx_http_gateway_eval_request_size_limit(r, conf, host);
+    if (rc != NGX_DECLINED) {
+        return rc;
+    }
+
     /* All checks passed: Cho phép request đi tiếp */
     return NGX_DECLINED;
 }

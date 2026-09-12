@@ -8,4 +8,6 @@ pub mod jwt;
 pub mod rate_limit;
 #[path = "traffic-shaper/mod.rs"]
 pub mod traffic_shaper;
+#[path = "request-size-limit/mod.rs"]
+pub mod request_size_limit;
 pub mod waf;

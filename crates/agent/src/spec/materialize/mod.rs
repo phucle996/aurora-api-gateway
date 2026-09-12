@@ -179,7 +179,29 @@ pub async fn materialize_nginx(
         }
     }
 
-    // 7. Upstreams Config
+    // 7. Request Size Limit snapshot.
+    let request_size_limit_path = policy_dir.join("active-request-size-limit.json");
+    if let Some(rsl_config) = rendered_extensions.request_size_limit_policy.as_ref() {
+        let mut rsl_obj = rsl_config
+            .as_object()
+            .ok_or_else(|| "request-size-limit config must be a JSON object".to_string())?
+            .clone();
+        rsl_obj.insert("schema_version".to_string(), serde_json::json!(1));
+        rsl_obj.insert("generation".to_string(), serde_json::json!(spec.release_id));
+        let rsl_json = serde_json::to_string_pretty(&serde_json::Value::Object(rsl_obj))?;
+        if atomic_write_if_changed(&request_size_limit_path, rsl_json.as_bytes()).await? {
+            info!("Updated active-request-size-limit.json");
+            changed = true;
+        }
+    } else {
+        match tokio::fs::remove_file(&request_size_limit_path).await {
+            Ok(()) => changed = true,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(Box::new(error)),
+        }
+    }
+
+    // 8. Upstreams Config
     let upstreams_path = policy_dir.join("active-upstreams.conf");
     let upstreams_content = if let Some(ref raw) = spec.upstreams_conf {
         raw.clone()

@@ -17,6 +17,8 @@ pub use extensions::access;
 pub use extensions::connection_limit;
 pub use extensions::jwt;
 pub use extensions::rate_limit;
+pub use extensions::request_size_limit;
+pub use extensions::traffic_shaper;
 pub use extensions::waf;
 pub use extensions::waf::*;
 

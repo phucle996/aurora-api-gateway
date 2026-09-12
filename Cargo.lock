@@ -121,6 +121,7 @@ dependencies = [
  "hex",
  "ipnet",
  "prost",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",

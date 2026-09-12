@@ -444,10 +444,21 @@ export const EXTENSION_DEFAULT_CONFIGS: Record<string, Record<string, any>> = {
     ]
   },
   'request-size-limit': {
-    enabled: true,
-    max_body_bytes: 10485760,
-    response_status: 413,
-    response_message: 'Payload Too Large'
+    rules: [
+      {
+        id: 'default-limit',
+        priority: 100,
+        origin: '*',
+        path_prefix: '/',
+        limit_by: 'client_ip',
+        match_value: '*',
+        max_request_bytes: 10485760,
+        max_header_bytes: 65536,
+        max_body_bytes: 10485760,
+        rejected_code: 413,
+        response_body: '{"error":"payload_too_large","message":"Request size exceeds limit"}'
+      }
+    ]
   },
   'traffic-split': {
     enabled: true,

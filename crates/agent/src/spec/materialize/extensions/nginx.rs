@@ -188,12 +188,6 @@ pub fn materialize(
                 }
             }
         }
-        "nginx-request-size-limit" => {
-            sink.push_server(&format!(
-                "client_max_body_size {};\n",
-                unsigned_or(config, "max_body_bytes", 1_048_576)
-            ));
-        }
         "nginx-response-buffering" => {
             sink.push_server("proxy_buffering off;\n");
         }

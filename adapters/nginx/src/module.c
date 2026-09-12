@@ -51,6 +51,12 @@ static ngx_command_t ngx_http_gateway_commands[] = {
       ngx_conf_set_str_slot, NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_gateway_conf_t, traffic_shaper_policy), NULL },
 
+    /* Extension: Request Size Limit Policy */
+    { ngx_string("gateway_request_size_limit_policy"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_str_slot, NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_gateway_conf_t, request_size_limit_policy), NULL },
+
     /* Extension: Core WAF Policy */
     { ngx_string("gateway_waf_policy"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
@@ -131,6 +137,7 @@ ngx_http_gateway_merge_conf(ngx_conf_t *cf, void *parent, void *child)
     if (ngx_http_gateway_merge_rate_limit(cf, prev, conf) != NGX_CONF_OK) { return NGX_CONF_ERROR; }
     if (ngx_http_gateway_merge_conn_limit(cf, prev, conf) != NGX_CONF_OK) { return NGX_CONF_ERROR; }
     if (ngx_http_gateway_merge_traffic_shaper(cf, prev, conf) != NGX_CONF_OK) { return NGX_CONF_ERROR; }
+    if (ngx_http_gateway_merge_request_size_limit(cf, prev, conf) != NGX_CONF_OK) { return NGX_CONF_ERROR; }
     if (ngx_http_gateway_merge_waf(cf, prev, conf) != NGX_CONF_OK) { return NGX_CONF_ERROR; }
 
     return NGX_CONF_OK;

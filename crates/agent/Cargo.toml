@@ -21,6 +21,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 sha2 = "0.10"
 hex = "0.4"
 ipnet = "2"
+regex = "1"
 anyhow = "1.0"
 tonic = "0.12"
 prost = "0.13"

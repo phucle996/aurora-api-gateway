@@ -184,6 +184,34 @@ uint32_t aurora_traffic_shaper_evaluate(const AuroraTrafficShaperEngine *engine,
     aurora_header_lookup_fn lookup_fn,
     AuroraTrafficShaperDecision *out_decision);
 
+/* ========================================================================== */
+/* Extension: Request Size Limit Types & FFI                                  */
+/* ========================================================================== */
+
+typedef struct AuroraRequestSizeLimitEngine AuroraRequestSizeLimitEngine;
+
+typedef struct {
+    uint32_t allowed;
+    uint16_t status_code;
+    uint32_t matched;
+    uint32_t rule_id_len;
+    char rule_id[128];
+    uint32_t body_len;
+    char body[4096];
+} AuroraRequestSizeDecision;
+
+uint32_t aurora_request_size_limit_create(const uint8_t *data, size_t len, AuroraRequestSizeLimitEngine **out);
+void aurora_request_size_limit_destroy(AuroraRequestSizeLimitEngine *engine);
+uint32_t aurora_request_size_limit_evaluate(const AuroraRequestSizeLimitEngine *engine,
+    const uint8_t *origin, size_t origin_len,
+    const uint8_t *path, size_t path_len,
+    const uint8_t *client_ip, size_t client_ip_len,
+    uint64_t header_bytes,
+    uint64_t body_bytes,
+    void *lookup_ctx,
+    aurora_header_lookup_fn lookup_fn,
+    AuroraRequestSizeDecision *out_decision);
+
 /* Control Plane Runtime & Telemetry */
 uint32_t aurora_waf_start_runtime(
     const char *controller_url,
