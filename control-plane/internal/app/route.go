@@ -44,7 +44,6 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	r.GET("/api/v1/extensions/:id", authMidd, m.ExtensionHandler.GetByID)
 	r.PUT("/api/v1/extensions/:id/status", authMidd, m.ExtensionHandler.UpdateStatus)
 	r.PUT("/api/v1/extensions/:id/config", authMidd, m.ExtensionHandler.UpdateConfig)
-	r.PUT("/api/v1/extensions/:id/schema", authMidd, m.ExtensionHandler.UpdateSchema)
 
 	// Route protected — phải vượt qua authMidd
 	r.GET("/api/v1/auth/me", authMidd, m.AuthHandler.Me)         // Thông tin user hiện tại
@@ -84,7 +83,6 @@ func RegisterRoutes(r *gin.Engine, m *Module, token string) {
 	r.PUT("/api/v1/l4/services/:id", authMidd, m.L4Handler.UpdateService)
 	r.PUT("/api/v1/l4/services/:id/status", authMidd, m.L4Handler.ToggleService)
 	r.DELETE("/api/v1/l4/services/:id", authMidd, m.L4Handler.DeleteService)
-
 
 	// Quản lý Cluster Nodes (danh sách và trạng thái các NGINX data plane nodes)
 	r.GET("/api/v1/events/stream", authMidd, m.NodeHandler.EventsStream)            // Server-Sent Events (SSE) realtime metrics & liveness stream

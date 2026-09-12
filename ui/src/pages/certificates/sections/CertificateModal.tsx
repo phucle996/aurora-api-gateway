@@ -37,7 +37,7 @@ export function CertificateModal({
         name: editingCert.name,
         snisInput: snis.join(', '),
         cert_pem: editingCert.cert_pem,
-        key_pem: editingCert.key_pem,
+		key_pem: '',
         mtls_enabled: editingCert.mtls_enabled,
         client_ca_pem: editingCert.client_ca_pem || '',
         verify_depth: editingCert.verify_depth || 1,

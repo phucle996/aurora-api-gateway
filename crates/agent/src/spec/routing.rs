@@ -25,4 +25,24 @@ pub struct LocationRoutingSpec {
     pub priority: i32,
     #[serde(default)]
     pub plugins_json: Option<String>,
+    #[serde(default)]
+    pub origin_tls: Option<OriginTLSSpec>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct OriginTLSSpec {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub verify_cert: bool,
+    #[serde(default)]
+    pub sni_host: String,
+    #[serde(default)]
+    pub ca_cert: String,
+    #[serde(default)]
+    pub mtls: bool,
+    #[serde(default)]
+    pub client_cert: String,
+    #[serde(default)]
+    pub client_key: String,
 }

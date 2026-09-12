@@ -46,29 +46,47 @@ impl SpecSyncRunner {
             let hash = compute_sha256(raw.as_bytes());
             info!(hash = %hash, path = %self.spec_path.display(), "Loading baseline node-spec.yaml from disk");
             if let Ok(spec) = Spec::parse_yaml(&raw) {
-                if let Ok(res) =
-                    materialize_nginx(&spec, &self.cfg.policy_dir, &self.cfg.routing_dir).await
-                {
-                    if res.nginx_changed && !self.cfg.no_nginx {
-                        if let Err(err) = self.nginx.test_config(&self.cfg.nginx_conf).await {
-                            error!(error = %err, "NGINX config test failed on bootstrap! Skipping reload");
-                        } else if let Err(err) = self.nginx.reload().await {
-                            error!(error = %err, "Failed to reload NGINX on bootstrap");
-                        } else {
-                            info!("NGINX reloaded successfully on bootstrap");
-                        }
-                    }
+                if let Err(err) = self.materialize_and_activate(&spec).await {
+                    error!(error = %err, "Failed to activate baseline NodeSpec; keeping it out of sync");
+                    return;
                 }
-                self.dispatcher
+                if let Err(err) = self
+                    .dispatcher
                     .lock()
                     .await
                     .apply_spec(&spec.extensions)
-                    .await;
+                    .await
+                {
+                    error!(error = %err, "Failed to activate baseline extension runtime");
+                    return;
+                }
                 *self.current_hash.lock().await = hash;
             } else {
                 warn!("Failed to parse local node-spec.yaml, will wait for Controller sync");
             }
         }
+    }
+
+    // This is deliberately shared by bootstrap and sync. Both paths own the same
+    // invariant: a spec hash becomes current only after its NGINX configuration is live.
+    async fn materialize_and_activate(&self, spec: &Spec) -> Result<(), String> {
+        let result = materialize_nginx(spec, &self.cfg.policy_dir, &self.cfg.routing_dir)
+            .await
+            .map_err(|err| format!("failed to materialize NGINX configs from NodeSpec: {err}"))?;
+
+        if result.nginx_changed && !self.cfg.no_nginx {
+            self.nginx
+                .test_config(&self.cfg.nginx_conf)
+                .await
+                .map_err(|err| format!("NGINX config test failed after spec update: {err}"))?;
+            self.nginx
+                .reload()
+                .await
+                .map_err(|err| format!("failed to reload NGINX after spec update: {err}"))?;
+            info!("NGINX reloaded successfully with new NodeSpec");
+        }
+
+        Ok(())
     }
 
     /// Apply and materialize new YAML specification content safely (Fault-tolerant / Never-crash).
@@ -94,30 +112,16 @@ impl SpecSyncRunner {
             .await
             .map_err(|e| format!("Failed to commit node-spec.yaml: {}", e))?;
 
-        // 2. Materialize NGINX configurations
-        match materialize_nginx(&spec, &self.cfg.policy_dir, &self.cfg.routing_dir).await {
-            Ok(res) => {
-                if res.nginx_changed && !self.cfg.no_nginx {
-                    if let Err(err) = self.nginx.test_config(&self.cfg.nginx_conf).await {
-                        error!(error = %err, "NGINX config test failed after spec update! Skipping reload");
-                    } else if let Err(err) = self.nginx.reload().await {
-                        error!(error = %err, "Failed to reload NGINX after spec update");
-                    } else {
-                        info!("NGINX reloaded successfully with new NodeSpec");
-                    }
-                }
-            }
-            Err(e) => {
-                error!(error = %e, "Failed to materialize NGINX configs from NodeSpec");
-            }
-        }
+        // 2. Materialize and activate NGINX before acknowledging the new hash.
+        self.materialize_and_activate(&spec).await?;
 
         // 3. Dispatch & Hot-reload Extensions
         self.dispatcher
             .lock()
             .await
             .apply_spec(&spec.extensions)
-            .await;
+            .await
+            .map_err(|error| format!("failed to activate extension runtime: {error}"))?;
 
         // 4. Update local hash
         *self.current_hash.lock().await = calculated_hash.clone();
@@ -190,5 +194,74 @@ impl SpecSyncRunner {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[tokio::test]
+    async fn failed_nginx_activation_does_not_advance_the_spec_hash() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock after unix epoch")
+            .as_nanos();
+        let base = std::env::temp_dir().join(format!("aurora-agent-spec-sync-{unique}"));
+        let policy_dir = base.join("policy");
+        let routing_dir = base.join("routing");
+        let modules_dir = base.join("modules");
+        fs::create_dir_all(&policy_dir).expect("create policy directory");
+        fs::create_dir_all(&routing_dir).expect("create routing directory");
+        fs::create_dir_all(&modules_dir).expect("create modules directory");
+
+        let nginx_bin = base.join("nginx-fails");
+        fs::write(&nginx_bin, "#!/bin/sh\nexit 1\n").expect("write fake nginx");
+        let mut permissions = fs::metadata(&nginx_bin)
+            .expect("read fake nginx permissions")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&nginx_bin, permissions).expect("make fake nginx executable");
+
+        let cfg = Config {
+            controller_url: "http://127.0.0.1:8080".to_string(),
+            node_id: "node-test".to_string(),
+            auth_token: "test-token".to_string(),
+            nginx_bin: nginx_bin.clone(),
+            nginx_conf: base.join("nginx.conf"),
+            policy_dir,
+            routing_dir,
+            modules_dir,
+            heartbeat_interval_secs: 5,
+            sync_interval_secs: 3,
+            metrics_port: 9145,
+            metrics_prometheus: false,
+            metrics_otlp_endpoint: None,
+            metrics_otlp_interval_secs: 15,
+            nginx_stub_status_url: None,
+            no_nginx: false,
+            grpc_url: None,
+        };
+        let nginx = NginxManager::new(nginx_bin, cfg.nginx_conf.clone());
+        let dispatcher = Arc::new(Mutex::new(ExtensionDispatcher::new(Arc::new(
+            cfg.node_id.clone(),
+        ))));
+        let grpc = GrpcClient::new("http://127.0.0.1:9090", "test-token")
+            .expect("create lazy grpc client");
+        let runner = SpecSyncRunner::new(cfg, nginx, dispatcher, grpc);
+
+        let body = "version: 1\nrelease_id: 7\n";
+        let err = runner
+            .apply_spec_content(body, &compute_sha256(body.as_bytes()))
+            .await
+            .expect_err("failed nginx config test must reject the spec");
+
+        assert!(err.contains("NGINX config test failed"));
+        assert!(runner.current_hash.lock().await.is_empty());
+
+        fs::remove_dir_all(base).expect("remove temporary test directory");
     }
 }

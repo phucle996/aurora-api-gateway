@@ -27,18 +27,18 @@ type UpdateCertificateRequest struct {
 }
 
 type CertificateResponse struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	SNIsJSON    string `json:"snis_json"`
-	CertPEM     string `json:"cert_pem"`
-	KeyPEM      string `json:"key_pem"`
-	MTLSEnabled bool   `json:"mtls_enabled"`
-	ClientCAPEM string `json:"client_ca_pem"`
-	VerifyDepth int    `json:"verify_depth"`
-	Enabled     bool   `json:"enabled"`
-	Description string `json:"description"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	SNIsJSON      string `json:"snis_json"`
+	CertPEM       string `json:"cert_pem"`
+	KeyConfigured bool   `json:"key_configured"`
+	MTLSEnabled   bool   `json:"mtls_enabled"`
+	ClientCAPEM   string `json:"client_ca_pem"`
+	VerifyDepth   int    `json:"verify_depth"`
+	Enabled       bool   `json:"enabled"`
+	Description   string `json:"description"`
+	CreatedAt     string `json:"created_at"`
+	UpdatedAt     string `json:"updated_at"`
 }
 
 type ListCertificatesResponse struct {
@@ -48,17 +48,17 @@ type ListCertificatesResponse struct {
 
 func ToCertificateResponse(item entity.CertificateItem) CertificateResponse {
 	return CertificateResponse{
-		ID:          item.ID,
-		Name:        item.Name,
-		SNIsJSON:    item.SNIsJSON,
-		CertPEM:     item.CertPEM,
-		KeyPEM:      item.KeyPEM,
-		MTLSEnabled: item.MTLSEnabled,
-		ClientCAPEM: item.ClientCAPEM,
-		VerifyDepth: item.VerifyDepth,
-		Enabled:     item.Enabled,
-		Description: item.Description,
-		CreatedAt:   item.CreatedAt,
-		UpdatedAt:   item.UpdatedAt,
+		ID:            item.ID,
+		Name:          item.Name,
+		SNIsJSON:      item.SNIsJSON,
+		CertPEM:       item.CertPEM,
+		KeyConfigured: item.KeyPEM != "",
+		MTLSEnabled:   item.MTLSEnabled,
+		ClientCAPEM:   item.ClientCAPEM,
+		VerifyDepth:   item.VerifyDepth,
+		Enabled:       item.Enabled,
+		Description:   item.Description,
+		CreatedAt:     item.CreatedAt,
+		UpdatedAt:     item.UpdatedAt,
 	}
 }

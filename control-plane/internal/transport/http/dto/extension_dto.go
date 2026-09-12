@@ -2,17 +2,21 @@ package dto
 
 // ExtensionResponse represents an extension returned by the HTTP API.
 type ExtensionResponse struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Category    string `json:"category"`
-	Description string `json:"description"`
-	Version     string `json:"version"`
-	Enabled     bool   `json:"enabled"`
-	ConfigJSON  string `json:"config_json"`
-	SchemaJSON  string `json:"schema_json"`
-	IsBuiltin   bool   `json:"is_builtin"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
+	ID               string `json:"id"`
+	ManifestKey      string `json:"manifest_key"`
+	ManifestVersion  uint32 `json:"manifest_version"`
+	ManifestDigest   string `json:"manifest_digest"`
+	Name             string `json:"name"`
+	Category         string `json:"category"`
+	Description      string `json:"description"`
+	Enabled          bool   `json:"enabled"`
+	ConfigJSON       string `json:"config_json"`
+	ConfigSchemaJSON string `json:"config_schema_json"`
+	UISchemaJSON     string `json:"ui_schema_json"`
+	Supported        bool   `json:"supported"`
+	IsBuiltin        bool   `json:"is_builtin"`
+	CreatedAt        string `json:"created_at"`
+	UpdatedAt        string `json:"updated_at"`
 }
 
 // UpdateExtensionStatusRequest contains status toggle payload.
@@ -25,10 +29,4 @@ type UpdateExtensionStatusRequest struct {
 type UpdateExtensionConfigRequest struct {
 	ConfigJSON string `json:"config_json,omitempty"`
 	Config     any    `json:"config,omitempty"`
-}
-
-// UpdateExtensionSchemaRequest contains extension schema updates.
-type UpdateExtensionSchemaRequest struct {
-	SchemaJSON string `json:"schema_json,omitempty"`
-	Schema     any    `json:"schema,omitempty"`
 }

@@ -8,6 +8,8 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -21,9 +23,35 @@ import (
 )
 
 const (
-	l4QueryTimeout  = 5 * time.Second
-	l4ActionTimeout = 10 * time.Second
+	l4QueryTimeout       = 5 * time.Second
+	l4ActionTimeout      = 10 * time.Second
+	maxL4ACLRules        = 256
+	maxL4ACLRulePriority = 1_000_000
 )
+
+var nginxTimeoutLiteral = regexp.MustCompile(`^(?:0|(?:[1-9][0-9]*(?:ms|s|m|h|d|w|M|y))+)$`)
+
+func isReservedL4TCPPort(protocol string, port int) bool {
+	if protocol != "tcp" {
+		return false
+	}
+
+	switch port {
+	case 80, 443, 9081, 9082, 9443:
+		return true
+	default:
+		return false
+	}
+}
+
+// validateTimeout is shared by create and update because both mutations materialize its value
+// directly into an NGINX directive.
+func validateTimeout(value string) error {
+	if !nginxTimeoutLiteral.MatchString(value) {
+		return taxonomy.ErrL4InvalidTimeout
+	}
+	return nil
+}
 
 // L4Handler xử lý các yêu cầu HTTP liên quan tới L4 Gateway Services.
 type L4Handler struct {
@@ -39,37 +67,71 @@ func NewL4Handler(s port.L4Service, upstreamRepo repo.UpstreamRepository) *L4Han
 	}
 }
 
-func validateACL(aclJSON string) error {
-	if aclJSON == "" || aclJSON == "[]" {
-		return nil
-	}
+// normalizeL4ACL is shared by the create and update workflows because the
+// persisted order is the NGINX stream access evaluation order. A larger
+// priority is evaluated first; ties are rejected rather than relying on an
+// accidental JSON array order.
+func normalizeL4ACL(aclJSON string) (string, error) {
 	var rules []struct {
-		CIDR   string `json:"cidr"`
-		Action string `json:"action"`
+		CIDR        string `json:"cidr"`
+		Action      string `json:"action"`
+		Priority    *int   `json:"priority"`
+		Description string `json:"description,omitempty"`
 	}
 	if err := json.Unmarshal([]byte(aclJSON), &rules); err != nil {
-		return fmt.Errorf("invalid acl rules json: %w", err)
+		return "", fmt.Errorf("invalid acl rules json: %w", err)
+	}
+	if len(rules) > maxL4ACLRules {
+		return "", fmt.Errorf("too many acl rules: maximum is %d", maxL4ACLRules)
 	}
 
-	for _, r := range rules {
-		act := strings.ToLower(strings.TrimSpace(r.Action))
+	priorities := make(map[int]struct{}, len(rules))
+	for i := range rules {
+		rule := &rules[i]
+		act := strings.ToLower(strings.TrimSpace(rule.Action))
 		if act != "allow" && act != "deny" {
-			return fmt.Errorf("invalid acl rule action '%s', must be allow or deny", r.Action)
+			return "", fmt.Errorf("invalid acl rule action %q, must be allow or deny", rule.Action)
 		}
-		cidr := strings.TrimSpace(r.CIDR)
+		if rule.Priority == nil || *rule.Priority < 1 || *rule.Priority > maxL4ACLRulePriority {
+			return "", fmt.Errorf("acl rule priority must be between 1 and %d", maxL4ACLRulePriority)
+		}
+		if _, exists := priorities[*rule.Priority]; exists {
+			return "", fmt.Errorf("acl rule priority %d is duplicated", *rule.Priority)
+		}
+		priorities[*rule.Priority] = struct{}{}
+
+		cidr := strings.TrimSpace(rule.CIDR)
 		if cidr == "" {
-			return taxonomy.ErrL4InvalidCIDR
+			return "", taxonomy.ErrL4InvalidCIDR
 		}
-		if _, err := netip.ParsePrefix(cidr); err != nil {
-			if _, err2 := netip.ParseAddr(cidr); err2 != nil {
-				return taxonomy.ErrL4InvalidCIDR
+		prefix, err := netip.ParsePrefix(cidr)
+		if err != nil {
+			addr, addrErr := netip.ParseAddr(cidr)
+			if addrErr != nil {
+				return "", taxonomy.ErrL4InvalidCIDR
 			}
+			prefix = netip.PrefixFrom(addr, addr.BitLen())
 		}
+		if prefix.Addr().Is4In6() {
+			return "", taxonomy.ErrL4InvalidCIDR
+		}
+
+		rule.CIDR = prefix.Masked().String()
+		rule.Action = act
+		rule.Description = strings.TrimSpace(rule.Description)
 	}
-	return nil
+
+	sort.Slice(rules, func(i, j int) bool {
+		return *rules[i].Priority > *rules[j].Priority
+	})
+	canonical, err := json.Marshal(rules)
+	if err != nil {
+		return "", fmt.Errorf("marshal acl rules: %w", err)
+	}
+	return string(canonical), nil
 }
 
-func (h *L4Handler) validateTarget(ctx context.Context, targetType, upstreamName, directEndpoint string) error {
+func (h *L4Handler) validateTarget(ctx context.Context, protocol, targetType, upstreamName, directEndpoint string) error {
 	tt := strings.ToLower(strings.TrimSpace(targetType))
 	if tt == "endpoint" {
 		endpoint := strings.TrimSpace(directEndpoint)
@@ -83,6 +145,9 @@ func (h *L4Handler) validateTarget(ctx context.Context, targetType, upstreamName
 		port, err := strconv.Atoi(portStr)
 		if err != nil || port < 1 || port > 65535 {
 			return taxonomy.ErrL4InvalidEndpoint
+		}
+		if protocol == "udp" && (endpoint == "127.0.0.1:80" || endpoint == "127.0.0.1:9443") {
+			return taxonomy.ErrL4L7PipelineRequiresTCP
 		}
 		return nil
 	}
@@ -221,6 +286,10 @@ func (h *L4Handler) CreateService(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": taxonomy.ErrL4InvalidPort.Error()})
 		return
 	}
+	if isReservedL4TCPPort(proto, req.ListenPort) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": taxonomy.ErrL4ReservedPort.Error()})
+		return
+	}
 
 	targetType := strings.ToLower(strings.TrimSpace(req.ForwardTargetType))
 	if targetType != "endpoint" {
@@ -232,7 +301,7 @@ func (h *L4Handler) CreateService(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), l4ActionTimeout)
 	defer cancel()
 
-	if err := h.validateTarget(ctx, targetType, upstreamName, directEndpoint); err != nil {
+	if err := h.validateTarget(ctx, proto, targetType, upstreamName, directEndpoint); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -241,10 +310,12 @@ func (h *L4Handler) CreateService(c *gin.Context) {
 	if aclJSON == "" {
 		aclJSON = "[]"
 	}
-	if err := validateACL(aclJSON); err != nil {
+	normalizedACL, err := normalizeL4ACL(aclJSON)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	aclJSON = normalizedACL
 
 	// Kiểm tra port conflict
 	existing, err := h.service.GetServiceByPortProto(ctx, proto, req.ListenPort)
@@ -264,6 +335,14 @@ func (h *L4Handler) CreateService(c *gin.Context) {
 	proxyConnectTimeout := strings.TrimSpace(req.ProxyConnectTimeout)
 	if proxyConnectTimeout == "" {
 		proxyConnectTimeout = "5s"
+	}
+	if err := validateTimeout(proxyTimeout); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := validateTimeout(proxyConnectTimeout); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
 	enabled := true
@@ -338,6 +417,10 @@ func (h *L4Handler) UpdateService(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": taxonomy.ErrL4InvalidPort.Error()})
 		return
 	}
+	if isReservedL4TCPPort(proto, req.ListenPort) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": taxonomy.ErrL4ReservedPort.Error()})
+		return
+	}
 
 	targetType := strings.ToLower(strings.TrimSpace(req.ForwardTargetType))
 	if targetType != "endpoint" {
@@ -349,7 +432,7 @@ func (h *L4Handler) UpdateService(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), l4ActionTimeout)
 	defer cancel()
 
-	if err := h.validateTarget(ctx, targetType, upstreamName, directEndpoint); err != nil {
+	if err := h.validateTarget(ctx, proto, targetType, upstreamName, directEndpoint); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -358,10 +441,12 @@ func (h *L4Handler) UpdateService(c *gin.Context) {
 	if aclJSON == "" {
 		aclJSON = "[]"
 	}
-	if err := validateACL(aclJSON); err != nil {
+	normalizedACL, err := normalizeL4ACL(aclJSON)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	aclJSON = normalizedACL
 
 	// Kiểm tra port conflict
 	existing, err := h.service.GetServiceByPortProto(ctx, proto, req.ListenPort)
@@ -381,6 +466,14 @@ func (h *L4Handler) UpdateService(c *gin.Context) {
 	proxyConnectTimeout := strings.TrimSpace(req.ProxyConnectTimeout)
 	if proxyConnectTimeout == "" {
 		proxyConnectTimeout = "5s"
+	}
+	if err := validateTimeout(proxyTimeout); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := validateTimeout(proxyConnectTimeout); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
 	enabled := true

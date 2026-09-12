@@ -19,11 +19,11 @@ export function ExtensionConfigModal({
   // Render Context from Database Source of Truth
   const schema: ExtensionRenderContext = useMemo(() => {
     try {
-      if (extension.schema_json && extension.schema_json.trim() !== '{}') {
-        return JSON.parse(extension.schema_json);
+      if (extension.ui_schema_json && extension.ui_schema_json.trim() !== '{}') {
+        return JSON.parse(extension.ui_schema_json);
       }
     } catch (e) {
-      console.error('Failed to parse extension schema_json:', e);
+      console.error('Failed to parse extension ui_schema_json:', e);
     }
     return {
       title: extension.name,
@@ -31,7 +31,7 @@ export function ExtensionConfigModal({
       layout_type: 'form',
       fields: [],
     };
-  }, [extension.schema_json, extension.name, extension.description]);
+  }, [extension.ui_schema_json, extension.name, extension.description]);
 
   const [workspaceMode, setWorkspaceMode] = useState<'visual' | 'json'>('visual');
   const [configText, setConfigText] = useState<string>('');

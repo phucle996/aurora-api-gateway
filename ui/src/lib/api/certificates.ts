@@ -2,10 +2,10 @@ import { api } from '../fetcher';
 
 export interface CertificateItem {
   id: string;
-  name: string;
-  snis_json: string;
-  cert_pem: string;
-  key_pem: string;
+	name: string;
+	snis_json: string;
+	cert_pem: string;
+	key_configured: boolean;
   mtls_enabled: boolean;
   client_ca_pem: string;
   verify_depth: number;

@@ -69,7 +69,7 @@ export function ExtensionCard({
                   {extension.id}
                 </span>
                 <span className="text-[10px] text-muted-foreground/80 font-mono">
-                  v{extension.version}
+                  v{extension.manifest_version ?? extension.version}
                 </span>
               </div>
             </div>
@@ -138,4 +138,3 @@ export function ExtensionCard({
     </div>
   );
 }
-

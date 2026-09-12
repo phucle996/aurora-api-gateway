@@ -105,26 +105,39 @@ impl App {
         ))));
 
         // Baseline initialization from CLI flags (if any) until first spec sync
-        let initial_spec = crate::spec::extensions::ExtensionsSpec {
-            prometheus: Some(crate::spec::extensions::MetricsExtensionSpec {
-                enabled: self.cfg.metrics_prometheus || self.cfg.metrics_otlp_endpoint.is_some(),
-                port: self.cfg.metrics_port,
-                stub_status_url: self.cfg.nginx_stub_status_url.clone(),
-                prometheus: Some(crate::spec::extensions::PrometheusSpec {
-                    enabled: self.cfg.metrics_prometheus,
-                    path: "/metrics".to_string(),
-                }),
-                otlp: self.cfg.metrics_otlp_endpoint.as_ref().map(|ep| {
-                    crate::spec::extensions::OtlpSpec {
-                        enabled: true,
-                        endpoint: ep.clone(),
-                        interval_secs: self.cfg.metrics_otlp_interval_secs,
-                    }
-                }),
-            }),
-            ..Default::default()
+        let metrics_enabled =
+            self.cfg.metrics_prometheus || self.cfg.metrics_otlp_endpoint.is_some();
+        let initial_extensions = if metrics_enabled {
+            vec![crate::spec::extensions::ExtensionInstanceSpec {
+                    instance_id: "bootstrap-prometheus".to_string(),
+                    key: "builtin/prometheus".to_string(),
+                    version: 1,
+                    manifest_digest: crate::extension::manifest::catalog_digest()
+                        .map_err(anyhow::Error::msg)?,
+                    config_json: serde_json::json!({
+                        "port": self.cfg.metrics_port,
+                        "stub_status_url": self.cfg.nginx_stub_status_url,
+                        "prometheus": {
+                            "enabled": self.cfg.metrics_prometheus,
+                            "path": "/metrics",
+                        },
+                        "otlp": self.cfg.metrics_otlp_endpoint.as_ref().map(|endpoint| serde_json::json!({
+                            "enabled": true,
+                            "endpoint": endpoint,
+                            "interval_secs": self.cfg.metrics_otlp_interval_secs,
+                        })),
+                    })
+                    .to_string(),
+                }]
+        } else {
+            Vec::new()
         };
-        dispatcher.lock().await.apply_spec(&initial_spec).await;
+        dispatcher
+            .lock()
+            .await
+            .apply_spec(&initial_extensions)
+            .await
+            .map_err(anyhow::Error::msg)?;
 
         // Spawn Unified SpecSync runner
         let spec_sync = Arc::new(sync::spec::SpecSyncRunner::new(

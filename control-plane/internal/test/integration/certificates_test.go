@@ -116,6 +116,9 @@ func TestCertificatesCRUD(t *testing.T) {
 	if certID == "" {
 		t.Fatal("expected non-empty cert ID")
 	}
+	if _, exposed := createRes["key_pem"]; exposed || createRes["key_configured"] != true {
+		t.Fatalf("certificate create response must not expose private key: %v", createRes)
+	}
 
 	// 2. Tạo thất bại do cert và key không khớp
 	request("POST", "/api/v1/certificates", map[string]interface{}{
@@ -138,6 +141,9 @@ func TestCertificatesCRUD(t *testing.T) {
 	getRes := request("GET", fmt.Sprintf("/api/v1/certificates/%s", certID), nil, 200)
 	if getRes["name"] != "Aurora API Wildcard" {
 		t.Fatalf("unexpected certificate: %v", getRes)
+	}
+	if _, exposed := getRes["key_pem"]; exposed || getRes["key_configured"] != true {
+		t.Fatalf("certificate read response must not expose private key: %v", getRes)
 	}
 
 	// 5. Cập nhật certificate

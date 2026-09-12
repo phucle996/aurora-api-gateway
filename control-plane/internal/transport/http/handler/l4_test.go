@@ -105,6 +105,25 @@ func TestL4Handler_Validations(t *testing.T) {
 		}
 	})
 
+	// 2b. TCP ports held by the local HTTP pipeline must not create stream listeners.
+	t.Run("Reserved TCP listener port", func(t *testing.T) {
+		body, _ := json.Marshal(dto.CreateL4ServiceRequest{
+			Name:              "conflicting_http_listener",
+			Protocol:          "tcp",
+			ListenPort:        80,
+			ForwardTargetType: "upstream",
+			UpstreamName:      "redis_pool",
+		})
+		req, _ := http.NewRequest(http.MethodPost, "/api/v1/l4/services", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected status 400, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
 	// 3. Forward to non-existent upstream -> 400
 	t.Run("Non-existent upstream", func(t *testing.T) {
 		body, _ := json.Marshal(dto.CreateL4ServiceRequest{
@@ -163,6 +182,71 @@ func TestL4Handler_Validations(t *testing.T) {
 		}
 	})
 
+	// 5b. The local HTTP bridge only accepts TCP.
+	t.Run("Reject UDP L7 bridge", func(t *testing.T) {
+		body, _ := json.Marshal(dto.CreateL4ServiceRequest{
+			Name:              "invalid_l7_udp",
+			Protocol:          "udp",
+			ListenPort:        5353,
+			ForwardTargetType: "endpoint",
+			DirectEndpoint:    "127.0.0.1:80",
+		})
+		req, _ := http.NewRequest(http.MethodPost, "/api/v1/l4/services", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected status 400, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	// 5c. Priority is mandatory and a duplicate would make first-match access
+	// control ambiguous.
+	t.Run("Reject missing or duplicate ACL priority", func(t *testing.T) {
+		for _, aclRules := range []string{
+			`[{"cidr":"192.0.2.0/24","action":"allow"}]`,
+			`[{"cidr":"192.0.2.0/24","action":"allow","priority":10},{"cidr":"0.0.0.0/0","action":"deny","priority":10}]`,
+		} {
+			body, _ := json.Marshal(dto.CreateL4ServiceRequest{
+				Name:              "invalid_acl_priority",
+				Protocol:          "tcp",
+				ListenPort:        5355,
+				ForwardTargetType: "endpoint",
+				DirectEndpoint:    "10.0.0.12:5432",
+				ACLRulesJSON:      aclRules,
+			})
+			req, _ := http.NewRequest(http.MethodPost, "/api/v1/l4/services", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusBadRequest {
+				t.Errorf("expected status 400, got %d: %s", w.Code, w.Body.String())
+			}
+		}
+	})
+
+	// 5d. Timeouts become NGINX directives and cannot contain arbitrary configuration.
+	t.Run("Reject invalid timeout literal", func(t *testing.T) {
+		body, _ := json.Marshal(dto.CreateL4ServiceRequest{
+			Name:              "invalid_timeout",
+			Protocol:          "tcp",
+			ListenPort:        5354,
+			ForwardTargetType: "endpoint",
+			DirectEndpoint:    "10.0.0.12:5432",
+			ProxyTimeout:      "1h; deny all",
+		})
+		req, _ := http.NewRequest(http.MethodPost, "/api/v1/l4/services", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected status 400, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
 	// 6. Valid service creation -> 201
 	var createdID string
 	t.Run("Valid service creation", func(t *testing.T) {
@@ -172,7 +256,7 @@ func TestL4Handler_Validations(t *testing.T) {
 			ListenPort:        6379,
 			ForwardTargetType: "upstream",
 			UpstreamName:      "redis_pool",
-			ACLRulesJSON:      `[{"cidr":"10.0.0.0/8","action":"allow"},{"cidr":"0.0.0.0/0","action":"deny"}]`,
+			ACLRulesJSON:      `[{"cidr":"0.0.0.0/0","action":"deny","priority":1},{"cidr":"10.0.0.0/8","action":"allow","priority":100}]`,
 		})
 		req, _ := http.NewRequest(http.MethodPost, "/api/v1/l4/services", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -186,6 +270,17 @@ func TestL4Handler_Validations(t *testing.T) {
 		var resp dto.L4ServiceResponse
 		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("unmarshal response: %v", err)
+		}
+		var aclRules []struct {
+			CIDR     string `json:"cidr"`
+			Action   string `json:"action"`
+			Priority int    `json:"priority"`
+		}
+		if err := json.Unmarshal([]byte(resp.ACLRulesJSON), &aclRules); err != nil {
+			t.Fatalf("unmarshal normalized ACL: %v", err)
+		}
+		if len(aclRules) != 2 || aclRules[0].Priority != 100 || aclRules[0].Action != "allow" || aclRules[1].Priority != 1 {
+			t.Fatalf("expected descending ACL priority, got %+v", aclRules)
 		}
 		createdID = resp.ID
 	})

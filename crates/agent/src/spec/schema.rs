@@ -1,9 +1,8 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use super::access::AccessSpec;
 use super::certificate::CertificateSpec;
-use super::extensions::ExtensionsSpec;
+use super::extensions::ExtensionInstanceSpec;
 use super::l4::L4Spec;
 use super::routing::RoutingSpec;
 use super::upstream::UpstreamSpec;
@@ -11,6 +10,7 @@ use super::waf::WafSpec;
 
 /// Root Declarative Manifest representing the entire desired state of the cluster gateway.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(deny_unknown_fields)]
 pub struct Spec {
     #[serde(default)]
     pub version: u32,
@@ -22,13 +22,10 @@ pub struct Spec {
     pub node_id: String,
 
     #[serde(default)]
-    pub extensions: ExtensionsSpec,
+    pub extensions: Vec<ExtensionInstanceSpec>,
 
     #[serde(default)]
     pub waf: WafSpec,
-
-    #[serde(default)]
-    pub access: AccessSpec,
 
     #[serde(default)]
     pub upstreams: Vec<UpstreamSpec>,
@@ -48,7 +45,6 @@ pub struct Spec {
     #[serde(default)]
     pub l4: Option<L4Spec>,
 }
-
 
 impl Spec {
     pub fn parse_yaml(raw: &str) -> Result<Self, serde_yaml::Error> {
@@ -74,17 +70,11 @@ version: 1
 release_id: 100
 node_id: "node-01"
 extensions:
-  metrics:
-    enabled: true
-    port: 9145
-    stub_status_url: "http://127.0.0.1:80/stub_status"
-    prometheus:
-      enabled: true
-      path: "/metrics"
-    otlp:
-      enabled: true
-      endpoint: "http://otel-collector:4317"
-      interval_secs: 15
+  - instance_id: "prometheus"
+    key: "builtin/prometheus"
+    version: 1
+    manifest_digest: "catalog-digest"
+    config_json: '{"port":9145,"stub_status_url":"http://127.0.0.1:80/stub_status","prometheus":{"enabled":true,"path":"/metrics"},"otlp":{"enabled":true,"endpoint":"http://otel-collector:4317","interval_secs":15}}'
 waf:
   mode: "enforce"
   block_paths:
@@ -106,14 +96,10 @@ routing:
         let spec = Spec::parse_yaml(yaml).expect("parse yaml");
         assert_eq!(spec.release_id, 100);
         assert_eq!(spec.node_id, "node-01");
-        assert!(spec.extensions.prometheus.is_some());
-        let metrics = spec.extensions.prometheus.as_ref().unwrap();
-        assert!(metrics.enabled);
-        assert_eq!(metrics.port, 9145);
-        assert_eq!(
-            metrics.stub_status_url.as_deref(),
-            Some("http://127.0.0.1:80/stub_status")
-        );
+        assert_eq!(spec.extensions.len(), 1);
+        let metrics = &spec.extensions[0];
+        assert_eq!(metrics.key, "builtin/prometheus");
+        assert!(metrics.config_json.contains("stub_status_url"));
         assert_eq!(spec.waf.block_paths.len(), 2);
         assert_eq!(spec.upstreams.len(), 1);
         assert_eq!(spec.routing.domains.len(), 1);

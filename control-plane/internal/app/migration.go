@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"aurora-waf.local/control-plane/internal/extensionmanifest"
 	"aurora-waf.local/control-plane/internal/service"
 	"aurora-waf.local/control-plane/migrations"
 )
@@ -34,7 +35,7 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return err
 	}
-	if version > 6 {
+	if version > 7 {
 		return fmt.Errorf("unsupported database schema version %d", version)
 	}
 	if version < 1 {
@@ -74,6 +75,51 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 		}
 		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version) VALUES(4)"); err != nil {
 			return err
+		}
+	}
+	if version < 5 {
+		if _, err := tx.ExecContext(ctx, migrations.ExtensionIPAccess); err != nil {
+			return fmt.Errorf("extension IP access adapter: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version) VALUES(5)"); err != nil {
+			return err
+		}
+	}
+	if version < 6 {
+		if _, err := tx.ExecContext(ctx, migrations.ExtensionIPAccessRepair); err != nil {
+			return fmt.Errorf("extension IP access adapter repair: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version) VALUES(6)"); err != nil {
+			return err
+		}
+	}
+	if version < 7 {
+		if _, err := tx.ExecContext(ctx, migrations.ExtensionInstances); err != nil {
+			return fmt.Errorf("extension instances schema: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version) VALUES(7)"); err != nil {
+			return err
+		}
+	}
+
+	// Installed manifests are immutable release assets while instances are
+	// durable configuration. Insert only absent instances so a newly shipped
+	// implementation is available on existing v7 databases without replacing
+	// an operator's configuration.
+	manifests, err := extensionmanifest.All()
+	if err != nil {
+		return err
+	}
+	for _, manifest := range manifests {
+		configJSON, err := extensionmanifest.ValidateConfig(manifest, string(manifest.DefaultConfig))
+		if err != nil {
+			return fmt.Errorf("validate default config for %s: %w", manifest.Key, err)
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT OR IGNORE INTO extension_instances (id, manifest_key, manifest_version, enabled, config_json)
+			VALUES (?, ?, ?, 0, ?)
+		`, manifest.ID, manifest.Key, manifest.Version, configJSON); err != nil {
+			return fmt.Errorf("seed extension instance %s: %w", manifest.Key, err)
 		}
 	}
 

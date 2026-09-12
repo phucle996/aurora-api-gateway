@@ -30,7 +30,6 @@ type ClusterSpecRelease struct {
 	CreatedAt     string `json:"created_at"`
 }
 
-
 // SpecRoutingRecord is the spec sync workflow's flat projection for domain routing rules.
 type SpecRoutingRecord struct {
 	ID            int64
@@ -62,13 +61,12 @@ type SpecCertificateRecord struct {
 	VerifyDepth int
 }
 
-// SpecExtensionRecord is the flat projection for an extension in the catalog.
+// SpecExtensionRecord is the spec workflow's durable extension-instance projection.
 type SpecExtensionRecord struct {
-	ID         string
-	Name       string
-	Category   string
-	Enabled    bool
-	ConfigJSON string
+	ID              string
+	ManifestKey     string
+	ManifestVersion uint32
+	ConfigJSON      string
 }
 
 // SpecUnifiedUpstreamRecord is the spec sync workflow's flat projection for an upstream pool.
@@ -106,5 +104,3 @@ type SpecAuthorityData struct {
 	UpstreamRecords []SpecUnifiedUpstreamRecord
 	L4Services      []SpecL4ServiceRecord
 }
-
-

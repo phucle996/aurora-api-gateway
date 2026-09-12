@@ -1,18 +1,23 @@
 package entity
 
-// ExtensionRecord represents the flat authority projection of an extension.
+// ExtensionRecord is the extension-instance projection. Runtime metadata comes
+// from its immutable manifest, while this record owns only durable instance state.
 type ExtensionRecord struct {
-	ID          string
-	Name        string
-	Category    string
-	Description string
-	Version     string
-	Enabled     bool
-	ConfigJSON  string
-	SchemaJSON  string
-	IsBuiltin   bool
-	CreatedAt   string
-	UpdatedAt   string
+	ID               string
+	ManifestKey      string
+	ManifestVersion  uint32
+	ManifestDigest   string
+	Name             string
+	Category         string
+	Description      string
+	Enabled          bool
+	ConfigJSON       string
+	ConfigSchemaJSON string
+	UISchemaJSON     string
+	Supported        bool
+	IsBuiltin        bool
+	CreatedAt        string
+	UpdatedAt        string
 }
 
 // ListExtensionsQuery defines filtering options when listing extensions.
@@ -31,10 +36,4 @@ type UpdateExtensionStatusCommand struct {
 type UpdateExtensionConfigCommand struct {
 	ID         string
 	ConfigJSON string
-}
-
-// UpdateExtensionSchemaCommand updates the schema JSON of an extension.
-type UpdateExtensionSchemaCommand struct {
-	ID         string
-	SchemaJSON string
 }

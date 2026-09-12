@@ -23,6 +23,17 @@ func setupExtensionTestDB(t *testing.T) *sql.DB {
 	if _, err := db.Exec(migrations.Seeds); err != nil {
 		t.Fatalf("failed to execute seeds: %v", err)
 	}
+	if _, err := db.Exec(migrations.ExtensionInstances); err != nil {
+		t.Fatalf("failed to create extension instances: %v", err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO extension_instances (id, manifest_key, manifest_version, enabled, config_json)
+		VALUES
+			('prometheus', 'builtin/prometheus', 1, 1, '{"port":9145,"prometheus":{"enabled":true,"path":"/metrics"}}'),
+			('ip-restriction', 'builtin/ip-restriction', 1, 0, '{"whitelist":[],"blacklist":[],"rules":[]}');
+	`); err != nil {
+		t.Fatalf("failed to seed extension instances: %v", err)
+	}
 
 	return db
 }
@@ -43,18 +54,7 @@ func TestExtensionRepository_List(t *testing.T) {
 		t.Fatalf("expected seeded extensions, got 0")
 	}
 
-	// 2. Filter by category
-	secExts, err := repo.List(ctx, entity.ListExtensionsQuery{Category: "security_engine"})
-	if err != nil {
-		t.Fatalf("List category security_engine failed: %v", err)
-	}
-	for _, ext := range secExts {
-		if ext.Category != "security_engine" {
-			t.Errorf("expected category security_engine, got %s", ext.Category)
-		}
-	}
-
-	// 3. Filter by status enabled
+	// 2. Filter by status enabled
 	enabledExts, err := repo.List(ctx, entity.ListExtensionsQuery{Status: "enabled"})
 	if err != nil {
 		t.Fatalf("List status enabled failed: %v", err)
@@ -78,7 +78,7 @@ func TestExtensionRepository_GetByID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetByID failed: %v", err)
 	}
-	if ext.ID != "prometheus" || ext.Category != "observability" {
+	if ext.ID != "prometheus" || ext.ManifestKey != "builtin/prometheus" {
 		t.Errorf("unexpected extension: %+v", ext)
 	}
 
@@ -114,7 +114,7 @@ func TestExtensionRepository_UpdateStatusAndConfig(t *testing.T) {
 	}
 
 	// Update config
-	newCfg := `{"enabled":false,"port":9999}`
+	newCfg := `{"port":9999}`
 	err = repo.UpdateConfig(ctx, entity.UpdateExtensionConfigCommand{
 		ID:         "prometheus",
 		ConfigJSON: newCfg,

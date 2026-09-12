@@ -202,4 +202,3 @@ CREATE TABLE IF NOT EXISTS l4_services (
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     CONSTRAINT uq_l4_services_listen UNIQUE (protocol, listen_port)
 );
-

@@ -8,6 +8,7 @@
 //!   trong môi trường đa luồng của NGINX worker.
 
 pub mod access;
+pub mod jwt;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 

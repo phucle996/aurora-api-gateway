@@ -33,6 +33,9 @@ func TestSQLiteRestartAndConnectionSettings(t *testing.T) {
 	if _, err := db.ExecContext(ctx, "CREATE TABLE restart_fixture (value TEXT); INSERT INTO restart_fixture VALUES ('retained')"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := db.ExecContext(ctx, "DELETE FROM extension_instances WHERE id = 'jwt-authentication'"); err != nil {
+		t.Fatal(err)
+	}
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +54,7 @@ func TestSQLiteRestartAndConnectionSettings(t *testing.T) {
 		t.Fatalf("value = %q, err = %v", value, err)
 	}
 	var count int
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil || count != 4 {
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil || count != 7 {
 		t.Fatalf("migration count = %d, err = %v", count, err)
 	}
 	var routesTableCount int
@@ -59,8 +62,12 @@ func TestSQLiteRestartAndConnectionSettings(t *testing.T) {
 		t.Fatalf("expected routes and ssl_certificates tables, got count = %d, err = %v", routesTableCount, err)
 	}
 	var legacyTableCount int
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('rules', 'policies', 'ruleset_releases', 'policy_cluster_releases')").Scan(&legacyTableCount); err != nil || legacyTableCount != 0 {
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('rules', 'policies', 'ruleset_releases', 'policy_cluster_releases', 'extensions')").Scan(&legacyTableCount); err != nil || legacyTableCount != 0 {
 		t.Fatalf("expected 0 legacy tables, got count = %d, err = %v", legacyTableCount, err)
+	}
+	var extensionInstanceCount int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM extension_instances").Scan(&extensionInstanceCount); err != nil || extensionInstanceCount != 18 {
+		t.Fatalf("expected 18 packaged extension instances, got count = %d, err = %v", extensionInstanceCount, err)
 	}
 	// Force replacement connections to verify per-connection settings survive churn.
 	db.SetMaxIdleConns(0)

@@ -24,6 +24,9 @@ func setupSpecTestDB(t *testing.T) *sql.DB {
 	if _, err := db.Exec(migrations.Seeds); err != nil {
 		t.Fatalf("failed to execute seeds: %v", err)
 	}
+	if _, err := db.Exec(migrations.ExtensionInstances); err != nil {
+		t.Fatalf("failed to create extension instances: %v", err)
+	}
 
 	// Seed cluster node
 	_, err = db.Exec(`
@@ -37,6 +40,9 @@ func setupSpecTestDB(t *testing.T) *sql.DB {
 		-- Seed Route
 		INSERT INTO routes (id, name, host, path, upstream_name, enabled)
 		VALUES ('rt_1', 'service.local', 'service.local', '/', 'app', 1);
+
+		INSERT INTO extension_instances (id, manifest_key, manifest_version, enabled, config_json)
+		VALUES ('prometheus', 'builtin/prometheus', 1, 1, '{"port":9145,"prometheus":{"enabled":true,"path":"/metrics"}}');
 	`)
 	if err != nil {
 		t.Fatalf("failed to seed test db: %v", err)
@@ -61,7 +67,9 @@ func TestSpecSyncRepository_GetAuthorityData_Success(t *testing.T) {
 		t.Errorf("expected node ID node-test-1, got %s", auth.NodeID)
 	}
 
-	if !strings.Contains(auth.UpstreamsConf, "upstream app") || !strings.Contains(auth.UpstreamsConf, "server 10.0.1.1:8080;") {
+	if !strings.Contains(auth.UpstreamsConf, "upstream app") ||
+		!strings.Contains(auth.UpstreamsConf, "zone aurora_http_app 64k;") ||
+		!strings.Contains(auth.UpstreamsConf, "server 10.0.1.1:8080 resolve;") {
 		t.Errorf("unexpected UpstreamsConf: %s", auth.UpstreamsConf)
 	}
 	if len(auth.RoutingRecords) != 1 || auth.RoutingRecords[0].Host != "service.local" {
@@ -180,4 +188,3 @@ func TestSpecSyncRepository_SpecRelease_Lifecycle(t *testing.T) {
 		t.Errorf("unexpected active 2: %+v", active2)
 	}
 }
-

@@ -39,6 +39,15 @@ uint32_t aurora_waf_evaluate(const AuroraEngine *engine, const uint8_t *path, si
 void aurora_waf_destroy(AuroraEngine *engine);
 uint32_t aurora_access_record_match(uint64_t generation, uint64_t rule_id, const uint8_t *ip, size_t ip_len);
 uint32_t aurora_access_swap_engine(const uint8_t *data, size_t len);
+typedef struct AuroraJwtEngine AuroraJwtEngine;
+/* Create status: 0 OK, 1 invalid policy, 2 panic. Evaluate: 0 allow,
+ * 1 unauthenticated, 2 evaluation failure. */
+uint32_t aurora_jwt_create(const uint8_t *data, size_t len, AuroraJwtEngine **out);
+void aurora_jwt_destroy(AuroraJwtEngine *engine);
+uint32_t aurora_jwt_evaluate(const AuroraJwtEngine *engine,
+    const uint8_t *host, size_t host_len,
+    const uint8_t *path, size_t path_len,
+    const uint8_t *authorization, size_t authorization_len);
 uint32_t aurora_waf_swap_policy(const uint8_t *data, size_t len);
 uint32_t aurora_waf_start_runtime(
     const char *controller_url,

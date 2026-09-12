@@ -58,12 +58,13 @@ export function ExtensionConfigHeader({
               </span>
             )}
             <span className="text-[11px] text-muted-foreground font-mono">
-              v{extension.version}
+              v{extension.manifest_version ?? extension.version}
             </span>
             {onToggleStatus && (
               <button
                 type="button"
-                onClick={() => onToggleStatus(extension.id, !extension.enabled)}
+                onClick={() => extension.supported !== false && onToggleStatus(extension.id, !extension.enabled)}
+                disabled={extension.supported === false}
                 className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors cursor-pointer ${extension.enabled
                     ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
                     : 'bg-muted text-muted-foreground border-border'

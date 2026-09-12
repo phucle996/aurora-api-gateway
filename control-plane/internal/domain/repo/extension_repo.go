@@ -12,5 +12,4 @@ type ExtensionRepository interface {
 	GetByID(ctx context.Context, id string) (*entity.ExtensionRecord, error)
 	UpdateStatus(ctx context.Context, cmd entity.UpdateExtensionStatusCommand) error
 	UpdateConfig(ctx context.Context, cmd entity.UpdateExtensionConfigCommand) error
-	UpdateSchema(ctx context.Context, cmd entity.UpdateExtensionSchemaCommand) error
 }

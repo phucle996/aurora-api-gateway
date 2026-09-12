@@ -7,12 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	"aurora-waf.local/control-plane/internal/domain/entity"
 	"aurora-waf.local/control-plane/internal/domain/repo"
+	"aurora-waf.local/control-plane/internal/extensionmanifest"
 	"github.com/goccy/go-yaml"
 )
 
@@ -169,7 +171,7 @@ func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*Spec, 
 		Version:     1,
 		ReleaseID:   releaseID,
 		GeneratedAt: "2026-01-01T00:00:00Z",
-		Extensions:  make(map[string]map[string]interface{}),
+		Extensions:  make([]ExtensionInstanceSpec, 0),
 		WAF: WAFSpec{
 			Mode: "enforce",
 		},
@@ -181,7 +183,6 @@ func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*Spec, 
 		}
 
 		doc.UpstreamsConf = auth.UpstreamsConf
-
 
 		if len(auth.RoutingRecords) > 0 {
 			domainMap := make(map[string][]LocationRoutingSpec)
@@ -201,6 +202,10 @@ func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*Spec, 
 					WebSocket:   d.WebSocket,
 					Priority:    d.Priority,
 					PluginsJSON: d.PluginsJSON,
+				}
+				var originTLS OriginTLSSpec
+				if strings.TrimSpace(d.SSLJSON) != "" && json.Unmarshal([]byte(d.SSLJSON), &originTLS) == nil && originTLS.Enabled {
+					loc.OriginTLS = &originTLS
 				}
 				if _, exists := domainMap[d.Host]; !exists {
 					domainOrder = append(domainOrder, d.Host)
@@ -241,20 +246,26 @@ func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*Spec, 
 		}
 
 		if len(auth.Extensions) > 0 {
-			extensionsMap := make(map[string]map[string]interface{})
-			for _, ext := range auth.Extensions {
-				var cfg map[string]interface{}
-				if err := json.Unmarshal([]byte(ext.ConfigJSON), &cfg); err == nil {
-					cfg["enabled"] = ext.Enabled
-					if cleaned, ok := cleanJSONFloats(cfg).(map[string]interface{}); ok {
-						extensionsMap[ext.ID] = cleaned
-					} else {
-						extensionsMap[ext.ID] = cfg
-					}
-				}
+			manifestDigest, err := extensionmanifest.Digest()
+			if err != nil {
+				return nil, "", "", fmt.Errorf("resolve extension manifest digest: %w", err)
 			}
-			if len(extensionsMap) > 0 {
-				doc.Extensions = extensionsMap
+			for _, ext := range auth.Extensions {
+				manifest, ok := extensionmanifest.Find(ext.ManifestKey, ext.ManifestVersion)
+				if !ok {
+					return nil, "", "", fmt.Errorf("extension instance %q references unavailable manifest %s@%d", ext.ID, ext.ManifestKey, ext.ManifestVersion)
+				}
+				canonicalConfig, err := extensionmanifest.ValidateConfig(manifest, ext.ConfigJSON)
+				if err != nil {
+					return nil, "", "", fmt.Errorf("extension instance %q has invalid config: %w", ext.ID, err)
+				}
+				doc.Extensions = append(doc.Extensions, ExtensionInstanceSpec{
+					InstanceID:     ext.ID,
+					Key:            ext.ManifestKey,
+					Version:        ext.ManifestVersion,
+					ManifestDigest: manifestDigest,
+					ConfigJSON:     canonicalConfig,
+				})
 			}
 		}
 
@@ -278,6 +289,7 @@ func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*Spec, 
 						Weight      int    `json:"weight"`
 						MaxFails    int    `json:"maxFails"`
 						FailTimeout string `json:"failTimeout"`
+						Backup      bool   `json:"backup"`
 					}
 					if err := json.Unmarshal([]byte(u.ServersJSON), &servers); err != nil {
 						servers = nil
@@ -289,6 +301,7 @@ func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*Spec, 
 							Weight:      srv.Weight,
 							MaxFails:    srv.MaxFails,
 							FailTimeout: srv.FailTimeout,
+							Backup:      srv.Backup,
 						})
 					}
 					algo := u.Algorithm
@@ -306,9 +319,16 @@ func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*Spec, 
 
 			for _, s := range auth.L4Services {
 				var acls []L4ACLRuleSpec
-				if err := json.Unmarshal([]byte(s.ACLRulesJSON), &acls); err != nil {
-					acls = []L4ACLRuleSpec{}
+				aclJSON := strings.TrimSpace(s.ACLRulesJSON)
+				if aclJSON == "" {
+					aclJSON = "[]"
 				}
+				if err := json.Unmarshal([]byte(aclJSON), &acls); err != nil {
+					return nil, "", "", fmt.Errorf("parse L4 ACL for service %q: %w", s.Name, err)
+				}
+				sort.Slice(acls, func(i, j int) bool {
+					return acls[i].Priority > acls[j].Priority
+				})
 				targetType := s.ForwardTargetType
 				if targetType == "" {
 					targetType = "upstream"
@@ -330,7 +350,6 @@ func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*Spec, 
 		}
 	}
 
-
 	yamlBytes, err := yaml.Marshal(doc)
 	if err != nil {
 		return nil, "", "", fmt.Errorf("failed to marshal node spec YAML: %w", err)
@@ -342,66 +361,19 @@ func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*Spec, 
 	return &doc, string(yamlBytes), hashStr, nil
 }
 
-func cleanJSONFloats(v interface{}) interface{} {
-	switch val := v.(type) {
-	case map[string]interface{}:
-		res := make(map[string]interface{}, len(val))
-		for k, v2 := range val {
-			res[k] = cleanJSONFloats(v2)
-		}
-		return res
-	case []interface{}:
-		res := make([]interface{}, len(val))
-		for i, v2 := range val {
-			res[i] = cleanJSONFloats(v2)
-		}
-		return res
-	case float64:
-		if val == math.Trunc(val) && !math.IsNaN(val) && !math.IsInf(val, 0) {
-			return int64(val)
-		}
-		return val
-	default:
-		return val
-	}
-}
-
 // Spec represents the declarative specification for the Aurora gateway cluster.
 type Spec struct {
-	Version       uint32                            `yaml:"version" json:"version"`
-	ReleaseID     int64                             `yaml:"release_id" json:"release_id"`
-	GeneratedAt   string                            `yaml:"generated_at" json:"generated_at"`
-	Extensions    map[string]map[string]interface{} `yaml:"extensions" json:"extensions"`
-	WAF           WAFSpec                           `yaml:"waf" json:"waf"`
-	Upstreams     []UpstreamSpec                    `yaml:"upstreams,omitempty" json:"upstreams,omitempty"`
-	UpstreamsConf string                            `yaml:"upstreams_conf,omitempty" json:"upstreams_conf,omitempty"`
-	Routing       RoutingSpec                       `yaml:"routing,omitempty" json:"routing,omitempty"`
-	RoutingConf   string                            `yaml:"routing_conf,omitempty" json:"routing_conf,omitempty"`
-	Certificates  []CertificateSpec                 `yaml:"certificates,omitempty" json:"certificates,omitempty"`
-	L4            *L4Spec                           `yaml:"l4,omitempty" json:"l4,omitempty"`
-}
-
-type ExtensionsSpec struct {
-	Metrics *MetricsExtensionSpec `yaml:"metrics,omitempty" json:"metrics,omitempty"`
-}
-
-type MetricsExtensionSpec struct {
-	Enabled       bool            `yaml:"enabled" json:"enabled"`
-	Port          uint16          `yaml:"port" json:"port"`
-	StubStatusURL string          `yaml:"stub_status_url,omitempty" json:"stub_status_url,omitempty"`
-	Prometheus    *PrometheusSpec `yaml:"prometheus,omitempty" json:"prometheus,omitempty"`
-	OTLP          *OTLPSpec       `yaml:"otlp,omitempty" json:"otlp,omitempty"`
-}
-
-type PrometheusSpec struct {
-	Enabled bool   `yaml:"enabled" json:"enabled"`
-	Path    string `yaml:"path" json:"path"`
-}
-
-type OTLPSpec struct {
-	Enabled      bool   `yaml:"enabled" json:"enabled"`
-	Endpoint     string `yaml:"endpoint" json:"endpoint"`
-	IntervalSecs uint64 `yaml:"interval_secs" json:"interval_secs"`
+	Version       uint32                  `yaml:"version" json:"version"`
+	ReleaseID     int64                   `yaml:"release_id" json:"release_id"`
+	GeneratedAt   string                  `yaml:"generated_at" json:"generated_at"`
+	Extensions    []ExtensionInstanceSpec `yaml:"extensions,omitempty" json:"extensions,omitempty"`
+	WAF           WAFSpec                 `yaml:"waf" json:"waf"`
+	Upstreams     []UpstreamSpec          `yaml:"upstreams,omitempty" json:"upstreams,omitempty"`
+	UpstreamsConf string                  `yaml:"upstreams_conf,omitempty" json:"upstreams_conf,omitempty"`
+	Routing       RoutingSpec             `yaml:"routing,omitempty" json:"routing,omitempty"`
+	RoutingConf   string                  `yaml:"routing_conf,omitempty" json:"routing_conf,omitempty"`
+	Certificates  []CertificateSpec       `yaml:"certificates,omitempty" json:"certificates,omitempty"`
+	L4            *L4Spec                 `yaml:"l4,omitempty" json:"l4,omitempty"`
 }
 
 type WAFSpec struct {
@@ -410,8 +382,16 @@ type WAFSpec struct {
 	RawJSON    string   `yaml:"raw_json,omitempty" json:"raw_json,omitempty"`
 }
 
+type ExtensionInstanceSpec struct {
+	InstanceID     string `yaml:"instance_id" json:"instance_id"`
+	Key            string `yaml:"key" json:"key"`
+	Version        uint32 `yaml:"version" json:"version"`
+	ManifestDigest string `yaml:"manifest_digest" json:"manifest_digest"`
+	ConfigJSON     string `yaml:"config_json" json:"config_json"`
+}
+
 type UpstreamSpec struct {
-	Name    string               `yaml:"name" json:"name"`
+	Name string `yaml:"name" json:"name"`
 
 	Servers []UpstreamServerSpec `yaml:"servers" json:"servers"`
 }
@@ -431,12 +411,23 @@ type DomainRoutingSpec struct {
 }
 
 type LocationRoutingSpec struct {
-	Path        string `yaml:"path" json:"path"`
-	Upstream    string `yaml:"upstream" json:"upstream"`
-	StripPath   bool   `yaml:"strip_path,omitempty" json:"strip_path,omitempty"`
-	WebSocket   bool   `yaml:"websocket,omitempty" json:"websocket,omitempty"`
-	Priority    int    `yaml:"priority,omitempty" json:"priority,omitempty"`
-	PluginsJSON string `yaml:"plugins_json,omitempty" json:"plugins_json,omitempty"`
+	Path        string         `yaml:"path" json:"path"`
+	Upstream    string         `yaml:"upstream" json:"upstream"`
+	StripPath   bool           `yaml:"strip_path,omitempty" json:"strip_path,omitempty"`
+	WebSocket   bool           `yaml:"websocket,omitempty" json:"websocket,omitempty"`
+	Priority    int            `yaml:"priority,omitempty" json:"priority,omitempty"`
+	PluginsJSON string         `yaml:"plugins_json,omitempty" json:"plugins_json,omitempty"`
+	OriginTLS   *OriginTLSSpec `yaml:"origin_tls,omitempty" json:"origin_tls,omitempty"`
+}
+
+type OriginTLSSpec struct {
+	Enabled    bool   `yaml:"enabled" json:"enabled"`
+	VerifyCert bool   `yaml:"verify_cert" json:"verifyCert"`
+	SNIHost    string `yaml:"sni_host,omitempty" json:"sniHost,omitempty"`
+	CACert     string `yaml:"ca_cert,omitempty" json:"caCert,omitempty"`
+	MTLS       bool   `yaml:"mtls" json:"mTLS"`
+	ClientCert string `yaml:"client_cert,omitempty" json:"clientCert,omitempty"`
+	ClientKey  string `yaml:"client_key,omitempty" json:"clientKey,omitempty"`
 }
 
 type CertificateSpec struct {
@@ -467,6 +458,7 @@ type L4ServerSpec struct {
 	Weight      int    `yaml:"weight,omitempty" json:"weight,omitempty"`
 	MaxFails    int    `yaml:"max_fails,omitempty" json:"max_fails,omitempty"`
 	FailTimeout string `yaml:"fail_timeout,omitempty" json:"fail_timeout,omitempty"`
+	Backup      bool   `yaml:"backup,omitempty" json:"backup,omitempty"`
 }
 
 type L4ServiceSpec struct {
@@ -483,7 +475,7 @@ type L4ServiceSpec struct {
 }
 
 type L4ACLRuleSpec struct {
-	CIDR   string `yaml:"cidr" json:"cidr"`
-	Action string `yaml:"action" json:"action"`
+	CIDR     string `yaml:"cidr" json:"cidr"`
+	Action   string `yaml:"action" json:"action"`
+	Priority uint32 `yaml:"priority" json:"priority"`
 }
-

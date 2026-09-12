@@ -54,17 +54,21 @@ func (h *ExtensionHandler) List(c *gin.Context) {
 	responses := make([]dto.ExtensionResponse, len(records))
 	for i, r := range records {
 		responses[i] = dto.ExtensionResponse{
-			ID:          r.ID,
-			Name:        r.Name,
-			Category:    r.Category,
-			Description: r.Description,
-			Version:     r.Version,
-			Enabled:     r.Enabled,
-			ConfigJSON:  r.ConfigJSON,
-			SchemaJSON:  r.SchemaJSON,
-			IsBuiltin:   r.IsBuiltin,
-			CreatedAt:   r.CreatedAt,
-			UpdatedAt:   r.UpdatedAt,
+			ID:               r.ID,
+			ManifestKey:      r.ManifestKey,
+			ManifestVersion:  r.ManifestVersion,
+			ManifestDigest:   r.ManifestDigest,
+			Name:             r.Name,
+			Category:         r.Category,
+			Description:      r.Description,
+			Enabled:          r.Enabled,
+			ConfigJSON:       r.ConfigJSON,
+			ConfigSchemaJSON: r.ConfigSchemaJSON,
+			UISchemaJSON:     r.UISchemaJSON,
+			Supported:        r.Supported,
+			IsBuiltin:        r.IsBuiltin,
+			CreatedAt:        r.CreatedAt,
+			UpdatedAt:        r.UpdatedAt,
 		}
 	}
 
@@ -97,17 +101,21 @@ func (h *ExtensionHandler) GetByID(c *gin.Context) {
 	}
 
 	resp := dto.ExtensionResponse{
-		ID:          r.ID,
-		Name:        r.Name,
-		Category:    r.Category,
-		Description: r.Description,
-		Version:     r.Version,
-		Enabled:     r.Enabled,
-		ConfigJSON:  r.ConfigJSON,
-		SchemaJSON:  r.SchemaJSON,
-		IsBuiltin:   r.IsBuiltin,
-		CreatedAt:   r.CreatedAt,
-		UpdatedAt:   r.UpdatedAt,
+		ID:               r.ID,
+		ManifestKey:      r.ManifestKey,
+		ManifestVersion:  r.ManifestVersion,
+		ManifestDigest:   r.ManifestDigest,
+		Name:             r.Name,
+		Category:         r.Category,
+		Description:      r.Description,
+		Enabled:          r.Enabled,
+		ConfigJSON:       r.ConfigJSON,
+		ConfigSchemaJSON: r.ConfigSchemaJSON,
+		UISchemaJSON:     r.UISchemaJSON,
+		Supported:        r.Supported,
+		IsBuiltin:        r.IsBuiltin,
+		CreatedAt:        r.CreatedAt,
+		UpdatedAt:        r.UpdatedAt,
 	}
 
 	c.JSON(http.StatusOK, resp)
@@ -200,58 +208,6 @@ func (h *ExtensionHandler) UpdateConfig(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "extension config updated successfully",
-		"id":      id,
-	})
-}
-
-// UpdateSchema updates the schema of an extension.
-func (h *ExtensionHandler) UpdateSchema(c *gin.Context) {
-	c.Header("Cache-Control", "no-store")
-	id := strings.TrimSpace(c.Param("id"))
-
-	var req dto.UpdateExtensionSchemaRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid schema payload: " + err.Error()})
-		return
-	}
-
-	var schemaJSON string
-	if req.SchemaJSON != "" {
-		schemaJSON = req.SchemaJSON
-	} else if req.Schema != nil {
-		bytes, err := json.Marshal(req.Schema)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to serialize schema: " + err.Error()})
-			return
-		}
-		schemaJSON = string(bytes)
-	} else {
-		schemaJSON = "{}"
-	}
-
-	ctx, cancel := context.WithTimeout(c.Request.Context(), extensionActionTimeout)
-	defer cancel()
-
-	cmd := entity.UpdateExtensionSchemaCommand{
-		ID:         id,
-		SchemaJSON: schemaJSON,
-	}
-
-	if err := h.service.UpdateExtensionSchema(ctx, cmd); err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "update extension schema timed out"})
-			return
-		}
-		if strings.Contains(err.Error(), "not found") {
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "extension schema updated successfully",
 		"id":      id,
 	})
 }

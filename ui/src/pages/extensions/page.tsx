@@ -6,7 +6,7 @@ import {
   ExtensionsApiResponse,
   ExtensionStatsData,
 } from './types';
-import { EXTENSIONS_CATALOG, CATEGORIES_META } from './data/catalog';
+import { CATEGORIES_META } from './data/catalog';
 import { ExtensionFilters } from './components/ExtensionFilters';
 import { ExtensionCard } from './components/ExtensionCard';
 import { ExtensionTable } from './components/ExtensionTable';
@@ -14,7 +14,7 @@ import { ExtensionConfigModal } from './components/ExtensionConfigModal';
 import { Blocks, RotateCw, AlertCircle, RefreshCw, Sparkles } from 'lucide-react';
 
 export default function ExtensionsPage() {
-  const [extensions, setExtensions] = useState<ExtensionItem[]>(EXTENSIONS_CATALOG);
+  const [extensions, setExtensions] = useState<ExtensionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,41 +33,10 @@ export default function ExtensionsPage() {
     if (isManual) setIsRefreshing(true);
     try {
       const res = await extensionsApi.list();
-      const apiItems = res.extensions || [];
-
-      if (apiItems.length > 0) {
-        const apiMap = new Map<string, ExtensionItem>();
-        apiItems.forEach((item) => apiMap.set(item.id, item));
-
-        // Merge catalog metadata with live API state
-        const merged: ExtensionItem[] = EXTENSIONS_CATALOG.map((catItem) => {
-          const live = apiMap.get(catItem.id);
-          if (live) {
-            return {
-              ...catItem,
-              enabled: live.enabled,
-              config_json: live.config_json || catItem.config_json,
-              schema_json: live.schema_json || catItem.schema_json,
-              version: live.version || catItem.version,
-            };
-          }
-          return catItem;
-        });
-
-        // Append custom dynamic extensions that might not be in the static catalog
-        apiItems.forEach((live) => {
-          if (!EXTENSIONS_CATALOG.some((c) => c.id === live.id)) {
-            merged.push(live);
-          }
-        });
-
-        setExtensions(merged);
-      } else {
-        setExtensions(EXTENSIONS_CATALOG);
-      }
+      setExtensions(res.extensions || []);
       setError(null);
     } catch (e) {
-      // If API fails, fall back cleanly to the static catalog
+      setExtensions([]);
       setError(e instanceof Error ? e.message : 'Failed to fetch live extensions from API');
     } finally {
       setLoading(false);
@@ -215,7 +184,7 @@ export default function ExtensionsPage() {
                 </h1>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-none text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20 animate-ext-pulse">
                   <Sparkles className="w-3 h-3" />
-                  115 Plugins Available
+                  Installed manifests
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">

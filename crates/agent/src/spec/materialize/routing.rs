@@ -1,6 +1,7 @@
 use crate::spec::certificate::CertificateSpec;
 use crate::spec::routing::LocationRoutingSpec;
 use crate::spec::schema::Spec;
+use std::cmp::Reverse;
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
@@ -11,10 +12,10 @@ pub fn matches_sni(pattern: &str, host: &str) -> bool {
     if p == h || p == "*" {
         return true;
     }
-    if let Some(suffix) = p.strip_prefix("*.") {
-        if let Some((sub, base)) = h.split_once('.') {
-            return !sub.is_empty() && base == suffix;
-        }
+    if let Some(suffix) = p.strip_prefix("*.")
+        && let Some((sub, base)) = h.split_once('.')
+    {
+        return !sub.is_empty() && base == suffix;
     }
     false
 }
@@ -35,12 +36,9 @@ pub fn find_matching_certificate<'a>(
         }
     }
     // 2. Wildcard SNI match
-    for cert in certs {
-        if cert.snis.iter().any(|s| matches_sni(s, host)) {
-            return Some(cert);
-        }
-    }
-    None
+    certs
+        .iter()
+        .find(|cert| cert.snis.iter().any(|s| matches_sni(s, host)))
 }
 
 /// Generates consolidated active-domain-routing.conf with SNI matching, mTLS, and longest prefix location sorting.
@@ -83,7 +81,7 @@ pub fn generate_domain_routing_conf(spec: &Spec, routing_dir: &Path) -> String {
         }
         let mut deduped: Vec<LocationRoutingSpec> = path_map.into_values().collect();
         // Sort locations by longest prefix path first (length DESC)
-        deduped.sort_by(|a, b| b.path.len().cmp(&a.path.len()));
+        deduped.sort_by_key(|location| Reverse(location.path.len()));
 
         let matched_cert = find_matching_certificate(&spec.certificates, &host);
 
@@ -92,7 +90,7 @@ pub fn generate_domain_routing_conf(spec: &Spec, routing_dir: &Path) -> String {
             "server {{\n    listen 80;\n    server_name {};\n    include /etc/nginx/domain-waf.conf;\n",
             host
         ));
-        render_locations_into(&mut buf, &deduped);
+        render_locations_into(&mut buf, &deduped, routing_dir);
         buf.push_str("}\n\n");
 
         // 2. HTTPS Server Block (if certificate matches)
@@ -100,7 +98,7 @@ pub fn generate_domain_routing_conf(spec: &Spec, routing_dir: &Path) -> String {
             let cert_file = certs_dir.join(format!("{}.crt", cert.id));
             let key_file = certs_dir.join(format!("{}.key", cert.id));
             buf.push_str(&format!(
-                "server {{\n    listen 443 ssl;\n    server_name {};\n    include /etc/nginx/domain-waf.conf;\n\n    ssl_certificate {};\n    ssl_certificate_key {};\n    ssl_protocols TLSv1.2 TLSv1.3;\n    ssl_ciphers HIGH:!aNULL:!MD5;\n",
+                "server {{\n    listen 443 ssl;\n    listen 127.0.0.1:9443 ssl proxy_protocol;\n    server_name {};\n    include /etc/nginx/domain-waf.conf;\n\n    ssl_certificate {};\n    ssl_certificate_key {};\n    ssl_protocols TLSv1.2 TLSv1.3;\n    ssl_ciphers HIGH:!aNULL:!MD5;\n",
                 host,
                 cert_file.display(),
                 key_file.display()
@@ -120,7 +118,7 @@ pub fn generate_domain_routing_conf(spec: &Spec, routing_dir: &Path) -> String {
                 ));
             }
 
-            render_locations_into(&mut buf, &deduped);
+            render_locations_into(&mut buf, &deduped, routing_dir);
             buf.push_str("}\n\n");
         }
     }
@@ -128,7 +126,11 @@ pub fn generate_domain_routing_conf(spec: &Spec, routing_dir: &Path) -> String {
     buf
 }
 
-pub fn render_locations_into(buf: &mut String, locations: &[LocationRoutingSpec]) {
+pub fn render_locations_into(
+    buf: &mut String,
+    locations: &[LocationRoutingSpec],
+    routing_dir: &Path,
+) {
     for loc in locations {
         buf.push_str(&format!("    location {} {{\n", loc.path));
 
@@ -149,44 +151,82 @@ pub fn render_locations_into(buf: &mut String, locations: &[LocationRoutingSpec]
             ));
         }
 
-        if let Some(ref plugins_str) = loc.plugins_json {
-            if let Ok(val) = serde_json::from_str::<serde_json::Value>(plugins_str) {
-                if let Some(rules) = val
-                    .get("uri-rewrite")
-                    .and_then(|u| u.get("rules"))
-                    .and_then(|r| r.as_array())
+        if let Some(ref plugins_str) = loc.plugins_json
+            && let Ok(val) = serde_json::from_str::<serde_json::Value>(plugins_str)
+            && let Some(rules) = val
+                .get("uri-rewrite")
+                .and_then(|uri_rewrite| uri_rewrite.get("rules"))
+                .and_then(|rules| rules.as_array())
+        {
+            for rule in rules {
+                if let Some(rewrite_path) = rule.get("rewrite_path").and_then(|path| path.as_str())
                 {
-                    for r in rules {
-                        if let Some(rewrite_path) = r.get("rewrite_path").and_then(|p| p.as_str()) {
-                            if let Some(match_hdr) =
-                                r.get("match_header").and_then(|m| m.as_object())
-                            {
-                                for (hdr_name, hdr_val) in match_hdr {
-                                    let val_str = hdr_val.as_str().unwrap_or("");
-                                    let var_name = format!(
-                                        "$http_{}",
-                                        hdr_name.to_ascii_lowercase().replace('-', "_")
-                                    );
-                                    buf.push_str(&format!(
-                                        "        if ({} = \"{}\") {{\n            rewrite ^ {} break;\n        }}\n",
-                                        var_name, val_str, rewrite_path
-                                    ));
-                                }
-                            } else {
-                                buf.push_str(&format!(
-                                    "        rewrite ^ {} break;\n",
-                                    rewrite_path
-                                ));
-                            }
+                    if let Some(match_header) = rule
+                        .get("match_header")
+                        .and_then(|header| header.as_object())
+                    {
+                        for (header_name, header_value) in match_header {
+                            let value = header_value.as_str().unwrap_or("");
+                            let variable = format!(
+                                "$http_{}",
+                                header_name.to_ascii_lowercase().replace('-', "_")
+                            );
+                            buf.push_str(&format!(
+                                "        if ({variable} = \"{value}\") {{\n            rewrite ^ {rewrite_path} break;\n        }}\n"
+                            ));
                         }
+                    } else {
+                        buf.push_str(&format!("        rewrite ^ {rewrite_path} break;\n"));
                     }
                 }
             }
         }
 
+        buf.push_str("        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_connect_timeout 5s;\n");
+
+        let mut scheme = "http";
+        if let Some(tls) = loc.origin_tls.as_ref().filter(|tls| tls.enabled) {
+            scheme = "https";
+            buf.push_str("        proxy_ssl_protocols TLSv1.2 TLSv1.3;\n");
+            if !tls.sni_host.is_empty() {
+                buf.push_str("        proxy_ssl_server_name on;\n");
+                buf.push_str(&format!("        proxy_ssl_name {};\n", tls.sni_host));
+            }
+            if tls.verify_cert {
+                buf.push_str("        proxy_ssl_verify on;\n");
+                if tls.ca_cert.trim().is_empty() {
+                    buf.push_str(
+                        "        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;\n",
+                    );
+                } else {
+                    buf.push_str(&format!(
+                        "        proxy_ssl_trusted_certificate {};\n",
+                        routing_dir
+                            .join("origin-tls")
+                            .join(format!("{}_ca.crt", loc.upstream))
+                            .display()
+                    ));
+                }
+            } else {
+                buf.push_str("        proxy_ssl_verify off;\n");
+            }
+            if tls.mtls {
+                let origin_tls_dir = routing_dir.join("origin-tls");
+                buf.push_str(&format!(
+                    "        proxy_ssl_certificate {};\n        proxy_ssl_certificate_key {};\n",
+                    origin_tls_dir
+                        .join(format!("{}_client.crt", loc.upstream))
+                        .display(),
+                    origin_tls_dir
+                        .join(format!("{}_client.key", loc.upstream))
+                        .display()
+                ));
+            }
+        }
+
         buf.push_str(&format!(
-            "        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_pass http://{};\n        proxy_next_upstream error timeout http_502 http_503;\n    }}\n",
-            loc.upstream
+            "        proxy_pass {}://{};\n        proxy_next_upstream error timeout http_502 http_503;\n    }}\n",
+            scheme, loc.upstream
         ));
     }
 }

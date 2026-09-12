@@ -528,6 +528,7 @@ func GenerateNginxUpstreamsConf(upstreams []entity.UpstreamItem) string {
 
 	for _, u := range upstreams {
 		sb.WriteString(fmt.Sprintf("upstream %s {\n", u.Name))
+		sb.WriteString(fmt.Sprintf("    zone aurora_http_%s 64k;\n", u.Name))
 		if u.ArchitectureType == "Load Balancer" && u.Algorithm != "round_robin" {
 			sb.WriteString(fmt.Sprintf("    %s;\n", u.Algorithm))
 		}
@@ -552,7 +553,7 @@ func GenerateNginxUpstreamsConf(upstreams []entity.UpstreamItem) string {
 				flagStr = " " + strings.Join(flags, " ")
 			}
 
-			sb.WriteString(fmt.Sprintf("    server %s%s;\n", srv.Address, flagStr))
+			sb.WriteString(fmt.Sprintf("    server %s%s resolve;\n", srv.Address, flagStr))
 		}
 
 		keepalive := u.Transport.KeepAliveConnections

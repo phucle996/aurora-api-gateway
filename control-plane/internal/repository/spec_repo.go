@@ -50,7 +50,6 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 		return nil, fmt.Errorf("query spec authority: %w", err)
 	}
 
-
 	// 2. Fetch Upstream definitions directly from upstreams table and render configuration
 	const upstreamsQuery = `
 	SELECT name, architecture_type, algorithm, servers_json, transport_json
@@ -76,6 +75,7 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 		}
 
 		sb.WriteString(fmt.Sprintf("upstream %s {\n", name))
+		sb.WriteString(fmt.Sprintf("    zone aurora_http_%s 64k;\n", name))
 		if archType == "Load Balancer" && algo != "" && algo != "round_robin" {
 			sb.WriteString(fmt.Sprintf("    %s;\n", algo))
 		}
@@ -106,7 +106,7 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 			if len(flags) > 0 {
 				flagStr = " " + strings.Join(flags, " ")
 			}
-			sb.WriteString(fmt.Sprintf("    server %s%s;\n", srv.Address, flagStr))
+			sb.WriteString(fmt.Sprintf("    server %s%s resolve;\n", srv.Address, flagStr))
 		}
 
 		var transport struct {
@@ -224,29 +224,31 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 		out.Certificates = certs
 	}
 
-	// 5. Fetch Extensions catalog
+	// 5. Fetch enabled extension instances. Manifest metadata remains packaged
+	// authority and is resolved by the compiler and agent registry.
 	const extensionsQuery = `
-	SELECT id, name, category, enabled, config_json
-	FROM extensions
-	ORDER BY id
+	SELECT id, manifest_key, manifest_version, config_json
+	FROM extension_instances
+	WHERE enabled = 1
+	ORDER BY manifest_key, manifest_version, id
 	`
 	extRows, err := r.reader.QueryContext(ctx, extensionsQuery)
-	if err == nil {
-		defer extRows.Close()
-		var extensions []entity.SpecExtensionRecord
-		for extRows.Next() {
-			var ext entity.SpecExtensionRecord
-			var enabledInt int
-			if err := extRows.Scan(&ext.ID, &ext.Name, &ext.Category, &enabledInt, &ext.ConfigJSON); err == nil {
-				ext.Enabled = enabledInt == 1
-				extensions = append(extensions, ext)
-			}
-		}
-		if err := extRows.Err(); err != nil {
-			return nil, fmt.Errorf("iterate extensions: %w", err)
-		}
-		out.Extensions = extensions
+	if err != nil {
+		return nil, fmt.Errorf("query extension instances: %w", err)
 	}
+	defer extRows.Close()
+	var extensions []entity.SpecExtensionRecord
+	for extRows.Next() {
+		var ext entity.SpecExtensionRecord
+		if err := extRows.Scan(&ext.ID, &ext.ManifestKey, &ext.ManifestVersion, &ext.ConfigJSON); err != nil {
+			return nil, fmt.Errorf("scan extension instance: %w", err)
+		}
+		extensions = append(extensions, ext)
+	}
+	if err := extRows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate extension instances: %w", err)
+	}
+	out.Extensions = extensions
 
 	// 6. Fetch Unified Upstreams & Active L4 Services
 	const unifiedUpstreamsQuery = `
@@ -300,7 +302,6 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 
 	return out, nil
 }
-
 
 func (r *SpecSyncRepository) RecordReport(ctx context.Context, cmd entity.SpecReportCommand) error {
 	syncStatus := "Syncing"

@@ -17,9 +17,15 @@ export interface ExtensionItem {
   name: string;
   category: ExtensionCategory | string;
   description: string;
-  version: string;
+  manifest_key?: string;
+  manifest_version?: number;
+  manifest_digest?: string;
+  version?: string;
   enabled: boolean;
   config_json: string;
+  config_schema_json?: string;
+  ui_schema_json?: string;
+  supported?: boolean;
   schema_json?: string;
   is_builtin: boolean;
   tags?: string[];

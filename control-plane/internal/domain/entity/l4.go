@@ -6,6 +6,7 @@ package entity
 type L4ACLRule struct {
 	CIDR        string
 	Action      string // "allow" | "deny"
+	Priority    int
 	Description string
 }
 

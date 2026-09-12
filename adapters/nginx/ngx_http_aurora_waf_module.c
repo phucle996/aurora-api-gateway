@@ -11,6 +11,8 @@ typedef struct {
     ngx_uint_t mode;         /* Chế độ hoạt động: enforce (chặn) hoặc audit (chỉ log) */
     ngx_str_t access_policy;
     AuroraAccessEngine *access_engine;
+    ngx_str_t jwt_policy;
+    AuroraJwtEngine *jwt_engine;
     ngx_str_t policy;        /* Đường dẫn tới file policy snapshot */
     ngx_str_t controller;    /* URL của Control Plane (VD: http://127.0.0.1:8080) */
     ngx_str_t node_id;       /* ID của Node (VD: node-local-01) */
@@ -23,6 +25,7 @@ typedef struct {
 static ngx_int_t ngx_http_aurora_init(ngx_conf_t *cf);
 static void *ngx_http_aurora_create_conf(ngx_conf_t *cf);
 static char *ngx_http_aurora_merge_conf(ngx_conf_t *cf, void *parent, void *child);
+static char *ngx_http_aurora_merge_jwt(ngx_conf_t *cf, ngx_http_aurora_conf_t *prev, ngx_http_aurora_conf_t *conf);
 static ngx_int_t ngx_http_aurora_handler(ngx_http_request_t *r);
 static void ngx_http_aurora_cleanup(void *data);
 static ngx_int_t ngx_http_aurora_variables(ngx_conf_t *cf);
@@ -82,6 +85,10 @@ static ngx_command_t ngx_http_aurora_commands[] = {
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_str_slot, NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_aurora_conf_t, access_policy), NULL },
+    { ngx_string("aurora_jwt_policy"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_str_slot, NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_aurora_conf_t, jwt_policy), NULL },
     { ngx_string("aurora_waf_policy"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_str_slot,
@@ -185,6 +192,7 @@ ngx_http_aurora_cleanup(void *data)
 
 
 static void ngx_http_aurora_access_cleanup(void *data) { aurora_access_destroy(data); }
+static void ngx_http_aurora_jwt_cleanup(void *data) { aurora_jwt_destroy(data); }
 
 /* Access snapshot loader owns its independent handle and cleanup boundary. */
 static char *ngx_http_aurora_merge_access(ngx_conf_t *cf, ngx_http_aurora_conf_t *prev, ngx_http_aurora_conf_t *conf)
@@ -253,6 +261,64 @@ static char *ngx_http_aurora_merge_access(ngx_conf_t *cf, ngx_http_aurora_conf_t
     return NGX_CONF_OK;
 }
 
+/* JWT snapshot loader is intentionally independent from WAF and CIDR engines.
+ * A configured JWT rule must use satisfy all so no other access module can
+ * bypass its cryptographic decision. */
+static char *ngx_http_aurora_merge_jwt(ngx_conf_t *cf, ngx_http_aurora_conf_t *prev, ngx_http_aurora_conf_t *conf)
+{
+    ngx_pool_cleanup_t *cleanup;
+    struct stat st;
+    int fd;
+    ssize_t n;
+    size_t used = 0;
+    u_char *bytes;
+    uint32_t status;
+
+    ngx_conf_merge_str_value(conf->jwt_policy, prev->jwt_policy, "");
+    if (conf->jwt_policy.len == 0) { return NGX_CONF_OK; }
+    if (((ngx_http_core_loc_conf_t *) ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module))->satisfy == NGX_HTTP_SATISFY_ANY) {
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "Aurora JWT requires satisfy all");
+        return NGX_CONF_ERROR;
+    }
+    if (prev->jwt_engine && conf->jwt_policy.data == prev->jwt_policy.data) {
+        conf->jwt_engine = prev->jwt_engine;
+        return NGX_CONF_OK;
+    }
+    if (ngx_conf_full_name(cf->cycle, &conf->jwt_policy, 0) != NGX_OK) { return NGX_CONF_ERROR; }
+
+    fd = open((char *) conf->jwt_policy.data, O_RDONLY|O_NONBLOCK);
+    if (fd == -1) {
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, ngx_errno, "cannot open Aurora JWT policy %V", &conf->jwt_policy);
+        return NGX_CONF_ERROR;
+    }
+    if (fstat(fd, &st) == -1 || !S_ISREG(st.st_mode) || st.st_size <= 0 || st.st_size > 65536) {
+        close(fd);
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "Aurora JWT policy must be a regular file of 1..65536 bytes");
+        return NGX_CONF_ERROR;
+    }
+    bytes = ngx_pnalloc(cf->temp_pool, 65537);
+    if (bytes == NULL) { close(fd); return NGX_CONF_ERROR; }
+    while (used < 65537) {
+        n = read(fd, bytes + used, 65537 - used);
+        if (n == -1 && errno == EINTR) { continue; }
+        if (n <= 0) { break; }
+        used += (size_t) n;
+    }
+    close(fd);
+    if (n < 0 || used != (size_t) st.st_size) { return NGX_CONF_ERROR; }
+
+    cleanup = ngx_pool_cleanup_add(cf->pool, 0);
+    if (cleanup == NULL) { return NGX_CONF_ERROR; }
+    status = aurora_jwt_create(bytes, used, &conf->jwt_engine);
+    if (status != 0) {
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "invalid Aurora JWT policy %V (status %ui)", &conf->jwt_policy, (ngx_uint_t) status);
+        return NGX_CONF_ERROR;
+    }
+    cleanup->handler = ngx_http_aurora_jwt_cleanup;
+    cleanup->data = conf->jwt_engine;
+    return NGX_CONF_OK;
+}
+
 /*
  * Gộp cấu hình từ block cha xuống block con và khởi tạo Rust WAF Engine từ file policy.
  */
@@ -278,6 +344,7 @@ ngx_http_aurora_merge_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_conf_merge_uint_value(conf->interval, prev->interval, 10);
 
     if (ngx_http_aurora_merge_access(cf, prev, conf) != NGX_CONF_OK) { return NGX_CONF_ERROR; }
+    if (ngx_http_aurora_merge_jwt(cf, prev, conf) != NGX_CONF_OK) { return NGX_CONF_ERROR; }
 
     /* Nếu WAF không được kích hoạt, bỏ qua các bước nạp policy */
     if (!conf->enabled) { return NGX_CONF_OK; }
@@ -383,9 +450,9 @@ ngx_http_aurora_handler(ngx_http_request_t *r)
         }
         if (decision.action == 1) { return NGX_HTTP_FORBIDDEN; }
     }
-    if (!conf->enabled) { return NGX_DECLINED; }
-    status = aurora_waf_evaluate_v4(conf->engine, host.data, host.len, r->uri.data, r->uri.len, &decision);
-    if (status != 0 || decision.action > 1) {
+    if (conf->enabled) {
+        status = aurora_waf_evaluate_v4(conf->engine, host.data, host.len, r->uri.data, r->uri.len, &decision);
+        if (status != 0 || decision.action > 1) {
         /*
          * Xử lý lỗi engine / panic:
          * Xóa log.handler tạm thời để tránh rò rỉ query/request nhạy cảm vào access log NGINX.
@@ -393,31 +460,55 @@ ngx_http_aurora_handler(ngx_http_request_t *r)
         log = *r->connection->log;
         log.handler = NULL; /* Do not append raw request/query via NGINX's HTTP log handler. */
         ngx_log_error(NGX_LOG_ERR, &log, 0, "Aurora evaluation failed: %ui", (ngx_uint_t) status);
-        return NGX_HTTP_SERVICE_UNAVAILABLE; /* 503 Service Unavailable khi engine lỗi */
-    }
+            return NGX_HTTP_SERVICE_UNAVAILABLE; /* 503 Service Unavailable khi engine lỗi */
+        }
 
     /* Action = 1 (Block/Vi phạm rule) */
-    if (aurora_log_second != ngx_time()) {
-        aurora_log_second = ngx_time();
-        aurora_log_count = 0;
-    }
-    if (decision.log_matches != 0 && aurora_log_count < 100) {
-        aurora_log_count++;
-        log = *r->connection->log;
-        log.handler = NULL;
-        ngx_log_error(NGX_LOG_INFO, &log, 0, "Aurora match generation=%uL rule=%uL score=%ui logs=%ui",
-                      decision.generation, decision.rule_id, (ngx_uint_t) decision.score, (ngx_uint_t) decision.log_matches);
-    }
-    if (decision.action == 1) {
-        /* Chế độ Audit: Chỉ ghi log cảnh báo, không chặn request */
-        if (conf->mode == 1) {
+        if (aurora_log_second != ngx_time()) {
+            aurora_log_second = ngx_time();
+            aurora_log_count = 0;
+        }
+        if (decision.log_matches != 0 && aurora_log_count < 100) {
+            aurora_log_count++;
             log = *r->connection->log;
             log.handler = NULL;
-            ngx_log_error(NGX_LOG_NOTICE, &log, 0, "Aurora audit: would block normalized path");
-            return NGX_DECLINED;
+            ngx_log_error(NGX_LOG_INFO, &log, 0, "Aurora match generation=%uL rule=%uL score=%ui logs=%ui",
+                          decision.generation, decision.rule_id, (ngx_uint_t) decision.score, (ngx_uint_t) decision.log_matches);
         }
+        if (decision.action == 1) {
+        /* Chế độ Audit: Chỉ ghi log cảnh báo, không chặn request */
+            if (conf->mode == 1) {
+                log = *r->connection->log;
+                log.handler = NULL;
+                ngx_log_error(NGX_LOG_NOTICE, &log, 0, "Aurora audit: would block normalized path");
+                return NGX_DECLINED;
+            }
         /* Chế độ Enforce: Trả về 403 Forbidden để chặn request */
-        return NGX_HTTP_FORBIDDEN;
+            return NGX_HTTP_FORBIDDEN;
+        }
+    }
+
+    if (conf->jwt_engine) {
+        ngx_table_elt_t *authorization = r->headers_in.authorization;
+        const u_char *authorization_data = authorization ? authorization->value.data : NULL;
+        size_t authorization_len = authorization ? authorization->value.len : 0;
+        status = aurora_jwt_evaluate(conf->jwt_engine, host.data, host.len,
+                                     r->uri.data, r->uri.len,
+                                     authorization_data, authorization_len);
+        if (status == 1) {
+            ngx_table_elt_t *challenge = ngx_list_push(&r->headers_out.headers);
+            if (challenge == NULL) { return NGX_HTTP_INTERNAL_SERVER_ERROR; }
+            challenge->hash = 1;
+            ngx_str_set(&challenge->key, "WWW-Authenticate");
+            ngx_str_set(&challenge->value, "Bearer");
+            return NGX_HTTP_UNAUTHORIZED;
+        }
+        if (status != 0) {
+            log = *r->connection->log;
+            log.handler = NULL;
+            ngx_log_error(NGX_LOG_ERR, &log, 0, "Aurora JWT evaluation failed: %ui", (ngx_uint_t) status);
+            return NGX_HTTP_SERVICE_UNAVAILABLE;
+        }
     }
 
     /* Action = 0 (Allow): Cho phép request đi tiếp qua các phase xử lý tiếp theo */
@@ -426,7 +517,7 @@ ngx_http_aurora_handler(ngx_http_request_t *r)
 
 /*
  * Khởi tạo module sau khi đọc xong cấu hình:
- * 1. Kiểm tra phiên bản ABI tương thích với thư viện Rust C ABI (phải bằng 3).
+ * 1. Kiểm tra phiên bản ABI tương thích với thư viện Rust C ABI (phải bằng 4).
  * 2. Đăng ký ngx_http_aurora_handler vào mảng handlers của NGX_HTTP_ACCESS_PHASE.
  */
 static ngx_int_t
@@ -436,7 +527,7 @@ ngx_http_aurora_init(ngx_conf_t *cf)
     ngx_http_handler_pt *handler;
 
     /* Kiểm tra phiên bản ABI giữa C adapter và Rust FFI boundary */
-    if (aurora_waf_abi_version() != 3) { return NGX_ERROR; }
+    if (aurora_waf_abi_version() != 4) { return NGX_ERROR; }
     ngx_str_t telemetry_name = ngx_string("aurora_telemetry_v1");
     aurora_telemetry_zone = ngx_shared_memory_add(cf, &telemetry_name, 8 * ngx_pagesize, &ngx_http_aurora_waf_module);
     if (aurora_telemetry_zone == NULL) { return NGX_ERROR; }

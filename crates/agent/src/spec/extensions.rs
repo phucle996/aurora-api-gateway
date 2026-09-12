@@ -1,17 +1,18 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-pub struct ExtensionsSpec {
-    #[serde(default, alias = "metrics")]
-    pub prometheus: Option<MetricsExtensionSpec>,
-    #[serde(flatten, default)]
-    pub dynamic: std::collections::HashMap<String, serde_yaml::Value>,
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionInstanceSpec {
+    pub instance_id: String,
+    pub key: String,
+    pub version: u32,
+    pub manifest_digest: String,
+    pub config_json: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct MetricsExtensionSpec {
-    #[serde(default = "default_true")]
-    pub enabled: bool,
     #[serde(default = "default_metrics_port")]
     pub port: u16,
     #[serde(default)]
@@ -25,7 +26,6 @@ pub struct MetricsExtensionSpec {
 impl Default for MetricsExtensionSpec {
     fn default() -> Self {
         Self {
-            enabled: true,
             port: default_metrics_port(),
             stub_status_url: None,
             prometheus: Some(PrometheusSpec::default()),
@@ -43,6 +43,7 @@ fn default_metrics_port() -> u16 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct PrometheusSpec {
     #[serde(default = "default_true")]
     pub enabled: bool,
@@ -64,6 +65,7 @@ fn default_metrics_path() -> String {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(deny_unknown_fields)]
 pub struct OtlpSpec {
     #[serde(default)]
     pub enabled: bool,

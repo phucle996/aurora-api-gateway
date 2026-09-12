@@ -1,14 +1,14 @@
-use super::extensions::{generate_extensions_http_conf, generate_extensions_nginx_conf};
+use super::extensions::render_extensions;
 use super::l4::generate_l4_streams_conf;
 use super::routing::{find_matching_certificate, generate_domain_routing_conf, matches_sni};
 use super::*;
 use crate::spec::certificate::CertificateSpec;
 use crate::spec::schema::Spec;
+use std::os::unix::fs::PermissionsExt;
 
 #[tokio::test]
 async fn test_materialize_nginx_files() {
-    let base_tmp =
-        std::env::temp_dir().join(format!("aurora-spec-test-{}", std::process::id()));
+    let base_tmp = std::env::temp_dir().join(format!("aurora-spec-test-{}", std::process::id()));
     let policy_dir = base_tmp.join("policy");
     let routing_dir = base_tmp.join("routing");
     let _ = tokio::fs::remove_dir_all(&base_tmp).await;
@@ -52,7 +52,8 @@ async fn test_materialize_nginx_files() {
         .await
         .unwrap();
     assert!(up_conf.contains("upstream backend"));
-    assert!(up_conf.contains("server 127.0.0.1:8080 weight=2;"));
+    assert!(up_conf.contains("zone aurora_http_backend 64k;"));
+    assert!(up_conf.contains("server 127.0.0.1:8080 weight=2 resolve;"));
 
     // Second run with same spec should NOT report changed
     let res2 = materialize_nginx(&spec, &policy_dir, &routing_dir)
@@ -63,67 +64,144 @@ async fn test_materialize_nginx_files() {
 
 #[test]
 fn test_extensions_generation() {
-    let mut extensions = std::collections::HashMap::new();
-
-    // 1. Rate Limit
-    let rl_yaml: serde_yaml::Value = serde_yaml::from_str(
-        r#"
-        enabled: true
-        rate: 50
-        burst: 100
-        period_secs: 1
-        rejected_code: 429
-        "#,
-    )
-    .unwrap();
-    extensions.insert("rate-limit".to_string(), rl_yaml);
-
-    // 2. CORS
-    let cors_yaml: serde_yaml::Value = serde_yaml::from_str(
-        r#"
-        enabled: true
-        allow_origins: ["https://example.com"]
-        allow_methods: ["GET", "POST"]
-        allow_headers: ["Authorization", "Content-Type"]
-        allow_credentials: true
-        max_age: 3600
-        "#,
-    )
-    .unwrap();
-    extensions.insert("cors".to_string(), cors_yaml);
-
-    // 3. Maintenance Mode
-    let maint_yaml: serde_yaml::Value = serde_yaml::from_str(
-        r#"
-        enabled: true
-        status_code: 503
-        bypass_header: "X-Bypass"
-        retry_after_secs: 120
-        message: "Under upgrade"
-        "#,
-    )
-    .unwrap();
-    extensions.insert("maintenance-mode".to_string(), maint_yaml);
-
-    let http_conf = generate_extensions_http_conf(&extensions);
+    let digest = crate::extension::manifest::catalog_digest().unwrap();
+    let extensions = vec![
+        crate::spec::extensions::ExtensionInstanceSpec {
+            instance_id: "rate-limit".to_string(),
+            key: "builtin/rate-limit".to_string(),
+            version: 1,
+            manifest_digest: digest.clone(),
+            config_json: r#"{"rate":50,"burst":100,"period_secs":1,"rejected_code":429}"#.to_string(),
+        },
+        crate::spec::extensions::ExtensionInstanceSpec {
+            instance_id: "cors".to_string(),
+            key: "builtin/cors".to_string(),
+            version: 1,
+            manifest_digest: digest.clone(),
+            config_json: r#"{"allow_origins":["https://example.com"],"allow_methods":["GET","POST"],"allow_headers":["Authorization","Content-Type"],"allow_credentials":true,"max_age":3600}"#.to_string(),
+        },
+        crate::spec::extensions::ExtensionInstanceSpec {
+            instance_id: "maintenance".to_string(),
+            key: "builtin/maintenance-mode".to_string(),
+            version: 1,
+            manifest_digest: digest,
+            config_json: r#"{"status_code":503,"bypass_header":"X-Bypass","retry_after_secs":120,"message":"Under upgrade"}"#.to_string(),
+        },
+        crate::spec::extensions::ExtensionInstanceSpec {
+            instance_id: "jwt-authentication".to_string(),
+            key: "builtin/jwt-authentication".to_string(),
+            version: 1,
+            manifest_digest: crate::extension::manifest::catalog_digest().unwrap(),
+            config_json: r#"{"rules":[{"id":"api","host":"api.example.test","path_prefix":"/api","public_key_pem":"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A\n-----END PUBLIC KEY-----","issuer":"https://issuer.example.test","audience":"gateway"}]}"#.to_string(),
+        },
+    ];
+    let rendered = render_extensions(&extensions).unwrap();
+    let http_conf = rendered.http_conf;
     assert!(
-        http_conf.contains(
-            "limit_req_zone $binary_remote_addr zone=aurora_rate_limit:10m rate=50r/s;"
-        )
+        http_conf
+            .contains("limit_req_zone $binary_remote_addr zone=aurora_rate_limit:10m rate=50r/s;")
     );
 
-    let server_conf = generate_extensions_nginx_conf(&extensions);
+    let server_conf = rendered.server_conf;
     assert!(server_conf.contains("limit_req_status 429;"));
     assert!(server_conf.contains("limit_req zone=aurora_rate_limit burst=100 nodelay;"));
     assert!(
-        server_conf.contains("add_header 'Access-Control-Allow-Origin' '$http_origin' always;")
+        server_conf.contains("add_header Access-Control-Allow-Origin \"$http_origin\" always;")
     );
-    assert!(
-        server_conf.contains("add_header 'Access-Control-Allow-Credentials' 'true' always;")
-    );
+    assert!(server_conf.contains("add_header Access-Control-Allow-Credentials \"true\" always;"));
     assert!(server_conf.contains("add_header Retry-After 120 always;"));
     assert!(server_conf.contains("if ($http_x_bypass)"));
-    assert!(server_conf.contains("return 503 '{\"error\":\"Under upgrade\"}';"));
+    assert!(server_conf.contains("return 503 \"{\\\"error\\\":\\\"Under upgrade\\\"}\";"));
+    assert!(server_conf.contains("aurora_jwt_policy /var/lib/aurora-policy/active-jwt.json;"));
+    assert_eq!(
+        rendered.jwt_policy.unwrap()["rules"][0]["host"],
+        "api.example.test"
+    );
+}
+
+#[tokio::test]
+async fn test_jwt_extension_materializes_and_removes_ffi_snapshot() {
+    let base = std::env::temp_dir().join(format!("aurora-jwt-materialize-{}", std::process::id()));
+    let policy_dir = base.join("policy");
+    let routing_dir = base.join("routing");
+    let _ = tokio::fs::remove_dir_all(&base).await;
+    let digest = crate::extension::manifest::catalog_digest().unwrap();
+    let spec = Spec {
+        release_id: 91,
+        extensions: vec![crate::spec::extensions::ExtensionInstanceSpec {
+            instance_id: "jwt-authentication".to_string(),
+            key: "builtin/jwt-authentication".to_string(),
+            version: 1,
+            manifest_digest: digest,
+            config_json: r#"{"rules":[{"id":"api","host":"api.example.test","path_prefix":"/","public_key_pem":"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A\n-----END PUBLIC KEY-----"}]}"#.to_string(),
+        }],
+        ..Default::default()
+    };
+
+    materialize_nginx(&spec, &policy_dir, &routing_dir)
+        .await
+        .expect("materialize JWT snapshot");
+    let jwt = tokio::fs::read_to_string(policy_dir.join("active-jwt.json"))
+        .await
+        .expect("read JWT snapshot");
+    assert!(jwt.contains("\"generation\": 91"));
+    assert!(jwt.contains("api.example.test"));
+
+    let disabled = Spec {
+        release_id: 92,
+        ..Default::default()
+    };
+    let result = materialize_nginx(&disabled, &policy_dir, &routing_dir)
+        .await
+        .expect("remove JWT snapshot");
+    assert!(result.nginx_changed);
+    assert!(!policy_dir.join("active-jwt.json").exists());
+    let _ = tokio::fs::remove_dir_all(base).await;
+}
+
+#[test]
+fn test_access_policy_renderer_generates_cidr_rules_from_instance_config() {
+    let instance = crate::spec::extensions::ExtensionInstanceSpec {
+        instance_id: "office-network".to_string(),
+        key: "builtin/ip-restriction".to_string(),
+        version: 1,
+        manifest_digest: crate::extension::manifest::catalog_digest().unwrap(),
+        config_json: r#"{"whitelist":["198.51.100.0/24"],"blacklist":["192.0.2.10/32"],"rules":[{"id":"admin-block","cidr":"203.0.113.0/24","type":"blacklist","match_value":"/admin","action":"block","priority":7}]}"#.to_string(),
+    };
+
+    let rendered = render_extensions(&[instance]).unwrap();
+    assert_eq!(rendered.access_rules.len(), 3);
+    assert_eq!(rendered.access_rules[0]["action"], "allow");
+    assert_eq!(rendered.access_rules[0]["priority"], 10);
+    assert_eq!(rendered.access_rules[1]["action"], "block");
+    assert_eq!(rendered.access_rules[2]["path_prefix"], "/admin");
+    assert_eq!(rendered.access_rules[2]["priority"], 7);
+    assert_eq!(rendered.access_rules[0]["networks"][0], "198.51.100.0/24");
+}
+
+#[test]
+fn test_extension_renderer_rejects_catalog_digest_mismatch() {
+    let instance = crate::spec::extensions::ExtensionInstanceSpec {
+        instance_id: "ip-restriction".to_string(),
+        key: "builtin/ip-restriction".to_string(),
+        version: 1,
+        manifest_digest: "wrong-catalog".to_string(),
+        config_json: r#"{"whitelist":[],"blacklist":[],"rules":[]}"#.to_string(),
+    };
+    assert!(render_extensions(&[instance]).is_err());
+}
+
+#[test]
+fn test_access_policy_renderer_rejects_ipv4_mapped_ipv6() {
+    let instance = crate::spec::extensions::ExtensionInstanceSpec {
+        instance_id: "ip-restriction".to_string(),
+        key: "builtin/ip-restriction".to_string(),
+        version: 1,
+        manifest_digest: crate::extension::manifest::catalog_digest().unwrap(),
+        config_json: r#"{"whitelist":["::ffff:192.0.2.1/128"],"blacklist":[],"rules":[]}"#
+            .to_string(),
+    };
+    assert!(render_extensions(&[instance]).is_err());
 }
 
 #[test]
@@ -197,6 +275,7 @@ fn test_generate_domain_routing_conf_features() {
                             strip_path: false,
                             websocket: false,
                             plugins_json: None,
+                            origin_tls: None,
                         },
                         crate::spec::routing::LocationRoutingSpec {
                             path: "/api/v1".to_string(),
@@ -205,6 +284,7 @@ fn test_generate_domain_routing_conf_features() {
                             strip_path: false,
                             websocket: false,
                             plugins_json: None,
+                            origin_tls: None,
                         },
                         // Higher priority route for same path /api/v1 -> overrides
                         crate::spec::routing::LocationRoutingSpec {
@@ -214,6 +294,15 @@ fn test_generate_domain_routing_conf_features() {
                             strip_path: true,
                             websocket: false,
                             plugins_json: Some(r#"{"uri-rewrite":{"rules":[{"match_header":{"X-Test":"v1"},"rewrite_path":"/test"}]}}"#.to_string()),
+                            origin_tls: Some(crate::spec::routing::OriginTLSSpec {
+                                enabled: true,
+                                verify_cert: true,
+                                sni_host: "origin.aurora.local".to_string(),
+                                ca_cert: "ORIGIN_CA".to_string(),
+                                mtls: true,
+                                client_cert: "ORIGIN_CLIENT_CERT".to_string(),
+                                client_key: "ORIGIN_CLIENT_KEY".to_string(),
+                            }),
                         },
                         crate::spec::routing::LocationRoutingSpec {
                             path: "/ws".to_string(),
@@ -222,6 +311,7 @@ fn test_generate_domain_routing_conf_features() {
                             strip_path: false,
                             websocket: true,
                             plugins_json: None,
+                            origin_tls: None,
                         },
                     ],
                 },
@@ -237,18 +327,27 @@ fn test_generate_domain_routing_conf_features() {
     assert!(conf.contains("server {\n    listen 80;\n    server_name api.aurora.local;"));
 
     // 2. Check HTTPS server block with mTLS
-    assert!(conf.contains("server {\n    listen 443 ssl;\n    server_name api.aurora.local;"));
+    assert!(conf.contains("server {\n    listen 443 ssl;\n    listen 127.0.0.1:9443 ssl proxy_protocol;\n    server_name api.aurora.local;"));
     assert!(conf.contains("ssl_certificate /var/lib/aurora-routing/certs/cert_123.crt;"));
     assert!(conf.contains("ssl_certificate_key /var/lib/aurora-routing/certs/cert_123.key;"));
-    assert!(
-        conf.contains("ssl_client_certificate /var/lib/aurora-routing/certs/cert_123_ca.crt;")
-    );
+    assert!(conf.contains("ssl_client_certificate /var/lib/aurora-routing/certs/cert_123_ca.crt;"));
     assert!(conf.contains("ssl_verify_client on;"));
     assert!(conf.contains("ssl_verify_depth 3;"));
 
     // 3. Check Deduplication & Priority: api_upstream_new won over api_upstream_old
-    assert!(conf.contains("proxy_pass http://api_upstream_new;"));
+    assert!(conf.contains("proxy_pass https://api_upstream_new;"));
     assert!(!conf.contains("proxy_pass http://api_upstream_old;"));
+    assert!(conf.contains("proxy_ssl_verify on;"));
+    assert!(conf.contains("proxy_ssl_name origin.aurora.local;"));
+    assert!(conf.contains(
+        "proxy_ssl_trusted_certificate /var/lib/aurora-routing/origin-tls/api_upstream_new_ca.crt;"
+    ));
+    assert!(conf.contains(
+        "proxy_ssl_certificate /var/lib/aurora-routing/origin-tls/api_upstream_new_client.crt;"
+    ));
+    assert!(conf.contains(
+        "proxy_ssl_certificate_key /var/lib/aurora-routing/origin-tls/api_upstream_new_client.key;"
+    ));
 
     // 4. Check Longest Prefix Sorting: /api/v1 (length 7) appears before /ws (length 3) and / (length 1)
     let pos_apiv1 = conf.find("location /api/v1").unwrap();
@@ -263,6 +362,7 @@ fn test_generate_domain_routing_conf_features() {
     // 6. Check WebSocket proxy headers
     assert!(conf.contains("proxy_set_header Upgrade $http_upgrade;"));
     assert!(conf.contains("proxy_set_header Connection \"upgrade\";"));
+    assert!(conf.contains("proxy_connect_timeout 5s;"));
 
     // 7. Check URI Rewrite plugin
     assert!(conf.contains("if ($http_x_test = \"v1\")"));
@@ -271,8 +371,7 @@ fn test_generate_domain_routing_conf_features() {
 
 #[tokio::test]
 async fn test_materialize_nginx_with_certificates() {
-    let base_tmp =
-        std::env::temp_dir().join(format!("aurora-cert-test-{}", std::process::id()));
+    let base_tmp = std::env::temp_dir().join(format!("aurora-cert-test-{}", std::process::id()));
     let policy_dir = base_tmp.join("policy");
     let routing_dir = base_tmp.join("routing");
     let _ = tokio::fs::remove_dir_all(&base_tmp).await;
@@ -283,11 +382,9 @@ async fn test_materialize_nginx_with_certificates() {
             id: "test_cert_id".to_string(),
             name: "Test Cert".to_string(),
             snis: vec!["secure.aurora.local".to_string()],
-            cert_pem: "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----"
-                .to_string(),
+            cert_pem: "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----".to_string(),
             key_pem: "-----BEGIN PRIVATE KEY-----\nMIIE\n-----END PRIVATE KEY-----".to_string(),
-            client_ca_pem: "-----BEGIN CERTIFICATE-----\nCA\n-----END CERTIFICATE-----"
-                .to_string(),
+            client_ca_pem: "-----BEGIN CERTIFICATE-----\nCA\n-----END CERTIFICATE-----".to_string(),
             mtls_enabled: true,
             verify_depth: 2,
         }],
@@ -301,6 +398,21 @@ async fn test_materialize_nginx_with_certificates() {
                     strip_path: false,
                     websocket: false,
                     plugins_json: None,
+                    origin_tls: Some(crate::spec::routing::OriginTLSSpec {
+                        enabled: true,
+                        verify_cert: true,
+                        sni_host: "origin.aurora.local".to_string(),
+                        ca_cert:
+                            "-----BEGIN CERTIFICATE-----\nORIGIN_CA\n-----END CERTIFICATE-----"
+                                .to_string(),
+                        mtls: true,
+                        client_cert:
+                            "-----BEGIN CERTIFICATE-----\nORIGIN_CLIENT\n-----END CERTIFICATE-----"
+                                .to_string(),
+                        client_key:
+                            "-----BEGIN PRIVATE KEY-----\nORIGIN_KEY\n-----END PRIVATE KEY-----"
+                                .to_string(),
+                    }),
                 }],
             }],
         },
@@ -315,21 +427,36 @@ async fn test_materialize_nginx_with_certificates() {
     let cert_file = routing_dir.join("certs/test_cert_id.crt");
     let key_file = routing_dir.join("certs/test_cert_id.key");
     let ca_file = routing_dir.join("certs/test_cert_id_ca.crt");
+    let origin_ca_file = routing_dir.join("origin-tls/backend_up_ca.crt");
+    let origin_cert_file = routing_dir.join("origin-tls/backend_up_client.crt");
+    let origin_key_file = routing_dir.join("origin-tls/backend_up_client.key");
 
     assert!(cert_file.exists());
     assert!(key_file.exists());
     assert!(ca_file.exists());
+    assert!(origin_ca_file.exists());
+    assert!(origin_cert_file.exists());
+    assert!(origin_key_file.exists());
 
     let cert_content = tokio::fs::read_to_string(&cert_file).await.unwrap();
     assert!(cert_content.contains("BEGIN CERTIFICATE"));
 
-    let routing_conf =
-        tokio::fs::read_to_string(routing_dir.join("active-domain-routing.conf"))
-            .await
-            .unwrap();
+    let routing_conf = tokio::fs::read_to_string(routing_dir.join("active-domain-routing.conf"))
+        .await
+        .unwrap();
     assert!(routing_conf.contains("listen 443 ssl;"));
     assert!(routing_conf.contains("test_cert_id.crt"));
     assert!(routing_conf.contains("ssl_verify_client on;"));
+    assert!(routing_conf.contains("proxy_pass https://backend_up;"));
+    assert!(routing_conf.contains("proxy_ssl_verify on;"));
+    assert_eq!(
+        std::fs::metadata(origin_key_file)
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o600
+    );
 
     let _ = tokio::fs::remove_dir_all(&base_tmp).await;
 }
@@ -339,63 +466,127 @@ fn test_l4_streams_generation() {
     use crate::spec::l4::{L4AclRuleSpec, L4ServerSpec, L4ServiceSpec, L4Spec, L4UpstreamSpec};
 
     let l4 = Some(L4Spec {
-        upstreams: vec![L4UpstreamSpec {
-            name: "pg_cluster".to_string(),
-            protocol: "tcp".to_string(),
-            algorithm: "least_conn".to_string(),
-            servers: vec![
-                L4ServerSpec {
+        upstreams: vec![
+            L4UpstreamSpec {
+                name: "pg_cluster".to_string(),
+                protocol: "tcp".to_string(),
+                algorithm: "least_conn".to_string(),
+                servers: vec![L4ServerSpec {
                     addr: "10.0.0.10:5432".to_string(),
                     weight: 2,
                     max_fails: Some(3),
                     fail_timeout: Some("10s".to_string()),
-                },
-            ],
-        }],
+                    backup: false,
+                }],
+            },
+            L4UpstreamSpec {
+                name: "client_affinity".to_string(),
+                protocol: "tcp".to_string(),
+                algorithm: "ip_hash".to_string(),
+                servers: vec![L4ServerSpec {
+                    addr: "10.0.0.11:5432".to_string(),
+                    weight: 1,
+                    max_fails: None,
+                    fail_timeout: None,
+                    backup: false,
+                }],
+            },
+            L4UpstreamSpec {
+                name: "failover_pool".to_string(),
+                protocol: "tcp".to_string(),
+                algorithm: "round_robin".to_string(),
+                servers: vec![
+                    L4ServerSpec {
+                        addr: "10.0.0.12:5432".to_string(),
+                        weight: 1,
+                        max_fails: Some(1),
+                        fail_timeout: Some("5s".to_string()),
+                        backup: false,
+                    },
+                    L4ServerSpec {
+                        addr: "10.0.0.13:5432".to_string(),
+                        weight: 1,
+                        max_fails: Some(1),
+                        fail_timeout: Some("5s".to_string()),
+                        backup: true,
+                    },
+                ],
+            },
+        ],
         services: vec![
-                L4ServiceSpec {
-                    name: "postgres_edge".to_string(),
-                    protocol: "tcp".to_string(),
-                    listen_port: 5432,
-                    forward_target_type: Some("upstream".to_string()),
-                    upstream: "pg_cluster".to_string(),
-                    endpoint: None,
-                    acl: vec![
-                        L4AclRuleSpec {
-                            cidr: "192.168.1.0/24".to_string(),
-                            action: "allow".to_string(),
-                        },
-                        L4AclRuleSpec {
-                            cidr: "0.0.0.0/0".to_string(),
-                            action: "deny".to_string(),
-                        },
-                    ],
-                    proxy_timeout: Some("1h".to_string()),
-                    proxy_connect_timeout: Some("5s".to_string()),
-                    enabled: true,
-                },
-                L4ServiceSpec {
-                    name: "redis_direct".to_string(),
-                    protocol: "tcp".to_string(),
-                    listen_port: 6379,
-                    forward_target_type: Some("endpoint".to_string()),
-                    upstream: String::new(),
-                    endpoint: Some("10.0.0.99:6379".to_string()),
-                    acl: vec![],
-                    proxy_timeout: Some("30m".to_string()),
-                    proxy_connect_timeout: None,
-                    enabled: true,
-                },
-            ],
-        });
+            L4ServiceSpec {
+                name: "postgres_edge".to_string(),
+                protocol: "tcp".to_string(),
+                listen_port: 5432,
+                forward_target_type: Some("upstream".to_string()),
+                upstream: "pg_cluster".to_string(),
+                endpoint: None,
+                acl: vec![
+                    L4AclRuleSpec {
+                        cidr: "0.0.0.0/0".to_string(),
+                        action: "deny".to_string(),
+                        priority: 1,
+                    },
+                    L4AclRuleSpec {
+                        cidr: "192.168.1.0/24".to_string(),
+                        action: "allow".to_string(),
+                        priority: 100,
+                    },
+                ],
+                proxy_timeout: Some("1h".to_string()),
+                proxy_connect_timeout: Some("5s".to_string()),
+                enabled: true,
+            },
+            L4ServiceSpec {
+                name: "redis_direct".to_string(),
+                protocol: "tcp".to_string(),
+                listen_port: 6379,
+                forward_target_type: Some("endpoint".to_string()),
+                upstream: String::new(),
+                endpoint: Some("10.0.0.99:6379".to_string()),
+                acl: vec![],
+                proxy_timeout: Some("30m".to_string()),
+                proxy_connect_timeout: None,
+                enabled: true,
+            },
+            L4ServiceSpec {
+                name: "http_route_bridge".to_string(),
+                protocol: "tcp".to_string(),
+                listen_port: 8088,
+                forward_target_type: Some("endpoint".to_string()),
+                upstream: String::new(),
+                endpoint: Some("127.0.0.1:80".to_string()),
+                acl: vec![],
+                proxy_timeout: Some("1h".to_string()),
+                proxy_connect_timeout: Some("5s".to_string()),
+                enabled: true,
+            },
+            L4ServiceSpec {
+                name: "upstream_with_stale_endpoint".to_string(),
+                protocol: "tcp".to_string(),
+                listen_port: 15432,
+                forward_target_type: Some("upstream".to_string()),
+                upstream: "pg_cluster".to_string(),
+                endpoint: Some("127.0.0.1:80".to_string()),
+                acl: vec![],
+                proxy_timeout: None,
+                proxy_connect_timeout: None,
+                enabled: true,
+            },
+        ],
+    });
 
-    let conf = generate_l4_streams_conf(&l4);
+    let conf = generate_l4_streams_conf(&l4).expect("valid L4 spec must render");
     assert!(conf.contains("upstream l4_pg_cluster {"));
+    assert!(conf.contains("zone aurora_l4_pg_cluster 64k;"));
     assert!(conf.contains("least_conn;"));
-    assert!(conf.contains("server 10.0.0.10:5432 weight=2 max_fails=3 fail_timeout=10s;"));
+    assert!(conf.contains("upstream l4_client_affinity {\n    zone aurora_l4_client_affinity 64k;\n    hash $remote_addr consistent;"));
+    assert!(conf.contains("server 10.0.0.13:5432 max_fails=1 fail_timeout=5s backup resolve;"));
+    assert!(conf.contains("server 10.0.0.10:5432 weight=2 max_fails=3 fail_timeout=10s resolve;"));
     assert!(conf.contains("listen 5432;"));
     assert!(conf.contains("allow 192.168.1.0/24;"));
     assert!(conf.contains("deny 0.0.0.0/0;"));
+    assert!(conf.find("allow 192.168.1.0/24;").unwrap() < conf.find("deny 0.0.0.0/0;").unwrap());
     assert!(conf.contains("proxy_pass l4_pg_cluster;"));
     assert!(conf.contains("proxy_timeout 1h;"));
     assert!(conf.contains("proxy_connect_timeout 5s;"));
@@ -404,4 +595,48 @@ fn test_l4_streams_generation() {
     assert!(conf.contains("listen 6379;"));
     assert!(conf.contains("proxy_pass 10.0.0.99:6379;"));
     assert!(conf.contains("proxy_timeout 30m;"));
+
+    // L7 bridge assertions: the stream layer must preserve the original peer address.
+    assert!(conf.contains("listen 8088;"));
+    assert!(conf.contains("proxy_protocol on;"));
+    assert!(conf.contains("proxy_pass 127.0.0.1:9082;"));
+    assert!(!conf.contains("proxy_pass 127.0.0.1:80;"));
+
+    // An upstream service must remain upstream even if an obsolete endpoint field exists.
+    assert!(conf.contains("listen 15432;\n    proxy_pass l4_pg_cluster;"));
+}
+
+#[test]
+fn test_l4_streams_reject_duplicate_acl_priority() {
+    use crate::spec::l4::{L4AclRuleSpec, L4ServiceSpec, L4Spec};
+
+    let l4 = Some(L4Spec {
+        upstreams: vec![],
+        services: vec![L4ServiceSpec {
+            name: "duplicate-priority".to_string(),
+            protocol: "tcp".to_string(),
+            listen_port: 19001,
+            forward_target_type: Some("endpoint".to_string()),
+            upstream: String::new(),
+            endpoint: Some("127.0.0.1:9000".to_string()),
+            acl: vec![
+                L4AclRuleSpec {
+                    cidr: "0.0.0.0/0".to_string(),
+                    action: "deny".to_string(),
+                    priority: 10,
+                },
+                L4AclRuleSpec {
+                    cidr: "192.0.2.0/24".to_string(),
+                    action: "allow".to_string(),
+                    priority: 10,
+                },
+            ],
+            proxy_timeout: None,
+            proxy_connect_timeout: None,
+            enabled: true,
+        }],
+    });
+
+    let error = generate_l4_streams_conf(&l4).expect_err("duplicate priority must fail closed");
+    assert!(error.contains("duplicate ACL priority 10"));
 }

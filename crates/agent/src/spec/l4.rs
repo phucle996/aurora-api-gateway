@@ -37,6 +37,8 @@ pub struct L4ServerSpec {
     pub max_fails: Option<u32>,
     #[serde(default)]
     pub fail_timeout: Option<String>,
+    #[serde(default)]
+    pub backup: bool,
 }
 
 fn default_weight() -> u32 {
@@ -73,4 +75,5 @@ fn default_true() -> bool {
 pub struct L4AclRuleSpec {
     pub cidr: String,
     pub action: String, // "allow" | "deny"
+    pub priority: u32,
 }

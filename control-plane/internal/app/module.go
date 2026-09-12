@@ -24,26 +24,25 @@ type Module struct {
 	SpecScheduler        *provider.SpecScheduler
 	HealthcheckHandler   *handler.HealthcheckHandler
 
-	AuthHandler          *handler.AuthHandler
-	AuthService          port.AuthService // Xác thực JWT — cần tham chiếu trong middleware
-	NodeHandler          *handler.NodeHandler
-	AnalyticsHandler     *handler.AnalyticsHandler
-	AnalyticsService     port.AnalyticsService
-	RouteHandler         *handler.RouteHandler
-	CertificateHandler   *handler.CertificateHandler
-	UpstreamHandler      *handler.UpstreamHandler
-	SystemHandler        *handler.SystemHandler
-	SecurityHandler      *handler.SecurityHandler
-	BackupHandler        *handler.BackupHandler
-	BackupScheduler      *service.BackupScheduler
-	ExtensionHandler     *handler.ExtensionHandler
-	ExtensionService     port.ExtensionService
-	L4Handler            *handler.L4Handler
-	L4Service            port.L4Service
-	AlertmanagerHandler  *handler.AlertmanagerHandler
-	AlertmanagerService  port.AlertmanagerService
+	AuthHandler         *handler.AuthHandler
+	AuthService         port.AuthService // Xác thực JWT — cần tham chiếu trong middleware
+	NodeHandler         *handler.NodeHandler
+	AnalyticsHandler    *handler.AnalyticsHandler
+	AnalyticsService    port.AnalyticsService
+	RouteHandler        *handler.RouteHandler
+	CertificateHandler  *handler.CertificateHandler
+	UpstreamHandler     *handler.UpstreamHandler
+	SystemHandler       *handler.SystemHandler
+	SecurityHandler     *handler.SecurityHandler
+	BackupHandler       *handler.BackupHandler
+	BackupScheduler     *service.BackupScheduler
+	ExtensionHandler    *handler.ExtensionHandler
+	ExtensionService    port.ExtensionService
+	L4Handler           *handler.L4Handler
+	L4Service           port.L4Service
+	AlertmanagerHandler *handler.AlertmanagerHandler
+	AlertmanagerService port.AlertmanagerService
 }
-
 
 // NewModule khởi tạo toàn bộ chuỗi dependency của ứng dụng theo thứ tự:
 //  1. Repository (sử dụng đúng writerDB hoặc readerDB tùy loại workflow)
@@ -131,18 +130,17 @@ func NewModule(writerDB, readerDB *sql.DB, cfg config.Config) *Module {
 		AlertmanagerService:  alertmanagerSvc,
 		HealthcheckHandler:   healthcheckHdr,
 
-		AuthHandler:          authHdr,
-		AuthService:          authSvc,
-		NodeHandler:          nodeHdr,
-		AnalyticsHandler:     analyticsHdr,
-		AnalyticsService:     analyticsSvc,
-		RouteHandler:         routeHdr,
-		CertificateHandler:   certHdr,
-		UpstreamHandler:      upstreamHdr,
-		SystemHandler:        systemHdr,
-		SecurityHandler:      securityHdr,
-		BackupHandler:        backupHdr,
-		BackupScheduler:      backupScheduler,
+		AuthHandler:        authHdr,
+		AuthService:        authSvc,
+		NodeHandler:        nodeHdr,
+		AnalyticsHandler:   analyticsHdr,
+		AnalyticsService:   analyticsSvc,
+		RouteHandler:       routeHdr,
+		CertificateHandler: certHdr,
+		UpstreamHandler:    upstreamHdr,
+		SystemHandler:      systemHdr,
+		SecurityHandler:    securityHdr,
+		BackupHandler:      backupHdr,
+		BackupScheduler:    backupScheduler,
 	}
 }
-

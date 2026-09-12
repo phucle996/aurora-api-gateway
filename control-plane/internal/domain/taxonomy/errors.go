@@ -2,9 +2,7 @@ package taxonomy
 
 import "errors"
 
-
 // ─── Auth Domain Errors ───────────────────────────────────────────────────────
-
 
 var (
 	// ErrInvalidCredentials phát sinh khi tên đăng nhập hoặc mật khẩu không chính xác
@@ -58,6 +56,9 @@ var (
 	// ErrL4InvalidPort phát sinh khi port nằm ngoài dải 1-65535
 	ErrL4InvalidPort = errors.New("l4 port must be between 1 and 65535")
 
+	// ErrL4ReservedPort phát sinh khi L4 TCP listener trùng cổng nội bộ của NGINX HTTP pipeline.
+	ErrL4ReservedPort = errors.New("l4 tcp listener uses a port reserved by the nginx http pipeline")
+
 	// ErrL4InvalidCIDR phát sinh khi CIDR trong ACL rule không đúng định dạng
 	ErrL4InvalidCIDR = errors.New("invalid cidr address format in l4 acl")
 
@@ -66,5 +67,10 @@ var (
 
 	// ErrL4TargetRequired phát sinh khi không có upstream hoặc direct endpoint được chỉ định
 	ErrL4TargetRequired = errors.New("either upstream or direct endpoint must be specified")
-)
 
+	// ErrL4InvalidTimeout phát sinh khi timeout không phải là NGINX time literal an toàn.
+	ErrL4InvalidTimeout = errors.New("invalid l4 timeout, expected an nginx duration such as 5s or 1h")
+
+	// ErrL4L7PipelineRequiresTCP phát sinh khi cố gắng đưa UDP vào HTTP pipeline.
+	ErrL4L7PipelineRequiresTCP = errors.New("the l7 pipeline target requires tcp")
+)

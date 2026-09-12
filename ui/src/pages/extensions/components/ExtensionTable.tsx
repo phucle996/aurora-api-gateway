@@ -83,7 +83,7 @@ export function ExtensionTable({
                   {/* Type & Version */}
                   <td className="py-3 px-4 whitespace-nowrap font-mono text-[11px] text-muted-foreground">
                     <div className="flex items-center gap-1.5">
-                      <span>v{ext.version}</span>
+                      <span>v{ext.manifest_version ?? ext.version}</span>
                       <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded-none">
                         {ext.is_builtin ? 'Core' : 'Custom'}
                       </span>

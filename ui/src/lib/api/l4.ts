@@ -3,6 +3,7 @@ import { api } from '../fetcher';
 export interface L4ACLRule {
   cidr: string;
   action: 'allow' | 'deny';
+  priority: number;
   description?: string;
 }
 

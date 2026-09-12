@@ -15,6 +15,7 @@ use std::{
 };
 
 pub mod access;
+pub mod jwt;
 pub mod telemetry;
 pub mod upstream;
 
@@ -29,11 +30,11 @@ const INVALID: u32 = 1;
 /// - PANIC (2): Quá trình xử lý phía Rust bị panic nhưng đã được chặn lại an toàn
 const PANIC: u32 = 2;
 
-/// Trả về số phiên bản ABI hiện tại của Aurora WAF (hiện tại là 3).
+/// Trả về số phiên bản ABI hiện tại của Aurora WAF (hiện tại là 4).
 /// Module NGINX sẽ gọi hàm này lúc khởi động để kiểm tra tính tương thích nhị phân.
 #[unsafe(no_mangle)]
 pub extern "C" fn aurora_waf_abi_version() -> u32 {
-    3
+    4
 }
 
 /// Nạp và hoán đổi nguyên tử (Atomic Swap) Policy Engine mới vào RAM.

@@ -14,6 +14,14 @@ export AURORA_SERVER_URL="${CONTROLLER_URL}"
 export AURORA_NODE_ID="${NODE_ID}"
 export AURORA_AUTH_TOKEN="${AUTH_TOKEN}"
 export NGINX_STUB_STATUS_URL="${NGINX_STUB_STATUS_URL:-http://127.0.0.1:80/stub_status}"
+if [ -z "${NGINX_RESOLVER:-}" ]; then
+  NGINX_RESOLVER="$(awk '/^nameserver[[:space:]]+/ { print $2; exit }' /etc/resolv.conf)"
+fi
+if [[ ! "${NGINX_RESOLVER}" =~ ^[0-9a-fA-F:.]+$ ]]; then
+  echo "FATAL: NGINX_RESOLVER must be an IP address" >&2
+  exit 1
+fi
+export NGINX_RESOLVER
 
 echo "[Aurora Node: ${NODE_ID}] Configuring connection to Controller: ${CONTROLLER_URL} (Heartbeat: ${HEARTBEAT_INTERVAL}s)..."
 
@@ -28,7 +36,7 @@ for aurora_proxy in ${TRUSTED_PROXY_CIDRS:-}; do
 done
 
 # Generate nginx.conf from template
-envsubst '${CONTROLLER_URL} ${NODE_ID} ${AUTH_TOKEN} ${HEARTBEAT_INTERVAL}' < /etc/nginx/nginx-node.conf.template > /etc/nginx/nginx.conf
+envsubst '${CONTROLLER_URL} ${NODE_ID} ${AUTH_TOKEN} ${HEARTBEAT_INTERVAL} ${NGINX_RESOLVER}' < /etc/nginx/nginx-node.conf.template > /etc/nginx/nginx.conf
 # This endpoint only serves a sanitized view; raw credentials never leave the node.
 sed -E 's/aurora_waf_token[[:space:]]+[^;]*;/aurora_waf_token [REDACTED];/' /etc/nginx/nginx.conf > /etc/nginx/aurora-config-view.conf
 chmod 600 /etc/nginx/nginx.conf
@@ -78,6 +86,9 @@ aurora_waf_controller ${CONTROLLER_URL};
 aurora_waf_node_id ${NODE_ID};
 aurora_waf_token ${AUTH_TOKEN};
 aurora_waf_heartbeat_interval ${HEARTBEAT_INTERVAL};
+real_ip_header proxy_protocol;
+set_real_ip_from 127.0.0.1;
+set_real_ip_from ::1;
 add_header X-Aurora-Node "${NODE_ID}" always;
 include /var/lib/aurora-policy/active-extensions.conf;
 EOF

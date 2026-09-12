@@ -15,7 +15,7 @@ int main(void) {
     AuroraEngine *engine = NULL;
     AuroraDecision decision;
     _Static_assert(sizeof(AuroraDecision) == 32, "ABI decision layout changed");
-    assert(aurora_waf_abi_version() == 3);
+    assert(aurora_waf_abi_version() == 4);
     assert(aurora_waf_create(NULL, 0, &engine) == 1 && engine == NULL);
     assert(aurora_waf_create((const uint8_t *)policy, strlen(policy), NULL) == 1);
     assert(aurora_waf_create((const uint8_t *)policy, 65537, &engine) == 1);
@@ -95,6 +95,6 @@ int main(void) {
     assert(strstr((char *)metrics, "aurora_node_cpu_percent{") == NULL);
     // Bound zone stays alive until process exit, matching the FFI lifetime contract.
     puts("Shared telemetry: 4 processes, 800000 evaluations, exact counters pass");
-    puts("C -> Rust ABI v3: lifecycle, limits, allow/block, invalid inputs pass");
+    puts("C -> Rust ABI v4: lifecycle, limits, allow/block, invalid inputs pass");
     return 0;
 }
