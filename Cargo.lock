@@ -132,6 +132,7 @@ name = "aurora-engine"
 version = "0.1.0"
 dependencies = [
  "jsonwebtoken",
+ "regex",
  "serde",
  "serde_json",
 ]
@@ -141,6 +142,7 @@ name = "aurora-ffi"
 version = "0.1.0"
 dependencies = [
  "aurora-engine",
+ "jsonwebtoken",
  "libc",
  "serde",
  "serde_json",

@@ -23,9 +23,6 @@ func setupExtensionTestDB(t *testing.T) *sql.DB {
 	if _, err := db.Exec(migrations.Seeds); err != nil {
 		t.Fatalf("failed to execute seeds: %v", err)
 	}
-	if _, err := db.Exec(migrations.ExtensionInstances); err != nil {
-		t.Fatalf("failed to create extension instances: %v", err)
-	}
 	if _, err := db.Exec(`
 		INSERT INTO extension_instances (id, manifest_key, manifest_version, enabled, config_json)
 		VALUES

@@ -154,19 +154,16 @@ CREATE TABLE IF NOT EXISTS backup_history (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
--- Extensions catalog and configurations
-CREATE TABLE IF NOT EXISTS extensions (
+-- Extensions instances
+CREATE TABLE IF NOT EXISTS extension_instances (
     id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    category TEXT NOT NULL CHECK(category IN ('security_engine', 'authentication', 'authorization_security', 'traffic_control', 'request_transformation', 'response_transformation', 'observability', 'resilience_upstream', 'cache_content', 'integration_runtime', 'ai_gateway', 'security', 'auth', 'traffic', 'runtime')),
-    description TEXT NOT NULL DEFAULT '',
-    version TEXT NOT NULL DEFAULT '1.0.0',
+    manifest_key TEXT NOT NULL,
+    manifest_version INTEGER NOT NULL CHECK(manifest_version > 0),
     enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0, 1)),
-    config_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(config_json)),
-    schema_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(schema_json)),
-    is_builtin INTEGER NOT NULL DEFAULT 1,
+    config_json TEXT NOT NULL CHECK(json_valid(config_json)),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    UNIQUE(manifest_key, manifest_version)
 );
 
 -- Cluster NodeSpec snapshot releases and head

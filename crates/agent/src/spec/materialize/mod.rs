@@ -93,11 +93,13 @@ pub async fn materialize_nginx(
     // verification through FFI; the agent only materializes its desired state.
     let jwt_path = policy_dir.join("active-jwt.json");
     if let Some(jwt_config) = rendered_extensions.jwt_policy.as_ref() {
-        let jwt_json = serde_json::to_string_pretty(&serde_json::json!({
-            "schema_version": 1,
-            "generation": spec.release_id,
-            "rules": jwt_config["rules"].clone(),
-        }))?;
+        let mut jwt_obj = jwt_config
+            .as_object()
+            .ok_or_else(|| "jwt config must be a JSON object".to_string())?
+            .clone();
+        jwt_obj.insert("schema_version".to_string(), serde_json::json!(1));
+        jwt_obj.insert("generation".to_string(), serde_json::json!(spec.release_id));
+        let jwt_json = serde_json::to_string_pretty(&serde_json::Value::Object(jwt_obj))?;
         if atomic_write_if_changed(&jwt_path, jwt_json.as_bytes()).await? {
             info!("Updated active-jwt.json");
             changed = true;

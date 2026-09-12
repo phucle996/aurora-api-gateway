@@ -78,10 +78,15 @@ ngx_http_gateway_eval_jwt(ngx_http_request_t *r, ngx_http_gateway_conf_t *conf, 
     ngx_table_elt_t *authorization = r->headers_in.authorization;
     const u_char *authorization_data = authorization ? authorization->value.data : NULL;
     size_t authorization_len = authorization ? authorization->value.len : 0;
+
+    AuroraJwtDecision decision;
+    ngx_memzero(&decision, sizeof(decision));
+
     uint32_t status = aurora_jwt_evaluate(conf->jwt_engine, host.data, host.len,
                                          r->uri.data, r->uri.len,
-                                         authorization_data, authorization_len);
-    if (status == 1) {
+                                         authorization_data, authorization_len,
+                                         &decision);
+    if (status == 1 || (status == 0 && decision.allowed == 0)) {
         ngx_table_elt_t *challenge = ngx_list_push(&r->headers_out.headers);
         if (challenge == NULL) { return NGX_HTTP_INTERNAL_SERVER_ERROR; }
         challenge->hash = 1;
@@ -94,6 +99,26 @@ ngx_http_gateway_eval_jwt(ngx_http_request_t *r, ngx_http_gateway_conf_t *conf, 
         log.handler = NULL;
         ngx_log_error(NGX_LOG_ERR, &log, 0, "Gateway JWT evaluation failed: %ui", (ngx_uint_t) status);
         return NGX_HTTP_SERVICE_UNAVAILABLE;
+    }
+
+    /* Inject forwarded headers into request headers before proxy_pass */
+    if (decision.headers_count > 0) {
+        uint32_t count = decision.headers_count < AURORA_JWT_MAX_FORWARD_HEADERS ? decision.headers_count : AURORA_JWT_MAX_FORWARD_HEADERS;
+        for (uint32_t i = 0; i < count; i++) {
+            ngx_table_elt_t *h = ngx_list_push(&r->headers_in.headers);
+            if (h == NULL) { return NGX_HTTP_INTERNAL_SERVER_ERROR; }
+            h->hash = 1;
+
+            h->key.len = decision.headers[i].name_len;
+            h->key.data = ngx_pnalloc(r->pool, h->key.len);
+            if (h->key.data == NULL) { return NGX_HTTP_INTERNAL_SERVER_ERROR; }
+            ngx_memcpy(h->key.data, decision.headers[i].name, h->key.len);
+
+            h->value.len = decision.headers[i].value_len;
+            h->value.data = ngx_pnalloc(r->pool, h->value.len);
+            if (h->value.data == NULL) { return NGX_HTTP_INTERNAL_SERVER_ERROR; }
+            ngx_memcpy(h->value.data, decision.headers[i].value, h->value.len);
+        }
     }
 
     return NGX_DECLINED;

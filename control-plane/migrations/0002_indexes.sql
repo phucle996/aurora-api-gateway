@@ -18,9 +18,9 @@ CREATE INDEX IF NOT EXISTS idx_upstreams_name ON upstreams(name);
 CREATE INDEX IF NOT EXISTS idx_upstreams_type ON upstreams(architecture_type);
 CREATE INDEX IF NOT EXISTS idx_upstreams_version ON upstreams(version);
 
--- Extensions indexes
-CREATE INDEX IF NOT EXISTS idx_extensions_category ON extensions(category);
-CREATE INDEX IF NOT EXISTS idx_extensions_enabled ON extensions(enabled);
+-- Extension instances indexes
+CREATE INDEX IF NOT EXISTS idx_extension_instances_enabled ON extension_instances(enabled);
+CREATE INDEX IF NOT EXISTS idx_extension_instances_manifest ON extension_instances(manifest_key, manifest_version);
 
 -- Cluster spec releases indexes
 CREATE INDEX IF NOT EXISTS idx_cluster_spec_releases_digest ON cluster_spec_releases(digest);

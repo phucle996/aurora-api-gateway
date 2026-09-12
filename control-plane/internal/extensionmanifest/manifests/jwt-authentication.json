@@ -2,9 +2,9 @@
   "key": "builtin/jwt-authentication",
   "version": 1,
   "id": "jwt-authentication",
-  "name": "JWT Authentication (RS256)",
+  "name": "JWT Authentication",
   "category": "authorization_security",
-  "description": "Validates scoped RS256 bearer tokens in the NGINX access phase.",
+  "description": "Validates scoped JWT bearer tokens (HS256, RS256, ES256) per origin with exclude paths and claims forwarding.",
   "renderer": "engine-jwt-rs256",
   "builtin": true,
   "default_config": {
@@ -19,15 +19,15 @@
     "table_columns": [
       {
         "key": "id",
-        "label": "Rule ID"
+        "label": "ID"
       },
       {
         "key": "host",
-        "label": "Host"
+        "label": "Origin (Host)"
       },
       {
-        "key": "path_prefix",
-        "label": "Path prefix"
+        "key": "algorithm",
+        "label": "Algorithm"
       },
       {
         "key": "issuer",
@@ -41,7 +41,7 @@
     "row_fields": [
       {
         "key": "id",
-        "label": "Rule ID",
+        "label": "Origin Rule ID",
         "type": "text",
         "required": true
       },
@@ -52,30 +52,73 @@
       },
       {
         "key": "host",
-        "label": "Host",
+        "label": "Origin (Host / Domain)",
         "type": "text",
         "required": true
       },
       {
         "key": "path_prefix",
-        "label": "Path prefix",
-        "type": "text",
-        "required": true
+        "label": "Base Path Prefix",
+        "type": "text"
+      },
+      {
+        "key": "algorithm",
+        "label": "Algorithm",
+        "type": "select",
+        "options": [
+          {
+            "label": "RS256 (RSA 2048/4096)",
+            "value": "RS256"
+          },
+          {
+            "label": "HS256 (HMAC Shared Secret)",
+            "value": "HS256"
+          },
+          {
+            "label": "ES256 (ECDSA P-256)",
+            "value": "ES256"
+          },
+          {
+            "label": "RS384",
+            "value": "RS384"
+          },
+          {
+            "label": "RS512",
+            "value": "RS512"
+          },
+          {
+            "label": "HS384",
+            "value": "HS384"
+          },
+          {
+            "label": "HS512",
+            "value": "HS512"
+          }
+        ]
+      },
+      {
+        "key": "secret",
+        "label": "HMAC Shared Secret (for HS256/384/512)",
+        "type": "password"
       },
       {
         "key": "public_key_pem",
-        "label": "RSA public key PEM",
-        "type": "textarea_code",
-        "required": true
+        "label": "Public Key PEM (for RS/ES)",
+        "type": "textarea_code"
+      },
+      {
+        "key": "exclude_paths",
+        "label": "Exclude Paths (Bypass without Token)",
+        "type": "list_string"
       },
       {
         "key": "issuer",
-        "label": "Issuer",
+        "label": "Issuer (iss)",
         "type": "text"
       },
       {
         "key": "audience",
-        "label": "Audience",
+        "label": "Audience (aud)",
         "type": "text"
       },
       {
@@ -87,22 +130,19 @@
   },
   "config_schema": {
     "type": "object",
-    "additionalProperties": false,
+    "additionalProperties": true,
     "required": [
       "rules"
     ],
     "properties": {
       "rules": {
         "type": "array",
-        "maxItems": 8,
+        "maxItems": 16,
         "items": {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
-            "id",
-            "host",
-            "path_prefix",
-            "public_key_pem"
+            "id"
           ],
           "properties": {
             "id": {
@@ -118,9 +158,21 @@
               "type": "string",
               "maxLength": 253
             },
+            "origin": {
+              "type": "string",
+              "maxLength": 253
+            },
             "path_prefix": {
               "type": "string",
               "maxLength": 8192
+            },
+            "algorithm": {
+              "type": "string",
+              "maxLength": 16
+            },
+            "secret": {
+              "type": "string",
+              "maxLength": 4096
             },
             "public_key_pem": {
               "type": "string",

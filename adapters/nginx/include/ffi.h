@@ -47,13 +47,29 @@ void aurora_waf_destroy(AuroraEngine *engine);
 uint32_t aurora_waf_swap_policy(const uint8_t *data, size_t len);
 
 /* Extension: JWT Authentication */
+#define AURORA_JWT_MAX_FORWARD_HEADERS 16
+
+typedef struct {
+    uint32_t name_len;
+    uint32_t value_len;
+    u_char name[64];
+    u_char value[256];
+} AuroraJwtHeader;
+
+typedef struct {
+    uint32_t allowed; /* 1 = allow, 0 = unauthorized */
+    uint32_t headers_count;
+    AuroraJwtHeader headers[AURORA_JWT_MAX_FORWARD_HEADERS];
+} AuroraJwtDecision;
+
 typedef struct AuroraJwtEngine AuroraJwtEngine;
 uint32_t aurora_jwt_create(const uint8_t *data, size_t len, AuroraJwtEngine **out);
 void aurora_jwt_destroy(AuroraJwtEngine *engine);
 uint32_t aurora_jwt_evaluate(const AuroraJwtEngine *engine,
     const uint8_t *host, size_t host_len,
     const uint8_t *path, size_t path_len,
-    const uint8_t *authorization, size_t authorization_len);
+    const uint8_t *authorization, size_t authorization_len,
+    AuroraJwtDecision *out_decision);
 
 /* Extension: Rate Limiting */
 typedef struct AuroraRateLimitEngine AuroraRateLimitEngine;

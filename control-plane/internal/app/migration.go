@@ -35,7 +35,7 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return err
 	}
-	if version > 7 {
+	if version > 4 {
 		return fmt.Errorf("unsupported database schema version %d", version)
 	}
 	if version < 1 {
@@ -77,34 +77,10 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 			return err
 		}
 	}
-	if version < 5 {
-		if _, err := tx.ExecContext(ctx, migrations.ExtensionIPAccess); err != nil {
-			return fmt.Errorf("extension IP access adapter: %w", err)
-		}
-		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version) VALUES(5)"); err != nil {
-			return err
-		}
-	}
-	if version < 6 {
-		if _, err := tx.ExecContext(ctx, migrations.ExtensionIPAccessRepair); err != nil {
-			return fmt.Errorf("extension IP access adapter repair: %w", err)
-		}
-		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version) VALUES(6)"); err != nil {
-			return err
-		}
-	}
-	if version < 7 {
-		if _, err := tx.ExecContext(ctx, migrations.ExtensionInstances); err != nil {
-			return fmt.Errorf("extension instances schema: %w", err)
-		}
-		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version) VALUES(7)"); err != nil {
-			return err
-		}
-	}
 
 	// Installed manifests are immutable release assets while instances are
 	// durable configuration. Insert only absent instances so a newly shipped
-	// implementation is available on existing v7 databases without replacing
+	// implementation is available on existing v4 databases without replacing
 	// an operator's configuration.
 	manifests, err := extensionmanifest.All()
 	if err != nil {

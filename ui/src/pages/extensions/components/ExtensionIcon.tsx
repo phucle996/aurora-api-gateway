@@ -188,8 +188,7 @@ export function ExtensionIcon({ id, category, className = 'w-5 h-5' }: Extension
     case 'key-auth':
     case 'api_key_auth':
       return <Key className={className} />;
-    case 'jwt-auth':
-    case 'jwt_auth':
+    case 'jwt-authentication':
       return <Ticket className={className} />;
     case 'hmac-auth':
       return <Hash className={className} />;
