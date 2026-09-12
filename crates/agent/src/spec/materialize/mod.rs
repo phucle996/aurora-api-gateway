@@ -110,7 +110,30 @@ pub async fn materialize_nginx(
         }
     }
 
-    // 4. Upstreams Config
+    // 4. Rate Limiting snapshot. The NGINX module owns request-time
+    // evaluation through FFI; the agent only materializes its desired state.
+    let rate_limit_path = policy_dir.join("active-rate-limit.json");
+    if let Some(rl_config) = rendered_extensions.rate_limit_policy.as_ref() {
+        let mut rl_obj = rl_config
+            .as_object()
+            .ok_or_else(|| "rate-limit config must be a JSON object".to_string())?
+            .clone();
+        rl_obj.insert("schema_version".to_string(), serde_json::json!(1));
+        rl_obj.insert("generation".to_string(), serde_json::json!(spec.release_id));
+        let rl_json = serde_json::to_string_pretty(&serde_json::Value::Object(rl_obj))?;
+        if atomic_write_if_changed(&rate_limit_path, rl_json.as_bytes()).await? {
+            info!("Updated active-rate-limit.json");
+            changed = true;
+        }
+    } else {
+        match tokio::fs::remove_file(&rate_limit_path).await {
+            Ok(()) => changed = true,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(Box::new(error)),
+        }
+    }
+
+    // 5. Upstreams Config
     let upstreams_path = policy_dir.join("active-upstreams.conf");
     let upstreams_content = if let Some(ref raw) = spec.upstreams_conf {
         raw.clone()

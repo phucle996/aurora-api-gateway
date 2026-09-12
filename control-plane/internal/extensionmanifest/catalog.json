@@ -1,20 +1,1197 @@
 [
-  {"key":"builtin/ip-restriction","version":1,"id":"ip-restriction","name":"IP CIDR Whitelist & Blacklist","category":"authorization_security","description":"High-speed radix tree client IP filtering.","renderer":"access-policy","builtin":true,"default_config":{"whitelist":[],"blacklist":[],"rules":[]},"ui_schema":{"layout_type":"table","fields":[],"table_columns":[{"key":"cidr","label":"CIDR"},{"key":"type","label":"Type"},{"key":"match_value","label":"Path"},{"key":"action","label":"Action"}]},"config_schema":{"type":"object","additionalProperties":false,"properties":{"whitelist":{"type":"array","maxItems":512,"items":{"type":"string","maxLength":64}},"blacklist":{"type":"array","maxItems":512,"items":{"type":"string","maxLength":64}},"rules":{"type":"array","maxItems":512,"items":{"type":"object","additionalProperties":false,"required":["id","cidr","type","match_value","action"],"properties":{"id":{"type":"string","maxLength":128},"cidr":{"type":"string","maxLength":64},"type":{"type":"string","enum":["whitelist","blacklist"]},"match_value":{"type":"string","maxLength":8192},"action":{"type":"string","enum":["allow","block"]},"priority":{"type":"integer","minimum":0,"maximum":1000000},"enabled":{"type":"boolean"}}}}}}},
-  {"key":"builtin/maintenance-mode","version":1,"id":"maintenance-mode","name":"Maintenance Mode","category":"traffic_control","description":"Returns a controlled maintenance response.","renderer":"nginx-maintenance","builtin":true,"default_config":{"status_code":503,"retry_after_secs":300,"message":"Service undergoing planned maintenance."},"ui_schema":{"layout_type":"form","fields":[{"key":"status_code","label":"Status code","type":"number"},{"key":"message","label":"Message","type":"text"}]},"config_schema":{"type":"object","additionalProperties":false,"required":["status_code","message"],"properties":{"status_code":{"type":"integer","minimum":200,"maximum":599},"retry_after_secs":{"type":"integer","minimum":0,"maximum":86400},"message":{"type":"string","maxLength":1024},"bypass_header":{"type":"string","maxLength":128}}}},
-  {"key":"builtin/rate-limit","version":1,"id":"rate-limit","name":"Rate Limit","category":"traffic_control","description":"NGINX shared-zone request limiting.","renderer":"nginx-rate-limit","builtin":true,"default_config":{"rate":100,"period_secs":1,"burst":200,"rejected_code":429},"ui_schema":{"layout_type":"form","fields":[]},"config_schema":{"type":"object","additionalProperties":false,"required":["rate"],"properties":{"rate":{"type":"integer","minimum":1,"maximum":1000000},"period_secs":{"type":"integer","minimum":1,"maximum":60},"burst":{"type":"integer","minimum":0,"maximum":1000000},"rejected_code":{"type":"integer","minimum":400,"maximum":599}}}},
-  {"key":"builtin/rate-limit-local","version":1,"id":"rate-limit-local","name":"Local Rate Limit","category":"traffic_control","description":"Node-local request limiting.","renderer":"nginx-rate-limit-local","builtin":true,"default_config":{"refill_rate":100,"capacity":1000,"rejected_code":429},"ui_schema":{"layout_type":"form","fields":[]},"config_schema":{"type":"object","additionalProperties":false,"properties":{"refill_rate":{"type":"integer","minimum":1,"maximum":1000000},"capacity":{"type":"integer","minimum":1,"maximum":1000000},"rejected_code":{"type":"integer","minimum":400,"maximum":599}}}},
-  {"key":"builtin/connection-limit","version":1,"id":"connection-limit","name":"Connection Limit","category":"traffic_control","description":"Per-client concurrent connection limiting.","renderer":"nginx-connection-limit","builtin":true,"default_config":{"max_connections_per_ip":50,"rejected_code":503},"ui_schema":{"layout_type":"form","fields":[]},"config_schema":{"type":"object","additionalProperties":false,"properties":{"max_connections_per_ip":{"type":"integer","minimum":1,"maximum":1000000},"rejected_code":{"type":"integer","minimum":400,"maximum":599}}}},
-  {"key":"builtin/bandwidth-limit","version":1,"id":"bandwidth-limit","name":"Bandwidth Limit","category":"traffic_control","description":"Per-response bandwidth limiting.","renderer":"nginx-bandwidth-limit","builtin":true,"default_config":{"rate_kb_per_sec":1024},"ui_schema":{"layout_type":"form","fields":[]},"config_schema":{"type":"object","additionalProperties":false,"properties":{"rate_kb_per_sec":{"type":"integer","minimum":1,"maximum":10000000},"burst_kb":{"type":"integer","minimum":0,"maximum":10000000}}}},
-  {"key":"builtin/cors","version":1,"id":"cors","name":"CORS","category":"authorization_security","description":"CORS response headers and preflight handling.","renderer":"nginx-cors","builtin":true,"default_config":{"allow_origins":["*"],"allow_methods":["GET","POST","OPTIONS"],"allow_headers":[],"allow_credentials":false,"max_age":86400},"ui_schema":{"layout_type":"form","fields":[]},"config_schema":{"type":"object","additionalProperties":false,"properties":{"allow_origins":{"type":"array","maxItems":64,"items":{"type":"string","maxLength":256}},"allow_methods":{"type":"array","maxItems":16,"items":{"type":"string","maxLength":16}},"allow_headers":{"type":"array","maxItems":128,"items":{"type":"string","maxLength":128}},"expose_headers":{"type":"array","maxItems":128,"items":{"type":"string","maxLength":128}},"allow_credentials":{"type":"boolean"},"max_age":{"type":"integer","minimum":0,"maximum":86400}}}},
-  {"key":"builtin/jwt-authentication","version":1,"id":"jwt-authentication","name":"JWT Authentication (RS256)","category":"authorization_security","description":"Validates scoped RS256 bearer tokens in the NGINX access phase.","renderer":"engine-jwt-rs256","builtin":true,"default_config":{"rules":[]},"required_for_enable":["rules"],"ui_schema":{"layout_type":"table","fields":[],"table_columns":[{"key":"id","label":"Rule ID"},{"key":"host","label":"Host"},{"key":"path_prefix","label":"Path prefix"},{"key":"issuer","label":"Issuer"},{"key":"audience","label":"Audience"}],"row_fields":[{"key":"id","label":"Rule ID","type":"text","required":true},{"key":"priority","label":"Priority","type":"number"},{"key":"host","label":"Host","type":"text","required":true},{"key":"path_prefix","label":"Path prefix","type":"text","required":true},{"key":"public_key_pem","label":"RSA public key PEM","type":"textarea_code","required":true},{"key":"issuer","label":"Issuer","type":"text"},{"key":"audience","label":"Audience","type":"text"},{"key":"clock_skew_secs","label":"Clock skew (seconds)","type":"number"}]},"config_schema":{"type":"object","additionalProperties":false,"required":["rules"],"properties":{"rules":{"type":"array","maxItems":8,"items":{"type":"object","additionalProperties":false,"required":["id","host","path_prefix","public_key_pem"],"properties":{"id":{"type":"string","maxLength":128},"priority":{"type":"integer","minimum":0,"maximum":1000000},"host":{"type":"string","maxLength":253},"path_prefix":{"type":"string","maxLength":8192},"public_key_pem":{"type":"string","maxLength":8192},"issuer":{"type":"string","maxLength":512},"audience":{"type":"string","maxLength":512},"clock_skew_secs":{"type":"integer","minimum":0,"maximum":300}}}}}}},
-  {"key":"builtin/request-header-transform","version":1,"id":"request-header-transform","name":"Request Header Transform","category":"request_transformation","description":"Adds and removes proxied request headers.","renderer":"nginx-request-header-transform","builtin":true,"default_config":{"add_headers":{},"remove_headers":[]},"ui_schema":{"layout_type":"form","fields":[]},"config_schema":{"type":"object","additionalProperties":false,"properties":{"add_headers":{"type":"object","additionalProperties":true,"properties":{}},"remove_headers":{"type":"array","maxItems":128,"items":{"type":"string","maxLength":128}}}}},
-  {"key":"builtin/response-header-transform","version":1,"id":"response-header-transform","name":"Response Header Transform","category":"response_transformation","description":"Adds and removes response headers.","renderer":"nginx-response-header-transform","builtin":true,"default_config":{"add_headers":{},"remove_headers":[]},"ui_schema":{"layout_type":"form","fields":[]},"config_schema":{"type":"object","additionalProperties":false,"properties":{"add_headers":{"type":"object","additionalProperties":true,"properties":{}},"remove_headers":{"type":"array","maxItems":128,"items":{"type":"string","maxLength":128}}}}},
-  {"key":"builtin/request-termination","version":1,"id":"request-termination","name":"Request Termination","category":"traffic_control","description":"Returns a configured response without proxying.","renderer":"nginx-request-termination","builtin":true,"default_config":{"status_code":200,"body":"{\"status\":\"mocked\"}"},"ui_schema":{"layout_type":"form","fields":[]},"config_schema":{"type":"object","additionalProperties":false,"properties":{"status_code":{"type":"integer","minimum":200,"maximum":599},"body":{"type":"string","maxLength":8192},"headers":{"type":"object","additionalProperties":true,"properties":{}}}}},
-  {"key":"builtin/uri-rewrite","version":1,"id":"uri-rewrite","name":"URI Rewrite","category":"request_transformation","description":"Applies configured URI rewrite rules.","renderer":"nginx-uri-rewrite","builtin":true,"default_config":{"rules":[]},"ui_schema":{"layout_type":"table","fields":[]},"config_schema":{"type":"object","additionalProperties":false,"properties":{"rules":{"type":"array","maxItems":128,"items":{"type":"object","additionalProperties":false,"required":["pattern","replacement"],"properties":{"pattern":{"type":"string","maxLength":1024},"replacement":{"type":"string","maxLength":1024}}}}}}},
-  {"key":"builtin/request-size-limit","version":1,"id":"request-size-limit","name":"Request Size Limit","category":"traffic_control","description":"Limits request body size.","renderer":"nginx-request-size-limit","builtin":true,"default_config":{"max_body_bytes":1048576},"ui_schema":{"layout_type":"form","fields":[]},"config_schema":{"type":"object","additionalProperties":false,"required":["max_body_bytes"],"properties":{"max_body_bytes":{"type":"integer","minimum":1,"maximum":1073741824}}}},
-  {"key":"builtin/response-buffering","version":1,"id":"response-buffering","name":"Response Buffering","category":"response_transformation","description":"Controls upstream response buffering.","renderer":"nginx-response-buffering","builtin":true,"default_config":{},"ui_schema":{"layout_type":"form","fields":[]},"config_schema":{"type":"object","additionalProperties":false,"properties":{}}},
-  {"key":"builtin/compression-brotli","version":1,"id":"compression-brotli","name":"Brotli Compression","category":"response_transformation","description":"Enables Brotli module and response compression.","renderer":"nginx-brotli","builtin":true,"default_config":{"quality":4},"ui_schema":{"layout_type":"form","fields":[]},"config_schema":{"type":"object","additionalProperties":false,"properties":{"quality":{"type":"integer","minimum":0,"maximum":11}}}},
-  {"key":"builtin/compression-gzip","version":1,"id":"compression-gzip","name":"Gzip Compression","category":"response_transformation","description":"Enables gzip response compression.","renderer":"nginx-gzip","builtin":true,"default_config":{"level":4},"ui_schema":{"layout_type":"form","fields":[]},"config_schema":{"type":"object","additionalProperties":false,"properties":{"level":{"type":"integer","minimum":1,"maximum":9}}}},
-  {"key":"builtin/timeout-policy","version":1,"id":"timeout-policy","name":"Timeout Policy","category":"resilience_upstream","description":"Sets upstream connection and I/O timeouts.","renderer":"nginx-timeout-policy","builtin":true,"default_config":{},"ui_schema":{"layout_type":"form","fields":[]},"config_schema":{"type":"object","additionalProperties":false,"properties":{"connect_timeout_ms":{"type":"integer","minimum":1,"maximum":3600000},"read_timeout_ms":{"type":"integer","minimum":1,"maximum":3600000},"write_timeout_ms":{"type":"integer","minimum":1,"maximum":3600000}}}},
-  {"key":"builtin/prometheus","version":1,"id":"prometheus","name":"Prometheus Metrics","category":"observability","description":"Runs the agent metrics exporter.","renderer":"agent-metrics","builtin":true,"default_config":{"port":9145,"prometheus":{"enabled":true,"path":"/metrics"}},"ui_schema":{"layout_type":"form","fields":[]},"config_schema":{"type":"object","additionalProperties":false,"properties":{"port":{"type":"integer","minimum":1024,"maximum":65535},"stub_status_url":{"type":"string","maxLength":2048},"prometheus":{"type":"object","additionalProperties":false,"properties":{"enabled":{"type":"boolean"},"path":{"type":"string","maxLength":256}}},"otlp":{"type":"object","additionalProperties":false,"properties":{"enabled":{"type":"boolean"},"endpoint":{"type":"string","maxLength":2048},"interval_secs":{"type":"integer","minimum":1,"maximum":3600}}}}}}
+  {
+    "key": "builtin/ip-restriction",
+    "version": 1,
+    "id": "ip-restriction",
+    "name": "IP CIDR Whitelist & Blacklist",
+    "category": "authorization_security",
+    "description": "High-speed radix tree client IP filtering.",
+    "renderer": "access-policy",
+    "builtin": true,
+    "default_config": {
+      "whitelist": [],
+      "blacklist": [],
+      "rules": []
+    },
+    "ui_schema": {
+      "layout_type": "table",
+      "fields": [],
+      "table_columns": [
+        {
+          "key": "cidr",
+          "label": "CIDR"
+        },
+        {
+          "key": "type",
+          "label": "Type"
+        },
+        {
+          "key": "match_value",
+          "label": "Path"
+        },
+        {
+          "key": "action",
+          "label": "Action"
+        }
+      ]
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "whitelist": {
+          "type": "array",
+          "maxItems": 512,
+          "items": {
+            "type": "string",
+            "maxLength": 64
+          }
+        },
+        "blacklist": {
+          "type": "array",
+          "maxItems": 512,
+          "items": {
+            "type": "string",
+            "maxLength": 64
+          }
+        },
+        "rules": {
+          "type": "array",
+          "maxItems": 512,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "cidr",
+              "type",
+              "match_value",
+              "action"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "maxLength": 128
+              },
+              "cidr": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "whitelist",
+                  "blacklist"
+                ]
+              },
+              "match_value": {
+                "type": "string",
+                "maxLength": 8192
+              },
+              "action": {
+                "type": "string",
+                "enum": [
+                  "allow",
+                  "block"
+                ]
+              },
+              "priority": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000
+              },
+              "enabled": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "key": "builtin/maintenance-mode",
+    "version": 1,
+    "id": "maintenance-mode",
+    "name": "Maintenance Mode",
+    "category": "traffic_control",
+    "description": "Returns a controlled maintenance response.",
+    "renderer": "nginx-maintenance",
+    "builtin": true,
+    "default_config": {
+      "status_code": 503,
+      "retry_after_secs": 300,
+      "message": "Service undergoing planned maintenance."
+    },
+    "ui_schema": {
+      "layout_type": "form",
+      "fields": [
+        {
+          "key": "status_code",
+          "label": "Status code",
+          "type": "number"
+        },
+        {
+          "key": "message",
+          "label": "Message",
+          "type": "text"
+        }
+      ]
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status_code",
+        "message"
+      ],
+      "properties": {
+        "status_code": {
+          "type": "integer",
+          "minimum": 200,
+          "maximum": 599
+        },
+        "retry_after_secs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 86400
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "bypass_header": {
+          "type": "string",
+          "maxLength": 128
+        }
+      }
+    }
+  },
+  {
+    "key": "builtin/rate-limit",
+    "version": 1,
+    "id": "rate-limit",
+    "name": "Rate Limit",
+    "category": "traffic_control",
+    "description": "High-performance in-process rate limiting with multi-algorithm and memory bounds.",
+    "renderer": "rate-limit",
+    "builtin": true,
+    "default_config": {
+      "algorithm": "token_bucket",
+      "memory_size_mb": 16,
+      "max_keys": 100000,
+      "eviction_policy": "lru",
+      "overflow_strategy": "evict_and_track",
+      "rules": []
+    },
+    "ui_schema": {
+      "layout_type": "table",
+      "fields": [
+        {
+          "key": "algorithm",
+          "label": "Algorithm",
+          "type": "select",
+          "options": [
+            {
+              "label": "Token Bucket",
+              "value": "token_bucket"
+            },
+            {
+              "label": "Leaky Bucket",
+              "value": "leaky_bucket"
+            },
+            {
+              "label": "Fixed Window",
+              "value": "fixed_window"
+            },
+            {
+              "label": "Sliding Window",
+              "value": "sliding_window"
+            }
+          ]
+        },
+        {
+          "key": "memory_size_mb",
+          "label": "Memory Limit (MB)",
+          "type": "number"
+        },
+        {
+          "key": "max_keys",
+          "label": "Max Tracked Keys",
+          "type": "number"
+        },
+        {
+          "key": "eviction_policy",
+          "label": "Eviction Policy",
+          "type": "select",
+          "options": [
+            {
+              "label": "Least Recently Used (LRU)",
+              "value": "lru"
+            },
+            {
+              "label": "Least Frequently Used (LFU)",
+              "value": "lfu"
+            },
+            {
+              "label": "First In, First Out (FIFO)",
+              "value": "fifo"
+            }
+          ]
+        },
+        {
+          "key": "overflow_strategy",
+          "label": "Overflow Strategy",
+          "type": "select",
+          "options": [
+            {
+              "label": "Evict and Track",
+              "value": "evict_and_track"
+            },
+            {
+              "label": "Drop New Requests",
+              "value": "drop_new"
+            },
+            {
+              "label": "Bypass New Requests",
+              "value": "bypass_new"
+            }
+          ]
+        }
+      ],
+      "table_columns": [
+        {
+          "key": "id",
+          "label": "Rule ID"
+        },
+        {
+          "key": "path_prefix",
+          "label": "Path Prefix"
+        },
+        {
+          "key": "limit_by",
+          "label": "Limit By"
+        },
+        {
+          "key": "rate",
+          "label": "Rate"
+        },
+        {
+          "key": "period_secs",
+          "label": "Period (s)"
+        },
+        {
+          "key": "action_on_exceeded",
+          "label": "Action"
+        }
+      ],
+      "row_fields": [
+        {
+          "key": "id",
+          "label": "Rule ID",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "priority",
+          "label": "Priority",
+          "type": "number"
+        },
+        {
+          "key": "host",
+          "label": "Host",
+          "type": "text"
+        },
+        {
+          "key": "path_prefix",
+          "label": "Path Prefix",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "limit_by",
+          "label": "Limit By",
+          "type": "select",
+          "options": [
+            {
+              "label": "Client IP",
+              "value": "client_ip"
+            },
+            {
+              "label": "API Key",
+              "value": "api_key"
+            },
+            {
+              "label": "Authorization Bearer",
+              "value": "authorization"
+            },
+            {
+              "label": "Route Path",
+              "value": "route_path"
+            }
+          ]
+        },
+        {
+          "key": "rate",
+          "label": "Rate",
+          "type": "number",
+          "required": true
+        },
+        {
+          "key": "burst",
+          "label": "Burst",
+          "type": "number"
+        },
+        {
+          "key": "period_secs",
+          "label": "Period (Seconds)",
+          "type": "number",
+          "required": true
+        },
+        {
+          "key": "action_on_exceeded",
+          "label": "Action on Exceeded",
+          "type": "select",
+          "options": [
+            {
+              "label": "Throttle (429)",
+              "value": "throttle"
+            },
+            {
+              "label": "Block (403)",
+              "value": "block"
+            },
+            {
+              "label": "Audit (Log Only)",
+              "value": "audit"
+            },
+            {
+              "label": "Custom Response",
+              "value": "custom_response"
+            }
+          ]
+        },
+        {
+          "key": "rejected_code",
+          "label": "HTTP Code",
+          "type": "number"
+        },
+        {
+          "key": "custom_message",
+          "label": "Custom Message",
+          "type": "text"
+        }
+      ]
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "type": "string",
+          "enum": [
+            "token_bucket",
+            "leaky_bucket",
+            "fixed_window",
+            "sliding_window"
+          ]
+        },
+        "memory_size_mb": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024
+        },
+        "max_keys": {
+          "type": "integer",
+          "minimum": 16,
+          "maximum": 5000000
+        },
+        "eviction_policy": {
+          "type": "string",
+          "enum": [
+            "lru",
+            "lfu",
+            "fifo"
+          ]
+        },
+        "overflow_strategy": {
+          "type": "string",
+          "enum": [
+            "evict_and_track",
+            "drop_new",
+            "bypass_new"
+          ]
+        },
+        "rules": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "path_prefix",
+              "rate",
+              "period_secs"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "maxLength": 128
+              },
+              "priority": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000
+              },
+              "host": {
+                "type": "string",
+                "maxLength": 253
+              },
+              "path_prefix": {
+                "type": "string",
+                "maxLength": 8192
+              },
+              "limit_by": {
+                "type": "string",
+                "enum": [
+                  "client_ip",
+                  "api_key",
+                  "authorization",
+                  "route_path"
+                ]
+              },
+              "rate": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              },
+              "period_secs": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 86400
+              },
+              "burst": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000
+              },
+              "action_on_exceeded": {
+                "type": "string",
+                "enum": [
+                  "throttle",
+                  "block",
+                  "audit",
+                  "custom_response"
+                ]
+              },
+              "rejected_code": {
+                "type": "integer",
+                "minimum": 200,
+                "maximum": 599
+              },
+              "custom_message": {
+                "type": "string",
+                "maxLength": 1024
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "key": "builtin/rate-limit-local",
+    "version": 1,
+    "id": "rate-limit-local",
+    "name": "Local Rate Limit",
+    "category": "traffic_control",
+    "description": "Node-local request limiting.",
+    "renderer": "nginx-rate-limit-local",
+    "builtin": true,
+    "default_config": {
+      "refill_rate": 100,
+      "capacity": 1000,
+      "rejected_code": 429
+    },
+    "ui_schema": {
+      "layout_type": "form",
+      "fields": []
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "refill_rate": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "capacity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "rejected_code": {
+          "type": "integer",
+          "minimum": 400,
+          "maximum": 599
+        }
+      }
+    }
+  },
+  {
+    "key": "builtin/connection-limit",
+    "version": 1,
+    "id": "connection-limit",
+    "name": "Connection Limit",
+    "category": "traffic_control",
+    "description": "Per-client concurrent connection limiting.",
+    "renderer": "nginx-connection-limit",
+    "builtin": true,
+    "default_config": {
+      "max_connections_per_ip": 50,
+      "rejected_code": 503
+    },
+    "ui_schema": {
+      "layout_type": "form",
+      "fields": []
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_connections_per_ip": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "rejected_code": {
+          "type": "integer",
+          "minimum": 400,
+          "maximum": 599
+        }
+      }
+    }
+  },
+  {
+    "key": "builtin/bandwidth-limit",
+    "version": 1,
+    "id": "bandwidth-limit",
+    "name": "Bandwidth Limit",
+    "category": "traffic_control",
+    "description": "Per-response bandwidth limiting.",
+    "renderer": "nginx-bandwidth-limit",
+    "builtin": true,
+    "default_config": {
+      "rate_kb_per_sec": 1024
+    },
+    "ui_schema": {
+      "layout_type": "form",
+      "fields": []
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rate_kb_per_sec": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000000
+        },
+        "burst_kb": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000000
+        }
+      }
+    }
+  },
+  {
+    "key": "builtin/cors",
+    "version": 1,
+    "id": "cors",
+    "name": "CORS",
+    "category": "authorization_security",
+    "description": "CORS response headers and preflight handling.",
+    "renderer": "nginx-cors",
+    "builtin": true,
+    "default_config": {
+      "allow_origins": [
+        "*"
+      ],
+      "allow_methods": [
+        "GET",
+        "POST",
+        "OPTIONS"
+      ],
+      "allow_headers": [],
+      "allow_credentials": false,
+      "max_age": 86400
+    },
+    "ui_schema": {
+      "layout_type": "form",
+      "fields": []
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allow_origins": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "maxLength": 256
+          }
+        },
+        "allow_methods": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "maxLength": 16
+          }
+        },
+        "allow_headers": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "expose_headers": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "allow_credentials": {
+          "type": "boolean"
+        },
+        "max_age": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 86400
+        }
+      }
+    }
+  },
+  {
+    "key": "builtin/jwt-authentication",
+    "version": 1,
+    "id": "jwt-authentication",
+    "name": "JWT Authentication (RS256)",
+    "category": "authorization_security",
+    "description": "Validates scoped RS256 bearer tokens in the NGINX access phase.",
+    "renderer": "engine-jwt-rs256",
+    "builtin": true,
+    "default_config": {
+      "rules": []
+    },
+    "required_for_enable": [
+      "rules"
+    ],
+    "ui_schema": {
+      "layout_type": "table",
+      "fields": [],
+      "table_columns": [
+        {
+          "key": "id",
+          "label": "Rule ID"
+        },
+        {
+          "key": "host",
+          "label": "Host"
+        },
+        {
+          "key": "path_prefix",
+          "label": "Path prefix"
+        },
+        {
+          "key": "issuer",
+          "label": "Issuer"
+        },
+        {
+          "key": "audience",
+          "label": "Audience"
+        }
+      ],
+      "row_fields": [
+        {
+          "key": "id",
+          "label": "Rule ID",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "priority",
+          "label": "Priority",
+          "type": "number"
+        },
+        {
+          "key": "host",
+          "label": "Host",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "path_prefix",
+          "label": "Path prefix",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "public_key_pem",
+          "label": "RSA public key PEM",
+          "type": "textarea_code",
+          "required": true
+        },
+        {
+          "key": "issuer",
+          "label": "Issuer",
+          "type": "text"
+        },
+        {
+          "key": "audience",
+          "label": "Audience",
+          "type": "text"
+        },
+        {
+          "key": "clock_skew_secs",
+          "label": "Clock skew (seconds)",
+          "type": "number"
+        }
+      ]
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rules"
+      ],
+      "properties": {
+        "rules": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "host",
+              "path_prefix",
+              "public_key_pem"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "maxLength": 128
+              },
+              "priority": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000
+              },
+              "host": {
+                "type": "string",
+                "maxLength": 253
+              },
+              "path_prefix": {
+                "type": "string",
+                "maxLength": 8192
+              },
+              "public_key_pem": {
+                "type": "string",
+                "maxLength": 8192
+              },
+              "issuer": {
+                "type": "string",
+                "maxLength": 512
+              },
+              "audience": {
+                "type": "string",
+                "maxLength": 512
+              },
+              "clock_skew_secs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 300
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "key": "builtin/request-header-transform",
+    "version": 1,
+    "id": "request-header-transform",
+    "name": "Request Header Transform",
+    "category": "request_transformation",
+    "description": "Adds and removes proxied request headers.",
+    "renderer": "nginx-request-header-transform",
+    "builtin": true,
+    "default_config": {
+      "add_headers": {},
+      "remove_headers": []
+    },
+    "ui_schema": {
+      "layout_type": "form",
+      "fields": []
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "add_headers": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {}
+        },
+        "remove_headers": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "type": "string",
+            "maxLength": 128
+          }
+        }
+      }
+    }
+  },
+  {
+    "key": "builtin/response-header-transform",
+    "version": 1,
+    "id": "response-header-transform",
+    "name": "Response Header Transform",
+    "category": "response_transformation",
+    "description": "Adds and removes response headers.",
+    "renderer": "nginx-response-header-transform",
+    "builtin": true,
+    "default_config": {
+      "add_headers": {},
+      "remove_headers": []
+    },
+    "ui_schema": {
+      "layout_type": "form",
+      "fields": []
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "add_headers": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {}
+        },
+        "remove_headers": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "type": "string",
+            "maxLength": 128
+          }
+        }
+      }
+    }
+  },
+  {
+    "key": "builtin/request-termination",
+    "version": 1,
+    "id": "request-termination",
+    "name": "Request Termination",
+    "category": "traffic_control",
+    "description": "Returns a configured response without proxying.",
+    "renderer": "nginx-request-termination",
+    "builtin": true,
+    "default_config": {
+      "status_code": 200,
+      "body": "{\"status\":\"mocked\"}"
+    },
+    "ui_schema": {
+      "layout_type": "form",
+      "fields": []
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status_code": {
+          "type": "integer",
+          "minimum": 200,
+          "maximum": 599
+        },
+        "body": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {}
+        }
+      }
+    }
+  },
+  {
+    "key": "builtin/uri-rewrite",
+    "version": 1,
+    "id": "uri-rewrite",
+    "name": "URI Rewrite",
+    "category": "request_transformation",
+    "description": "Applies configured URI rewrite rules.",
+    "renderer": "nginx-uri-rewrite",
+    "builtin": true,
+    "default_config": {
+      "rules": []
+    },
+    "ui_schema": {
+      "layout_type": "table",
+      "fields": []
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rules": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "pattern",
+              "replacement"
+            ],
+            "properties": {
+              "pattern": {
+                "type": "string",
+                "maxLength": 1024
+              },
+              "replacement": {
+                "type": "string",
+                "maxLength": 1024
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "key": "builtin/request-size-limit",
+    "version": 1,
+    "id": "request-size-limit",
+    "name": "Request Size Limit",
+    "category": "traffic_control",
+    "description": "Limits request body size.",
+    "renderer": "nginx-request-size-limit",
+    "builtin": true,
+    "default_config": {
+      "max_body_bytes": 1048576
+    },
+    "ui_schema": {
+      "layout_type": "form",
+      "fields": []
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_body_bytes"
+      ],
+      "properties": {
+        "max_body_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1073741824
+        }
+      }
+    }
+  },
+  {
+    "key": "builtin/response-buffering",
+    "version": 1,
+    "id": "response-buffering",
+    "name": "Response Buffering",
+    "category": "response_transformation",
+    "description": "Controls upstream response buffering.",
+    "renderer": "nginx-response-buffering",
+    "builtin": true,
+    "default_config": {},
+    "ui_schema": {
+      "layout_type": "form",
+      "fields": []
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    }
+  },
+  {
+    "key": "builtin/compression-brotli",
+    "version": 1,
+    "id": "compression-brotli",
+    "name": "Brotli Compression",
+    "category": "response_transformation",
+    "description": "Enables Brotli module and response compression.",
+    "renderer": "nginx-brotli",
+    "builtin": true,
+    "default_config": {
+      "quality": 4
+    },
+    "ui_schema": {
+      "layout_type": "form",
+      "fields": []
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "quality": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 11
+        }
+      }
+    }
+  },
+  {
+    "key": "builtin/compression-gzip",
+    "version": 1,
+    "id": "compression-gzip",
+    "name": "Gzip Compression",
+    "category": "response_transformation",
+    "description": "Enables gzip response compression.",
+    "renderer": "nginx-gzip",
+    "builtin": true,
+    "default_config": {
+      "level": 4
+    },
+    "ui_schema": {
+      "layout_type": "form",
+      "fields": []
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "level": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9
+        }
+      }
+    }
+  },
+  {
+    "key": "builtin/timeout-policy",
+    "version": 1,
+    "id": "timeout-policy",
+    "name": "Timeout Policy",
+    "category": "resilience_upstream",
+    "description": "Sets upstream connection and I/O timeouts.",
+    "renderer": "nginx-timeout-policy",
+    "builtin": true,
+    "default_config": {},
+    "ui_schema": {
+      "layout_type": "form",
+      "fields": []
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "connect_timeout_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600000
+        },
+        "read_timeout_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600000
+        },
+        "write_timeout_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600000
+        }
+      }
+    }
+  },
+  {
+    "key": "builtin/prometheus",
+    "version": 1,
+    "id": "prometheus",
+    "name": "Prometheus Metrics",
+    "category": "observability",
+    "description": "Runs the agent metrics exporter.",
+    "renderer": "agent-metrics",
+    "builtin": true,
+    "default_config": {
+      "port": 9145,
+      "prometheus": {
+        "enabled": true,
+        "path": "/metrics"
+      }
+    },
+    "ui_schema": {
+      "layout_type": "form",
+      "fields": []
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535
+        },
+        "stub_status_url": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "prometheus": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "path": {
+              "type": "string",
+              "maxLength": 256
+            }
+          }
+        },
+        "otlp": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "endpoint": {
+              "type": "string",
+              "maxLength": 2048
+            },
+            "interval_secs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3600
+            }
+          }
+        }
+      }
+    }
+  }
 ]

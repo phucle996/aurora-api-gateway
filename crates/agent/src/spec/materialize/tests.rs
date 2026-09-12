@@ -71,7 +71,7 @@ fn test_extensions_generation() {
             key: "builtin/rate-limit".to_string(),
             version: 1,
             manifest_digest: digest.clone(),
-            config_json: r#"{"rate":50,"burst":100,"period_secs":1,"rejected_code":429}"#.to_string(),
+            config_json: r#"{"algorithm":"token_bucket","memory_size_mb":16,"max_keys":100000,"eviction_policy":"lru","overflow_strategy":"evict_and_track","rules":[{"id":"r1","host":"*","path_prefix":"/","limit_by":"client_ip","rate":50,"burst":100,"period_secs":1,"action_on_exceeded":"throttle","rejected_code":429}]}"#.to_string(),
         },
         crate::spec::extensions::ExtensionInstanceSpec {
             instance_id: "cors".to_string(),
@@ -96,15 +96,10 @@ fn test_extensions_generation() {
         },
     ];
     let rendered = render_extensions(&extensions).unwrap();
-    let http_conf = rendered.http_conf;
-    assert!(
-        http_conf
-            .contains("limit_req_zone $binary_remote_addr zone=aurora_rate_limit:10m rate=50r/s;")
-    );
+    assert!(rendered.rate_limit_policy.is_some());
 
     let server_conf = rendered.server_conf;
-    assert!(server_conf.contains("limit_req_status 429;"));
-    assert!(server_conf.contains("limit_req zone=aurora_rate_limit burst=100 nodelay;"));
+    assert!(server_conf.contains("gateway_rate_limit_policy /var/lib/aurora-policy/active-rate-limit.json;"));
     assert!(
         server_conf.contains("add_header Access-Control-Allow-Origin \"$http_origin\" always;")
     );
@@ -112,7 +107,7 @@ fn test_extensions_generation() {
     assert!(server_conf.contains("add_header Retry-After 120 always;"));
     assert!(server_conf.contains("if ($http_x_bypass)"));
     assert!(server_conf.contains("return 503 \"{\\\"error\\\":\\\"Under upgrade\\\"}\";"));
-    assert!(server_conf.contains("aurora_jwt_policy /var/lib/aurora-policy/active-jwt.json;"));
+    assert!(server_conf.contains("gateway_jwt_policy /var/lib/aurora-policy/active-jwt.json;"));
     assert_eq!(
         rendered.jwt_policy.unwrap()["rules"][0]["host"],
         "api.example.test"
@@ -156,6 +151,47 @@ async fn test_jwt_extension_materializes_and_removes_ffi_snapshot() {
         .expect("remove JWT snapshot");
     assert!(result.nginx_changed);
     assert!(!policy_dir.join("active-jwt.json").exists());
+    let _ = tokio::fs::remove_dir_all(base).await;
+}
+
+#[tokio::test]
+async fn test_rate_limit_extension_materializes_and_removes_ffi_snapshot() {
+    let base = std::env::temp_dir().join(format!("materialize-rate-limit-snapshot-{}", std::process::id()));
+    let policy_dir = base.join("policy");
+    let routing_dir = base.join("routing");
+    let _ = tokio::fs::remove_dir_all(&base).await;
+    let digest = crate::extension::manifest::catalog_digest().unwrap();
+    let spec = Spec {
+        release_id: 88,
+        extensions: vec![crate::spec::extensions::ExtensionInstanceSpec {
+            instance_id: "rate-limit".to_string(),
+            key: "builtin/rate-limit".to_string(),
+            version: 1,
+            manifest_digest: digest,
+            config_json: r#"{"algorithm":"token_bucket","memory_size_mb":16,"max_keys":100000,"eviction_policy":"lru","overflow_strategy":"evict_and_track","rules":[{"id":"r1","host":"*","path_prefix":"/api","limit_by":"client_ip","rate":100,"period_secs":1,"action_on_exceeded":"throttle"}]}"#.to_string(),
+        }],
+        ..Default::default()
+    };
+
+    materialize_nginx(&spec, &policy_dir, &routing_dir)
+        .await
+        .expect("materialize rate-limit snapshot");
+    let rl = tokio::fs::read_to_string(policy_dir.join("active-rate-limit.json"))
+        .await
+        .expect("read rate-limit snapshot");
+    assert!(rl.contains("\"generation\": 88"));
+    assert!(rl.contains("\"token_bucket\""));
+    assert!(rl.contains("\"/api\""));
+
+    let disabled = Spec {
+        release_id: 89,
+        ..Default::default()
+    };
+    let result = materialize_nginx(&disabled, &policy_dir, &routing_dir)
+        .await
+        .expect("remove rate-limit snapshot");
+    assert!(result.nginx_changed);
+    assert!(!policy_dir.join("active-rate-limit.json").exists());
     let _ = tokio::fs::remove_dir_all(base).await;
 }
 

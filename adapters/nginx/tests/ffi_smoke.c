@@ -1,5 +1,5 @@
 #define _GNU_SOURCE
-#include "aurora_waf.h"
+#include "ffi.h"
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
@@ -93,7 +93,20 @@ int main(void) {
     assert(aurora_waf_format_prometheus_metrics("node", metrics, sizeof(metrics) - 1, &written) == 0);
     metrics[written] = 0;
     assert(strstr((char *)metrics, "aurora_node_cpu_percent{") == NULL);
-    // Bound zone stays alive until process exit, matching the FFI lifetime contract.
+    // Rate Limit FFI smoke test
+    const char *rl_policy = "{\"schema_version\":1,\"generation\":1,\"algorithm\":\"token_bucket\",\"memory_size_mb\":10,\"max_keys\":10000,\"eviction_policy\":\"lru\",\"overflow_strategy\":\"evict_and_track\",\"rules\":[{\"id\":\"r1\",\"host\":\"*\",\"path_prefix\":\"/rl\",\"limit_by\":\"client_ip\",\"rate\":1,\"burst\":1,\"period_secs\":10,\"action_on_exceeded\":\"throttle\"}]}";
+    AuroraRateLimitEngine *rl_engine = NULL;
+    assert(aurora_rate_limit_create((const uint8_t *)rl_policy, strlen(rl_policy), &rl_engine) == 0);
+    assert(rl_engine != NULL);
+    AuroraRateLimitDecision rl_dec;
+    memset(&rl_dec, 0, sizeof(rl_dec));
+    assert(aurora_rate_limit_evaluate(rl_engine, (const uint8_t *)"test.local", 10, (const uint8_t *)"/rl/test", 8, (const uint8_t *)"10.0.0.1", 8, NULL, 0, NULL, 0, &rl_dec) == 0);
+    assert(rl_dec.allowed == 1);
+    assert(aurora_rate_limit_evaluate(rl_engine, (const uint8_t *)"test.local", 10, (const uint8_t *)"/rl/test", 8, (const uint8_t *)"10.0.0.1", 8, NULL, 0, NULL, 0, &rl_dec) == 0);
+    assert(rl_dec.allowed == 0 && rl_dec.action == 1 && rl_dec.status_code == 429);
+    aurora_rate_limit_destroy(rl_engine);
+    puts("Aurora Rate Limit FFI: create, evaluate 1st allow, 2nd throttle, destroy pass");
+
     puts("Shared telemetry: 4 processes, 800000 evaluations, exact counters pass");
     puts("C -> Rust ABI v4: lifecycle, limits, allow/block, invalid inputs pass");
     return 0;

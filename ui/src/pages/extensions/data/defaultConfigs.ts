@@ -373,13 +373,25 @@ export const EXTENSION_DEFAULT_CONFIGS: Record<string, Record<string, any>> = {
 
   // 4. Traffic Control (14)
   'rate-limit': {
-    enabled: true,
-    rate: 100,
-    burst: 200,
-    period_secs: 1,
-    limit_by: 'ip',
-    rejected_code: 429,
-    rejected_message: 'Too Many Requests'
+    algorithm: 'token_bucket',
+    memory_size_mb: 16,
+    max_keys: 100000,
+    eviction_policy: 'lru',
+    overflow_strategy: 'evict_and_track',
+    rules: [
+      {
+        id: 'default-ip-rate-limit',
+        priority: 0,
+        host: '*',
+        path_prefix: '/',
+        limit_by: 'client_ip',
+        rate: 100,
+        burst: 100,
+        period_secs: 1,
+        action_on_exceeded: 'throttle',
+        rejected_code: 429
+      }
+    ]
   },
   'rate-limit-local': {
     enabled: true,

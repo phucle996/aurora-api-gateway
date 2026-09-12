@@ -1,7 +1,14 @@
-ngx_addon_name=ngx_http_aurora_waf_module
+ngx_addon_name=ngx_http_gateway_module
 ngx_module_type=HTTP
-ngx_module_name=ngx_http_aurora_waf_module
-ngx_module_srcs="$ngx_addon_dir/ngx_http_aurora_waf_module.c"
+ngx_module_name=ngx_http_gateway_module
+ngx_module_srcs="$ngx_addon_dir/src/module.c \
+                 $ngx_addon_dir/src/pipeline.c \
+                 $ngx_addon_dir/src/telemetry.c \
+                 $ngx_addon_dir/src/extensions/access.c \
+                 $ngx_addon_dir/src/extensions/jwt.c \
+                 $ngx_addon_dir/src/extensions/rate_limit.c \
+                 $ngx_addon_dir/src/extensions/waf.c"
 ngx_module_incs="$ngx_addon_dir/include"
 ngx_module_libs="$ngx_addon_dir/../../target/release/libaurora_ffi.a -Wl,--exclude-libs,ALL -ldl -lpthread -lm"
 . auto/module
+

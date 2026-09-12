@@ -59,10 +59,10 @@ build_module_for_version() {
     make modules
 
     # Output: version-tagged .so file. Do not truncate inodes mapped by running workers.
-    local out="$aurora_root/build/modules/ngx_http_aurora_waf_module-${ver}.so"
+    local out="$aurora_root/build/modules/ngx_http_gateway_module-${ver}.so"
     local tmp
-    tmp=$(mktemp "$aurora_root/build/modules/.aurora-module-XXXXXX")
-    install -m 755 objs/ngx_http_aurora_waf_module.so "$tmp"
+    tmp=$(mktemp "$aurora_root/build/modules/.gateway-module-XXXXXX")
+    install -m 755 objs/ngx_http_gateway_module.so "$tmp"
     mv -f "$tmp" "$out"
     printf 'Built %s\n' "$out"
 }
@@ -78,9 +78,10 @@ fi
 build_module_for_version "$requested_version" "$sha"
 
 # Output standard module name
-cp -f "$aurora_root/build/modules/ngx_http_aurora_waf_module-${requested_version}.so" \
-    "$aurora_root/build/modules/ngx_http_aurora_waf_module.so"
-
+cp -f "$aurora_root/build/modules/ngx_http_gateway_module-${requested_version}.so" \
+    "$aurora_root/build/modules/ngx_http_gateway_module.so"
 
 echo "==> All module builds complete."
+
+
 ls -lh "$aurora_root/build/modules/"*.so

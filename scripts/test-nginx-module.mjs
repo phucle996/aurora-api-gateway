@@ -18,7 +18,7 @@ const port = basePort + 500;
 const policy = { schema_version: 1, block_paths: ['/blocked', '/off', '/audit'] };
 writeFileSync(`${dir}/policy.json`, JSON.stringify(policy));
 writeFileSync(`${dir}/override.json`, JSON.stringify({ schema_version: 1, block_paths: ['/override'] }));
-const renderConfig = (p) => `load_module ${root}/build/modules/ngx_http_aurora_waf_module.so;
+const renderConfig = (p) => `load_module ${root}/build/modules/ngx_http_gateway_module.so;
 worker_processes 2;
 pid ${dir}/nginx.pid;
 error_log ${dir}/error.log notice;
@@ -33,14 +33,14 @@ http {
   server {
     listen 127.0.0.1:${p};
     root ${dir}/html;
-    aurora_waf on;
-    aurora_waf_policy ${dir}/policy.json;
+    gateway on;
+    gateway_waf_policy ${dir}/policy.json;
     location / { try_files $uri =404; }
-    location = /off { aurora_waf off; }
-    location = /audit { aurora_waf_mode audit; }
-    location = /override { aurora_waf_policy ${dir}/override.json; }
+    location = /off { gateway off; }
+    location = /audit { gateway_waf_mode audit; }
+    location = /override { gateway_waf_policy ${dir}/override.json; }
     location = /redirect { try_files $uri /blocked; }
-    location = /metrics { aurora_waf_metrics; }
+    location = /metrics { gateway_metrics; }
   }
 }`;
 writeFileSync(`${dir}/nginx.conf`, renderConfig(testPort));
@@ -50,7 +50,7 @@ const args = ['-e', 'stderr', '-p', `${dir}/`, '-c', `${dir}/nginx.conf`];
 assert.equal(spawnSync(nginx, [...args, '-t'], { env: childEnv, encoding: 'utf8' }).status, 0, 'valid policy/module must load');
 
 // Startup validation must reject configurations that silently weaken the contract.
-for (const bad of [renderConfig(testPort).replace('aurora_waf on;', 'aurora_waf on; satisfy any;'), renderConfig(testPort).replace(`aurora_waf_policy ${dir}/policy.json;`, '')]) {
+for (const bad of [renderConfig(testPort).replace('gateway on;', 'gateway on; satisfy any;'), renderConfig(testPort).replace(`gateway_waf_policy ${dir}/policy.json;`, '')]) {
   writeFileSync(`${dir}/nginx.conf`, bad);
   assert.notEqual(spawnSync(nginx, [...args, '-t'], { env: childEnv, encoding: 'utf8' }).status, 0);
 }
@@ -78,10 +78,11 @@ try {
   assert.notEqual(spawnSync(nginx, [...args, '-t'], { env: childEnv, encoding: 'utf8' }).status, 0);
   child.kill('SIGHUP');
   for (let attempt = 0; ; attempt++) {
-    if (new RegExp(`${child.pid}#[0-9]+: invalid Aurora policy`).test(readFileSync(`${dir}/error.log`, 'utf8'))) break;
+    if (new RegExp(`${child.pid}#[0-9]+: invalid Gateway policy`).test(readFileSync(`${dir}/error.log`, 'utf8'))) break;
     assert.ok(attempt < 50, 'reload rejection missing');
     await new Promise(r => setTimeout(r, 50));
   }
+
   const retained = await fetch(`http://127.0.0.1:${port}/blocked`, { headers: { Connection: 'close' } });
   await retained.text(); assert.equal(retained.status, 403);
 

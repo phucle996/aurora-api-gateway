@@ -12,6 +12,7 @@ pub struct RenderedExtensions {
     pub server_conf: String,
     pub access_rules: Vec<Value>,
     pub jwt_policy: Option<Value>,
+    pub rate_limit_policy: Option<Value>,
 }
 
 pub fn render_extensions(
@@ -29,6 +30,7 @@ pub fn render_extensions(
     let mut used_access_rule_ids = HashSet::new();
     let mut metrics_instances = 0;
     let mut jwt_policy = None;
+    let mut rate_limit_policy = None;
 
     for instance in instances {
         let manifest = resolve(instance)?;
@@ -90,7 +92,7 @@ pub fn render_extensions(
                     ));
                 }
                 jwt_policy = Some(Value::Object(config));
-                server.push_str("aurora_jwt_policy /var/lib/aurora-policy/active-jwt.json;\n");
+                server.push_str("gateway_jwt_policy /var/lib/aurora-policy/active-jwt.json;\n");
                 has_server = true;
             }
             "nginx-brotli" => {
@@ -104,22 +106,150 @@ pub fn render_extensions(
                 server.push_str("brotli_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript image/svg+xml;\n");
                 has_server = true;
             }
-            "nginx-rate-limit" => {
-                let rate = unsigned_or(&config, "rate", 100).max(1);
-                let rate_text = if unsigned_or(&config, "period_secs", 1) == 60 {
-                    format!("{rate}r/m")
-                } else {
-                    format!("{rate}r/s")
-                };
-                http.push_str(&format!(
-                    "limit_req_zone $binary_remote_addr zone=aurora_rate_limit:10m rate={rate_text};\n"
-                ));
-                has_http = true;
-                server.push_str(&format!(
-                    "limit_req_status {};\nlimit_req zone=aurora_rate_limit burst={} nodelay;\n",
-                    unsigned_or(&config, "rejected_code", 429),
-                    unsigned_or(&config, "burst", 200)
-                ));
+            "rate-limit" => {
+                if rate_limit_policy.is_some() {
+                    return Err(
+                        "NodeSpec contains more than one rate-limit extension".to_string(),
+                    );
+                }
+                let rules = array(&config, "rules").ok_or_else(|| {
+                    format!(
+                        "decode rate-limit extension {} config: rules must be an array",
+                        instance.instance_id
+                    )
+                })?;
+                if rules.is_empty() || rules.len() > 64 {
+                    return Err(format!(
+                        "rate-limit extension {} must contain 1..=64 rules",
+                        instance.instance_id
+                    ));
+                }
+                let algorithm = string(&config, "algorithm").ok_or_else(|| {
+                    format!(
+                        "decode rate-limit extension {} config: missing algorithm",
+                        instance.instance_id
+                    )
+                })?;
+                if !matches!(algorithm, "token_bucket" | "leaky_bucket" | "fixed_window" | "sliding_window") {
+                    return Err(format!(
+                        "rate-limit extension {} has invalid algorithm: {algorithm}",
+                        instance.instance_id
+                    ));
+                }
+                let mem_mb = unsigned(&config, "memory_size_mb").ok_or_else(|| {
+                    format!(
+                        "decode rate-limit extension {} config: missing memory_size_mb",
+                        instance.instance_id
+                    )
+                })?;
+                if mem_mb == 0 || mem_mb > 1024 {
+                    return Err(format!(
+                        "rate-limit extension {} memory_size_mb must be 1..=1024",
+                        instance.instance_id
+                    ));
+                }
+                let max_keys = unsigned(&config, "max_keys").ok_or_else(|| {
+                    format!(
+                        "decode rate-limit extension {} config: missing max_keys",
+                        instance.instance_id
+                    )
+                })?;
+                if !(16..=5_000_000).contains(&max_keys) {
+                    return Err(format!(
+                        "rate-limit extension {} max_keys must be 16..=5000000",
+                        instance.instance_id
+                    ));
+                }
+                let eviction = string(&config, "eviction_policy").ok_or_else(|| {
+                    format!(
+                        "decode rate-limit extension {} config: missing eviction_policy",
+                        instance.instance_id
+                    )
+                })?;
+                if !matches!(eviction, "lru" | "lfu" | "fifo") {
+                    return Err(format!(
+                        "rate-limit extension {} has invalid eviction_policy: {eviction}",
+                        instance.instance_id
+                    ));
+                }
+                let overflow = string(&config, "overflow_strategy").ok_or_else(|| {
+                    format!(
+                        "decode rate-limit extension {} config: missing overflow_strategy",
+                        instance.instance_id
+                    )
+                })?;
+                if !matches!(overflow, "evict_and_track" | "drop_new" | "bypass_new") {
+                    return Err(format!(
+                        "rate-limit extension {} has invalid overflow_strategy: {overflow}",
+                        instance.instance_id
+                    ));
+                }
+
+                let mb_keys = (mem_mb * 1024 * 1024) / 128;
+                if max_keys > mb_keys {
+                    return Err(format!(
+                        "rate-limit extension {} max_keys ({max_keys}) exceeds memory limit {mem_mb}MB ({mb_keys} keys)",
+                        instance.instance_id
+                    ));
+                }
+
+                let mut rule_ids = std::collections::HashSet::with_capacity(rules.len());
+                for (idx, r_val) in rules.iter().enumerate() {
+                    let r_obj = r_val.as_object().ok_or_else(|| {
+                        format!("rate-limit extension {} rule #{idx} must be an object", instance.instance_id)
+                    })?;
+                    let id = r_obj.get("id").and_then(|v| v.as_str()).ok_or_else(|| {
+                        format!("rate-limit extension {} rule #{idx} missing id", instance.instance_id)
+                    })?;
+                    if id.trim().is_empty() || id.len() > 128 || !rule_ids.insert(id.to_string()) {
+                        return Err(format!("rate-limit extension {} invalid or duplicate rule id: {id}", instance.instance_id));
+                    }
+                    let host = r_obj.get("host").and_then(|v| v.as_str()).ok_or_else(|| {
+                        format!("rate-limit extension {} rule {id} missing host", instance.instance_id)
+                    })?;
+                    if host.is_empty() || host.len() > 253 {
+                        return Err(format!("rate-limit extension {} rule {id} invalid host", instance.instance_id));
+                    }
+                    let path = r_obj.get("path_prefix").and_then(|v| v.as_str()).ok_or_else(|| {
+                        format!("rate-limit extension {} rule {id} missing path_prefix", instance.instance_id)
+                    })?;
+                    if !path.starts_with('/') || path.len() > 8192 || path.bytes().any(|b| b <= 32 || b >= 127) {
+                        return Err(format!("rate-limit extension {} rule {id} invalid path_prefix", instance.instance_id));
+                    }
+                    let limit_by = r_obj.get("limit_by").and_then(|v| v.as_str()).ok_or_else(|| {
+                        format!("rate-limit extension {} rule {id} missing limit_by", instance.instance_id)
+                    })?;
+                    if !matches!(limit_by, "client_ip" | "api_key" | "authorization" | "route_path") {
+                        return Err(format!("rate-limit extension {} rule {id} invalid limit_by: {limit_by}", instance.instance_id));
+                    }
+                    let rate = r_obj.get("rate").and_then(|v| v.as_u64()).ok_or_else(|| {
+                        format!("rate-limit extension {} rule {id} missing rate", instance.instance_id)
+                    })?;
+                    if rate == 0 || rate > 1_000_000 {
+                        return Err(format!("rate-limit extension {} rule {id} invalid rate", instance.instance_id));
+                    }
+                    let period = r_obj.get("period_secs").and_then(|v| v.as_u64()).ok_or_else(|| {
+                        format!("rate-limit extension {} rule {id} missing period_secs", instance.instance_id)
+                    })?;
+                    if period == 0 || period > 86400 {
+                        return Err(format!("rate-limit extension {} rule {id} invalid period_secs", instance.instance_id));
+                    }
+                    let action = r_obj.get("action_on_exceeded").and_then(|v| v.as_str()).ok_or_else(|| {
+                        format!("rate-limit extension {} rule {id} missing action_on_exceeded", instance.instance_id)
+                    })?;
+                    if !matches!(action, "throttle" | "block" | "audit" | "custom_response") {
+                        return Err(format!("rate-limit extension {} rule {id} invalid action_on_exceeded: {action}", instance.instance_id));
+                    }
+                    if matches!(r_obj.get("burst").and_then(|v| v.as_u64()), Some(burst) if burst < rate) {
+                        return Err(format!("rate-limit extension {} rule {id} burst cannot be less than rate ({rate})", instance.instance_id));
+                    }
+                    if matches!(r_obj.get("rejected_code").and_then(|v| v.as_u64()), Some(rejected_code) if !(200..=599).contains(&rejected_code)) {
+                        return Err(format!("rate-limit extension {} rule {id} invalid rejected_code", instance.instance_id));
+                    }
+                }
+
+                rate_limit_policy = Some(Value::Object(config));
+                server.push_str("gateway_rate_limit_policy /var/lib/aurora-policy/active-rate-limit.json;\n");
                 has_server = true;
             }
             "nginx-rate-limit-local" => {
@@ -343,6 +473,7 @@ pub fn render_extensions(
         server_conf: server,
         access_rules,
         jwt_policy,
+        rate_limit_policy,
     })
 }
 
