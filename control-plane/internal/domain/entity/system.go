@@ -15,9 +15,6 @@ type SystemInfo struct {
 	DatabasePath         string
 	DatabaseSizeBytes    int64
 	DatabaseSizeFormat   string
-	NodesTotal           int
-	NodesReady           int
-	NodesSummary         string
 	MemoryAllocBytes     uint64
 	MemoryAllocFormatted string
 }

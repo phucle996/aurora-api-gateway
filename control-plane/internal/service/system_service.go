@@ -55,9 +55,6 @@ func (s *SystemService) GetSystemInfo(ctx context.Context) (*entity.SystemInfo, 
 	runtime.ReadMemStats(&m)
 	memStr := formatBytes(m.Alloc)
 
-	nodesTotal, nodesReady, _ := s.repo.GetNodeCounts(ctx)
-	nodesSummary := "Stateless Fleet (Pull Sync)"
-
 	return &entity.SystemInfo{
 		Product:              "AURORA API GATEWAY",
 		Version:              s.cfg.Version,
@@ -70,9 +67,6 @@ func (s *SystemService) GetSystemInfo(ctx context.Context) (*entity.SystemInfo, 
 		DatabasePath:         s.cfg.SQLitePath,
 		DatabaseSizeBytes:    dbSize,
 		DatabaseSizeFormat:   dbSizeStr,
-		NodesTotal:           nodesTotal,
-		NodesReady:           nodesReady,
-		NodesSummary:         nodesSummary,
 		MemoryAllocBytes:     m.Alloc,
 		MemoryAllocFormatted: memStr,
 	}, nil

@@ -36,8 +36,3 @@ func (r *SystemRepository) Check(ctx context.Context) error {
 	var version int
 	return r.reader.QueryRowContext(ctx, query).Scan(&version)
 }
-
-// GetNodeCounts returns 0, 0 in stateless dataplane mode.
-func (r *SystemRepository) GetNodeCounts(ctx context.Context) (int, int, error) {
-	return 0, 0, nil
-}

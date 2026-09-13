@@ -53,9 +53,6 @@ func (h *SystemHandler) Info(c *gin.Context) {
 		"database_path":           info.DatabasePath,
 		"database_size_bytes":     info.DatabaseSizeBytes,
 		"database_size_formatted": info.DatabaseSizeFormat,
-		"nodes_total":             info.NodesTotal,
-		"nodes_ready":             info.NodesReady,
-		"nodes_summary":           info.NodesSummary,
 		"memory_alloc_bytes":      info.MemoryAllocBytes,
 		"memory_alloc_formatted":  info.MemoryAllocFormatted,
 	})

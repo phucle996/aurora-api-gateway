@@ -8,22 +8,14 @@ import (
 	"aurora-waf.local/control-plane/internal/service"
 )
 
-type mockSystemRepo struct {
-	total int
-	ready int
-	err   error
-}
+type mockSystemRepo struct{}
 
 func (m *mockSystemRepo) Check(ctx context.Context) error {
 	return nil
 }
 
-func (m *mockSystemRepo) GetNodeCounts(ctx context.Context) (int, int, error) {
-	return m.total, m.ready, m.err
-}
-
 func TestSystemService_GetSystemInfo(t *testing.T) {
-	mockRepo := &mockSystemRepo{total: 3, ready: 3}
+	mockRepo := &mockSystemRepo{}
 	cfg := config.Config{
 		SQLitePath: "/non-existent/path.db",
 		Version:    "v2.0.0",
@@ -38,12 +30,6 @@ func TestSystemService_GetSystemInfo(t *testing.T) {
 
 	if info.Version != "v2.0.0" {
 		t.Errorf("expected version v2.0.0, got %s", info.Version)
-	}
-	if info.NodesTotal != 3 || info.NodesReady != 3 {
-		t.Errorf("expected 3/3 nodes, got %d/%d", info.NodesReady, info.NodesTotal)
-	}
-	if info.NodesSummary != "Stateless Fleet (Pull Sync)" {
-		t.Errorf("expected 'Stateless Fleet (Pull Sync)', got '%s'", info.NodesSummary)
 	}
 
 	// Test with empty version / buildTime to verify fallback to config defaults
