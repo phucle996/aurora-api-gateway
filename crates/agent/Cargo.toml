@@ -6,9 +6,17 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[lib]
+name = "aurora_agent"
+path = "src/lib.rs"
+
 [[bin]]
 name = "aurora-agent"
 path = "src/main.rs"
+
+[[bench]]
+name = "l4_materialize"
+harness = false
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }

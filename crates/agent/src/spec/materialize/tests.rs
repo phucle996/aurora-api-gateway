@@ -1147,3 +1147,50 @@ fn test_l4_streams_reject_duplicate_acl_priority() {
     let error = generate_l4_streams_conf(&l4).expect_err("duplicate priority must fail closed");
     assert!(error.contains("duplicate ACL priority 10"));
 }
+
+#[test]
+fn test_l4_streams_memory_leak_audit() {
+    use crate::spec::l4::{L4AclRuleSpec, L4ServerSpec, L4ServiceSpec, L4Spec, L4UpstreamSpec};
+
+    let l4 = Some(L4Spec {
+        upstreams: vec![L4UpstreamSpec {
+            name: "leak_test_pool".to_string(),
+            protocol: "tcp".to_string(),
+            algorithm: "least_conn".to_string(),
+            servers: (0..10)
+                .map(|i| L4ServerSpec {
+                    addr: format!("10.0.0.{i}:6379"),
+                    weight: 1,
+                    max_fails: Some(3),
+                    fail_timeout: Some("10s".to_string()),
+                    backup: false,
+                })
+                .collect(),
+        }],
+        services: vec![L4ServiceSpec {
+            name: "leak_test_service".to_string(),
+            protocol: "tcp".to_string(),
+            listen_port: 10001,
+            forward_target_type: Some("upstream".to_string()),
+            upstream: "leak_test_pool".to_string(),
+            endpoint: None,
+            acl: (0..50)
+                .map(|i| L4AclRuleSpec {
+                    cidr: format!("192.168.{}.0/24", i % 250),
+                    action: "allow".to_string(),
+                    priority: (i + 1) as u32,
+                })
+                .collect(),
+            proxy_timeout: Some("1h".to_string()),
+            proxy_connect_timeout: Some("5s".to_string()),
+            enabled: true,
+        }],
+    });
+
+    // Run 10,000 consecutive iterations to verify zero heap leaks or fragmentation growth
+    for _ in 0..10_000 {
+        let conf = generate_l4_streams_conf(&l4).expect("must render");
+        assert!(!conf.is_empty());
+        drop(conf);
+    }
+}

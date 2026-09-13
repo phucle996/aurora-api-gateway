@@ -1,0 +1,27 @@
+{
+  "name": "aurora-l4-e2e",
+  "version": "1.0.0",
+  "description": "Professional Multi-Tier L4 Testing Pyramid (Micro Bench, Allocation Profile, Unit Tests, Macro Syntax, Playwright UI, Functional E2E, Production Load & Leak Audit)",
+  "type": "module",
+  "scripts": {
+    "test": "node index.mjs",
+    "test:smoke": "node index.mjs --smoke",
+    "test:p1": "node index.mjs --phase=1",
+    "test:p2": "node index.mjs --phase=2",
+    "test:p3": "node index.mjs --phase=3",
+    "test:p4": "node index.mjs --phase=4",
+    "test:p5": "node index.mjs --phase=5",
+    "test:p6": "node index.mjs --phase=6",
+    "test:p7": "node index.mjs --phase=7",
+    "test:p8": "node index.mjs --phase=8",
+    "test:p9": "node index.mjs --phase=9",
+    "test:micro": "node index.mjs --phase=1,2,3",
+    "test:macro": "node index.mjs --phase=4,5,6,7,8,9",
+    "test:chaos": "node index.mjs --phase=7",
+    "test:conflicts": "node index.mjs --phase=8",
+    "test:advanced": "node index.mjs --phase=9",
+    "test:leak": "node leak-audit.mjs",
+    "test:skip-ui": "node index.mjs --skip-ui",
+    "test:skip-load": "node index.mjs --skip-load"
+  }
+}

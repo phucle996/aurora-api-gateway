@@ -1,16 +1,5 @@
-#![allow(clippy::result_large_err)]
-
-mod app;
-mod config;
-mod extension;
-mod grpc;
-mod nginx;
-mod spec;
-mod sync;
-
 use anyhow::Result;
-use app::App;
-use config::Config;
+use aurora_agent::{App, Config};
 use std::sync::Arc;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
@@ -18,6 +7,36 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() > 1 && args[1] == "--materialize-l4" {
+        let input = if args.len() > 2 && !args[2].is_empty() {
+            std::fs::read_to_string(&args[2])?
+        } else {
+            use std::io::Read;
+            let mut buf = String::new();
+            std::io::stdin().read_to_string(&mut buf)?;
+            buf
+        };
+
+        let l4_spec: aurora_agent::spec::l4::L4Spec =
+            if let Ok(spec) = aurora_agent::spec::schema::Spec::parse_json(&input) {
+                spec.l4.unwrap_or_default()
+            } else {
+                serde_json::from_str(&input)
+                    .map_err(|e| anyhow::anyhow!("failed to parse L4 JSON spec: {}", e))?
+            };
+
+        let conf = aurora_agent::spec::materialize::generate_l4_streams_conf(&Some(l4_spec))
+            .map_err(|e| anyhow::anyhow!("failed to materialize L4 stream configuration: {}", e))?;
+
+        if args.len() > 3 && !args[3].is_empty() {
+            std::fs::write(&args[3], &conf)?;
+        } else {
+            print!("{}", conf);
+        }
+        return Ok(());
+    }
+
     // 1. Setup structured logging
     tracing_subscriber::registry()
         .with(
