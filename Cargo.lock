@@ -138,6 +138,7 @@ dependencies = [
 name = "aurora-engine"
 version = "0.1.0"
 dependencies = [
+ "hashbrown 0.17.1",
  "jsonwebtoken",
  "redis",
  "regex",

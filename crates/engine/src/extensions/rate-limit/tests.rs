@@ -2,6 +2,293 @@ use crate::Error;
 use crate::extensions::rate_limit::RateLimitEngine;
 use crate::extensions::rate_limit::types::ActionOnExceeded;
 
+#[test]
+fn borrowed_counter_keys_preserve_hash_and_rule_identity() {
+    use super::shard::RateLimitKeyRef;
+    use hashbrown::Equivalent;
+    use std::hash::BuildHasher;
+
+    let hasher = std::collections::hash_map::RandomState::new();
+    for idx in 0..64 {
+        for bytes in [b"".as_slice(), b"client-a", b"client-a\0", &[255; 16384]] {
+            let owned = (idx, bytes.to_vec());
+            let query = RateLimitKeyRef(idx, bytes);
+            assert_eq!(hasher.hash_one(&query), hasher.hash_one(&owned));
+            assert!(query.equivalent(&owned));
+            assert!(!query.equivalent(&(idx + 1, bytes.to_vec())));
+        }
+    }
+}
+
+#[test]
+fn ttl_bound_preserves_expiry_with_mixed_periods_and_clock_rollback() {
+    use super::shard::{RateLimitKeyRef, Shard, ShardConfig, insert_shard_entry};
+    use super::types::{
+        CompiledRule, EvictionPolicy, LimitBy, OverflowStrategy, RateLimitAlgorithm,
+    };
+
+    let mut rule = CompiledRule {
+        id: "ttl".into(),
+        host: b"*".to_vec(),
+        path_prefix: b"/".to_vec(),
+        limit_by: LimitBy::ClientIp,
+        header_name: None,
+        rate: 1,
+        period_secs: 60,
+        burst: 1,
+        action_on_exceeded: ActionOnExceeded::Throttle,
+        rejected_code: 429,
+        custom_message: None,
+        response_headers: Vec::new(),
+    };
+    let cfg = ShardConfig {
+        max_keys_per_shard: 2,
+        eviction_policy: EvictionPolicy::Lru,
+        overflow_strategy: OverflowStrategy::DropNew,
+        algorithm: RateLimitAlgorithm::TokenBucket,
+    };
+    let mut shard = Shard::new();
+    insert_shard_entry(
+        &mut shard,
+        &RateLimitKeyRef(0, b"old"),
+        &rule,
+        &cfg,
+        100,
+        100_000,
+    )
+    .unwrap();
+    insert_shard_entry(
+        &mut shard,
+        &RateLimitKeyRef(0, b"recent"),
+        &rule,
+        &cfg,
+        200,
+        200_000,
+    )
+    .unwrap();
+    assert!(
+        insert_shard_entry(
+            &mut shard,
+            &RateLimitKeyRef(0, b"full"),
+            &rule,
+            &cfg,
+            210,
+            210_000
+        )
+        .is_err()
+    );
+    // The incoming rule's TTL threshold remains authoritative, including equality.
+    insert_shard_entry(
+        &mut shard,
+        &RateLimitKeyRef(0, b"new"),
+        &rule,
+        &cfg,
+        220,
+        220_000,
+    )
+    .unwrap();
+    assert!(!shard.entries.contains_key(&RateLimitKeyRef(0, b"old")));
+    assert!(shard.entries.contains_key(&RateLimitKeyRef(0, b"recent")));
+    assert_eq!(shard.oldest_access_lower_bound, 200);
+
+    // A shorter incoming period must trigger a sweep even at the same time.
+    rule.period_secs = 5;
+    insert_shard_entry(
+        &mut shard,
+        &RateLimitKeyRef(1, b"short"),
+        &rule,
+        &cfg,
+        220,
+        220_000,
+    )
+    .unwrap();
+    assert!(!shard.entries.contains_key(&RateLimitKeyRef(0, b"recent")));
+    assert!(shard.entries.contains_key(&RateLimitKeyRef(0, b"new")));
+
+    // Insert after clock rollback; its older timestamp must lower the bound.
+    shard.entries.remove(&RateLimitKeyRef(1, b"short"));
+    insert_shard_entry(
+        &mut shard,
+        &RateLimitKeyRef(1, b"rollback"),
+        &rule,
+        &cfg,
+        50,
+        50_000,
+    )
+    .unwrap();
+    assert_eq!(shard.oldest_access_lower_bound, 50);
+    insert_shard_entry(
+        &mut shard,
+        &RateLimitKeyRef(1, b"recovered"),
+        &rule,
+        &cfg,
+        61,
+        61_000,
+    )
+    .unwrap();
+    assert!(!shard.entries.contains_key(&RateLimitKeyRef(1, b"rollback")));
+    assert!(shard.entries.contains_key(&RateLimitKeyRef(0, b"new")));
+}
+
+#[test]
+fn full_shard_preserves_each_eviction_policy() {
+    use super::shard::{RateLimitKeyRef, Shard, ShardConfig, insert_shard_entry};
+    use super::types::{
+        CompiledRule, EvictionPolicy, LimitBy, OverflowStrategy, RateLimitAlgorithm,
+    };
+
+    let rule = CompiledRule {
+        id: "eviction".into(),
+        host: b"*".to_vec(),
+        path_prefix: b"/".to_vec(),
+        limit_by: LimitBy::ClientIp,
+        header_name: None,
+        rate: 1,
+        period_secs: 1000,
+        burst: 1,
+        action_on_exceeded: ActionOnExceeded::Throttle,
+        rejected_code: 429,
+        custom_message: None,
+        response_headers: Vec::new(),
+    };
+    for (policy, victim) in [
+        (EvictionPolicy::Lru, b"b"),
+        (EvictionPolicy::Lfu, b"c"),
+        (EvictionPolicy::Fifo, b"a"),
+    ] {
+        let cfg = ShardConfig {
+            max_keys_per_shard: 3,
+            eviction_policy: policy,
+            overflow_strategy: OverflowStrategy::EvictAndTrack,
+            algorithm: RateLimitAlgorithm::TokenBucket,
+        };
+        let mut shard = Shard::new();
+        for (key, created, accessed, count) in [
+            (b"a", 100, 400, 10),
+            (b"b", 200, 200, 5),
+            (b"c", 300, 300, 1),
+        ] {
+            let entry = insert_shard_entry(
+                &mut shard,
+                &RateLimitKeyRef(0, key),
+                &rule,
+                &cfg,
+                created,
+                created * 1000,
+            )
+            .unwrap();
+            entry.last_access_secs = accessed;
+            entry.access_count = count;
+        }
+        insert_shard_entry(
+            &mut shard,
+            &RateLimitKeyRef(0, b"d"),
+            &rule,
+            &cfg,
+            500,
+            500_000,
+        )
+        .unwrap();
+        assert_eq!(shard.entries.len(), 3);
+        assert!(
+            !shard.entries.contains_key(&RateLimitKeyRef(0, victim)),
+            "{policy:?}"
+        );
+        assert!(shard.entries.contains_key(&RateLimitKeyRef(0, b"d")));
+    }
+}
+
+#[test]
+fn existing_counter_survives_full_shard_and_borrowed_input_reuse() {
+    use super::shard::hash_key;
+
+    for algorithm in [
+        "token_bucket",
+        "leaky_bucket",
+        "fixed_window",
+        "sliding_window",
+    ] {
+        for overflow in ["drop_new", "bypass_new", "evict_and_track"] {
+            let mut policy = sample_snapshot(vec![serde_json::json!({
+                "id": "counter", "host": "*", "path_prefix": "/api",
+                "limit_by": "header", "header_name": "x-api-key",
+                "rate": 2, "burst": 2, "period_secs": 86400,
+                "action_on_exceeded": "throttle"
+            })]);
+            policy["algorithm"] = algorithm.into();
+            policy["max_keys"] = 16.into(); // One counter per shard.
+            policy["overflow_strategy"] = overflow.into();
+            let engine =
+                RateLimitEngine::from_snapshot(&serde_json::to_vec(&policy).unwrap()).unwrap();
+            let mut buffer = b"client-original".to_vec();
+            assert!(
+                engine
+                    .evaluate(b"example.com", b"/api", b"127.0.0.1", |_| Some(&buffer))
+                    .unwrap()
+                    .allowed
+            );
+            // Simulate the adapter reusing its request buffer after evaluate.
+            buffer.fill(b'x');
+            let original = b"client-original";
+            let decision = engine
+                .evaluate(b"example.com", b"/api", b"127.0.0.1", |_| Some(original))
+                .unwrap();
+            assert!(decision.allowed, "{algorithm}/{overflow}");
+            assert_eq!(decision.remaining, 0);
+            assert!(
+                !engine
+                    .evaluate(b"example.com", b"/api", b"127.0.0.1", |_| Some(original))
+                    .unwrap()
+                    .allowed
+            );
+
+            let new_key = (0..1000)
+                .map(|i| format!("new-{i}"))
+                .find(|key| hash_key(0, key.as_bytes()) == hash_key(0, original))
+                .unwrap();
+            let decision = engine
+                .evaluate(b"example.com", b"/api", b"127.0.0.1", |_| {
+                    Some(new_key.as_bytes())
+                })
+                .unwrap();
+            assert_eq!(decision.allowed, overflow != "drop_new");
+            let old = engine
+                .evaluate(b"example.com", b"/api", b"127.0.0.1", |_| Some(original))
+                .unwrap();
+            assert_eq!(
+                old.allowed,
+                overflow == "evict_and_track",
+                "{algorithm}/{overflow}"
+            );
+        }
+    }
+}
+
+#[test]
+fn local_counters_keep_rule_and_identifier_quotas_independent() {
+    let policy = sample_snapshot(vec![
+        serde_json::json!({"id":"a", "host":"*", "path_prefix":"/a", "limit_by":"header", "header_name":"x-api-key", "rate":1, "period_secs":86400, "action_on_exceeded":"throttle"}),
+        serde_json::json!({"id":"b", "host":"*", "path_prefix":"/b", "limit_by":"header", "header_name":"x-api-key", "rate":1, "period_secs":86400, "action_on_exceeded":"throttle"}),
+    ]);
+    let engine = RateLimitEngine::from_snapshot(&serde_json::to_vec(&policy).unwrap()).unwrap();
+    for key in [b"client-a".as_slice(), b"client-b"] {
+        for path in [b"/a".as_slice(), b"/b"] {
+            assert!(
+                engine
+                    .evaluate(b"example.com", path, b"127.0.0.1", |_| Some(key))
+                    .unwrap()
+                    .allowed
+            );
+            assert!(
+                !engine
+                    .evaluate(b"example.com", path, b"127.0.0.1", |_| Some(key))
+                    .unwrap()
+                    .allowed
+            );
+        }
+    }
+}
+
 fn sample_snapshot(rules: Vec<serde_json::Value>) -> serde_json::Value {
     serde_json::json!({
         "schema_version": 1,

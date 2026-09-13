@@ -1,7 +1,5 @@
 use crate::extensions::rate_limit::redis::RedisRateLimiter;
-use crate::extensions::rate_limit::shard::{
-    Shard, ShardConfig, ensure_shard_capacity_and_entry, hash_key,
-};
+use crate::extensions::rate_limit::shard::{Shard, ShardConfig, hash_key, insert_shard_entry};
 use crate::extensions::rate_limit::types::{
     ActionOnExceeded, CompiledHeader, CompiledRule, LimitBy, MAX_RATE_LIMIT_POLICY_BYTES,
     MAX_RATE_LIMIT_RULES, NUM_SHARDS, OnErrorAction, RateLimitDecision, RateLimitMode,
@@ -399,9 +397,19 @@ impl RateLimitEngine {
         let shard_idx = hash_key(rule_idx, identifier);
         let mut shard = self.shards[shard_idx].lock().unwrap();
 
-        let map_key = (rule_idx, identifier.to_vec());
+        let map_key = super::shard::RateLimitKeyRef(rule_idx, identifier);
 
-        let entry = match ensure_shard_capacity_and_entry(
+        // A wall-clock rollback must not invalidate the shard's TTL bound.
+        shard.oldest_access_lower_bound = shard.oldest_access_lower_bound.min(now_secs);
+
+        // Existing counters need only one borrowed lookup and no owned key.
+        if let Some(entry) = shard.entries.get_mut(&map_key) {
+            entry.last_access_secs = now_secs;
+            entry.access_count += 1;
+            return entry.state.advance(rule, now_secs, now_ms);
+        }
+
+        let entry = match insert_shard_entry(
             &mut shard,
             &map_key,
             rule,

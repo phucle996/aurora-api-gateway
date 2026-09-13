@@ -211,18 +211,19 @@
             "value": "client_ip"
           },
           {
-            "label": "API Key",
-            "value": "api_key"
-          },
-          {
-            "label": "Authorization Bearer",
-            "value": "authorization"
+            "label": "Header",
+            "value": "header"
           },
           {
             "label": "Route Path",
             "value": "route_path"
           }
         ]
+      },
+      {
+        "key": "header_name",
+        "label": "Header Name",
+        "type": "text"
       },
       {
         "key": "rate",
@@ -425,10 +426,14 @@
               "type": "string",
               "enum": [
                 "client_ip",
-                "api_key",
-                "authorization",
+                "header",
                 "route_path"
               ]
+            },
+            "header_name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
             },
             "rate": {
               "type": "integer",

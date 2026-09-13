@@ -215,12 +215,29 @@ pub fn validate_rate_limit_config(
             })?;
         if !matches!(
             limit_by,
-            "client_ip" | "ip" | "api_key" | "authorization" | "route_path"
+            "client_ip" | "header" | "route_path"
         ) {
             return Err(format!(
                 "rate-limit extension {} rule {id} invalid limit_by: {limit_by}",
                 instance.instance_id
             ));
+        }
+        if limit_by == "header" {
+            let header_name = r_obj
+                .get("header_name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if header_name.trim().is_empty()
+                || header_name.len() > 64
+                || !header_name
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+            {
+                return Err(format!(
+                    "rate-limit extension {} rule '{id}' limit_by 'header' requires valid header_name (1..=64 alphanumeric, '-' or '_')",
+                    instance.instance_id
+                ));
+            }
         }
         let rate = r_obj.get("rate").and_then(|v| v.as_u64()).ok_or_else(|| {
             format!(
