@@ -82,6 +82,12 @@ ngx_int_t ngx_http_gateway_handler(ngx_http_request_t *r) {
     return rc;
   }
 
+  /* Stage 11: In-process Request Mirror */
+  rc = ngx_http_gateway_eval_request_mirror(r, conf, host);
+  if (rc != NGX_DECLINED) {
+    return rc;
+  }
+
   /* All checks passed: Cho phép request đi tiếp */
   return NGX_DECLINED;
 }

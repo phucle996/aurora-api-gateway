@@ -1,0 +1,9 @@
+{
+  "name": "aurora-request-mirror-e2e",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "End-to-End verification and benchmark harness for Aurora Gateway Request Mirror extension",
+  "scripts": {
+    "test": "node index.mjs"
+  }
+}

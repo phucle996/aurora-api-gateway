@@ -249,12 +249,10 @@ export function ExtensionIcon({ id, category, className = 'w-5 h-5' }: Extension
       return <GitFork className={className} />;
     case 'canary-release': // đã imple
       return <GitBranch className={className} />;
-    case 'blue-green':
+    case 'blue-green': // đã imple 
       return <Shuffle className={className} />;
-    case 'request-mirror':
+    case 'request-mirror': // đã imple (bao trọn cả traffic-shadow qua sample_percentage & x-request-mirror)
       return <Copy className={className} />;
-    case 'traffic-shadow':
-      return <Ghost className={className} />;
     case 'priority-routing':
       return <Sparkles className={className} />;
     case 'maintenance-mode':

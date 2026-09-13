@@ -30,17 +30,21 @@ typedef struct {
   AuroraCanaryReleaseEngine *canary_release_engine;
   ngx_str_t blue_green_policy;
   AuroraBlueGreenEngine *blue_green_engine;
+  ngx_str_t request_mirror_policy;
+  AuroraRequestMirrorEngine *request_mirror_engine;
   ngx_str_t policy;     /* Đường dẫn tới file WAF policy snapshot */
   AuroraEngine *engine; /* Con trỏ tới instance Rust WAF engine */
 } ngx_http_gateway_conf_t;
 
 typedef struct {
   ngx_str_t chosen_upstream;
+  ngx_str_t mirror_upstream;
   ngx_str_t rule_id;
   ngx_str_t deploy_slot;
   ngx_uint_t evaluated;
   ngx_uint_t is_canary;
   ngx_uint_t is_header_override;
+  ngx_uint_t is_mirrored;
 } ngx_http_gateway_ctx_t;
 
 extern ngx_module_t ngx_http_gateway_module;
@@ -136,6 +140,19 @@ ngx_int_t ngx_http_gateway_eval_blue_green(ngx_http_request_t *r,
 ngx_int_t ngx_http_gateway_variable_deploy_slot(ngx_http_request_t *r,
                                                 ngx_http_variable_value_t *v,
                                                 uintptr_t data);
+
+/* Extension: Request Mirror */
+char *ngx_http_gateway_merge_request_mirror(ngx_conf_t *cf,
+                                            ngx_http_gateway_conf_t *prev,
+                                            ngx_http_gateway_conf_t *conf);
+ngx_int_t ngx_http_gateway_eval_request_mirror(ngx_http_request_t *r,
+                                               ngx_http_gateway_conf_t *conf,
+                                               ngx_str_t host);
+ngx_int_t ngx_http_gateway_variable_mirror_upstream(
+    ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
+ngx_int_t ngx_http_gateway_variable_mirror_status(ngx_http_request_t *r,
+                                                  ngx_http_variable_value_t *v,
+                                                  uintptr_t data);
 
 /* Extension: Core WAF */
 char *ngx_http_gateway_merge_waf(ngx_conf_t *cf, ngx_http_gateway_conf_t *prev,

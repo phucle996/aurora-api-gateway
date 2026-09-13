@@ -10,6 +10,8 @@ pub mod connection_limit;
 pub mod jwt;
 #[path = "rate-limit/mod.rs"]
 pub mod rate_limit;
+#[path = "request-mirror/mod.rs"]
+pub mod request_mirror;
 #[path = "request-size-limit/mod.rs"]
 pub mod request_size_limit;
 #[path = "traffic-shaper/mod.rs"]

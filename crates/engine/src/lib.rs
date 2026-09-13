@@ -12,6 +12,7 @@ pub use extensions::traffic_shaper;
 pub use extensions::traffic_split;
 pub use extensions::canary_release;
 pub use extensions::blue_green;
+pub use extensions::request_mirror;
 pub use extensions::waf;
 
 // Top-level re-exports for clean ergonomics and backward compatibility:
@@ -24,6 +25,7 @@ pub use extensions::traffic_shaper::TrafficShaperEngine;
 pub use extensions::traffic_split::TrafficSplitEngine;
 pub use extensions::canary_release::CanaryReleaseEngine;
 pub use extensions::blue_green::BlueGreenEngine;
+pub use extensions::request_mirror::RequestMirrorEngine;
 pub use extensions::waf::{
     Action, Decision, Engine, Error, MAX_PATH_BYTES, MAX_POLICY_BYTES, host_matches,
     host_specificity,

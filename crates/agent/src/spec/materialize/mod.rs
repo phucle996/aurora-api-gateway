@@ -267,6 +267,28 @@ pub async fn materialize_nginx(
         }
     }
 
+    // 11. Request Mirror snapshot.
+    let request_mirror_path = policy_dir.join("active-request-mirror.json");
+    if let Some(rm_config) = rendered_extensions.request_mirror_policy.as_ref() {
+        let mut rm_obj = rm_config
+            .as_object()
+            .ok_or_else(|| "request-mirror config must be a JSON object".to_string())?
+            .clone();
+        rm_obj.insert("schema_version".to_string(), serde_json::json!(1));
+        rm_obj.insert("generation".to_string(), serde_json::json!(spec.release_id));
+        let rm_json = serde_json::to_string_pretty(&serde_json::Value::Object(rm_obj))?;
+        if atomic_write_if_changed(&request_mirror_path, rm_json.as_bytes()).await? {
+            info!("Updated active-request-mirror.json");
+            changed = true;
+        }
+    } else {
+        match tokio::fs::remove_file(&request_mirror_path).await {
+            Ok(()) => changed = true,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(Box::new(error)),
+        }
+    }
+
     // 9. Upstreams Config
     let upstreams_path = policy_dir.join("active-upstreams.conf");
     let upstreams_content = if let Some(ref raw) = spec.upstreams_conf {

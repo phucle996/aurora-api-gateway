@@ -305,11 +305,41 @@ typedef struct {
 uint32_t aurora_blue_green_create(const uint8_t *data, size_t len,
                                   AuroraBlueGreenEngine **out);
 void aurora_blue_green_destroy(AuroraBlueGreenEngine *engine);
-uint32_t aurora_blue_green_evaluate(
-    const AuroraBlueGreenEngine *engine, const uint8_t *origin,
-    size_t origin_len, const uint8_t *path, size_t path_len, void *lookup_ctx,
-    aurora_header_lookup_fn lookup_fn,
-    AuroraBlueGreenDecision *out_decision);
+uint32_t aurora_blue_green_evaluate(const AuroraBlueGreenEngine *engine,
+                                    const uint8_t *origin, size_t origin_len,
+                                    const uint8_t *path, size_t path_len,
+                                    void *lookup_ctx,
+                                    aurora_header_lookup_fn lookup_fn,
+                                    AuroraBlueGreenDecision *out_decision);
+
+/* ========================================================================== */
+/* Extension: Request Mirror Types & FFI                                      */
+/* ========================================================================== */
+
+typedef struct AuroraRequestMirrorEngine AuroraRequestMirrorEngine;
+
+typedef struct {
+  uint32_t matched;
+  uint32_t is_mirrored;
+  uint32_t rule_id_len;
+  char rule_id[128];
+  uint32_t primary_upstream_len;
+  char primary_upstream[128];
+  uint32_t mirror_upstream_len;
+  char mirror_upstream[128];
+  uint32_t headers_count;
+  AuroraUpstreamHeader headers[16];
+} AuroraMirrorDecision;
+
+uint32_t aurora_request_mirror_create(const uint8_t *data, size_t len,
+                                      AuroraRequestMirrorEngine **out);
+void aurora_request_mirror_destroy(AuroraRequestMirrorEngine *engine);
+uint32_t aurora_request_mirror_evaluate(const AuroraRequestMirrorEngine *engine,
+                                        const uint8_t *origin,
+                                        size_t origin_len, const uint8_t *path,
+                                        size_t path_len, const uint8_t *method,
+                                        size_t method_len, uint32_t random_seed,
+                                        AuroraMirrorDecision *out_decision);
 
 /* Control Plane Runtime & Telemetry */
 uint32_t aurora_waf_start_runtime(const char *controller_url,

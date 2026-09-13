@@ -555,6 +555,62 @@ async fn test_materialize_nginx_writes_and_removes_blue_green_snapshot() {
     let _ = tokio::fs::remove_dir_all(base).await;
 }
 
+#[tokio::test]
+async fn test_materialize_nginx_writes_and_removes_request_mirror_snapshot() {
+    let base = std::env::temp_dir().join(format!(
+        "aurora-agent-test-mirror-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let policy_dir = base.join("policy");
+    let routing_dir = base.join("routing");
+    let _ = tokio::fs::remove_dir_all(&base).await;
+
+    let spec = Spec {
+        release_id: 401,
+        extensions: vec![crate::spec::extensions::ExtensionInstanceSpec {
+            instance_id: "mirror-1".to_string(),
+            key: "builtin/request-mirror".to_string(),
+            version: 1,
+            renderer: "request-mirror".to_string(),
+            manifest_digest: String::new(),
+            config_json: r#"{
+                "primary_upstream": "app_primary",
+                "mirror_upstream": "app_shadow",
+                "sample_percentage": 100,
+                "ignore_mirror_errors": true
+            }"#
+            .to_string(),
+        }],
+        ..Default::default()
+    };
+
+    materialize_nginx(&spec, &policy_dir, &routing_dir)
+        .await
+        .expect("materialize request-mirror snapshot");
+    let rm = tokio::fs::read_to_string(policy_dir.join("active-request-mirror.json"))
+        .await
+        .expect("read request-mirror snapshot");
+    assert!(rm.contains("\"generation\": 401"));
+    assert!(rm.contains("\"app_primary\""));
+    assert!(rm.contains("\"app_shadow\""));
+    assert!(rm.contains("\"sample_percentage\": 100"));
+
+    let disabled = Spec {
+        release_id: 402,
+        ..Default::default()
+    };
+    let result = materialize_nginx(&disabled, &policy_dir, &routing_dir)
+        .await
+        .expect("remove request-mirror snapshot");
+    assert!(result.nginx_changed);
+    assert!(!policy_dir.join("active-request-mirror.json").exists());
+    let _ = tokio::fs::remove_dir_all(base).await;
+}
+
+
 
 #[test]
 fn test_access_policy_renderer_generates_cidr_rules_from_instance_config() {

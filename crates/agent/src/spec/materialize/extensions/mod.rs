@@ -1,4 +1,8 @@
 pub mod access;
+#[path = "blue-green/mod.rs"]
+pub mod blue_green;
+#[path = "canary-release/mod.rs"]
+pub mod canary_release;
 pub mod common;
 #[path = "connection-limit/mod.rs"]
 pub mod connection_limit;
@@ -7,16 +11,14 @@ pub mod metrics;
 pub mod nginx;
 #[path = "rate-limit/mod.rs"]
 pub mod rate_limit;
-#[path = "traffic-shaper/mod.rs"]
-pub mod traffic_shaper;
+#[path = "request-mirror/mod.rs"]
+pub mod request_mirror;
 #[path = "request-size-limit/mod.rs"]
 pub mod request_size_limit;
+#[path = "traffic-shaper/mod.rs"]
+pub mod traffic_shaper;
 #[path = "traffic-split/mod.rs"]
 pub mod traffic_split;
-#[path = "canary-release/mod.rs"]
-pub mod canary_release;
-#[path = "blue-green/mod.rs"]
-pub mod blue_green;
 
 use crate::spec::extensions::ExtensionInstanceSpec;
 use nginx::NginxDirectiveSink;
@@ -36,6 +38,7 @@ pub struct RenderedExtensions {
     pub traffic_split_policy: Option<Value>,
     pub canary_release_policy: Option<Value>,
     pub blue_green_policy: Option<Value>,
+    pub request_mirror_policy: Option<Value>,
 }
 
 pub fn render_extensions(
@@ -60,6 +63,7 @@ pub fn render_extensions(
     let mut traffic_split_policy = None;
     let mut canary_release_policy = None;
     let mut blue_green_policy = None;
+    let mut request_mirror_policy = None;
 
     for instance in instances {
         if instance.renderer.trim().is_empty() {
@@ -149,6 +153,13 @@ pub fn render_extensions(
                 &mut server,
                 &mut has_server,
             )?,
+            "request-mirror" => request_mirror::materialize(
+                instance,
+                config,
+                &mut request_mirror_policy,
+                &mut server,
+                &mut has_server,
+            )?,
             renderer if renderer.starts_with("nginx-") => {
                 let mut sink = NginxDirectiveSink {
                     modules: &mut modules,
@@ -191,5 +202,6 @@ pub fn render_extensions(
         traffic_split_policy,
         canary_release_policy,
         blue_green_policy,
+        request_mirror_policy,
     })
 }

@@ -96,6 +96,20 @@ ngx_int_t ngx_http_gateway_variables(ngx_conf_t *cf) {
   }
   v->get_handler = ngx_http_gateway_variable_deploy_slot;
 
+  ngx_str_t mirror_up_name = ngx_string("gateway_mirror_upstream");
+  v = ngx_http_add_variable(cf, &mirror_up_name, NGX_HTTP_VAR_NOCACHEABLE);
+  if (v == NULL) {
+    return NGX_ERROR;
+  }
+  v->get_handler = ngx_http_gateway_variable_mirror_upstream;
+
+  ngx_str_t mirror_status_name = ngx_string("gateway_mirror_status");
+  v = ngx_http_add_variable(cf, &mirror_status_name, NGX_HTTP_VAR_NOCACHEABLE);
+  if (v == NULL) {
+    return NGX_ERROR;
+  }
+  v->get_handler = ngx_http_gateway_variable_mirror_status;
+
   return NGX_OK;
 }
 
