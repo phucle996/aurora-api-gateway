@@ -128,10 +128,10 @@ impl RequestSizeLimitEngine {
     }
 
     pub fn evaluate<'a>(
-        &self,
+        &'a self,
         req: &RequestSizeEvalRequest<'a>,
         header_lookup: impl Fn(&str) -> Option<&'a [u8]>,
-    ) -> RequestSizeDecision {
+    ) -> RequestSizeDecision<'a> {
         if req.origin.is_empty()
             || req.origin.len() > 253
             || req.path.is_empty()
@@ -207,13 +207,13 @@ impl RequestSizeLimitEngine {
 
             if violates_total || violates_header || violates_body {
                 return RequestSizeDecision::reject(
-                    rule.id.clone(),
+                    rule.id.as_str(),
                     rule.rejected_code,
-                    rule.response_body.clone(),
+                    rule.response_body.as_slice(),
                 );
             }
 
-            return RequestSizeDecision::allow_matched(rule.id.clone());
+            return RequestSizeDecision::allow_matched(rule.id.as_str());
         }
 
         RequestSizeDecision::allow()

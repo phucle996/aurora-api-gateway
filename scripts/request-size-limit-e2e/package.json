@@ -1,0 +1,6 @@
+{
+  "name": "request-size-limit-e2e",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.mjs"
+}

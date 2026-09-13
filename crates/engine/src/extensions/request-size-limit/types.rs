@@ -100,37 +100,37 @@ pub struct RequestSizeEvalRequest<'a> {
     pub body_bytes: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RequestSizeDecision {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RequestSizeDecision<'a> {
     pub allowed: bool,
     pub rejected_code: u16,
-    pub response_body: Vec<u8>,
+    pub response_body: &'a [u8],
     pub matched: bool,
-    pub rule_id: String,
+    pub rule_id: &'a str,
 }
 
-impl RequestSizeDecision {
-    pub fn allow() -> Self {
-        Self {
+impl<'a> RequestSizeDecision<'a> {
+    pub fn allow() -> RequestSizeDecision<'static> {
+        RequestSizeDecision {
             allowed: true,
             rejected_code: 0,
-            response_body: Vec::new(),
+            response_body: &[],
             matched: false,
-            rule_id: String::new(),
+            rule_id: "",
         }
     }
 
-    pub fn allow_matched(rule_id: String) -> Self {
+    pub fn allow_matched(rule_id: &'a str) -> Self {
         Self {
             allowed: true,
             rejected_code: 0,
-            response_body: Vec::new(),
+            response_body: &[],
             matched: true,
             rule_id,
         }
     }
 
-    pub fn reject(rule_id: String, rejected_code: u16, response_body: Vec<u8>) -> Self {
+    pub fn reject(rule_id: &'a str, rejected_code: u16, response_body: &'a [u8]) -> Self {
         Self {
             allowed: false,
             rejected_code,
