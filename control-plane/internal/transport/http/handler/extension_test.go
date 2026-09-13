@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"aurora-waf.local/control-plane/internal/domain/entity"
@@ -194,3 +195,138 @@ func TestExtensionHandler_UpdateConfig(t *testing.T) {
 		t.Errorf("unexpected command: %+v", capturedCmd)
 	}
 }
+
+func TestExtensionHandler_TransportValidation_EmptyID(t *testing.T) {
+	svc := &mockExtService{}
+	r := setupTestRouter(svc)
+
+	// GetByID empty / whitespace ID
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/api/v1/extensions/%20", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for empty id, got %d", w.Code)
+	}
+
+	// UpdateStatus empty / whitespace ID
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("PUT", "/api/v1/extensions/%20/status", bytes.NewBufferString(`{"enabled":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for empty id on status, got %d", w.Code)
+	}
+
+	// UpdateConfig empty / whitespace ID
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("PUT", "/api/v1/extensions/%20/config", bytes.NewBufferString(`{"config_json":"{}"}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for empty id on config, got %d", w.Code)
+	}
+}
+
+func TestExtensionHandler_TransportValidation_ContentType(t *testing.T) {
+	svc := &mockExtService{}
+	r := setupTestRouter(svc)
+
+	// Unsupported media type for status
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("PUT", "/api/v1/extensions/metrics/status", bytes.NewBufferString(`{"enabled":true}`))
+	req.Header.Set("Content-Type", "text/plain")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusUnsupportedMediaType {
+		t.Errorf("expected 415 for text/plain, got %d", w.Code)
+	}
+
+	// Unsupported media type for config
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("PUT", "/api/v1/extensions/metrics/config", bytes.NewBufferString(`{"config_json":"{}"}`))
+	req.Header.Set("Content-Type", "text/plain")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusUnsupportedMediaType {
+		t.Errorf("expected 415 for text/plain, got %d", w.Code)
+	}
+}
+
+func TestExtensionHandler_TransportValidation_UnknownFieldsAndTrailing(t *testing.T) {
+	svc := &mockExtService{}
+	r := setupTestRouter(svc)
+
+	// Unknown field in status payload
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("PUT", "/api/v1/extensions/metrics/status", bytes.NewBufferString(`{"enabled":true,"unknown_param":123}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for unknown fields in status, got %d", w.Code)
+	}
+
+	// Trailing JSON in status payload
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("PUT", "/api/v1/extensions/metrics/status", bytes.NewBufferString(`{"enabled":true} {"extra":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for trailing JSON in status, got %d", w.Code)
+	}
+
+	// Unknown field in config payload
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("PUT", "/api/v1/extensions/metrics/config", bytes.NewBufferString(`{"config_json":"{}","unknown_param":123}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for unknown fields in config, got %d", w.Code)
+	}
+
+	// Trailing JSON in config payload
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("PUT", "/api/v1/extensions/metrics/config", bytes.NewBufferString(`{"config_json":"{}"} {"extra":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for trailing JSON in config, got %d", w.Code)
+	}
+}
+
+func TestExtensionHandler_TransportValidation_InvalidJSONConfig(t *testing.T) {
+	svc := &mockExtService{}
+	r := setupTestRouter(svc)
+
+	// config_json with malformed JSON string
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("PUT", "/api/v1/extensions/metrics/config", bytes.NewBufferString(`{"config_json":"{malformed json"}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for malformed config_json, got %d", w.Code)
+	}
+}
+
+func TestExtensionHandler_TransportValidation_BodyLimit(t *testing.T) {
+	svc := &mockExtService{}
+	r := setupTestRouter(svc)
+
+	// Status payload exceeding 64KB with allowed whitespace
+	hugeStatus := bytes.NewBufferString(`{"enabled":true` + strings.Repeat(" ", 70000) + `}`)
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("PUT", "/api/v1/extensions/metrics/status", hugeStatus)
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("expected 413 for oversized status body, got %d", w.Code)
+	}
+
+	// Config payload exceeding 1MB with large config_json string value
+	hugeConfig := bytes.NewBufferString(`{"config_json":"` + strings.Repeat("a", 1100000) + `"}`)
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("PUT", "/api/v1/extensions/metrics/config", hugeConfig)
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("expected 413 for oversized config body, got %d", w.Code)
+	}
+}
+

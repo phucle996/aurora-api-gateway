@@ -522,28 +522,18 @@ export const EXTENSION_DEFAULT_CONFIGS: Record<string, Record<string, any>> = {
     ignore_responses: true,
     sample_rate: 0.1
   },
-  'priority-routing': {
-    enabled: true,
-    header_name: 'X-Customer-Tier',
-    high_priority_values: ['enterprise', 'vip'],
-    low_priority_queue_capacity: 500,
-    timeout_ms: 3000
-  },
-  'maintenance-mode': {
-    enabled: false,
-    status_code: 503,
-    bypass_header: 'X-Maintenance-Bypass',
-    retry_after_secs: 300,
-    message: 'Service undergoing planned maintenance. Please retry in a few moments.'
-  },
   'request-termination': {
     enabled: true,
-    status_code: 200,
-    body: '{"status":"mocked","message":"Early terminated by gateway policy"}',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Mock-Source': 'Aurora-Gateway'
-    }
+    status_code: 503,
+    content_type: 'application/json; charset=utf-8',
+    body: '{"error": "Service undergoing planned maintenance. Please retry later."}',
+    headers: [
+      { name: 'Retry-After', value: '300' },
+      { name: 'X-Aurora-Terminated', value: 'true' }
+    ],
+    bypass_headers: [
+      { name: 'X-Maintenance-Bypass', value: 'secret123' }
+    ]
   },
 
   // 5. Request Transformation (10)

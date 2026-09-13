@@ -64,25 +64,31 @@ ngx_int_t ngx_http_gateway_handler(ngx_http_request_t *r) {
     return rc;
   }
 
-  /* Stage 8: In-process Traffic Split */
+  /* Stage 8: In-process Request Termination */
+  rc = ngx_http_gateway_eval_request_termination(r, conf, host);
+  if (rc != NGX_DECLINED) {
+    return rc;
+  }
+
+  /* Stage 9: In-process Traffic Split */
   rc = ngx_http_gateway_eval_traffic_split(r, conf, host);
   if (rc != NGX_DECLINED) {
     return rc;
   }
 
-  /* Stage 9: In-process Canary Release */
+  /* Stage 10: In-process Canary Release */
   rc = ngx_http_gateway_eval_canary_release(r, conf, host);
   if (rc != NGX_DECLINED) {
     return rc;
   }
 
-  /* Stage 10: In-process Blue-Green Deployment */
+  /* Stage 11: In-process Blue-Green Deployment */
   rc = ngx_http_gateway_eval_blue_green(r, conf, host);
   if (rc != NGX_DECLINED) {
     return rc;
   }
 
-  /* Stage 11: In-process Request Mirror */
+  /* Stage 12: In-process Request Mirror */
   rc = ngx_http_gateway_eval_request_mirror(r, conf, host);
   if (rc != NGX_DECLINED) {
     return rc;

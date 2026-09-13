@@ -27,12 +27,6 @@ func NewExtensionService(repo repo.ExtensionRepository, onMutation ...func()) *e
 	}
 }
 
-func (s *extensionService) notifyMutation() {
-	if s.onMutation != nil {
-		s.onMutation()
-	}
-}
-
 func (s *extensionService) ListExtensions(ctx context.Context, q entity.ListExtensionsQuery) ([]entity.ExtensionRecord, error) {
 	q.Category = strings.TrimSpace(q.Category)
 	q.Status = strings.TrimSpace(strings.ToLower(q.Status))
@@ -53,10 +47,6 @@ func (s *extensionService) ListExtensions(ctx context.Context, q entity.ListExte
 }
 
 func (s *extensionService) GetExtension(ctx context.Context, id string) (*entity.ExtensionRecord, error) {
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return nil, fmt.Errorf("extension id cannot be empty")
-	}
 	record, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -66,10 +56,6 @@ func (s *extensionService) GetExtension(ctx context.Context, id string) (*entity
 }
 
 func (s *extensionService) UpdateExtensionStatus(ctx context.Context, cmd entity.UpdateExtensionStatusCommand) error {
-	cmd.ID = strings.TrimSpace(cmd.ID)
-	if cmd.ID == "" {
-		return fmt.Errorf("extension id cannot be empty")
-	}
 	record, err := s.GetExtension(ctx, cmd.ID)
 	if err != nil {
 		return err
@@ -89,21 +75,13 @@ func (s *extensionService) UpdateExtensionStatus(ctx context.Context, cmd entity
 	if err := s.repo.UpdateStatus(ctx, cmd); err != nil {
 		return err
 	}
-	s.notifyMutation()
+	if s.onMutation != nil {
+		s.onMutation()
+	}
 	return nil
 }
 
 func (s *extensionService) UpdateExtensionConfig(ctx context.Context, cmd entity.UpdateExtensionConfigCommand) error {
-	cmd.ID = strings.TrimSpace(cmd.ID)
-	if cmd.ID == "" {
-		return fmt.Errorf("extension id cannot be empty")
-	}
-
-	configJSON := strings.TrimSpace(cmd.ConfigJSON)
-	if configJSON == "" {
-		configJSON = "{}"
-	}
-
 	record, err := s.GetExtension(ctx, cmd.ID)
 	if err != nil {
 		return err
@@ -115,7 +93,7 @@ func (s *extensionService) UpdateExtensionConfig(ctx context.Context, cmd entity
 	if !ok {
 		return fmt.Errorf("extension manifest %s@%d is unavailable", record.ManifestKey, record.ManifestVersion)
 	}
-	canonical, err := extensionmanifest.ValidateConfig(manifest, configJSON)
+	canonical, err := extensionmanifest.ValidateConfig(manifest, cmd.ConfigJSON)
 	if err != nil {
 		return fmt.Errorf("invalid config for %s: %w", cmd.ID, err)
 	}
@@ -124,7 +102,9 @@ func (s *extensionService) UpdateExtensionConfig(ctx context.Context, cmd entity
 	if err := s.repo.UpdateConfig(ctx, cmd); err != nil {
 		return err
 	}
-	s.notifyMutation()
+	if s.onMutation != nil {
+		s.onMutation()
+	}
 	return nil
 }
 

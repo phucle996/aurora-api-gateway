@@ -56,9 +56,6 @@ import {
   GitBranch,
   Shuffle,
   Copy,
-  Ghost,
-  Sparkles,
-  Construction,
   OctagonX,
 
   // 5. Request Transformation (10)
@@ -253,11 +250,7 @@ export function ExtensionIcon({ id, category, className = 'w-5 h-5' }: Extension
       return <Shuffle className={className} />;
     case 'request-mirror': // đã imple (bao trọn cả traffic-shadow qua sample_percentage & x-request-mirror)
       return <Copy className={className} />;
-    case 'priority-routing':
-      return <Sparkles className={className} />;
-    case 'maintenance-mode':
-      return <Construction className={className} />;
-    case 'request-termination':
+    case 'request-termination': // đã imple (bao trọn cả maintenance-mode, direct response & mock)
       return <OctagonX className={className} />;
 
     // 5. Request Transformation (10) - All Unique

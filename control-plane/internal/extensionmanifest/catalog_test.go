@@ -7,8 +7,8 @@ func TestCatalogDefaultsMatchTheirRuntimeSchemas(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load catalog: %v", err)
 	}
-	if len(manifests) != 19 {
-		t.Fatalf("expected 19 packaged manifests, got %d", len(manifests))
+	if len(manifests) != 20 {
+		t.Fatalf("expected 20 packaged manifests, got %d", len(manifests))
 	}
 	digest, err := Digest()
 	if err != nil || len(digest) != 64 {
@@ -68,21 +68,21 @@ func TestJWTManifestRequiresAtLeastOneRuleBeforeEnable(t *testing.T) {
 }
 
 func TestValidateConfigRejectsUnknownAndTrailingValues(t *testing.T) {
-	manifest, ok := Find("builtin/maintenance-mode", 1)
+	manifest, ok := Find("builtin/request-termination", 1)
 	if !ok {
-		t.Fatal("maintenance manifest not installed")
+		t.Fatal("request-termination manifest not installed")
 	}
-	if _, err := ValidateConfig(manifest, `{"status_code":503,"message":"maintenance","unknown":true}`); err == nil {
+	if _, err := ValidateConfig(manifest, `{"status_code":503,"body":"maintenance","unknown":true}`); err == nil {
 		t.Fatal("expected unknown field to be rejected")
 	}
-	if _, err := ValidateConfig(manifest, `{"status_code":503,"message":"maintenance"} {}`); err == nil {
+	if _, err := ValidateConfig(manifest, `{"status_code":503,"body":"maintenance"} {}`); err == nil {
 		t.Fatal("expected trailing JSON value to be rejected")
 	}
-	canonical, err := ValidateConfig(manifest, `{"message":"maintenance","status_code":503}`)
+	canonical, err := ValidateConfig(manifest, `{"body":"maintenance","status_code":503}`)
 	if err != nil {
 		t.Fatalf("expected valid config: %v", err)
 	}
-	if canonical != `{"message":"maintenance","status_code":503}` {
-		t.Fatalf("unexpected canonical config: %s", canonical)
+	if canonical != `{"body":"maintenance","status_code":503}` {
+		t.Fatalf("unexpected canonical json: %s", canonical)
 	}
 }

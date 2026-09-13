@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -17,6 +18,8 @@ import (
 const (
 	extensionQueryTimeout  = 5 * time.Second
 	extensionActionTimeout = 10 * time.Second
+	extensionStatusMaxBody = 65536   // 64 KB
+	extensionConfigMaxBody = 1048576 // 1 MB
 )
 
 // ExtensionHandler handles extension catalog and configuration HTTP requests.
@@ -82,6 +85,10 @@ func (h *ExtensionHandler) List(c *gin.Context) {
 func (h *ExtensionHandler) GetByID(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "extension id cannot be empty"})
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), extensionQueryTimeout)
 	defer cancel()
@@ -125,10 +132,34 @@ func (h *ExtensionHandler) GetByID(c *gin.Context) {
 func (h *ExtensionHandler) UpdateStatus(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "extension id cannot be empty"})
+		return
+	}
 
+	contentType := c.GetHeader("Content-Type")
+	if contentType != "" && strings.Split(contentType, ";")[0] != "application/json" {
+		c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "application/json required"})
+		return
+	}
+
+	reader := http.MaxBytesReader(c.Writer, c.Request.Body, extensionStatusMaxBody)
 	var req dto.UpdateExtensionStatusRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	decoder := json.NewDecoder(reader)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&req); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body exceeds size limit"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status payload: " + err.Error()})
+		return
+	}
+
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "trailing JSON in request body"})
 		return
 	}
 
@@ -164,14 +195,38 @@ func (h *ExtensionHandler) UpdateStatus(c *gin.Context) {
 func (h *ExtensionHandler) UpdateConfig(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "extension id cannot be empty"})
+		return
+	}
 
+	contentType := c.GetHeader("Content-Type")
+	if contentType != "" && strings.Split(contentType, ";")[0] != "application/json" {
+		c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "application/json required"})
+		return
+	}
+
+	reader := http.MaxBytesReader(c.Writer, c.Request.Body, extensionConfigMaxBody)
 	var req dto.UpdateExtensionConfigRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	decoder := json.NewDecoder(reader)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&req); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body exceeds size limit"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid config payload: " + err.Error()})
 		return
 	}
 
-	configJSON := req.ConfigJSON
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "trailing JSON in request body"})
+		return
+	}
+
+	configJSON := strings.TrimSpace(req.ConfigJSON)
 	if configJSON == "" && req.Config != nil {
 		b, err := json.Marshal(req.Config)
 		if err != nil {
@@ -183,6 +238,9 @@ func (h *ExtensionHandler) UpdateConfig(c *gin.Context) {
 
 	if configJSON == "" {
 		configJSON = "{}"
+	} else if !json.Valid([]byte(configJSON)) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid json for extension config"})
+		return
 	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), extensionActionTimeout)

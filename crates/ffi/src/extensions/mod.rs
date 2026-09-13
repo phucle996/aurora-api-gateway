@@ -14,6 +14,8 @@ pub mod rate_limit;
 pub mod request_mirror;
 #[path = "request-size-limit/mod.rs"]
 pub mod request_size_limit;
+#[path = "request-termination/mod.rs"]
+pub mod request_termination;
 #[path = "traffic-shaper/mod.rs"]
 pub mod traffic_shaper;
 #[path = "traffic-split/mod.rs"]

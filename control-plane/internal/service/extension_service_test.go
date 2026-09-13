@@ -48,7 +48,7 @@ func TestExtensionService_Validation(t *testing.T) {
 		getByIDFn: func(ctx context.Context, id string) (*entity.ExtensionRecord, error) {
 			return &entity.ExtensionRecord{
 				ID:              id,
-				ManifestKey:     "builtin/maintenance-mode",
+				ManifestKey:     "builtin/request-termination",
 				ManifestVersion: 1,
 			}, nil
 		},
@@ -56,26 +56,8 @@ func TestExtensionService_Validation(t *testing.T) {
 	svc := service.NewExtensionService(mockRepo)
 	ctx := context.Background()
 
-	// Empty ID for GetExtension
-	_, err := svc.GetExtension(ctx, "  ")
-	if err == nil {
-		t.Errorf("expected error on empty id, got nil")
-	}
-
-	// Empty ID for UpdateExtensionStatus
-	err = svc.UpdateExtensionStatus(ctx, entity.UpdateExtensionStatusCommand{ID: ""})
-	if err == nil {
-		t.Errorf("expected error on empty id, got nil")
-	}
-
-	// Empty ID for UpdateExtensionConfig
-	err = svc.UpdateExtensionConfig(ctx, entity.UpdateExtensionConfigCommand{ID: ""})
-	if err == nil {
-		t.Errorf("expected error on empty id, got nil")
-	}
-
 	// Invalid JSON for UpdateExtensionConfig
-	err = svc.UpdateExtensionConfig(ctx, entity.UpdateExtensionConfigCommand{
+	err := svc.UpdateExtensionConfig(ctx, entity.UpdateExtensionConfigCommand{
 		ID:         "test",
 		ConfigJSON: "{invalid-json",
 	})
@@ -92,12 +74,12 @@ func TestExtensionService_Validation(t *testing.T) {
 
 	err = svc.UpdateExtensionConfig(ctx, entity.UpdateExtensionConfigCommand{
 		ID:         "test",
-		ConfigJSON: `{"status_code":503,"message":"Planned maintenance"}`,
+		ConfigJSON: `{"body":"Planned maintenance","status_code":503}`,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error on valid json: %v", err)
 	}
-	if updatedCmd.ID != "test" || updatedCmd.ConfigJSON != `{"message":"Planned maintenance","status_code":503}` {
+	if updatedCmd.ID != "test" || updatedCmd.ConfigJSON != `{"body":"Planned maintenance","status_code":503}` {
 		t.Errorf("unexpected command recorded: %+v", updatedCmd)
 	}
 

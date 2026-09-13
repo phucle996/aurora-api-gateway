@@ -610,7 +610,58 @@ async fn test_materialize_nginx_writes_and_removes_request_mirror_snapshot() {
     let _ = tokio::fs::remove_dir_all(base).await;
 }
 
+#[tokio::test]
+async fn test_materialize_nginx_writes_and_removes_request_termination_snapshot() {
+    let base = std::env::temp_dir().join(format!(
+        "aurora-agent-test-termination-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let policy_dir = base.join("policy");
+    let routing_dir = base.join("routing");
+    let _ = tokio::fs::remove_dir_all(&base).await;
 
+    let spec = Spec {
+        release_id: 501,
+        extensions: vec![crate::spec::extensions::ExtensionInstanceSpec {
+            instance_id: "term-1".to_string(),
+            key: "builtin/request-termination".to_string(),
+            version: 1,
+            renderer: "request-termination".to_string(),
+            manifest_digest: String::new(),
+            config_json: r#"{
+                "status_code": 503,
+                "content_type": "application/json",
+                "body": "{\"error\": \"Under Maintenance\"}"
+            }"#
+            .to_string(),
+        }],
+        ..Default::default()
+    };
+
+    materialize_nginx(&spec, &policy_dir, &routing_dir)
+        .await
+        .expect("materialize request-termination snapshot");
+    let rt = tokio::fs::read_to_string(policy_dir.join("active-request-termination.json"))
+        .await
+        .expect("read request-termination snapshot");
+    assert!(rt.contains("\"generation\": 501"));
+    assert!(rt.contains("\"status_code\": 503"));
+    assert!(rt.contains("Under Maintenance"));
+
+    let disabled = Spec {
+        release_id: 502,
+        ..Default::default()
+    };
+    let result = materialize_nginx(&disabled, &policy_dir, &routing_dir)
+        .await
+        .expect("remove request-termination snapshot");
+    assert!(result.nginx_changed);
+    assert!(!policy_dir.join("active-request-termination.json").exists());
+    let _ = tokio::fs::remove_dir_all(base).await;
+}
 
 #[test]
 fn test_access_policy_renderer_generates_cidr_rules_from_instance_config() {

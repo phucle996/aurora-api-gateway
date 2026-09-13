@@ -110,6 +110,14 @@ ngx_int_t ngx_http_gateway_variables(ngx_conf_t *cf) {
   }
   v->get_handler = ngx_http_gateway_variable_mirror_status;
 
+  ngx_str_t termination_status_name = ngx_string("gateway_termination_status");
+  v = ngx_http_add_variable(cf, &termination_status_name,
+                            NGX_HTTP_VAR_NOCACHEABLE);
+  if (v == NULL) {
+    return NGX_ERROR;
+  }
+  v->get_handler = ngx_http_gateway_variable_termination_status;
+
   return NGX_OK;
 }
 

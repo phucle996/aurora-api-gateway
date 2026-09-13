@@ -289,7 +289,29 @@ pub async fn materialize_nginx(
         }
     }
 
-    // 9. Upstreams Config
+    // 12. Request Termination snapshot.
+    let request_termination_path = policy_dir.join("active-request-termination.json");
+    if let Some(rt_config) = rendered_extensions.request_termination_policy.as_ref() {
+        let mut rt_obj = rt_config
+            .as_object()
+            .ok_or_else(|| "request-termination config must be a JSON object".to_string())?
+            .clone();
+        rt_obj.insert("schema_version".to_string(), serde_json::json!(1));
+        rt_obj.insert("generation".to_string(), serde_json::json!(spec.release_id));
+        let rt_json = serde_json::to_string_pretty(&serde_json::Value::Object(rt_obj))?;
+        if atomic_write_if_changed(&request_termination_path, rt_json.as_bytes()).await? {
+            info!("Updated active-request-termination.json");
+            changed = true;
+        }
+    } else {
+        match tokio::fs::remove_file(&request_termination_path).await {
+            Ok(()) => changed = true,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(Box::new(error)),
+        }
+    }
+
+    // 13. Upstreams Config
     let upstreams_path = policy_dir.join("active-upstreams.conf");
     let upstreams_content = if let Some(ref raw) = spec.upstreams_conf {
         raw.clone()

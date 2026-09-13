@@ -15,6 +15,8 @@ pub mod rate_limit;
 pub mod request_mirror;
 #[path = "request-size-limit/mod.rs"]
 pub mod request_size_limit;
+#[path = "request-termination/mod.rs"]
+pub mod request_termination;
 #[path = "traffic-shaper/mod.rs"]
 pub mod traffic_shaper;
 #[path = "traffic-split/mod.rs"]
@@ -39,6 +41,7 @@ pub struct RenderedExtensions {
     pub canary_release_policy: Option<Value>,
     pub blue_green_policy: Option<Value>,
     pub request_mirror_policy: Option<Value>,
+    pub request_termination_policy: Option<Value>,
 }
 
 pub fn render_extensions(
@@ -64,6 +67,7 @@ pub fn render_extensions(
     let mut canary_release_policy = None;
     let mut blue_green_policy = None;
     let mut request_mirror_policy = None;
+    let mut request_termination_policy = None;
 
     for instance in instances {
         if instance.renderer.trim().is_empty() {
@@ -160,6 +164,13 @@ pub fn render_extensions(
                 &mut server,
                 &mut has_server,
             )?,
+            "request-termination" => request_termination::materialize(
+                instance,
+                config,
+                &mut request_termination_policy,
+                &mut server,
+                &mut has_server,
+            )?,
             renderer if renderer.starts_with("nginx-") => {
                 let mut sink = NginxDirectiveSink {
                     modules: &mut modules,
@@ -203,5 +214,6 @@ pub fn render_extensions(
         canary_release_policy,
         blue_green_policy,
         request_mirror_policy,
+        request_termination_policy,
     })
 }

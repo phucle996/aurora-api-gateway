@@ -14,6 +14,7 @@ ngx_module_srcs="$ngx_addon_dir/src/module.c \
                  $ngx_addon_dir/src/extensions/canary_release.c \
                  $ngx_addon_dir/src/extensions/blue_green.c \
                  $ngx_addon_dir/src/extensions/request_mirror.c \
+                 $ngx_addon_dir/src/extensions/request_termination.c \
                  $ngx_addon_dir/src/extensions/waf.c"
 ngx_module_incs="$ngx_addon_dir/include"
 ngx_module_libs="$ngx_addon_dir/../../target/release/libaurora_ffi.a -Wl,--exclude-libs,ALL -ldl -lpthread -lm"

@@ -341,6 +341,41 @@ uint32_t aurora_request_mirror_evaluate(const AuroraRequestMirrorEngine *engine,
                                         size_t method_len, uint32_t random_seed,
                                         AuroraMirrorDecision *out_decision);
 
+/* Extension: Request Termination */
+typedef struct AuroraRequestTerminationEngine AuroraRequestTerminationEngine;
+
+typedef struct {
+  const uint8_t *name_ptr;
+  size_t name_len;
+  const uint8_t *value_ptr;
+  size_t value_len;
+} AuroraIncomingHeader;
+
+typedef struct {
+  uint32_t matched;
+  uint32_t should_terminate;
+  uint32_t status_code;
+  uint32_t rule_id_len;
+  char rule_id[128];
+  uint32_t content_type_len;
+  char content_type[128];
+  uint32_t body_len;
+  const char *body;
+  uint32_t headers_count;
+  AuroraUpstreamHeader headers[16];
+} AuroraTerminationDecision;
+
+uint32_t
+aurora_request_termination_create(const uint8_t *data, size_t len,
+                                  AuroraRequestTerminationEngine **out);
+void aurora_request_termination_destroy(AuroraRequestTerminationEngine *engine);
+uint32_t aurora_request_termination_evaluate(
+    const AuroraRequestTerminationEngine *engine, const uint8_t *origin,
+    size_t origin_len, const uint8_t *path, size_t path_len,
+    const uint8_t *method, size_t method_len,
+    const AuroraIncomingHeader *headers, size_t headers_count,
+    AuroraTerminationDecision *out_decision);
+
 /* Control Plane Runtime & Telemetry */
 uint32_t aurora_waf_start_runtime(const char *controller_url,
                                   const char *node_id, const char *token,
