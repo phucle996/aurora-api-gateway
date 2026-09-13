@@ -17,6 +17,9 @@ type healthcheckService struct {
 // NewHealthcheckService khởi tạo dịch vụ HealthcheckService,
 // nhận vào repo.SystemRepository và trả về interface domainservice.HealthcheckService.
 func NewHealthcheckService(system repo.SystemRepository) domainservice.HealthcheckService {
+	if system == nil {
+		panic("systemRepo cannot be nil")
+	}
 	return &healthcheckService{
 		system: system,
 	}

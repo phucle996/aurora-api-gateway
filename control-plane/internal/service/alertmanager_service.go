@@ -22,6 +22,9 @@ type alertmanagerService struct {
 
 // NewAlertmanagerService khởi tạo service adapter giao tiếp với Alertmanager & Prometheus.
 func NewAlertmanagerService(repo repo.AlertmanagerRepository) port.AlertmanagerService {
+	if repo == nil {
+		panic("alertmanagerRepo cannot be nil")
+	}
 	return &alertmanagerService{
 		repo: repo,
 		httpClient: &http.Client{

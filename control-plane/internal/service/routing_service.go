@@ -19,6 +19,9 @@ func NewRoutingService(
 	r repo.RouteRepository,
 	onMutation ...func(),
 ) domainService.RoutingService {
+	if r == nil {
+		panic("routeRepo cannot be nil")
+	}
 	var fn func()
 	if len(onMutation) > 0 {
 		fn = onMutation[0]

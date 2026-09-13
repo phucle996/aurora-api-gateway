@@ -102,8 +102,12 @@ func TestReadinessFailsWhenStorageCloses(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer pools.Close()
+	mod, err := app.NewModule(pools.Writer, pools.Reader, config.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	router := gin.New()
-	app.RegisterRoutes(router, app.NewModule(pools.Writer, pools.Reader, config.Config{}), "")
+	app.RegisterRoutes(router, mod, "")
 	check := func(path string, want int) {
 		t.Helper()
 		response := httptest.NewRecorder()

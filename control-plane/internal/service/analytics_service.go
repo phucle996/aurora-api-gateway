@@ -30,6 +30,9 @@ type analyticsService struct {
 
 // NewAnalyticsService khởi tạo service phân tích số liệu (Query-Only Semantic Analytics Engine).
 func NewAnalyticsService(analyticsRepo repo.AnalyticsRepository, extRepo ...repo.ExtensionRepository) domainService.AnalyticsService {
+	if analyticsRepo == nil {
+		panic("analyticsRepo cannot be nil")
+	}
 	client := &http.Client{Timeout: 5 * time.Second}
 	var er repo.ExtensionRepository
 	if len(extRepo) > 0 {

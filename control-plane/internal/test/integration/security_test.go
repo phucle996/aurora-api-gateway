@@ -49,7 +49,10 @@ func securityFixture(t *testing.T) http.Handler {
 		SQLitePath: path,
 		JWTSecret:  securityTestToken,
 	}
-	module := app.NewModule(pools.Writer, pools.Reader, cfg)
+	module, err := app.NewModule(pools.Writer, pools.Reader, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
 	app.RegisterRoutes(router, module, securityTestToken)
 	return router
 }

@@ -49,7 +49,10 @@ func routesFixture(t *testing.T) (http.Handler, string) {
 		SQLitePath: path,
 		JWTSecret:  "routes-test-token-at-least-32-bytes",
 	}
-	module := app.NewModule(db, db, cfg)
+	module, err := app.NewModule(db, db, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
 	router := gin.New()
 	token := "routes-operator-secret-token"
 	app.RegisterRoutes(router, module, token)

@@ -17,6 +17,9 @@ type extensionService struct {
 
 // NewExtensionService creates a new ExtensionService instance with optional mutation callback.
 func NewExtensionService(repo repo.ExtensionRepository, onMutation ...func()) *extensionService {
+	if repo == nil {
+		panic("extensionRepo cannot be nil")
+	}
 	var fn func()
 	if len(onMutation) > 0 {
 		fn = onMutation[0]

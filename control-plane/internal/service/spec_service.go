@@ -15,6 +15,9 @@ type SpecSyncService struct {
 
 // NewSpecSyncService creates a new SpecSyncService instance.
 func NewSpecSyncService(repo repo.SpecSyncRepository) *SpecSyncService {
+	if repo == nil {
+		panic("specSyncRepo cannot be nil")
+	}
 	return &SpecSyncService{
 		repo: repo,
 	}
@@ -23,12 +26,6 @@ func NewSpecSyncService(repo repo.SpecSyncRepository) *SpecSyncService {
 // SyncSpec serves the cluster declarative NodeSpec snapshot in O(1) time
 // by reading the pre-compiled active release from the database.
 func (s *SpecSyncService) SyncSpec(ctx context.Context, q entity.SpecSyncQuery) (*entity.SpecSyncResult, error) {
-	if s.repo == nil {
-		return &entity.SpecSyncResult{
-			InSync: false,
-		}, nil
-	}
-
 	active, err := s.repo.GetActiveSpecRelease(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get active spec release: %w", err)
@@ -62,8 +59,5 @@ func (s *SpecSyncService) SyncSpec(ctx context.Context, q entity.SpecSyncQuery) 
 
 // ReportSpec records the node's applied spec version and telemetry report.
 func (s *SpecSyncService) ReportSpec(ctx context.Context, cmd entity.SpecReportCommand) error {
-	if s.repo == nil {
-		return nil
-	}
 	return s.repo.RecordReport(ctx, cmd)
 }

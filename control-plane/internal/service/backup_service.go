@@ -37,6 +37,12 @@ type backupService struct {
 
 // NewBackupService khởi tạo service quản lý sao lưu dữ liệu và khôi phục snapshot.
 func NewBackupService(db *sql.DB, repo repo.BackupRepository, sqlitePath string) BackupService {
+	if db == nil {
+		panic("db cannot be nil")
+	}
+	if repo == nil {
+		panic("backupRepo cannot be nil")
+	}
 	return &backupService{
 		db:         db,
 		repo:       repo,
@@ -215,10 +221,6 @@ func (s *backupService) RestoreSnapshot(ctx context.Context, fileBytes []byte) (
 	_ = verifyDB.Close()
 
 	// Thực hiện khôi phục trực tiếp vào live database qua NewRestore của driver
-	if s.db == nil {
-		return nil, errors.New("kết nối cơ sở dữ liệu đích không khả dụng")
-	}
-
 	dbConn, err := s.db.Conn(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("không thể mở kết nối độc quyền phục hồi dữ liệu: %w", err)
@@ -471,6 +473,12 @@ type BackupScheduler struct {
 
 // NewBackupScheduler tạo mới scheduler quản lý tác vụ Cron sao lưu tự động.
 func NewBackupScheduler(svc port.BackupService, repo repo.BackupRepository) *BackupScheduler {
+	if svc == nil {
+		panic("backupService cannot be nil")
+	}
+	if repo == nil {
+		panic("backupRepo cannot be nil")
+	}
 	return &BackupScheduler{
 		svc:  svc,
 		repo: repo,

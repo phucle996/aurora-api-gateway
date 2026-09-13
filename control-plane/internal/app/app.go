@@ -99,7 +99,11 @@ func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
 		}
 	}
 
-	module := NewModule(pools.Writer, pools.Reader, cfg)
+	module, err := NewModule(pools.Writer, pools.Reader, cfg)
+	if err != nil {
+		_ = pools.Close()
+		return nil, fmt.Errorf("init module: %w", err)
+	}
 	RegisterRoutes(router, module, token)
 
 	// UI tĩnh (console quản trị) được nhúng trực tiếp vào binary.

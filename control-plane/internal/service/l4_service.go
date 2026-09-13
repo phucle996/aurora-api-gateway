@@ -17,6 +17,9 @@ type l4Service struct {
 
 // NewL4Service khởi tạo L4 domain service implementation.
 func NewL4Service(r repo.L4Repository, onMutation ...func()) domainservice.L4Service {
+	if r == nil {
+		panic("l4Repo cannot be nil")
+	}
 	var fn func()
 	if len(onMutation) > 0 {
 		fn = onMutation[0]

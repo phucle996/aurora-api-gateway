@@ -44,7 +44,10 @@ func backupFixture(t *testing.T) (http.Handler, string) {
 		SQLitePath: path,
 		JWTSecret:  backupTestToken,
 	}
-	module := app.NewModule(pools.Writer, pools.Reader, cfg)
+	module, err := app.NewModule(pools.Writer, pools.Reader, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
 	app.RegisterRoutes(router, module, backupTestToken)
 	return router, path
 }

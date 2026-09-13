@@ -34,7 +34,10 @@ func metricsFixture(t *testing.T) http.Handler {
 	t.Cleanup(func() { pools.Close() })
 
 	router := gin.New()
-	module := app.NewModule(pools.Writer, pools.Reader, config.Config{})
+	module, err := app.NewModule(pools.Writer, pools.Reader, config.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	app.RegisterRoutes(router, module, "metrics-test-token-at-least-32-bytes")
 	return router
 }

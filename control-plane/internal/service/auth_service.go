@@ -41,6 +41,9 @@ type authService struct {
 
 // NewAuthService là hàm khởi tạo dịch vụ xác thực, nhận vào kho lưu trữ dữ liệu và cấu hình hệ thống.
 func NewAuthService(repo repo.AuthRepository, cfg config.Config) AuthService {
+	if repo == nil {
+		panic("authRepo cannot be nil")
+	}
 	return &authService{
 		repo: repo,
 		cfg:  cfg,

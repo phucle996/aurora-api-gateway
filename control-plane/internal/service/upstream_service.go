@@ -29,6 +29,9 @@ type UpstreamService struct {
 
 // NewUpstreamService khởi tạo UpstreamService với repo tương ứng và mutation callback tùy chọn.
 func NewUpstreamService(r repo.UpstreamRepository, onMutation ...func()) domainService.UpstreamService {
+	if r == nil {
+		panic("upstreamRepo cannot be nil")
+	}
 	var fn func()
 	if len(onMutation) > 0 {
 		fn = onMutation[0]

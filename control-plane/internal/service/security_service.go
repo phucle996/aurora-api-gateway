@@ -25,6 +25,9 @@ type securityService struct {
 
 // NewSecurityService khởi tạo dịch vụ bảo mật & xác thực.
 func NewSecurityService(repo repo.SecurityRepository) port.SecurityService {
+	if repo == nil {
+		panic("securityRepo cannot be nil")
+	}
 	return &securityService{repo: repo}
 }
 

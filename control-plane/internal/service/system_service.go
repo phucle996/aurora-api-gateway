@@ -22,6 +22,9 @@ type SystemService struct {
 
 // NewSystemService khởi tạo service thu thập thông tin hệ thống.
 func NewSystemService(r repo.SystemRepository, cfg config.Config) port.SystemService {
+	if r == nil {
+		panic("systemRepo cannot be nil")
+	}
 	if cfg.Version == "" {
 		cfg.Version = config.DefaultVersion
 	}
