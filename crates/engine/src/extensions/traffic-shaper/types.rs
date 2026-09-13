@@ -68,21 +68,21 @@ pub(crate) struct CompiledRule {
     pub burst_bytes: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TrafficShaperDecision {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TrafficShaperDecision<'a> {
     pub rate_bytes_per_sec: u64,
     pub burst_bytes: u64,
     pub matched: bool,
-    pub rule_id: String,
+    pub rule_id: &'a str,
 }
 
-impl TrafficShaperDecision {
-    pub fn passthrough() -> Self {
-        Self {
+impl<'a> TrafficShaperDecision<'a> {
+    pub const fn passthrough() -> TrafficShaperDecision<'static> {
+        TrafficShaperDecision {
             rate_bytes_per_sec: 0,
             burst_bytes: 0,
             matched: false,
-            rule_id: String::new(),
+            rule_id: "",
         }
     }
 }

@@ -110,13 +110,13 @@ impl TrafficShaperEngine {
         })
     }
 
-    pub fn evaluate<'a>(
-        &self,
+    pub fn evaluate<'a, 'h>(
+        &'a self,
         host: &[u8],
         path: &[u8],
         client_ip: &[u8],
-        header_lookup: impl Fn(&str) -> Option<&'a [u8]>,
-    ) -> TrafficShaperDecision {
+        header_lookup: impl Fn(&str) -> Option<&'h [u8]>,
+    ) -> TrafficShaperDecision<'a> {
         if host.is_empty()
             || host.len() > 253
             || path.is_empty()
@@ -142,7 +142,7 @@ impl TrafficShaperEngine {
                         rate_bytes_per_sec: rule.rate_bytes_per_sec,
                         burst_bytes: rule.burst_bytes,
                         matched: true,
-                        rule_id: rule.id.clone(),
+                        rule_id: rule.id.as_str(),
                     };
                 }
                 LimitBy::RoutePath => {
@@ -150,7 +150,7 @@ impl TrafficShaperEngine {
                         rate_bytes_per_sec: rule.rate_bytes_per_sec,
                         burst_bytes: rule.burst_bytes,
                         matched: true,
-                        rule_id: rule.id.clone(),
+                        rule_id: rule.id.as_str(),
                     };
                 }
                 LimitBy::Header => {
@@ -162,7 +162,7 @@ impl TrafficShaperEngine {
                             rate_bytes_per_sec: rule.rate_bytes_per_sec,
                             burst_bytes: rule.burst_bytes,
                             matched: true,
-                            rule_id: rule.id.clone(),
+                            rule_id: rule.id.as_str(),
                         };
                     }
                     // If header absent or empty, skip to next rule in priority order
