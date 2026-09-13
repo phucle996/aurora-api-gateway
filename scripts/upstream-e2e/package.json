@@ -1,0 +1,27 @@
+{
+  "name": "aurora-upstream-e2e",
+  "version": "1.0.0",
+  "description": "Comprehensive Upstream E2E Quality Pyramid Suite (CRUD, Balancing, HA Failover, TLS/mTLS, Traffic Steering Extensions, Transport & Dynamic Hot Churn)",
+  "type": "module",
+  "scripts": {
+    "test": "node index.mjs",
+    "test:full": "node index.mjs",
+    "test:micro": "node index.mjs --bench-only --skip-macro",
+    "test:macro": "node index.mjs --skip-bench --phase=0",
+    "test:smoke": "node index.mjs --smoke --skip-bench --skip-macro",
+    "test:p1": "node index.mjs --phase=1 --skip-bench --skip-macro",
+    "test:p2": "node index.mjs --phase=2 --skip-bench --skip-macro",
+    "test:p3": "node index.mjs --phase=3 --skip-bench --skip-macro",
+    "test:p4": "node index.mjs --phase=4 --skip-bench --skip-macro",
+    "test:p5": "node index.mjs --phase=5 --skip-bench --skip-macro",
+    "test:p6": "node index.mjs --phase=6 --skip-bench --skip-macro",
+    "test:p7": "node index.mjs --phase=7 --skip-bench --skip-macro",
+    "test:mtls": "node index.mjs --phase=4 --skip-bench --skip-macro",
+    "test:failover": "node index.mjs --phase=3 --skip-bench --skip-macro",
+    "test:extensions": "node index.mjs --phase=5 --skip-bench --skip-macro"
+  },
+  "dependencies": {
+    "playwright-core": "^1.40.0",
+    "ws": "^8.18.0"
+  }
+}
