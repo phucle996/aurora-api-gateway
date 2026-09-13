@@ -14,4 +14,6 @@ pub mod traffic_shaper;
 pub mod traffic_split;
 #[path = "canary-release/mod.rs"]
 pub mod canary_release;
+#[path = "blue-green/mod.rs"]
+pub mod blue_green;
 pub mod waf;

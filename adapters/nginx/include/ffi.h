@@ -283,6 +283,34 @@ uint32_t aurora_canary_release_evaluate(
     void *lookup_ctx, aurora_header_lookup_fn lookup_fn,
     AuroraCanaryDecision *out_decision);
 
+/* ========================================================================== */
+/* Extension: Blue-Green Deployment Types & FFI                               */
+/* ========================================================================== */
+
+typedef struct AuroraBlueGreenEngine AuroraBlueGreenEngine;
+
+typedef struct {
+  uint32_t matched;
+  uint32_t is_header_override;
+  uint32_t rule_id_len;
+  char rule_id[128];
+  uint32_t upstream_len;
+  char upstream[128];
+  uint32_t active_slot_len;
+  char active_slot[16];
+  uint32_t headers_count;
+  AuroraUpstreamHeader headers[16];
+} AuroraBlueGreenDecision;
+
+uint32_t aurora_blue_green_create(const uint8_t *data, size_t len,
+                                  AuroraBlueGreenEngine **out);
+void aurora_blue_green_destroy(AuroraBlueGreenEngine *engine);
+uint32_t aurora_blue_green_evaluate(
+    const AuroraBlueGreenEngine *engine, const uint8_t *origin,
+    size_t origin_len, const uint8_t *path, size_t path_len, void *lookup_ctx,
+    aurora_header_lookup_fn lookup_fn,
+    AuroraBlueGreenDecision *out_decision);
+
 /* Control Plane Runtime & Telemetry */
 uint32_t aurora_waf_start_runtime(const char *controller_url,
                                   const char *node_id, const char *token,

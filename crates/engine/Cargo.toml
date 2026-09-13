@@ -38,6 +38,10 @@ harness = false
 name = "canary_release"
 harness = false
 
+[[bench]]
+name = "blue_green"
+harness = false
+
 [dependencies]
 hashbrown = { version = "0.17.1", default-features = false, features = ["inline-more"] }
 serde = { version = "1", features = ["derive"] }

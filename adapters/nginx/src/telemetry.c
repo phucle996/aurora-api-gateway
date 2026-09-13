@@ -89,6 +89,13 @@ ngx_int_t ngx_http_gateway_variables(ngx_conf_t *cf) {
   }
   v->get_handler = ngx_http_gateway_variable_canary_status;
 
+  ngx_str_t deploy_slot_name = ngx_string("gateway_deploy_slot");
+  v = ngx_http_add_variable(cf, &deploy_slot_name, NGX_HTTP_VAR_NOCACHEABLE);
+  if (v == NULL) {
+    return NGX_ERROR;
+  }
+  v->get_handler = ngx_http_gateway_variable_deploy_slot;
+
   return NGX_OK;
 }
 

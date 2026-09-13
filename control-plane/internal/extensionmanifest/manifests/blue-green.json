@@ -1,0 +1,146 @@
+{
+  "key": "builtin/blue-green",
+  "version": 1,
+  "id": "blue-green",
+  "name": "Blue-Green Deployment",
+  "category": "traffic_control",
+  "description": "Zero-downtime Blue-Green traffic routing, instant slot cutover, and preview header overrides.",
+  "renderer": "blue-green",
+  "builtin": true,
+  "default_config": {
+    "enabled": true,
+    "active_slot": "blue",
+    "blue_upstream": "app_blue",
+    "green_upstream": "app_green",
+    "switch_header": "X-Deploy-Slot"
+  },
+  "ui_schema": {
+    "layout_type": "form",
+    "fields": []
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "active_slot": {
+        "type": "string",
+        "enum": [
+          "blue",
+          "green"
+        ]
+      },
+      "blue_upstream": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "green_upstream": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "switch_header": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      },
+      "rules": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 64,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "blue_upstream",
+            "green_upstream"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "priority": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000
+            },
+            "origin": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 253
+            },
+            "path_prefix": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "active_slot": {
+              "type": "string",
+              "enum": [
+                "blue",
+                "green"
+              ]
+            },
+            "blue_upstream": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "green_upstream": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "switch_header": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "blue_upstream_headers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "value"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "green_upstream_headers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "value"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

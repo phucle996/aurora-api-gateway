@@ -500,6 +500,62 @@ async fn test_materialize_nginx_writes_and_removes_canary_release_snapshot() {
     let _ = tokio::fs::remove_dir_all(base).await;
 }
 
+#[tokio::test]
+async fn test_materialize_nginx_writes_and_removes_blue_green_snapshot() {
+    let base = std::env::temp_dir().join(format!(
+        "aurora-agent-test-bluegreen-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let policy_dir = base.join("policy");
+    let routing_dir = base.join("routing");
+    let _ = tokio::fs::remove_dir_all(&base).await;
+
+    let spec = Spec {
+        release_id: 301,
+        extensions: vec![crate::spec::extensions::ExtensionInstanceSpec {
+            instance_id: "bg-1".to_string(),
+            key: "builtin/blue-green".to_string(),
+            version: 1,
+            renderer: "blue-green".to_string(),
+            manifest_digest: String::new(),
+            config_json: r#"{
+                "active_slot": "green",
+                "blue_upstream": "app_blue",
+                "green_upstream": "app_green",
+                "switch_header": "x-deploy-slot"
+            }"#
+            .to_string(),
+        }],
+        ..Default::default()
+    };
+
+    materialize_nginx(&spec, &policy_dir, &routing_dir)
+        .await
+        .expect("materialize blue-green snapshot");
+    let bg = tokio::fs::read_to_string(policy_dir.join("active-blue-green.json"))
+        .await
+        .expect("read blue-green snapshot");
+    assert!(bg.contains("\"generation\": 301"));
+    assert!(bg.contains("\"app_blue\""));
+    assert!(bg.contains("\"app_green\""));
+    assert!(bg.contains("\"active_slot\": \"green\""));
+
+    let disabled = Spec {
+        release_id: 302,
+        ..Default::default()
+    };
+    let result = materialize_nginx(&disabled, &policy_dir, &routing_dir)
+        .await
+        .expect("remove blue-green snapshot");
+    assert!(result.nginx_changed);
+    assert!(!policy_dir.join("active-blue-green.json").exists());
+    let _ = tokio::fs::remove_dir_all(base).await;
+}
+
+
 #[test]
 fn test_access_policy_renderer_generates_cidr_rules_from_instance_config() {
     let instance = crate::spec::extensions::ExtensionInstanceSpec {

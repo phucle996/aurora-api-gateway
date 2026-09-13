@@ -245,6 +245,28 @@ pub async fn materialize_nginx(
         }
     }
 
+    // 10. Blue-Green snapshot.
+    let blue_green_path = policy_dir.join("active-blue-green.json");
+    if let Some(bg_config) = rendered_extensions.blue_green_policy.as_ref() {
+        let mut bg_obj = bg_config
+            .as_object()
+            .ok_or_else(|| "blue-green config must be a JSON object".to_string())?
+            .clone();
+        bg_obj.insert("schema_version".to_string(), serde_json::json!(1));
+        bg_obj.insert("generation".to_string(), serde_json::json!(spec.release_id));
+        let bg_json = serde_json::to_string_pretty(&serde_json::Value::Object(bg_obj))?;
+        if atomic_write_if_changed(&blue_green_path, bg_json.as_bytes()).await? {
+            info!("Updated active-blue-green.json");
+            changed = true;
+        }
+    } else {
+        match tokio::fs::remove_file(&blue_green_path).await {
+            Ok(()) => changed = true,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(Box::new(error)),
+        }
+    }
+
     // 9. Upstreams Config
     let upstreams_path = policy_dir.join("active-upstreams.conf");
     let upstreams_content = if let Some(ref raw) = spec.upstreams_conf {

@@ -15,6 +15,8 @@ pub mod request_size_limit;
 pub mod traffic_split;
 #[path = "canary-release/mod.rs"]
 pub mod canary_release;
+#[path = "blue-green/mod.rs"]
+pub mod blue_green;
 
 use crate::spec::extensions::ExtensionInstanceSpec;
 use nginx::NginxDirectiveSink;
@@ -33,6 +35,7 @@ pub struct RenderedExtensions {
     pub request_size_limit_policy: Option<Value>,
     pub traffic_split_policy: Option<Value>,
     pub canary_release_policy: Option<Value>,
+    pub blue_green_policy: Option<Value>,
 }
 
 pub fn render_extensions(
@@ -56,6 +59,7 @@ pub fn render_extensions(
     let mut request_size_limit_policy = None;
     let mut traffic_split_policy = None;
     let mut canary_release_policy = None;
+    let mut blue_green_policy = None;
 
     for instance in instances {
         if instance.renderer.trim().is_empty() {
@@ -138,6 +142,13 @@ pub fn render_extensions(
                 &mut server,
                 &mut has_server,
             )?,
+            "blue-green" => blue_green::materialize(
+                instance,
+                config,
+                &mut blue_green_policy,
+                &mut server,
+                &mut has_server,
+            )?,
             renderer if renderer.starts_with("nginx-") => {
                 let mut sink = NginxDirectiveSink {
                     modules: &mut modules,
@@ -179,5 +190,6 @@ pub fn render_extensions(
         request_size_limit_policy,
         traffic_split_policy,
         canary_release_policy,
+        blue_green_policy,
     })
 }
