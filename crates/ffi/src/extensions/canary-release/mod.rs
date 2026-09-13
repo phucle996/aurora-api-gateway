@@ -7,7 +7,7 @@
 use crate::extensions::connection_limit::AuroraHeaderLookupFn;
 use aurora_engine::canary_release::{CanaryReleaseEngine, CanaryReleaseEvalRequest};
 use std::{
-    panic::{catch_unwind, AssertUnwindSafe},
+    panic::{AssertUnwindSafe, catch_unwind},
     ptr, slice,
 };
 
@@ -198,7 +198,7 @@ pub unsafe extern "C" fn aurora_canary_release_evaluate(
             out.upstream_len = copy_up as u32;
 
             let mut h_idx = 0;
-            for (name, val) in decision.upstream_headers.into_iter().take(16) {
+            for (name, val) in decision.upstream_headers.iter().take(16) {
                 let name_bytes = name.as_bytes();
                 let copy_name = name_bytes.len().min(64);
                 out.headers[h_idx].name[..copy_name].copy_from_slice(&name_bytes[..copy_name]);
@@ -304,11 +304,23 @@ mod tests {
             assert_eq!(eval_rc, 0);
             assert_eq!(decision.matched, 1);
             assert_eq!(decision.is_canary, 1);
-            assert_eq!(&decision.rule_id[..decision.rule_id_len as usize], b"canary-v1");
-            assert_eq!(&decision.upstream[..decision.upstream_len as usize], b"app_canary");
+            assert_eq!(
+                &decision.rule_id[..decision.rule_id_len as usize],
+                b"canary-v1"
+            );
+            assert_eq!(
+                &decision.upstream[..decision.upstream_len as usize],
+                b"app_canary"
+            );
             assert_eq!(decision.headers_count, 1);
-            assert_eq!(&decision.headers[0].name[..decision.headers[0].name_len as usize], b"x-canary-tag");
-            assert_eq!(&decision.headers[0].value[..decision.headers[0].value_len as usize], b"active");
+            assert_eq!(
+                &decision.headers[0].name[..decision.headers[0].name_len as usize],
+                b"x-canary-tag"
+            );
+            assert_eq!(
+                &decision.headers[0].value[..decision.headers[0].value_len as usize],
+                b"active"
+            );
 
             aurora_canary_release_destroy(engine);
         }

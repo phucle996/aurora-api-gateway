@@ -143,11 +143,11 @@ impl TrafficSplitEngine {
         })
     }
 
-    pub fn evaluate<'a>(
-        &self,
-        req: &TrafficSplitEvalRequest<'a>,
-        header_lookup: impl Fn(&str) -> Option<&'a [u8]>,
-    ) -> TrafficSplitDecision {
+    pub fn evaluate<'a, 'h>(
+        &'a self,
+        req: &TrafficSplitEvalRequest<'_>,
+        header_lookup: impl Fn(&str) -> Option<&'h [u8]>,
+    ) -> TrafficSplitDecision<'a> {
         if req.origin.is_empty()
             || req.origin.len() > 253
             || req.path.is_empty()
@@ -187,13 +187,13 @@ impl TrafficSplitEngine {
 
             for target in &rule.targets {
                 if bucket < target.cumulative_weight {
-                    return TrafficSplitDecision::matched(rule.id.clone(), target.upstream.clone());
+                    return TrafficSplitDecision::matched(rule.id.as_str(), target.upstream.as_str());
                 }
             }
 
             // Fallback safety to last target
             if let Some(last) = rule.targets.last() {
-                return TrafficSplitDecision::matched(rule.id.clone(), last.upstream.clone());
+                return TrafficSplitDecision::matched(rule.id.as_str(), last.upstream.as_str());
             }
         }
 

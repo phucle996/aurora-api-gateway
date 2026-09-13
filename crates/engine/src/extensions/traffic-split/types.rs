@@ -85,23 +85,23 @@ pub struct TrafficSplitEvalRequest<'a> {
     pub random_seed: u32,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TrafficSplitDecision {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TrafficSplitDecision<'a> {
     pub matched: bool,
-    pub rule_id: String,
-    pub upstream: String,
+    pub rule_id: &'a str,
+    pub upstream: &'a str,
 }
 
-impl TrafficSplitDecision {
-    pub fn unmatched() -> Self {
-        Self {
+impl<'a> TrafficSplitDecision<'a> {
+    pub const fn unmatched() -> TrafficSplitDecision<'static> {
+        TrafficSplitDecision {
             matched: false,
-            rule_id: String::new(),
-            upstream: String::new(),
+            rule_id: "",
+            upstream: "",
         }
     }
 
-    pub fn matched(rule_id: String, upstream: String) -> Self {
+    pub const fn matched(rule_id: &'a str, upstream: &'a str) -> Self {
         Self {
             matched: true,
             rule_id,

@@ -121,31 +121,31 @@ pub struct CanaryReleaseEvalRequest<'a> {
     pub random_seed: u32,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CanaryDecision {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CanaryDecision<'a> {
     pub matched: bool,
-    pub rule_id: String,
-    pub upstream: String,
+    pub rule_id: &'a str,
+    pub upstream: &'a str,
     pub is_canary: bool,
-    pub upstream_headers: Vec<(String, String)>,
+    pub upstream_headers: &'a [(String, String)],
 }
 
-impl CanaryDecision {
-    pub fn unmatched() -> Self {
-        Self {
+impl<'a> CanaryDecision<'a> {
+    pub const fn unmatched() -> CanaryDecision<'static> {
+        CanaryDecision {
             matched: false,
-            rule_id: String::new(),
-            upstream: String::new(),
+            rule_id: "",
+            upstream: "",
             is_canary: false,
-            upstream_headers: Vec::new(),
+            upstream_headers: &[],
         }
     }
 
-    pub fn matched(
-        rule_id: String,
-        upstream: String,
+    pub const fn matched(
+        rule_id: &'a str,
+        upstream: &'a str,
         is_canary: bool,
-        upstream_headers: Vec<(String, String)>,
+        upstream_headers: &'a [(String, String)],
     ) -> Self {
         Self {
             matched: true,

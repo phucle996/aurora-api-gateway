@@ -1,0 +1,10 @@
+{
+  "name": "aurora-canary-release-e2e",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "test": "node index.mjs",
+    "smoke": "node index.mjs --smoke",
+    "bench": "node index.mjs --bench-only"
+  }
+}

@@ -48,12 +48,22 @@ fn test_canary_header_regex_match() {
     let engine = CanaryReleaseEngine::from_snapshot(policy.as_bytes()).unwrap();
 
     // 1. Header matches "true" -> Canary
-    let req = eval_req(b"example.com", b"/api/users", b"/api/users", b"", b"127.0.0.1", 0);
+    let req = eval_req(
+        b"example.com",
+        b"/api/users",
+        b"/api/users",
+        b"",
+        b"127.0.0.1",
+        0,
+    );
     let decision = engine.evaluate(&req, |k| if k == "x-canary" { Some(b"true") } else { None });
     assert!(decision.matched);
     assert_eq!(decision.upstream, "app_canary");
     assert!(decision.is_canary);
-    assert_eq!(decision.upstream_headers, vec![("X-Routed-Canary".to_string(), "true".to_string())]);
+    assert_eq!(
+        decision.upstream_headers,
+        &[("X-Routed-Canary".to_string(), "true".to_string())]
+    );
 
     // 2. Header matches "beta" -> Canary
     let decision2 = engine.evaluate(&req, |k| if k == "x-canary" { Some(b"beta") } else { None });
@@ -61,10 +71,19 @@ fn test_canary_header_regex_match() {
     assert!(decision2.is_canary);
 
     // 3. Header does not match -> Baseline
-    let decision3 = engine.evaluate(&req, |k| if k == "x-canary" { Some(b"false") } else { None });
+    let decision3 = engine.evaluate(&req, |k| {
+        if k == "x-canary" {
+            Some(b"false")
+        } else {
+            None
+        }
+    });
     assert_eq!(decision3.upstream, "app_baseline");
     assert!(!decision3.is_canary);
-    assert_eq!(decision3.upstream_headers, vec![("X-Routed-Canary".to_string(), "false".to_string())]);
+    assert_eq!(
+        decision3.upstream_headers,
+        &[("X-Routed-Canary".to_string(), "false".to_string())]
+    );
 
     // 4. Header missing -> Baseline
     let decision4 = engine.evaluate(&req, |_| None);
@@ -97,13 +116,27 @@ fn test_canary_uri_regex_match() {
 
     let engine = CanaryReleaseEngine::from_snapshot(policy.as_bytes()).unwrap();
 
-    let req_v2 = eval_req(b"example.com", b"/v2/products", b"/v2/products", b"", b"127.0.0.1", 0);
+    let req_v2 = eval_req(
+        b"example.com",
+        b"/v2/products",
+        b"/v2/products",
+        b"",
+        b"127.0.0.1",
+        0,
+    );
     let d1 = engine.evaluate(&req_v2, |_| None);
     assert_eq!(d1.upstream, "nextgen_v2");
     assert!(d1.is_canary);
     assert!(d1.upstream_headers.is_empty());
 
-    let req_v1 = eval_req(b"example.com", b"/v1/products", b"/v1/products", b"", b"127.0.0.1", 0);
+    let req_v1 = eval_req(
+        b"example.com",
+        b"/v1/products",
+        b"/v1/products",
+        b"",
+        b"127.0.0.1",
+        0,
+    );
     let d2 = engine.evaluate(&req_v1, |_| None);
     assert_eq!(d2.upstream, "legacy_v1");
     assert!(!d2.is_canary);
@@ -137,14 +170,31 @@ fn test_canary_query_regex_match() {
     let engine = CanaryReleaseEngine::from_snapshot(policy.as_bytes()).unwrap();
 
     // Query contains exp=ai_search -> Canary
-    let req_canary = eval_req(b"example.com", b"/search", b"/search?q=rust&exp=ai_search", b"q=rust&exp=ai_search", b"127.0.0.1", 0);
+    let req_canary = eval_req(
+        b"example.com",
+        b"/search",
+        b"/search?q=rust&exp=ai_search",
+        b"q=rust&exp=ai_search",
+        b"127.0.0.1",
+        0,
+    );
     let d1 = engine.evaluate(&req_canary, |_| None);
     assert_eq!(d1.upstream, "search_v2");
     assert!(d1.is_canary);
-    assert_eq!(d1.upstream_headers, vec![("X-Search-Backend".to_string(), "ai-v2".to_string())]);
+    assert_eq!(
+        d1.upstream_headers,
+        &[("X-Search-Backend".to_string(), "ai-v2".to_string())]
+    );
 
     // Query does not match -> Baseline
-    let req_baseline = eval_req(b"example.com", b"/search", b"/search?q=rust&exp=standard", b"q=rust&exp=standard", b"127.0.0.1", 0);
+    let req_baseline = eval_req(
+        b"example.com",
+        b"/search",
+        b"/search?q=rust&exp=standard",
+        b"q=rust&exp=standard",
+        b"127.0.0.1",
+        0,
+    );
     let d2 = engine.evaluate(&req_baseline, |_| None);
     assert_eq!(d2.upstream, "search_v1");
     assert!(!d2.is_canary);
@@ -186,7 +236,10 @@ fn test_canary_weight_percentage_rollout() {
         let decision = engine.evaluate(&req, |_| None);
         if decision.is_canary {
             assert_eq!(decision.upstream, "app_canary");
-            assert_eq!(decision.upstream_headers, vec![("X-Canary".to_string(), "1".to_string())]);
+            assert_eq!(
+                decision.upstream_headers,
+                &[("X-Canary".to_string(), "1".to_string())]
+            );
             canary_count += 1;
         } else {
             assert_eq!(decision.upstream, "app_stable");
@@ -197,8 +250,14 @@ fn test_canary_weight_percentage_rollout() {
 
     let canary_pct = (canary_count as f64 / total as f64) * 100.0;
     let baseline_pct = (baseline_count as f64 / total as f64) * 100.0;
-    assert!((15.0..=25.0).contains(&canary_pct), "Expected ~20% canary, got {canary_pct}%");
-    assert!((75.0..=85.0).contains(&baseline_pct), "Expected ~80% baseline, got {baseline_pct}%");
+    assert!(
+        (15.0..=25.0).contains(&canary_pct),
+        "Expected ~20% canary, got {canary_pct}%"
+    );
+    assert!(
+        (75.0..=85.0).contains(&baseline_pct),
+        "Expected ~80% baseline, got {baseline_pct}%"
+    );
 }
 
 #[test]

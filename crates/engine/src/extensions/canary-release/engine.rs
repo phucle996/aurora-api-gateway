@@ -181,11 +181,11 @@ impl CanaryReleaseEngine {
         })
     }
 
-    pub fn evaluate<'a>(
-        &self,
-        req: &CanaryReleaseEvalRequest<'a>,
-        header_lookup: impl Fn(&str) -> Option<&'a [u8]>,
-    ) -> CanaryDecision {
+    pub fn evaluate<'a, 'h>(
+        &'a self,
+        req: &CanaryReleaseEvalRequest<'_>,
+        header_lookup: impl Fn(&str) -> Option<&'h [u8]>,
+    ) -> CanaryDecision<'a> {
         if req.origin.is_empty()
             || req.origin.len() > 253
             || req.path.is_empty()
@@ -251,10 +251,10 @@ impl CanaryReleaseEngine {
 
             if regex_matched {
                 return CanaryDecision::matched(
-                    rule.id.clone(),
-                    rule.canary_upstream.clone(),
+                    rule.id.as_str(),
+                    rule.canary_upstream.as_str(),
                     true,
-                    rule.canary_upstream_headers.clone(),
+                    &rule.canary_upstream_headers,
                 );
             }
 
@@ -279,20 +279,20 @@ impl CanaryReleaseEngine {
 
                 if bucket < rule.weight_percentage {
                     return CanaryDecision::matched(
-                        rule.id.clone(),
-                        rule.canary_upstream.clone(),
+                        rule.id.as_str(),
+                        rule.canary_upstream.as_str(),
                         true,
-                        rule.canary_upstream_headers.clone(),
+                        &rule.canary_upstream_headers,
                     );
                 }
             }
 
             // Default: Baseline upstream
             return CanaryDecision::matched(
-                rule.id.clone(),
-                rule.baseline_upstream.clone(),
+                rule.id.as_str(),
+                rule.baseline_upstream.as_str(),
                 false,
-                rule.baseline_upstream_headers.clone(),
+                &rule.baseline_upstream_headers,
             );
         }
 

@@ -30,6 +30,14 @@ harness = false
 name = "traffic_shaper"
 harness = false
 
+[[bench]]
+name = "traffic_split"
+harness = false
+
+[[bench]]
+name = "canary_release"
+harness = false
+
 [dependencies]
 hashbrown = { version = "0.17.1", default-features = false, features = ["inline-more"] }
 serde = { version = "1", features = ["derive"] }
