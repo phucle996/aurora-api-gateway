@@ -10,7 +10,7 @@ pub struct Config {
     #[arg(long, env = "CONTROLLER_URL")]
     pub controller_url: String,
 
-    #[arg(long, env = "NODE_ID")]
+    #[arg(long, env = "NODE_ID", default_value = "")]
     pub node_id: String,
 
     #[arg(long, env = "AUTH_TOKEN")]
@@ -65,7 +65,11 @@ pub struct Config {
 
 impl Config {
     pub fn load() -> Self {
-        let config = Self::parse();
+        let mut config = Self::parse();
+        if config.node_id.trim().is_empty() {
+            config.node_id =
+                std::env::var("HOSTNAME").unwrap_or_else(|_| "stateless-replica".to_string());
+        }
         config.validate();
         config
     }
@@ -94,9 +98,6 @@ impl Config {
             panic!(
                 "FATAL: CONTROLLER_URL is missing or empty. Provide via --controller-url or CONTROLLER_URL env var."
             );
-        }
-        if self.node_id.trim().is_empty() {
-            panic!("FATAL: NODE_ID is missing or empty. Provide via --node-id or NODE_ID env var.");
         }
         if self.auth_token.trim().is_empty() {
             panic!(

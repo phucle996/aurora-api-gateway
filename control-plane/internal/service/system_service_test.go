@@ -42,8 +42,8 @@ func TestSystemService_GetSystemInfo(t *testing.T) {
 	if info.NodesTotal != 3 || info.NodesReady != 3 {
 		t.Errorf("expected 3/3 nodes, got %d/%d", info.NodesReady, info.NodesTotal)
 	}
-	if info.NodesSummary != "3 / 3 Nodes Ready" {
-		t.Errorf("expected '3 / 3 Nodes Ready', got '%s'", info.NodesSummary)
+	if info.NodesSummary != "Stateless Fleet (Pull Sync)" {
+		t.Errorf("expected 'Stateless Fleet (Pull Sync)', got '%s'", info.NodesSummary)
 	}
 
 	// Test with empty version / buildTime to verify fallback to config defaults

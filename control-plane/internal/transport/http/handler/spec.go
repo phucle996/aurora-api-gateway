@@ -26,10 +26,6 @@ func (h *SpecHandler) GetSpec(c *gin.Context) {
 	if nodeID == "" {
 		nodeID = c.Param("node")
 	}
-	if nodeID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "node_id is required"})
-		return
-	}
 
 	currentHash := c.Query("current_hash")
 

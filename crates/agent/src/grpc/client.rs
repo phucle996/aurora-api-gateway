@@ -1,5 +1,4 @@
 use super::proto as pb;
-use pb::heartbeat_service_client::HeartbeatServiceClient;
 use pb::spec_sync_service_client::SpecSyncServiceClient;
 use tonic::metadata::MetadataValue;
 use tonic::service::interceptor::InterceptedService;
@@ -26,7 +25,6 @@ pub type InterceptedChannel = InterceptedService<Channel, AuthInterceptor>;
 
 #[derive(Clone)]
 pub struct GrpcClient {
-    pub heartbeat: HeartbeatServiceClient<InterceptedChannel>,
     pub spec: SpecSyncServiceClient<InterceptedChannel>,
 }
 
@@ -41,16 +39,9 @@ impl GrpcClient {
             .unwrap_or_else(|_| MetadataValue::from_static(""));
 
         let interceptor = AuthInterceptor { token_header };
-
-        let heartbeat =
-            HeartbeatServiceClient::with_interceptor(channel.clone(), interceptor.clone());
         let spec = SpecSyncServiceClient::with_interceptor(channel, interceptor);
 
-        Ok(Self { heartbeat, spec })
-    }
-
-    pub fn heartbeat_handler(&self) -> crate::grpc::handler::HeartbeatGrpcHandler {
-        crate::grpc::handler::HeartbeatGrpcHandler::new(self.heartbeat.clone())
+        Ok(Self { spec })
     }
 
     pub fn spec_handler(&self) -> crate::grpc::handler::SpecGrpcHandler {

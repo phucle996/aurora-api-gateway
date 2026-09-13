@@ -18,39 +18,10 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS cluster_nodes (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    hostname TEXT NOT NULL,
-    ip TEXT NOT NULL,
-    status TEXT NOT NULL CHECK(status IN ('Ready', 'Not Ready', 'Draining')),
-    version TEXT NOT NULL,
-    sync_status TEXT NOT NULL CHECK(sync_status IN ('In Sync', 'Drift', 'Syncing')),
-    join_method TEXT NOT NULL,
-    certificate TEXT NOT NULL,
-    last_heartbeat TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-    pending_command TEXT NOT NULL DEFAULT 'none',
-    reload_status TEXT NOT NULL DEFAULT 'idle' CHECK(reload_status IN ('idle', 'pending', 'reloading', 'completed')),
-    observed_release_id INTEGER,
-    runtime_started_at INTEGER NOT NULL DEFAULT 0,
-    worker_identity TEXT NOT NULL DEFAULT '',
-    last_applied_at TEXT NOT NULL DEFAULT ''
-);
-
 CREATE TABLE IF NOT EXISTS system_settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
-
-CREATE TABLE IF NOT EXISTS node_sync_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    node_id TEXT NOT NULL REFERENCES cluster_nodes(id) ON DELETE CASCADE,
-    event_type TEXT NOT NULL CHECK(event_type IN ('release_applied','reload_completed','drift_detected')),
-    release_id INTEGER,
-    message TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
 -- Routes table: flat entity with 1:1 upstream binding and 7-phase plugin pipeline

@@ -90,15 +90,6 @@ impl App {
     pub async fn run(self: Arc<Self>, shutdown: CancellationToken) -> Result<()> {
         info!("Starting Aurora Dataplane Agent background sync workers");
 
-        // Spawn background sync loops
-        let c1 = self.cfg.clone();
-        let n1 = self.nginx.clone();
-        let cl1 = self.grpc_client.clone();
-        let started_at = self.started_at;
-        tokio::spawn(async move {
-            sync::heartbeat::run_heartbeat_loop(c1, cl1, n1, started_at).await;
-        });
-
         // Initialize Extension Dispatcher
         let dispatcher = Arc::new(Mutex::new(ExtensionDispatcher::new(Arc::new(
             self.cfg.node_id.clone(),

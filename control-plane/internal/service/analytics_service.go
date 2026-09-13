@@ -29,7 +29,7 @@ type analyticsService struct {
 }
 
 // NewAnalyticsService khởi tạo service phân tích số liệu (Query-Only Semantic Analytics Engine).
-func NewAnalyticsService(analyticsRepo repo.AnalyticsRepository, nodeRepo repo.NodeRepository, extRepo ...repo.ExtensionRepository) domainService.AnalyticsService {
+func NewAnalyticsService(analyticsRepo repo.AnalyticsRepository, extRepo ...repo.ExtensionRepository) domainService.AnalyticsService {
 	client := &http.Client{Timeout: 5 * time.Second}
 	var er repo.ExtensionRepository
 	if len(extRepo) > 0 {

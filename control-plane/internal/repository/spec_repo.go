@@ -29,28 +29,7 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 		NodeID: nodeID,
 	}
 
-	// 1. Check node existence using CTE
-	const authorityQuery = `
-	WITH node_auth AS (
-		SELECT id FROM cluster_nodes WHERE id = ?
-		UNION ALL
-		SELECT 'cluster' WHERE ? = '' OR ? = 'cluster'
-		LIMIT 1
-	)
-	SELECT n.id
-	FROM node_auth n;
-	`
-
-	var id string
-	err := r.reader.QueryRowContext(ctx, authorityQuery, nodeID, nodeID, nodeID).Scan(&id)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("unregistered node: %s", nodeID)
-		}
-		return nil, fmt.Errorf("query spec authority: %w", err)
-	}
-
-	// 2. Fetch Upstream definitions directly from upstreams table and render configuration
+	// 1. Fetch Upstream definitions directly from upstreams table and render configuration
 	const upstreamsQuery = `
 	SELECT name, architecture_type, algorithm, servers_json, transport_json
 	FROM upstreams
@@ -304,23 +283,7 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 }
 
 func (r *SpecSyncRepository) RecordReport(ctx context.Context, cmd entity.SpecReportCommand) error {
-	syncStatus := "Syncing"
-	if cmd.Status == "in_sync" || cmd.Status == "applied" || cmd.Status == "In Sync" {
-		syncStatus = "In Sync"
-	}
-
-	const updateNodeSQL = `
-	UPDATE cluster_nodes
-	SET observed_release_id = CASE WHEN ? > 0 THEN ? ELSE observed_release_id END,
-		sync_status = ?,
-		last_applied_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
-		last_heartbeat = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-	WHERE id = ?
-	`
-	_, err := r.writer.ExecContext(ctx, updateNodeSQL, cmd.ReleaseID, cmd.ReleaseID, syncStatus, cmd.NodeID)
-	if err != nil {
-		return fmt.Errorf("record spec report in cluster_nodes: %w", err)
-	}
+	// In stateless dataplane model, spec reports do not mutate node tables.
 	return nil
 }
 

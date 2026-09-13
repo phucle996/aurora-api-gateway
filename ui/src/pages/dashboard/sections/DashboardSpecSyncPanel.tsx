@@ -3,27 +3,23 @@ import { Link } from 'react-router-dom';
 import {
   GitPullRequest,
   CheckCircle2,
-  AlertTriangle,
   Clock,
   Hash,
   Copy,
   Check,
-  RefreshCw,
   Layers,
-  ArrowDownToLine,
+  Radio,
   ArrowRight,
+  ShieldCheck,
 } from 'lucide-react';
-import type { NodeRecord } from '../../../lib/api/nodes';
 import type { ClusterSpecInfo } from '../../../lib/api/spec';
 
 interface DashboardSpecSyncPanelProps {
-  nodes: NodeRecord[];
   clusterSpec: ClusterSpecInfo | null;
   onRefresh?: () => void;
 }
 
 export function DashboardSpecSyncPanel({
-  nodes,
   clusterSpec,
   onRefresh,
 }: DashboardSpecSyncPanelProps) {
@@ -36,17 +32,11 @@ export function DashboardSpecSyncPanel({
 
   const copyHash = () => {
     if (clusterSpec?.hash) {
-      navigator.clipboard.writeText(clusterSpec.hash).catch(() => { });
+      navigator.clipboard.writeText(clusterSpec.hash).catch(() => {});
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
   };
-
-  const inSyncCount = nodes.filter(
-    (n) => n.sync === 'In Sync' || (n.ruleset && n.ruleset !== 'none')
-  ).length;
-  const driftCount = nodes.filter((n) => n.sync === 'Drift').length;
-  const total = nodes.length;
 
   return (
     <div className="bg-card border border-border p-4 flex flex-col justify-between shadow-xs rounded-sm transition-colors font-sans h-full">
@@ -66,13 +56,10 @@ export function DashboardSpecSyncPanel({
               </span>
             </div>
           </div>
-          <Link
-            to="/nodes"
-            className="text-xs text-primary hover:underline flex items-center gap-0.5"
-          >
-            <span>Nodes</span>
-            <ArrowRight className="w-3 h-3" />
-          </Link>
+          <span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-medium">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            Ready
+          </span>
         </div>
 
         {/* Cluster Target Release Box */}
@@ -108,91 +95,37 @@ export function DashboardSpecSyncPanel({
               </button>
             )}
           </div>
-
-          <div className="text-[10px] text-muted-foreground flex items-center gap-1">
-            <ArrowDownToLine className="w-3 h-3 text-muted-foreground shrink-0" />
-            <span>Dataplane agents periodically pull & verify SHA-256 digest via gRPC.</span>
-          </div>
         </div>
 
-        {/* Sync Convergence Summary */}
-        <div className="space-y-2 mb-3">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Cluster Convergence</span>
-            <span className="font-semibold tabular-nums text-foreground">
-              {total > 0 ? `${inSyncCount} of ${total} nodes in sync` : 'Awaiting node connections'}
-            </span>
-          </div>
-          <div className="h-2 w-full bg-muted rounded-full overflow-hidden flex">
-            <div
-              className="bg-emerald-500 h-full transition-all duration-500"
-              style={{ width: total > 0 ? `${(inSyncCount / total) * 100}%` : '100%' }}
-              title="In Sync"
-            />
-            {driftCount > 0 && (
-              <div
-                className="bg-amber-500 h-full transition-all duration-500"
-                style={{ width: `${(driftCount / total) * 100}%` }}
-                title="Drifting"
-              />
-            )}
-          </div>
-        </div>
-
-        {/* Per-Node Sync List */}
-        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-0.5">
-          {nodes.length === 0 ? (
-            <div className="p-3 text-center text-xs text-muted-foreground bg-muted/20 rounded-sm">
-              No data plane nodes registered yet.
+        {/* Sync Pipeline Status & Properties */}
+        <div className="space-y-2.5 text-xs my-3">
+          <div className="p-2.5 bg-card border border-border rounded-sm space-y-1.5">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-muted-foreground flex items-center gap-1.5">
+                <Radio className="w-3 h-3 text-violet-500" />
+                Delivery Channel
+              </span>
+              <span className="font-mono text-foreground font-semibold">gRPC HTTP/2 (:9090)</span>
             </div>
-          ) : (
-            nodes.map((node) => {
-              const isSync = node.sync === 'In Sync' || (node.ruleset && node.ruleset !== 'none');
-              return (
-                <div
-                  key={node.id}
-                  className="flex items-center justify-between p-2 rounded-xs bg-muted/30 border border-border text-xs"
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${isSync ? 'bg-emerald-500' : 'bg-amber-500'
-                        }`}
-                    />
-                    <span className="font-medium text-foreground truncate">
-                      {node.name}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground font-mono">
-                      {node.ip}
-                    </span>
-                  </div>
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-muted-foreground flex items-center gap-1.5">
+                <ShieldCheck className="w-3 h-3 text-emerald-500" />
+                Convergence Method
+              </span>
+              <span className="text-foreground font-medium">Atomic Checksum Poll</span>
+            </div>
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-muted-foreground flex items-center gap-1.5">
+                <Clock className="w-3 h-3 text-primary" />
+                Sync Interval
+              </span>
+              <span className="font-mono text-foreground">3s continuous poll</span>
+            </div>
+          </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[10px] font-mono text-muted-foreground">
-                      {node.ruleset || 'rev-none'}
-                    </span>
-                    <span
-                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-xs text-[10px] font-medium ${isSync
-                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                          : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
-                        }`}
-                    >
-                      {isSync ? (
-                        <>
-                          <CheckCircle2 className="w-2.5 h-2.5" />
-                          <span>In Sync</span>
-                        </>
-                      ) : (
-                        <>
-                          <AlertTriangle className="w-2.5 h-2.5" />
-                          <span>Drift</span>
-                        </>
-                      )}
-                    </span>
-                  </div>
-                </div>
-              );
-            })
-          )}
+          <div className="text-[11px] text-muted-foreground leading-relaxed px-1">
+            Data plane replicas pull active spec without central state coordination. Any configuration drift automatically triggers an in-memory test and atomic NGINX reload.
+          </div>
         </div>
       </div>
 
@@ -200,13 +133,14 @@ export function DashboardSpecSyncPanel({
       <div className="pt-3 mt-3 border-t border-border flex items-center justify-between text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1">
           <Clock className="w-3 h-3" />
-          <span>Polling interval: 15s</span>
+          <span>Continuous Agent Sync</span>
         </span>
         <Link
-          to="/nodes"
-          className="text-primary hover:underline"
+          to="/routes"
+          className="text-primary hover:underline flex items-center gap-0.5"
         >
-          Manage Deployments
+          <span>View Ingress Routes</span>
+          <ArrowRight className="w-3 h-3" />
         </Link>
       </div>
     </div>

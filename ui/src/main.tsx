@@ -4,7 +4,6 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import DashboardPage from './pages/dashboard/page';
 import LoginPage from './pages/login/page';
 import AnalyticsPage from './pages/analytics/page';
-import NodesPage from './pages/nodes/page';
 import ExtensionsPage from './pages/extensions/page';
 import SettingsPage from './pages/settings/page';
 import RoutesPage from './pages/routes/page';
@@ -53,9 +52,9 @@ createRoot(document.getElementById('root')!).render(
 
           <Route path="/telemetry" element={<AnalyticsPage />} />
 
-          {/* Cluster & Nodes */}
-          <Route path="/nodes" element={<NodesPage />} />
-          <Route path="/cluster-nodes" element={<NodesPage />} />
+          {/* Cluster / Nodes deprecated -> redirect to Dashboard */}
+          <Route path="/nodes" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/cluster-nodes" element={<Navigate to="/dashboard" replace />} />
 
           {/* Dynamic Extensions */}
           <Route path="/extensions" element={<ExtensionsPage />} />

@@ -11,7 +11,7 @@ export const specApi = {
     try {
       const token = getAuthToken();
       const res = await fetch(
-        `${API_BASE_URL}/api/v1/sync/spec?node_id=cluster-dashboard-probe`,
+        `${API_BASE_URL}/api/v1/sync/spec`,
         {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         }

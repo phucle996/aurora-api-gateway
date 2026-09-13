@@ -2,7 +2,6 @@
 set -e
 
 export CONTROLLER_URL="${CONTROLLER_URL:-http://controller:8080}"
-export NODE_ID="${NODE_ID:-node-01}"
 NGINX_RAW_VER=$(/opt/nginx/usr/sbin/nginx -v 2>&1 | sed -n 's/.*nginx\/\([0-9.]*\).*/\1/p')
 export NODE_VERSION="${NODE_VERSION:-${NGINX_RAW_VER:-1.30.4}}"
 if [ -z "${AUTH_TOKEN:-}" ]; then
@@ -11,7 +10,6 @@ if [ -z "${AUTH_TOKEN:-}" ]; then
 fi
 export HEARTBEAT_INTERVAL="${HEARTBEAT_INTERVAL:-5}"
 export AURORA_SERVER_URL="${CONTROLLER_URL}"
-export AURORA_NODE_ID="${NODE_ID}"
 export AURORA_AUTH_TOKEN="${AUTH_TOKEN}"
 export NGINX_STUB_STATUS_URL="${NGINX_STUB_STATUS_URL:-http://127.0.0.1:80/stub_status}"
 if [ -z "${NGINX_RESOLVER:-}" ]; then
@@ -23,7 +21,7 @@ if [[ ! "${NGINX_RESOLVER}" =~ ^[0-9a-fA-F:.]+$ ]]; then
 fi
 export NGINX_RESOLVER
 
-echo "[Aurora Node: ${NODE_ID}] Configuring connection to Controller: ${CONTROLLER_URL} (Heartbeat: ${HEARTBEAT_INTERVAL}s)..."
+echo "[Aurora Dataplane] Configuring connection to Controller: ${CONTROLLER_URL}..."
 
 # Trust only explicitly configured proxy IPs/CIDRs, never arbitrary forwarded headers.
 : > /etc/nginx/access-trusted-proxies.conf
@@ -36,7 +34,7 @@ for aurora_proxy in ${TRUSTED_PROXY_CIDRS:-}; do
 done
 
 # Generate nginx.conf from template
-envsubst '${CONTROLLER_URL} ${NODE_ID} ${AUTH_TOKEN} ${HEARTBEAT_INTERVAL} ${NGINX_RESOLVER}' < /etc/nginx/nginx-node.conf.template > /etc/nginx/nginx.conf
+envsubst '${CONTROLLER_URL} ${AUTH_TOKEN} ${HEARTBEAT_INTERVAL} ${NGINX_RESOLVER}' < /etc/nginx/nginx-node.conf.template > /etc/nginx/nginx.conf
 # This endpoint only serves a sanitized view; raw credentials never leave the node.
 sed -E 's/aurora_waf_token[[:space:]]+[^;]*;/aurora_waf_token [REDACTED];/' /etc/nginx/nginx.conf > /etc/nginx/aurora-config-view.conf
 chmod 600 /etc/nginx/nginx.conf
@@ -85,7 +83,6 @@ gateway_waf_mode enforce;
 real_ip_header proxy_protocol;
 set_real_ip_from 127.0.0.1;
 set_real_ip_from ::1;
-add_header X-Aurora-Node "${NODE_ID}" always;
 include /var/lib/aurora-policy/active-extensions.conf;
 EOF
 chmod 600 /etc/nginx/domain-waf.conf
@@ -111,10 +108,9 @@ if ! /opt/nginx/usr/sbin/nginx -t -c /etc/nginx/nginx.conf; then
     /opt/nginx/usr/sbin/nginx -t -c /etc/nginx/nginx.conf
 fi
 
-echo "[Aurora Node: ${NODE_ID}] Starting Aurora Dataplane Agent & NGINX supervisor..."
+echo "[Aurora Dataplane] Starting Aurora Dataplane Agent & NGINX supervisor..."
 EXEC_ARGS=(
   --controller-url "${CONTROLLER_URL}"
-  --node-id "${NODE_ID}"
   --auth-token "${AUTH_TOKEN}"
   --nginx-bin "${NGINX_BIN:-/opt/nginx/usr/sbin/nginx}"
   --nginx-conf "${NGINX_CONF:-/etc/nginx/nginx.conf}"

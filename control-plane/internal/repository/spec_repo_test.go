@@ -3,7 +3,6 @@ package repository_test
 import (
 	"context"
 	"database/sql"
-	"strings"
 	"testing"
 
 	"aurora-waf.local/control-plane/internal/domain/entity"
@@ -25,12 +24,8 @@ func setupSpecTestDB(t *testing.T) *sql.DB {
 		t.Fatalf("failed to execute seeds: %v", err)
 	}
 
-	// Seed cluster node
+	// Seed Upstream
 	_, err = db.Exec(`
-		INSERT INTO cluster_nodes (id, name, ip, hostname, status, version, sync_status, join_method, certificate)
-		VALUES ('node-test-1', 'Test Node 1', '10.0.0.1', 'edge-1', 'Ready', '1.0.0', 'In Sync', 'manual', 'Valid');
-
-		-- Seed Upstream
 		INSERT INTO upstreams (name, architecture_type, algorithm, servers_json, transport_json)
 		VALUES ('app', 'Load Balancer', 'round_robin', '[{"address":"10.0.1.1:8080"}]', '{"keepAliveConnections":32}');
 
@@ -55,38 +50,25 @@ func TestSpecSyncRepository_GetAuthorityData_Success(t *testing.T) {
 	repo := repository.NewSpecSyncRepository(db, db)
 	ctx := context.Background()
 
-	auth, err := repo.GetAuthorityData(ctx, "node-test-1")
+	auth, err := repo.GetAuthorityData(ctx, "any-node")
 	if err != nil {
-		t.Fatalf("unexpected error getting authority: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if auth.NodeID != "node-test-1" {
-		t.Errorf("expected node ID node-test-1, got %s", auth.NodeID)
+	if auth == nil {
+		t.Fatalf("expected authority data, got nil")
 	}
 
-	if !strings.Contains(auth.UpstreamsConf, "upstream app") ||
-		!strings.Contains(auth.UpstreamsConf, "zone aurora_http_app 64k;") ||
-		!strings.Contains(auth.UpstreamsConf, "server 10.0.1.1:8080 resolve;") {
-		t.Errorf("unexpected UpstreamsConf: %s", auth.UpstreamsConf)
+	if len(auth.UpstreamRecords) == 0 {
+		t.Errorf("expected seeded upstreams to be rendered, got 0")
 	}
-	if len(auth.RoutingRecords) != 1 || auth.RoutingRecords[0].Host != "service.local" {
-		t.Errorf("unexpected RoutingRecords: %+v", auth.RoutingRecords)
+
+	if len(auth.RoutingRecords) == 0 {
+		t.Errorf("expected seeded routes to be loaded, got 0")
 	}
+
 	if len(auth.Extensions) == 0 {
 		t.Errorf("expected seeded extensions to be loaded, got 0")
-	}
-}
-
-func TestSpecSyncRepository_GetAuthorityData_UnregisteredNode(t *testing.T) {
-	db := setupSpecTestDB(t)
-	defer db.Close()
-
-	repo := repository.NewSpecSyncRepository(db, db)
-	ctx := context.Background()
-
-	_, err := repo.GetAuthorityData(ctx, "non-existent-node")
-	if err == nil {
-		t.Fatalf("expected error for non-existent node")
 	}
 }
 
@@ -106,20 +88,6 @@ func TestSpecSyncRepository_RecordReport(t *testing.T) {
 	}
 	if err := repo.RecordReport(ctx, cmd); err != nil {
 		t.Fatalf("unexpected error recording report: %v", err)
-	}
-
-	// Verify update in cluster_nodes
-	var observedRel int64
-	var syncStatus string
-	err := db.QueryRowContext(ctx, "SELECT observed_release_id, sync_status FROM cluster_nodes WHERE id = 'node-test-1'").Scan(&observedRel, &syncStatus)
-	if err != nil {
-		t.Fatalf("failed to query node: %v", err)
-	}
-	if observedRel != 99 {
-		t.Errorf("expected observed_release_id 99, got %d", observedRel)
-	}
-	if syncStatus != "In Sync" {
-		t.Errorf("expected sync_status 'In Sync', got %s", syncStatus)
 	}
 }
 

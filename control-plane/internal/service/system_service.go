@@ -53,11 +53,7 @@ func (s *SystemService) GetSystemInfo(ctx context.Context) (*entity.SystemInfo, 
 	memStr := formatBytes(m.Alloc)
 
 	nodesTotal, nodesReady, _ := s.repo.GetNodeCounts(ctx)
-
-	nodesSummary := fmt.Sprintf("%d / %d Nodes Ready", nodesReady, nodesTotal)
-	if nodesTotal == 0 {
-		nodesSummary = "Standalone (0 Nodes)"
-	}
+	nodesSummary := "Stateless Fleet (Pull Sync)"
 
 	return &entity.SystemInfo{
 		Product:              "AURORA API GATEWAY",

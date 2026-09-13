@@ -39,7 +39,6 @@ services:
     environment:
       - CONTROLLER_URL=http://controller:8080
       - GRPC_URL=http://controller:9099
-      - NODE_ID=node-01
       - AUTH_TOKEN=71b268cadc82c2ecfff176c7dfd5c4ac77a0e6a3cd0ae3a7d87b1b9bb686b994
     ports:
       - "80:80"

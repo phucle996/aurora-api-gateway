@@ -23,10 +23,6 @@ func NewSpecSyncService(repo repo.SpecSyncRepository) *SpecSyncService {
 // SyncSpec serves the cluster declarative NodeSpec snapshot in O(1) time
 // by reading the pre-compiled active release from the database.
 func (s *SpecSyncService) SyncSpec(ctx context.Context, q entity.SpecSyncQuery) (*entity.SpecSyncResult, error) {
-	if q.NodeID == "" {
-		return nil, fmt.Errorf("node_id is required")
-	}
-
 	if s.repo == nil {
 		return &entity.SpecSyncResult{
 			InSync: false,

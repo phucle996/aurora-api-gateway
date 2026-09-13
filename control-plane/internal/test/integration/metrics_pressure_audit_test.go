@@ -54,7 +54,7 @@ func TestAuditMetricsConcurrentConfigDurableAuthority(t *testing.T) {
 	defer pools.Close()
 	durable := repository.NewAnalyticsRepository(pools.Writer)
 	gate := &metricsAuditSaveGate{AnalyticsRepository: durable, committed: make(chan struct{}), resume: make(chan struct{})}
-	s := service.NewAnalyticsService(gate, repository.NewNodeRepository(pools.Writer))
+	s := service.NewAnalyticsService(gate)
 	first := make(chan error, 1)
 	go func() {
 		first <- s.SaveConfig(context.Background(), entity.MetricsIntegrationConfig{Mode: "standalone"})
@@ -97,38 +97,4 @@ func TestAuditStandaloneRollupSurvivesRequestCancellation(t *testing.T) {
 	t.Skip("deprecated: standalone mode rollup worker has been removed in favor of external TSDB query engine")
 }
 
-func TestAuditMetricsStaleHeartbeatNotReady(t *testing.T) {
-	if os.Getenv("AURORA_METRICS_AUDIT") != "1" {
-		t.Skip("opt-in stale-liveness audit")
-	}
-	dbPath := filepath.Join(t.TempDir(), "stale.db")
-	a, err := app.NewApp(context.Background(), config.Config{SQLitePath: dbPath})
-	if err != nil {
-		t.Fatal(err)
-	}
-	a.Close()
-	pools, err := infra.OpenSQLitePool(context.Background(), dbPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer pools.Close()
-	nodeRepo := repository.NewNodeRepository(pools.Writer)
-	metrics := service.NewAnalyticsService(repository.NewAnalyticsRepository(pools.Writer), nodeRepo)
-	nodes := service.NewNodeService(nodeRepo, metrics, nil)
-	defer metrics.SaveConfig(context.Background(), entity.MetricsIntegrationConfig{Mode: "disabled"})
-	for _, mode := range []string{"disabled", "standalone", "prometheus"} {
-		if err = metrics.SaveConfig(context.Background(), entity.MetricsIntegrationConfig{Mode: mode, PrometheusURL: "http://127.0.0.1:1"}); err != nil {
-			t.Fatal(err)
-		}
-		if _, err = nodes.RecordHeartbeat(context.Background(), entity.NodeHeartbeatPayload{NodeID: "node-local-01", Timestamp: time.Now().Add(-2 * time.Minute).Unix(), CPUUsage: 12}); err != nil {
-			t.Fatal(err)
-		}
-		node, err := nodes.GetNodeByID(context.Background(), "node-local-01")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if node == nil || node.Status != "Not Ready" {
-			t.Errorf("mode=%s: stale node must be Not Ready; got %+v", mode, node)
-		}
-	}
-}
+

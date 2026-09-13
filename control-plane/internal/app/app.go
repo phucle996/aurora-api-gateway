@@ -27,14 +27,14 @@ import (
 //   - server: HTTP server với tất cả các route đã đăng ký
 //   - grpcServer: gRPC server cho giao tiếp Dataplane Node
 type App struct {
-	db                 *infra.DBPool
-	server             *http.Server
-	grpcServer         *grpcserver.Server
-	grpcLis            net.Listener
-	analytics          port.AnalyticsService
-	backupScheduler    *service.BackupScheduler
-	specScheduler      *provider.SpecScheduler
-	checkpointDone     chan struct{}
+	db              *infra.DBPool
+	server          *http.Server
+	grpcServer      *grpcserver.Server
+	grpcLis         net.Listener
+	analytics       port.AnalyticsService
+	backupScheduler *service.BackupScheduler
+	specScheduler   *provider.SpecScheduler
+	checkpointDone  chan struct{}
 }
 
 func init() {
@@ -133,8 +133,7 @@ func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
 	}()
 
 	grpcSrv := grpcserver.NewServer(cfg.GRPCAddr, token, grpcserver.Handlers{
-		Heartbeat: module.GRPCHeartbeatHandler,
-		Spec:      module.GRPCSpecSyncHandler,
+		Spec: module.GRPCSpecSyncHandler,
 	})
 	grpcLis, err := net.Listen("tcp", cfg.GRPCAddr)
 	if err != nil {
@@ -151,12 +150,12 @@ func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
 			ReadHeaderTimeout: 10 * time.Second,
 			IdleTimeout:       120 * time.Second,
 		},
-		grpcServer:         grpcSrv,
-		grpcLis:            grpcLis,
-		analytics:          module.AnalyticsService,
-		backupScheduler:    module.BackupScheduler,
-		specScheduler:      module.SpecScheduler,
-		checkpointDone:     checkpointDone,
+		grpcServer:      grpcSrv,
+		grpcLis:         grpcLis,
+		analytics:       module.AnalyticsService,
+		backupScheduler: module.BackupScheduler,
+		specScheduler:   module.SpecScheduler,
+		checkpointDone:  checkpointDone,
 	}, nil
 }
 

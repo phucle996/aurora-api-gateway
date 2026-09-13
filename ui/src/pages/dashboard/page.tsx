@@ -6,13 +6,11 @@ import { DashboardNodesSummary } from './sections/DashboardNodesSummary';
 import { DashboardClusterHealth } from './sections/DashboardClusterHealth';
 import { DashboardStatusBanner } from './sections/DashboardStatusBanner';
 
-import { nodesApi, type NodeRecord, type NodeHeartbeat } from '../../lib/api/nodes';
 import { systemApi, type SystemInfo } from '../../lib/api/system';
 import { specApi, type ClusterSpecInfo } from '../../lib/api/spec';
 import { API_BASE_URL, getAuthToken } from '../../lib/fetcher';
 
 export default function DashboardPage() {
-  const [nodes, setNodes] = useState<NodeRecord[]>([]);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [clusterSpec, setClusterSpec] = useState<ClusterSpecInfo | null>(null);
   const [streamState, setStreamState] = useState<'Live' | 'Polling' | 'Disconnected'>('Polling');
@@ -20,20 +18,18 @@ export default function DashboardPage() {
 
   const requestID = useRef(0);
 
-  // Fetch baseline fleet snapshot
+  // Fetch baseline system & cluster spec snapshot
   const loadData = useCallback(async (showSpin = false) => {
     if (showSpin) setIsRefreshing(true);
     const reqId = ++requestID.current;
 
     try {
-      const [nodesData, infoData, specData] = await Promise.all([
-        nodesApi.list().catch(() => [] as NodeRecord[]),
+      const [infoData, specData] = await Promise.all([
         systemApi.getInfo().catch(() => null),
         specApi.getClusterSpec().catch(() => null),
       ]);
 
       if (reqId === requestID.current) {
-        setNodes(nodesData);
         setSystemInfo(infoData);
         setClusterSpec(specData);
       }
@@ -71,41 +67,9 @@ export default function DashboardPage() {
       setStreamState('Polling');
     };
 
-    const handleHeartbeat = (event: MessageEvent) => {
-      try {
-        const parsed = JSON.parse(event.data);
-        const updates: NodeHeartbeat[] = (
-          Array.isArray(parsed) ? parsed : [parsed]
-        ).filter(
-          (u: NodeHeartbeat) =>
-            typeof u.node_id === 'string' &&
-            Number.isFinite(u.timestamp) &&
-            u.timestamp > 0
-        );
-
-        if (updates.length > 0) {
-          setNodes((prevNodes) =>
-            prevNodes.map((n) => {
-              const u = updates.find((it) => it.node_id === n.id);
-              if (!u) return n;
-              return {
-                ...n,
-                ip: u.ip || n.ip,
-                status: u.status,
-                sync: u.sync || n.sync,
-                ruleset: u.ruleset || n.ruleset,
-                lastHeartbeatTimestamp: u.timestamp * 1000,
-              };
-            })
-          );
-        }
-      } catch {
-        // Fallback polling reconciles
-      }
-    };
-
-    es.addEventListener('nodes_heartbeat', handleHeartbeat);
-    es.addEventListener('node_heartbeat', handleHeartbeat);
+    es.addEventListener('spec_update', () => {
+      void loadData(false);
+    });
     es.addEventListener('node_sync', () => {
       void loadData(false);
     });
@@ -127,23 +91,22 @@ export default function DashboardPage() {
 
       {/* 2. Top 4 Fleet & Spec KPI Cards */}
       <DashboardMetrics
-        nodes={nodes}
+        systemInfo={systemInfo}
         clusterSpec={clusterSpec}
         isLoading={isRefreshing}
       />
 
-      {/* 3. Main Row: Fleet 3-Pillar Lifecycle Matrix (2 cols) + Declarative Spec Sync Panel (1 col) */}
+      {/* 3. Main Row: Stateless Architecture Overview (2 cols) + Declarative Spec Sync Panel (1 col) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2">
           <DashboardNodesSummary
-            nodes={nodes}
+            systemInfo={systemInfo}
             clusterSpec={clusterSpec}
             onRefresh={() => void loadData(true)}
           />
         </div>
         <div className="lg:col-span-1">
           <DashboardSpecSyncPanel
-            nodes={nodes}
             clusterSpec={clusterSpec}
             onRefresh={() => void loadData(true)}
           />
@@ -152,7 +115,7 @@ export default function DashboardPage() {
 
       {/* 4. Bottom Row: Control Plane Runtime & Storage Persistence Health */}
       <div className="grid grid-cols-1 gap-5">
-        <DashboardClusterHealth systemInfo={systemInfo} nodes={nodes} />
+        <DashboardClusterHealth systemInfo={systemInfo} />
       </div>
 
       {/* 5. Operational Status Banner */}

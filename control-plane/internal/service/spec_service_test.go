@@ -126,14 +126,17 @@ func TestSpecSyncService_InSyncAndMismatch(t *testing.T) {
 	}
 }
 
-func TestSpecSyncService_NodeIDRequired(t *testing.T) {
+func TestSpecSyncService_EmptyNodeIDAllowed(t *testing.T) {
 	mockRepo := &mockSpecRepo{}
 	svc := service.NewSpecSyncService(mockRepo)
 
-	_, err := svc.SyncSpec(context.Background(), entity.SpecSyncQuery{
+	res, err := svc.SyncSpec(context.Background(), entity.SpecSyncQuery{
 		NodeID: "",
 	})
-	if err == nil {
-		t.Fatalf("expected error for empty node_id")
+	if err != nil {
+		t.Fatalf("unexpected error for empty node_id: %v", err)
+	}
+	if res == nil {
+		t.Fatalf("expected result, got nil")
 	}
 }

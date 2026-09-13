@@ -25,9 +25,6 @@ func (h *SpecSyncHandler) SyncSpec(ctx context.Context, req *pb.SyncSpecRequest)
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request cannot be nil")
 	}
-	if req.NodeId == "" {
-		return nil, status.Error(codes.InvalidArgument, "node_id is required")
-	}
 
 	res, err := h.specService.SyncSpec(ctx, entity.SpecSyncQuery{
 		NodeID:      req.NodeId,
@@ -48,9 +45,6 @@ func (h *SpecSyncHandler) SyncSpec(ctx context.Context, req *pb.SyncSpecRequest)
 func (h *SpecSyncHandler) ReportSpec(ctx context.Context, req *pb.ReportSpecRequest) (*pb.ReportSpecResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request cannot be nil")
-	}
-	if req.NodeId == "" {
-		return nil, status.Error(codes.InvalidArgument, "node_id is required")
 	}
 
 	err := h.specService.ReportSpec(ctx, entity.SpecReportCommand{

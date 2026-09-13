@@ -4,7 +4,6 @@ env NODE_ROLE;
 env AURORA_METRICS_SCOPE;
 env NODE_VERSION;
 env AURORA_SERVER_URL;
-env AURORA_NODE_ID;
 env AURORA_AUTH_TOKEN;
 worker_processes 2;
 worker_rlimit_nofile 65535;
@@ -45,7 +44,6 @@ http {
         gateway_access_policy /var/lib/aurora-policy/active-access.json;
         gateway_waf_mode enforce;
 
-        add_header X-Aurora-Node "${NODE_ID}" always;
         add_header X-Aurora-Generation $gateway_waf_generation always;
         include /var/lib/aurora-policy/active-extensions.conf;
 

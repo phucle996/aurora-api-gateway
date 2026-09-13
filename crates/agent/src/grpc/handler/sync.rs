@@ -18,10 +18,6 @@ impl SpecGrpcHandler {
         node_id: &str,
         current_hash: &str,
     ) -> Result<SyncSpecResponse, String> {
-        if node_id.is_empty() {
-            return Err("node_id must not be empty".to_string());
-        }
-
         let mut client = self.client.clone();
         let req = SyncSpecRequest {
             node_id: node_id.to_string(),
@@ -60,10 +56,6 @@ impl SpecGrpcHandler {
         status: &str,
         message: &str,
     ) -> Result<(), String> {
-        if node_id.is_empty() {
-            return Err("node_id must not be empty".to_string());
-        }
-
         let mut client = self.client.clone();
         let req = ReportSpecRequest {
             node_id: node_id.to_string(),

@@ -124,12 +124,6 @@ export function ConsoleSidebar({
       icon: <BarChart3 className="w-4 h-4 shrink-0 text-primary" />,
     },
     {
-      label: 'NGINX / Nodes',
-      path: '/nodes',
-      aliases: ['/cluster-nodes'],
-      icon: <Server className="w-4 h-4 shrink-0" />,
-    },
-    {
       label: 'Extensions',
       path: '/extensions',
       aliases: ['/extensions/'],

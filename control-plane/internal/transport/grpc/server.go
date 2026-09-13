@@ -15,8 +15,7 @@ type Server struct {
 }
 
 type Handlers struct {
-	Heartbeat *handler.HeartbeatHandler
-	Spec      *handler.SpecSyncHandler
+	Spec *handler.SpecSyncHandler
 }
 
 func NewServer(addr string, adminToken string, handlers Handlers) *Server {
@@ -25,9 +24,6 @@ func NewServer(addr string, adminToken string, handlers Handlers) *Server {
 	}
 
 	s := grpc.NewServer(opts...)
-	if handlers.Heartbeat != nil {
-		pb.RegisterHeartbeatServiceServer(s, handlers.Heartbeat)
-	}
 	if handlers.Spec != nil {
 		pb.RegisterSpecSyncServiceServer(s, handlers.Spec)
 	}

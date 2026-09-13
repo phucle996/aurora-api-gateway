@@ -10,20 +10,15 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import type { SystemInfo } from '../../../lib/api/system';
-import type { NodeRecord } from '../../../lib/api/nodes';
 
 interface DashboardClusterHealthProps {
   systemInfo: SystemInfo | null;
-  nodes: NodeRecord[];
 }
 
 export function DashboardClusterHealth({
   systemInfo,
-  nodes,
 }: DashboardClusterHealthProps) {
-  const nodesReady = nodes.filter((n) => n.status === 'Ready').length;
-  const nodesTotal = nodes.length;
-  const isHealthy = nodesTotal > 0 && nodesReady === nodesTotal;
+  const isHealthy = Boolean(systemInfo);
 
   return (
     <div className="bg-card border border-border p-4 flex flex-col justify-between font-sans shadow-xs rounded-sm transition-colors h-full">
@@ -35,7 +30,7 @@ export function DashboardClusterHealth({
               <Shield className="w-3.5 h-3.5" />
             </div>
             <span className="text-sm font-semibold text-foreground">
-              Control Plane & Storage Health
+              Control Plane & Persistence Health
             </span>
           </div>
           <Link
@@ -52,15 +47,11 @@ export function DashboardClusterHealth({
           className={`my-3 p-3 flex items-start gap-3 rounded-sm ${
             isHealthy
               ? 'bg-emerald-500/10 border border-emerald-500/30'
-              : nodesTotal === 0
-              ? 'bg-blue-500/10 border border-blue-500/30'
               : 'bg-amber-500/10 border border-amber-500/30'
           }`}
         >
           {isHealthy ? (
             <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-          ) : nodesTotal === 0 ? (
-            <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
           ) : (
             <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
           )}
@@ -69,23 +60,15 @@ export function DashboardClusterHealth({
               className={`text-xs font-bold ${
                 isHealthy
                   ? 'text-emerald-700 dark:text-emerald-400'
-                  : nodesTotal === 0
-                  ? 'text-blue-700 dark:text-blue-400'
                   : 'text-amber-700 dark:text-amber-400'
               }`}
             >
-              {nodesTotal === 0
-                ? 'Control Plane Online (Standalone)'
-                : isHealthy
-                ? 'Cluster Fully Operational'
-                : 'Cluster Degraded'}
+              {isHealthy
+                ? 'Control Plane Online & Serving gRPC / REST'
+                : 'Control Plane Initializing...'}
             </div>
             <div className="text-[11px] text-muted-foreground font-sans mt-0.5">
-              {nodesTotal === 0
-                ? 'Control plane is active and listening for data plane join requests.'
-                : `${nodesReady} of ${nodesTotal} data plane node${
-                    nodesTotal > 1 ? 's' : ''
-                  } healthy.`}
+              Control Plane authoritative state engine running in SQLite WAL mode. Ready for continuous dataplane pull.
             </div>
           </div>
         </div>
@@ -143,7 +126,7 @@ export function DashboardClusterHealth({
           </div>
 
           <div className="flex justify-between py-1">
-            <span className="text-muted-foreground">Runtime Runtime</span>
+            <span className="text-muted-foreground">Runtime Engine</span>
             <span className="text-muted-foreground font-mono">
               {systemInfo?.go_version || 'Go'}
             </span>

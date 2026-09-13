@@ -37,17 +37,7 @@ func (r *SystemRepository) Check(ctx context.Context) error {
 	return r.reader.QueryRowContext(ctx, query).Scan(&version)
 }
 
-// GetNodeCounts đếm tổng số node và số node ở trạng thái sẵn sàng trong cluster.
+// GetNodeCounts returns 0, 0 in stateless dataplane mode.
 func (r *SystemRepository) GetNodeCounts(ctx context.Context) (int, int, error) {
-	if r.reader == nil {
-		return 0, 0, nil
-	}
-	var total, ready int
-	if err := r.reader.QueryRowContext(ctx, "SELECT COUNT(*) FROM cluster_nodes;").Scan(&total); err != nil {
-		return 0, 0, err
-	}
-	if err := r.reader.QueryRowContext(ctx, "SELECT COUNT(*) FROM cluster_nodes WHERE status IN ('Ready', 'healthy', 'online');").Scan(&ready); err != nil {
-		return total, 0, err
-	}
-	return total, ready, nil
+	return 0, 0, nil
 }
