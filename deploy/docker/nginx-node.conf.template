@@ -1,4 +1,4 @@
-load_module /opt/modules/ngx_http_aurora_waf_module.so;
+load_module /opt/modules/ngx_http_gateway_module.so;
 include /var/lib/aurora-routing/dependencies/current/modules.conf;
 env NODE_ROLE;
 env AURORA_METRICS_SCOPE;
@@ -24,11 +24,6 @@ http {
     http2 on;
     include /etc/nginx/access-trusted-proxies.conf;
 
-    aurora_waf_controller ${CONTROLLER_URL};
-    aurora_waf_node_id ${NODE_ID};
-    aurora_waf_token ${AUTH_TOKEN};
-    aurora_waf_heartbeat_interval ${HEARTBEAT_INTERVAL};
-
     real_ip_header X-Real-IP;
     set_real_ip_from 127.0.0.1;
     set_real_ip_from ::1;
@@ -45,17 +40,13 @@ http {
         listen 80;
         server_name localhost;
 
-        aurora_waf on;
-        aurora_waf_policy /var/lib/aurora-policy/active-policy.json;
-        aurora_access_policy /var/lib/aurora-policy/active-access.json;
-        aurora_waf_mode enforce;
-        aurora_waf_controller ${CONTROLLER_URL};
-        aurora_waf_node_id ${NODE_ID};
-        aurora_waf_token ${AUTH_TOKEN};
-        aurora_waf_heartbeat_interval ${HEARTBEAT_INTERVAL};
+        gateway on;
+        gateway_waf_policy /var/lib/aurora-policy/active-policy.json;
+        gateway_access_policy /var/lib/aurora-policy/active-access.json;
+        gateway_waf_mode enforce;
 
         add_header X-Aurora-Node "${NODE_ID}" always;
-        add_header X-Aurora-Generation $aurora_waf_generation always;
+        add_header X-Aurora-Generation $gateway_waf_generation always;
         include /var/lib/aurora-policy/active-extensions.conf;
 
         default_type text/plain;
@@ -71,7 +62,7 @@ http {
         }
 
         location = /metrics {
-            aurora_waf_metrics;
+            gateway_metrics;
         }
 
         location = /stub_status {
@@ -93,14 +84,10 @@ http {
         set_real_ip_from 127.0.0.1;
         set_real_ip_from ::1;
 
-        aurora_waf on;
-        aurora_waf_policy /var/lib/aurora-policy/active-policy.json;
-        aurora_access_policy /var/lib/aurora-policy/active-access.json;
-        aurora_waf_mode enforce;
-        aurora_waf_controller ${CONTROLLER_URL};
-        aurora_waf_node_id ${NODE_ID};
-        aurora_waf_token ${AUTH_TOKEN};
-        aurora_waf_heartbeat_interval ${HEARTBEAT_INTERVAL};
+        gateway on;
+        gateway_waf_policy /var/lib/aurora-policy/active-policy.json;
+        gateway_access_policy /var/lib/aurora-policy/active-access.json;
+        gateway_waf_mode enforce;
 
         location / {
             proxy_set_header Host $host;
@@ -117,11 +104,11 @@ http {
     # Keep workload server first for the existing telemetry config inheritance.
     server {
         listen 127.0.0.1:9081;
-        aurora_waf on;
-        aurora_waf_policy /var/lib/aurora-policy/active-policy.json;
-        aurora_access_policy /var/lib/aurora-policy/active-access.json;
-        location = /generation { return 200 "$aurora_waf_generation"; }
-        location = /access-generation { return 200 "$aurora_access_generation"; }
+        gateway on;
+        gateway_waf_policy /var/lib/aurora-policy/active-policy.json;
+        gateway_access_policy /var/lib/aurora-policy/active-access.json;
+        location = /generation { return 200 "$gateway_waf_generation"; }
+        location = /access-generation { return 200 "$gateway_access_generation"; }
     }
 }
 

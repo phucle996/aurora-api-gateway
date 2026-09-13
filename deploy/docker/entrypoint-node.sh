@@ -78,14 +78,10 @@ chmod 700 /var/lib/aurora-policy
 
 # Routing servers share the same WAF enforcement and node identity as the workload server.
 cat > /etc/nginx/domain-waf.conf <<EOF
-aurora_waf on;
-aurora_waf_policy /var/lib/aurora-policy/active-policy.json;
-aurora_access_policy /var/lib/aurora-policy/active-access.json;
-aurora_waf_mode enforce;
-aurora_waf_controller ${CONTROLLER_URL};
-aurora_waf_node_id ${NODE_ID};
-aurora_waf_token ${AUTH_TOKEN};
-aurora_waf_heartbeat_interval ${HEARTBEAT_INTERVAL};
+gateway on;
+gateway_waf_policy /var/lib/aurora-policy/active-policy.json;
+gateway_access_policy /var/lib/aurora-policy/active-access.json;
+gateway_waf_mode enforce;
 real_ip_header proxy_protocol;
 set_real_ip_from 127.0.0.1;
 set_real_ip_from ::1;

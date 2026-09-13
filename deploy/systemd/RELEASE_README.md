@@ -34,7 +34,7 @@ The installer will:
 |------|-------------|
 | `bin/aurora-controller` | Control Plane HTTP server (Go binary) |
 | `bin/aurora-compile` | WAF rule compiler (Rust binary) |
-| `modules/ngx_http_aurora_waf_module-*.so` | Pre-built NGINX dynamic modules (one per supported version) |
+| `modules/ngx_http_gateway_module-*.so` | Pre-built NGINX dynamic modules (one per supported version) |
 | `modules/supported-versions.txt` | List of supported NGINX versions |
 | `deploy/` | Agent scripts for bare-metal node setup |
 | `install.sh` | Interactive installer with NGINX detection |

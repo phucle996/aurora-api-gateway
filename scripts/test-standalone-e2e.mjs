@@ -56,7 +56,7 @@ try {
     try {
       const res = await fetch(`${controllerBase}/readyz`);
       if (res.ok) break;
-    } catch {}
+    } catch { }
     if (attempt >= 50 || controller.exitCode !== null) {
       throw new Error(`Controller khởi động thất bại: ${controllerStderr}`);
     }
@@ -78,7 +78,7 @@ try {
   writeFileSync(`${dir}/html/ok`, 'ok\n');
   writeFileSync(`${dir}/policy.json`, JSON.stringify({ schema_version: 1, block_paths: ['/blocked'] }));
 
-  const nginxConf = `load_module ${root}/build/modules/ngx_http_aurora_waf_module.so;
+  const nginxConf = `load_module ${root}/build/modules/ngx_http_gateway_module.so;
 worker_processes 1;
 pid ${dir}/nginx.pid;
 error_log ${dir}/error.log notice;
@@ -93,15 +93,11 @@ http {
   server {
     listen 127.0.0.1:${nginxPort};
     root ${dir}/html;
-    aurora_waf on;
-    aurora_waf_policy ${dir}/policy.json;
-    aurora_waf_controller ${controllerBase};
-    aurora_waf_node_id node-local-01;
-    aurora_waf_token ${token};
-    aurora_waf_heartbeat_interval 1;
+    gateway on;
+    gateway_waf_policy ${dir}/policy.json;
 
     location / { try_files $uri =404; }
-    location = /metrics { aurora_waf_metrics; }
+    location = /metrics { gateway_metrics; }
   }
 }`;
   writeFileSync(`${dir}/nginx.conf`, nginxConf);
@@ -117,7 +113,7 @@ http {
     try {
       const res = await fetch(`http://127.0.0.1:${nginxPort}/ok`);
       if (res.ok) break;
-    } catch {}
+    } catch { }
     if (attempt >= 50 || nginxProcess.exitCode !== null) {
       throw new Error(`NGINX khởi động thất bại: ${nginxStderr}`);
     }

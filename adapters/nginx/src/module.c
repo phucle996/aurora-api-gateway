@@ -10,6 +10,14 @@ static void ngx_http_gateway_exit_process(ngx_cycle_t *cycle);
 static ngx_conf_enum_t ngx_http_gateway_modes[] = {
     {ngx_string("enforce"), 0}, {ngx_string("audit"), 1}, {ngx_null_string, 0}};
 
+static char *ngx_http_gateway_noop_slot(ngx_conf_t *cf, ngx_command_t *cmd,
+                                        void *conf) {
+  (void)cf;
+  (void)cmd;
+  (void)conf;
+  return NGX_CONF_OK;
+}
+
 static ngx_command_t ngx_http_gateway_commands[] = {
     /* Gateway Core Directives */
     {ngx_string("gateway"),
@@ -111,6 +119,74 @@ static ngx_command_t ngx_http_gateway_commands[] = {
     /* Metrics Directive */
     {ngx_string("gateway_metrics"), NGX_HTTP_LOC_CONF | NGX_CONF_NOARGS,
      ngx_http_gateway_metrics_directive, 0, 0, NULL},
+
+    {ngx_string("aurora_waf_metrics"), NGX_HTTP_LOC_CONF | NGX_CONF_NOARGS,
+     ngx_http_gateway_metrics_directive, 0, 0, NULL},
+
+    /* Legacy aliases for backwards compatibility */
+    {ngx_string("aurora_waf"),
+     NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_FLAG,
+     ngx_conf_set_flag_slot, NGX_HTTP_LOC_CONF_OFFSET,
+     offsetof(ngx_http_gateway_conf_t, enabled), NULL},
+
+    {ngx_string("aurora_waf_policy"),
+     NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF |
+         NGX_CONF_TAKE1,
+     ngx_conf_set_str_slot, NGX_HTTP_LOC_CONF_OFFSET,
+     offsetof(ngx_http_gateway_conf_t, policy), NULL},
+
+    {ngx_string("aurora_access_policy"),
+     NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF |
+         NGX_CONF_TAKE1,
+     ngx_conf_set_str_slot, NGX_HTTP_LOC_CONF_OFFSET,
+     offsetof(ngx_http_gateway_conf_t, access_policy), NULL},
+
+    {ngx_string("aurora_waf_mode"),
+     NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF |
+         NGX_CONF_TAKE1,
+     ngx_conf_set_enum_slot, NGX_HTTP_LOC_CONF_OFFSET,
+     offsetof(ngx_http_gateway_conf_t, mode), ngx_http_gateway_modes},
+
+    /* Legacy no-op directives (agent manages daemon/node orchestration now) */
+    {ngx_string("aurora_waf_controller"),
+     NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF |
+         NGX_CONF_TAKE1,
+     ngx_http_gateway_noop_slot, 0, 0, NULL},
+
+    {ngx_string("aurora_waf_node_id"),
+     NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF |
+         NGX_CONF_TAKE1,
+     ngx_http_gateway_noop_slot, 0, 0, NULL},
+
+    {ngx_string("aurora_waf_token"),
+     NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF |
+         NGX_CONF_TAKE1,
+     ngx_http_gateway_noop_slot, 0, 0, NULL},
+
+    {ngx_string("aurora_waf_heartbeat_interval"),
+     NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF |
+         NGX_CONF_TAKE1,
+     ngx_http_gateway_noop_slot, 0, 0, NULL},
+
+    {ngx_string("gateway_controller"),
+     NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF |
+         NGX_CONF_TAKE1,
+     ngx_http_gateway_noop_slot, 0, 0, NULL},
+
+    {ngx_string("gateway_node_id"),
+     NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF |
+         NGX_CONF_TAKE1,
+     ngx_http_gateway_noop_slot, 0, 0, NULL},
+
+    {ngx_string("gateway_token"),
+     NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF |
+         NGX_CONF_TAKE1,
+     ngx_http_gateway_noop_slot, 0, 0, NULL},
+
+    {ngx_string("gateway_heartbeat_interval"),
+     NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF |
+         NGX_CONF_TAKE1,
+     ngx_http_gateway_noop_slot, 0, 0, NULL},
 
     ngx_null_command};
 

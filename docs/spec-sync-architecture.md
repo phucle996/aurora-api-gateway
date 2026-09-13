@@ -69,7 +69,7 @@ This document provides a technical specification of the configuration synchroniz
 │  ┌──────────────────────────────────────────────────────────────────┐  │
 │  │ NGINX Datapath Engine                                            │  │
 │  │  ├── Master Process                                              │  │
-│  │  │    ├── load_module ngx_http_aurora_waf_module.so              │  │
+│  │  │    ├── load_module ngx_http_gateway_module.so                 │  │
 │  │  │    └── include /var/lib/aurora-routing/.../modules.conf       │  │
 │  │  └── Worker Processes                                            │  │
 │  │       ├── include /var/lib/aurora-policy/active-extensions.conf  │  │
@@ -270,7 +270,7 @@ sequenceDiagram
 
 | Category | Count | Primary Execution Engine | NGINX Impact | Agent Impact |
 | :--- | :---: | :--- | :---: | :---: |
-| **Security Engine** (WAF, SQLi, XSS, CRS, etc.) | 15 | `ngx_http_aurora_waf_module.so` + Agent Watcher | Directives / WAF JSON | In-process regex and scanner inspector |
+| **Security Engine** (WAF, SQLi, XSS, CRS, etc.) | 15 | `ngx_http_gateway_module.so` + Agent Watcher | Directives / WAF JSON | In-process regex and scanner inspector |
 | **Authentication** (JWT, API Key, Basic, mTLS, etc.) | 12 | Agent Dispatcher + Forward Auth | Auth Request / Headers | Cryptographic verification & JWKS cache |
 | **Authorization** (IP Restrict, GeoIP, RBAC, CORS) | 12 | Radix IP Tree + `active-extensions.conf` | CIDR allow/deny, CORS headers | Role claims validator |
 | **Traffic Control** (Rate Limit, Split, Concurrency) | 14 | NGINX Core (`limit_req`) + UDP Cluster Daemon | Native rate-limiting zones | Distributed sliding window sync |

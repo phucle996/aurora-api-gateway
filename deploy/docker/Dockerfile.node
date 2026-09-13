@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY build/nginx-runtime /opt/nginx
-COPY build/modules/ngx_http_aurora_waf_module.so /opt/modules/ngx_http_aurora_waf_module.so
+COPY build/modules/ngx_http_gateway_module.so /opt/modules/ngx_http_gateway_module.so
 COPY deploy/docker/nginx-node.conf.template /etc/nginx/nginx-node.conf.template
 COPY deploy/docker/entrypoint-node.sh /entrypoint.sh
 COPY deploy/docker/extension-modules.sh /extension-modules.sh

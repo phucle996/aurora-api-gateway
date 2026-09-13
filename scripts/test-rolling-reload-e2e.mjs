@@ -78,7 +78,7 @@ try {
   writeFileSync(`${dir}/html/ok`, 'ok\n');
   writeFileSync(`${dir}/policy.json`, JSON.stringify({ schema_version: 1, block_paths: ['/blocked'] }));
 
-  const nginxConf = `load_module ${root}/build/modules/ngx_http_aurora_waf_module.so;
+  const nginxConf = `load_module ${root}/build/modules/ngx_http_gateway_module.so;
 master_process on;
 worker_processes 1;
 worker_shutdown_timeout 30s;
@@ -96,12 +96,8 @@ http {
   server {
     listen 127.0.0.1:${nginxPort} reuseport;
     root ${dir}/html;
-    aurora_waf on;
-    aurora_waf_policy ${dir}/policy.json;
-    aurora_waf_controller ${controllerBase};
-    aurora_waf_node_id node-local-01;
-    aurora_waf_token ${token};
-    aurora_waf_heartbeat_interval 1;
+    gateway on;
+    gateway_waf_policy ${dir}/policy.json;
 
     location / { try_files $uri =404; }
   }

@@ -60,8 +60,23 @@ ngx_int_t ngx_http_gateway_variables(ngx_conf_t *cf) {
   }
   v->get_handler = ngx_http_gateway_generation;
 
+  ngx_str_t legacy_name = ngx_string("aurora_waf_generation");
+  v = ngx_http_add_variable(cf, &legacy_name, NGX_HTTP_VAR_NOCACHEABLE);
+  if (v == NULL) {
+    return NGX_ERROR;
+  }
+  v->get_handler = ngx_http_gateway_generation;
+
   ngx_str_t access_name = ngx_string("gateway_access_generation");
   v = ngx_http_add_variable(cf, &access_name, NGX_HTTP_VAR_NOCACHEABLE);
+  if (v == NULL) {
+    return NGX_ERROR;
+  }
+  v->get_handler = ngx_http_gateway_generation;
+  v->data = 1;
+
+  ngx_str_t legacy_access_name = ngx_string("aurora_access_generation");
+  v = ngx_http_add_variable(cf, &legacy_access_name, NGX_HTTP_VAR_NOCACHEABLE);
   if (v == NULL) {
     return NGX_ERROR;
   }

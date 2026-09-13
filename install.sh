@@ -191,7 +191,7 @@ has_compat_flag() {
 
 find_module_for_version() {
   local ver="$1"
-  local module="${PAYLOAD_DIR}/modules/ngx_http_aurora_waf_module-${ver}.so"
+  local module="${PAYLOAD_DIR}/modules/ngx_http_gateway_module-${ver}.so"
   if [ -f "$module" ]; then
     echo "$module"
   fi
@@ -301,9 +301,9 @@ else
         echo ""
         echo "  NOTICE: No pre-built module found for NGINX ${SELECTED_VERSION}."
         echo "  Available pre-built modules:"
-        for f in "${PAYLOAD_DIR}"/modules/ngx_http_aurora_waf_module-*.so; do
+        for f in "${PAYLOAD_DIR}"/modules/ngx_http_gateway_module-*.so; do
           [ -f "$f" ] || continue
-          local_ver=$(basename "$f" | sed 's/ngx_http_aurora_waf_module-//;s/\.so//')
+          local_ver=$(basename "$f" | sed 's/ngx_http_gateway_module-//;s/\.so//')
           echo "    - ${local_ver}"
         done
         echo ""
@@ -377,8 +377,8 @@ if [ -d "${PAYLOAD_DIR}/nginx-runtime" ]; then
   echo "==> Installing Aurora Dataplane NGINX 1.30.4 runtime into /opt/aurora/nginx..."
   mkdir -p /opt/aurora/nginx /opt/modules /var/lib/aurora-policy /var/lib/aurora-routing
   cp -rf "${PAYLOAD_DIR}/nginx-runtime/"* /opt/aurora/nginx/
-  if [ -f "${PAYLOAD_DIR}/modules/ngx_http_aurora_waf_module.so" ]; then
-    install -m 755 "${PAYLOAD_DIR}/modules/ngx_http_aurora_waf_module.so" /opt/modules/ngx_http_aurora_waf_module.so
+  if [ -f "${PAYLOAD_DIR}/modules/ngx_http_gateway_module.so" ]; then
+    install -m 755 "${PAYLOAD_DIR}/modules/ngx_http_gateway_module.so" /opt/modules/ngx_http_gateway_module.so
   fi
 fi
 
@@ -394,18 +394,18 @@ if [ -n "$SELECTED_NGINX" ] && [ -n "$SELECTED_MODULE" ]; then
   fi
   mkdir -p "$NGINX_MODULES_PATH"
 
-  echo "==> Installing WAF module (NGINX ${SELECTED_VERSION}) into ${NGINX_MODULES_PATH}..."
-  install -m 755 "$SELECTED_MODULE" "${NGINX_MODULES_PATH}/ngx_http_aurora_waf_module.so"
+  echo "==> Installing Gateway module (NGINX ${SELECTED_VERSION}) into ${NGINX_MODULES_PATH}..."
+  install -m 755 "$SELECTED_MODULE" "${NGINX_MODULES_PATH}/ngx_http_gateway_module.so"
 
   NGINX_CONF=$("$SELECTED_NGINX" -V 2>&1 | grep -oP '(?<=--conf-path=)\S+' || echo "/etc/nginx/nginx.conf")
 
-  if grep -q 'ngx_http_aurora_waf_module' "$NGINX_CONF" 2>/dev/null; then
+  if grep -q 'ngx_http_gateway_module' "$NGINX_CONF" 2>/dev/null; then
     echo "  load_module directive already present in ${NGINX_CONF}"
   else
     echo ""
     echo "  Add the following line at the TOP of ${NGINX_CONF}:"
     echo ""
-    echo "    load_module ${NGINX_MODULES_PATH}/ngx_http_aurora_waf_module.so;"
+    echo "    load_module ${NGINX_MODULES_PATH}/ngx_http_gateway_module.so;"
     echo ""
   fi
 
@@ -417,9 +417,9 @@ if [ -n "$SELECTED_NGINX" ] && [ -n "$SELECTED_MODULE" ]; then
   fi
 else
   # Copy all modules to standard location for later use.
-  echo "==> Copying all WAF modules to /usr/lib/nginx/modules/..."
+  echo "==> Copying all Gateway modules to /usr/lib/nginx/modules/..."
   mkdir -p /usr/lib/nginx/modules
-  for f in "${PAYLOAD_DIR}"/modules/ngx_http_aurora_waf_module-*.so; do
+  for f in "${PAYLOAD_DIR}"/modules/ngx_http_gateway_module-*.so; do
     [ -f "$f" ] || continue
     install -m 755 "$f" /usr/lib/nginx/modules/
   done
@@ -598,12 +598,12 @@ if [ -n "$SELECTED_NGINX" ]; then
   echo "  Module installed: $(basename "$SELECTED_MODULE") -> ${NGINX_MODULES_PATH}"
   echo ""
   echo "  To start the Data Plane:"
-  echo "    1. Ensure 'load_module ${NGINX_MODULES_PATH}/ngx_http_aurora_waf_module.so;' is at the top of nginx.conf"
+  echo "    1. Ensure 'load_module ${NGINX_MODULES_PATH}/ngx_http_gateway_module.so;' is at the top of nginx.conf"
   echo "    2. Configure /etc/aurora-waf/node.env"
   echo "    3. sudo systemctl enable --now aurora-waf-nginx"
 else
   echo "  Pre-built modules copied to /usr/lib/nginx/modules/:"
-  for f in /usr/lib/nginx/modules/ngx_http_aurora_waf_module-*.so; do
+  for f in /usr/lib/nginx/modules/ngx_http_gateway_module-*.so; do
     [ -f "$f" ] || continue
     echo "    - $(basename "$f")"
   done

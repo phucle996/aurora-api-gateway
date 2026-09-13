@@ -91,11 +91,11 @@ async function attack(name, rate, seconds, { outage = false, reload = false, con
 
 try {
     results.host = { cpus: os.cpus().length, cpu: os.cpus()[0].model, memory: os.totalmem(), release: os.release() };
-    results.artifacts = Object.fromEntries(['build/aurora-controller-perf', 'build/modules/ngx_http_aurora_waf_module.so'].map(f => [f, createHash('sha256').update(readFileSync(path.join(root, f))).digest('hex')]));
+    results.artifacts = Object.fromEntries(['build/aurora-controller-perf', 'build/modules/ngx_http_gateway_module.so'].map(f => [f, createHash('sha256').update(readFileSync(path.join(root, f))).digest('hex')]));
     results.trunks = spawnSync(trunks, ['--version'], { encoding: 'utf8' }).stdout;
     mkdirSync(`${dir}/html`); writeFileSync(`${dir}/html/ok`, 'ok\n');
     writeFileSync(`${dir}/policy.json`, JSON.stringify({ schema_version: 1, block_paths: ['/blocked', ...Array.from({ length: 511 }, (_, i) => `/deny-${i}`)] }));
-    writeFileSync(`${dir}/nginx.conf`, `${baseline ? '' : `load_module ${root}/build/modules/ngx_http_aurora_waf_module.so;`}
+    writeFileSync(`${dir}/nginx.conf`, `${baseline ? '' : `load_module ${root}/build/modules/ngx_http_gateway_module.so;`}
 worker_processes 4; worker_rlimit_nofile 16384; pid ${dir}/nginx.pid; error_log ${dir}/nginx-error.log notice;
 worker_shutdown_timeout 30s;
 events { worker_connections 4096; }
@@ -103,8 +103,8 @@ http { access_log off; sendfile on; client_body_temp_path ${dir}/client; proxy_t
 lingering_close on; lingering_time 30s; lingering_timeout 5s;
 keepalive_timeout 65s; keepalive_requests 10000;
 server { listen 127.0.0.1:${np} reuseport; root ${dir}/html; add_header X-Test-Worker $pid always;
-${baseline ? 'location = /blocked { return 403; }' : `aurora_waf on; aurora_waf_policy ${dir}/policy.json; aurora_waf_controller ${cb}; aurora_waf_node_id node-local-01; aurora_waf_token ${token}; aurora_waf_heartbeat_interval 1;`}
-location / { try_files $uri =404; } ${baseline ? '' : 'location = /metrics { aurora_waf_metrics; }'}
+${baseline ? 'location = /blocked { return 403; }' : `gateway on; gateway_waf_policy ${dir}/policy.json;`}
+location / { try_files $uri =404; } ${baseline ? '' : 'location = /metrics { gateway_metrics; }'}
 }}`, { mode: 0o600 });
     writeFileSync(`${dir}/prometheus.yml`, `global:\n  scrape_interval: 1s\nscrape_configs:\n  - job_name: pressure\n    honor_labels: true\n    static_configs:\n      - targets: ['127.0.0.1:${np}']\n`);
     controller = launchController(); await ready(cb + '/readyz', controller);

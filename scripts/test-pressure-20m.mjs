@@ -147,7 +147,7 @@ try {
   // - KHÔNG dùng reuseport trong single node instance để Master process quản lý 1 listening socket duy nhất.
   // - Khi reload (SIGHUP), Master socket luôn mở, worker mới ngay lập tức accept trên socket đó.
   // - worker_shutdown_timeout 30s + lingering_close 30s đảm bảo không drop bất kỳ connection in-flight nào.
-  const nginxConf = `load_module ${root}/build/modules/ngx_http_aurora_waf_module.so;
+  const nginxConf = `load_module ${root}/build/modules/ngx_http_gateway_module.so;
 worker_processes 4;
 worker_rlimit_nofile 65535;
 pid ${dir}/nginx.pid;
@@ -178,15 +178,11 @@ http {
     root ${dir}/html;
     add_header X-Test-Worker $pid always;
 
-    aurora_waf on;
-    aurora_waf_policy ${dir}/policy.json;
-    aurora_waf_controller ${cpBase};
-    aurora_waf_node_id node-local-01;
-    aurora_waf_token ${token};
-    aurora_waf_heartbeat_interval 1;
+    gateway on;
+    gateway_waf_policy ${dir}/policy.json;
 
     location / { try_files $uri =404; }
-    location = /metrics { aurora_waf_metrics; }
+    location = /metrics { gateway_metrics; }
   }
 }`;
   writeFileSync(`${dir}/nginx.conf`, nginxConf);

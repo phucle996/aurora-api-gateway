@@ -4,7 +4,7 @@ NGINX ?= $(shell command -v nginx)
 
 .PHONY: policies-test
 policies-test: module compiler
-	cd control-plane && AURORA_TEST_COMPILER="$(CURDIR)/target/release/aurora-compile" AURORA_TEST_NGINX="$(NGINX)" AURORA_TEST_MODULE="$(CURDIR)/build/modules/ngx_http_aurora_waf_module.so" go test -race -count=1 ./internal/test/integration -run TestPolicy
+	cd control-plane && AURORA_TEST_COMPILER="$(CURDIR)/target/release/aurora-compile" AURORA_TEST_NGINX="$(NGINX)" AURORA_TEST_MODULE="$(CURDIR)/build/modules/ngx_http_gateway_module.so" go test -race -count=1 ./internal/test/integration -run TestPolicy
 
 .PHONY: metrics-pressure-test metrics-audit-test
 metrics-pressure-test: module compiler
@@ -37,7 +37,7 @@ rules-init:
 	node scripts/init-rules-runtime.mjs
 
 rules-test: module compiler
-	cd control-plane && AURORA_TEST_COMPILER="$(CURDIR)/target/release/aurora-compile" AURORA_TEST_NGINX="$(NGINX)" AURORA_TEST_MODULE="$(CURDIR)/build/modules/ngx_http_aurora_waf_module.so" go test -race -count=1 -v ./internal/test/integration
+	cd control-plane && AURORA_TEST_COMPILER="$(CURDIR)/target/release/aurora-compile" AURORA_TEST_NGINX="$(NGINX)" AURORA_TEST_MODULE="$(CURDIR)/build/modules/ngx_http_gateway_module.so" go test -race -count=1 -v ./internal/test/integration
 
 ui-install:
 	cd ui && npm ci
