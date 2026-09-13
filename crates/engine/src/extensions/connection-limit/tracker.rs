@@ -32,9 +32,13 @@ impl ShardedConnTracker {
                 Ok(guard) => guard,
                 Err(poisoned) => poisoned.into_inner(),
             };
-            map.entry(key.to_vec())
-                .or_insert_with(|| Arc::new(AtomicU32::new(0)))
-                .clone()
+            if let Some(counter) = map.get(key) {
+                counter.clone()
+            } else {
+                let counter = Arc::new(AtomicU32::new(0));
+                map.insert(key.to_vec(), counter.clone());
+                counter
+            }
         };
 
         let mut current = counter.load(Ordering::Relaxed);

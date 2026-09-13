@@ -76,27 +76,29 @@ pub fn validate_jwt_config(
 
                 if let Some(header_key) = cr_obj.get("header_key").and_then(|v| v.as_str()) {
                     let h_trimmed = header_key.trim();
-                    if !h_trimmed.is_empty() {
-                        if h_trimmed.len() > 64
-                            || !h_trimmed.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-                        {
-                            return Err(format!(
-                                "JWT extension {} origin '{id}' claim_rule #{cr_idx} invalid 'header_key' '{h_trimmed}'",
-                                instance.instance_id
-                            ));
-                        }
+                    if !h_trimmed.is_empty()
+                        && (h_trimmed.len() > 64
+                            || !h_trimmed
+                                .bytes()
+                                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'))
+                    {
+                        return Err(format!(
+                            "JWT extension {} origin '{id}' claim_rule #{cr_idx} invalid 'header_key' '{h_trimmed}'",
+                            instance.instance_id
+                        ));
                     }
                 }
 
-                if let Some(pattern) = cr_obj.get("values_match").and_then(|v| v.as_str()) {
-                    if pattern != "*" && !pattern.trim().is_empty() {
-                        Regex::new(pattern).map_err(|e| {
-                            format!(
-                                "JWT extension {} origin '{id}' claim_rule #{cr_idx} invalid regex '{pattern}': {e}",
-                                instance.instance_id
-                            )
-                        })?;
-                    }
+                if let Some(pattern) = cr_obj.get("values_match").and_then(|v| v.as_str())
+                    && pattern != "*"
+                    && !pattern.trim().is_empty()
+                {
+                    Regex::new(pattern).map_err(|e| {
+                        format!(
+                            "JWT extension {} origin '{id}' claim_rule #{cr_idx} invalid regex '{pattern}': {e}",
+                            instance.instance_id
+                        )
+                    })?;
                 }
             }
         }

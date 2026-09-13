@@ -110,13 +110,12 @@ impl JwtEngine {
                 if cr.payload_key.trim().is_empty() || cr.payload_key.len() > 64 {
                     return Err(Error::InvalidPolicy);
                 }
-                if let Some(ref h_key) = cr.header_key {
-                    if h_key.trim().is_empty()
+                if let Some(ref h_key) = cr.header_key
+                    && (h_key.trim().is_empty()
                         || h_key.len() > 64
-                        || !h_key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-                    {
-                        return Err(Error::InvalidPolicy);
-                    }
+                        || !h_key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'))
+                {
+                    return Err(Error::InvalidPolicy);
                 }
                 let regex = if cr.values_match == "*" || cr.values_match.trim().is_empty() {
                     None

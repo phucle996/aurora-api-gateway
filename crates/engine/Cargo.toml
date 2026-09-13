@@ -18,6 +18,10 @@ harness = false
 name = "jwt_evaluate"
 harness = false
 
+[[bench]]
+name = "conn_limit_local"
+harness = false
+
 [dependencies]
 hashbrown = { version = "0.17.1", default-features = false, features = ["inline-more"] }
 serde = { version = "1", features = ["derive"] }

@@ -35,6 +35,10 @@ fn apply_custom_response(
     rule: &CompiledRule,
     current_connections: u32,
 ) {
+    if rule.response_headers.is_empty() && rule.response_body.is_none() {
+        return;
+    }
+
     let limit_str = rule.max_connections.to_string();
     let current_str = current_connections.to_string();
     let status_code_str = decision.status_code.to_string();
@@ -250,16 +254,28 @@ impl ConnectionLimitEngine {
                 }
             };
 
-            let mut tracker_key = Vec::with_capacity(rule.id.len() + 1 + identifier.len());
-            tracker_key.extend_from_slice(rule.id.as_bytes());
-            tracker_key.push(b':');
-            tracker_key.extend_from_slice(identifier);
+            let key_len = rule.id.len() + 1 + identifier.len();
+            let mut stack_key = [0u8; 128];
+            let mut heap_key = Vec::new();
+            let tracker_key: &[u8] = if key_len <= 128 {
+                let id_bytes = rule.id.as_bytes();
+                stack_key[..id_bytes.len()].copy_from_slice(id_bytes);
+                stack_key[id_bytes.len()] = b':';
+                stack_key[id_bytes.len() + 1..key_len].copy_from_slice(identifier);
+                &stack_key[..key_len]
+            } else {
+                heap_key.reserve_exact(key_len);
+                heap_key.extend_from_slice(rule.id.as_bytes());
+                heap_key.push(b':');
+                heap_key.extend_from_slice(identifier);
+                &heap_key
+            };
 
             let (allowed, current, is_redis) = match self.mode {
                 ConnLimitMode::Local => {
                     let (ok, cur) = self
                         .local_tracker
-                        .acquire(&tracker_key, rule.max_connections);
+                        .acquire(tracker_key, rule.max_connections);
                     (ok, cur, false)
                 }
                 ConnLimitMode::Distributed => {
@@ -270,7 +286,7 @@ impl ConnectionLimitEngine {
                                 OnErrorAction::FallbackLocal => {
                                     let (ok, cur) = self
                                         .local_tracker
-                                        .acquire(&tracker_key, rule.max_connections);
+                                        .acquire(tracker_key, rule.max_connections);
                                     (ok, cur, false)
                                 }
                                 OnErrorAction::Pass => (true, 0, false),
@@ -280,7 +296,7 @@ impl ConnectionLimitEngine {
                     } else {
                         let (ok, cur) = self
                             .local_tracker
-                            .acquire(&tracker_key, rule.max_connections);
+                            .acquire(tracker_key, rule.max_connections);
                         (ok, cur, false)
                     }
                 }
@@ -342,10 +358,22 @@ impl ConnectionLimitEngine {
             return;
         }
 
-        let mut tracker_key = Vec::with_capacity(token.rule_id.len() + 1 + token.identifier.len());
-        tracker_key.extend_from_slice(token.rule_id.as_bytes());
-        tracker_key.push(b':');
-        tracker_key.extend_from_slice(&token.identifier);
-        self.local_tracker.release(&tracker_key);
+        let key_len = token.rule_id.len() + 1 + token.identifier.len();
+        let mut stack_key = [0u8; 128];
+        let mut heap_key = Vec::new();
+        let tracker_key: &[u8] = if key_len <= 128 {
+            let id_bytes = token.rule_id.as_bytes();
+            stack_key[..id_bytes.len()].copy_from_slice(id_bytes);
+            stack_key[id_bytes.len()] = b':';
+            stack_key[id_bytes.len() + 1..key_len].copy_from_slice(&token.identifier);
+            &stack_key[..key_len]
+        } else {
+            heap_key.reserve_exact(key_len);
+            heap_key.extend_from_slice(token.rule_id.as_bytes());
+            heap_key.push(b':');
+            heap_key.extend_from_slice(&token.identifier);
+            &heap_key
+        };
+        self.local_tracker.release(tracker_key);
     }
 }
