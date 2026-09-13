@@ -1,10 +1,11 @@
 use super::crypto::{compile_keys, parse_algorithm, path_matches, valid_host, valid_path_prefix};
 use super::types::{
-    CompiledForwardHeader, JwtDecision, MAX_AUTHORIZATION_BYTES, MAX_EXCLUDE_PATHS_PER_ORIGIN,
-    MAX_FORWARD_HEADERS_PER_ORIGIN, MAX_JWT_ORIGINS, MAX_JWT_POLICY_BYTES, OriginPolicy, Snapshot,
+    ClaimRuleInput, CompiledClaimRule, JwtDecision, MAX_AUTHORIZATION_BYTES,
+    MAX_CLAIM_RULES_PER_ORIGIN, MAX_EXCLUDE_PATHS_PER_ORIGIN, MAX_JWT_ORIGINS,
+    MAX_JWT_POLICY_BYTES, OriginPolicy, Snapshot,
 };
-use crate::{Error, MAX_PATH_BYTES, host_matches, host_specificity};
-use jsonwebtoken::{Validation, decode, decode_header};
+use crate::{host_matches, host_specificity, Error, MAX_PATH_BYTES};
+use jsonwebtoken::{decode, decode_header, Validation};
 use regex::Regex;
 use std::collections::HashSet;
 
@@ -51,7 +52,6 @@ impl JwtEngine {
             if !valid_host(origin.host())
                 || !valid_path_prefix(&origin.path_prefix)
                 || origin.exclude_paths.len() > MAX_EXCLUDE_PATHS_PER_ORIGIN
-                || origin.forward_headers.len() > MAX_FORWARD_HEADERS_PER_ORIGIN
                 || origin.issuer.len() > 512
                 || origin.audience.len() > 512
                 || origin.clock_skew_secs > 300
@@ -70,7 +70,12 @@ impl JwtEngine {
             let alg = parse_algorithm(&origin.algorithm)?;
             let mut validation = Validation::new(alg);
             validation.leeway = origin.clock_skew_secs;
-            validation.validate_nbf = true;
+            validation.validate_nbf = origin.validate_nbf;
+            // Clear default required claims so exp is only strictly required if require_exp is true
+            validation.required_spec_claims.clear();
+            if origin.require_exp {
+                validation.required_spec_claims.insert("exp".to_string());
+            }
             if !origin.issuer.is_empty() {
                 validation.set_issuer(&[origin.issuer]);
                 validation.required_spec_claims.insert("iss".to_string());
@@ -83,24 +88,46 @@ impl JwtEngine {
             let (primary_key, keys_by_kid) =
                 compile_keys(alg, &origin.secret, &origin.public_key_pem, &origin.keys)?;
 
-            let mut forward_headers = Vec::with_capacity(origin.forward_headers.len());
-            for fwd in origin.forward_headers {
-                if fwd.payload_key.trim().is_empty()
-                    || fwd.payload_key.len() > 64
-                    || fwd.header_key.trim().is_empty()
-                    || fwd.header_key.len() > 64
-                {
+            // Support unified claim_rules with fallback to forward_headers
+            let mut all_claim_rules = origin.claim_rules;
+            if all_claim_rules.is_empty() && !origin.forward_headers.is_empty() {
+                for fwd in origin.forward_headers {
+                    all_claim_rules.push(ClaimRuleInput {
+                        payload_key: fwd.payload_key,
+                        values_match: fwd.value,
+                        header_key: Some(fwd.header_key),
+                        required: false,
+                    });
+                }
+            }
+
+            if all_claim_rules.len() > MAX_CLAIM_RULES_PER_ORIGIN {
+                return Err(Error::InvalidPolicy);
+            }
+
+            let mut claim_rules = Vec::with_capacity(all_claim_rules.len());
+            for cr in all_claim_rules {
+                if cr.payload_key.trim().is_empty() || cr.payload_key.len() > 64 {
                     return Err(Error::InvalidPolicy);
                 }
-                let regex = if fwd.value == "*" || fwd.value.trim().is_empty() {
+                if let Some(ref h_key) = cr.header_key {
+                    if h_key.trim().is_empty()
+                        || h_key.len() > 64
+                        || !h_key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+                    {
+                        return Err(Error::InvalidPolicy);
+                    }
+                }
+                let regex = if cr.values_match == "*" || cr.values_match.trim().is_empty() {
                     None
                 } else {
-                    Some(Regex::new(&fwd.value).map_err(|_| Error::InvalidPolicy)?)
+                    Some(Regex::new(&cr.values_match).map_err(|_| Error::InvalidPolicy)?)
                 };
-                forward_headers.push(CompiledForwardHeader {
-                    payload_key: fwd.payload_key,
-                    header_key: fwd.header_key,
+                claim_rules.push(CompiledClaimRule {
+                    payload_key: cr.payload_key,
                     regex,
+                    header_key: cr.header_key.filter(|h| !h.trim().is_empty()),
+                    required: cr.required,
                 });
             }
 
@@ -111,7 +138,7 @@ impl JwtEngine {
                 validation,
                 primary_key,
                 keys_by_kid,
-                forward_headers,
+                claim_rules,
             });
         }
 
@@ -188,26 +215,37 @@ impl JwtEngine {
         match decode::<serde_json::Value>(token_str, decoding_key, &origin.validation) {
             Ok(token_data) => {
                 let mut forwarded_headers = Vec::new();
-                if !origin.forward_headers.is_empty()
-                    && let Some(payload_obj) = token_data.claims.as_object()
-                {
-                    for fwd in &origin.forward_headers {
-                        if let Some(val) = payload_obj.get(&fwd.payload_key) {
-                            let val_str = match val {
-                                serde_json::Value::String(s) => s.clone(),
-                                serde_json::Value::Number(n) => n.to_string(),
-                                serde_json::Value::Bool(b) => b.to_string(),
-                                other => other.to_string(),
-                            };
-                            let matched = match fwd.regex {
-                                Some(ref re) => re.is_match(&val_str),
-                                None => true,
-                            };
-                            if matched {
-                                forwarded_headers.push((fwd.header_key.clone(), val_str));
+                if let Some(payload_obj) = token_data.claims.as_object() {
+                    for cr in &origin.claim_rules {
+                        match payload_obj.get(&cr.payload_key) {
+                            Some(val) => {
+                                let val_str = match val {
+                                    serde_json::Value::String(s) => s.clone(),
+                                    serde_json::Value::Number(n) => n.to_string(),
+                                    serde_json::Value::Bool(b) => b.to_string(),
+                                    other => other.to_string(),
+                                };
+                                let matched = match cr.regex {
+                                    Some(ref re) => re.is_match(&val_str),
+                                    None => true,
+                                };
+                                if !matched {
+                                    if cr.required {
+                                        return Ok(JwtDecision::Unauthorized);
+                                    }
+                                } else if let Some(ref h_key) = cr.header_key {
+                                    forwarded_headers.push((h_key.clone(), val_str));
+                                }
+                            }
+                            None => {
+                                if cr.required {
+                                    return Ok(JwtDecision::Unauthorized);
+                                }
                             }
                         }
                     }
+                } else if origin.claim_rules.iter().any(|r| r.required) {
+                    return Ok(JwtDecision::Unauthorized);
                 }
                 Ok(JwtDecision::Allow { forwarded_headers })
             }

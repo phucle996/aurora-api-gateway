@@ -7,7 +7,8 @@ pub const MAX_JWT_POLICY_BYTES: usize = 131_072;
 pub const MAX_JWT_ORIGINS: usize = 16;
 pub const MAX_JWT_KEYS_PER_ORIGIN: usize = 8;
 pub const MAX_EXCLUDE_PATHS_PER_ORIGIN: usize = 32;
-pub const MAX_FORWARD_HEADERS_PER_ORIGIN: usize = 16;
+pub const MAX_CLAIM_RULES_PER_ORIGIN: usize = 32;
+pub const MAX_FORWARD_HEADERS_PER_ORIGIN: usize = 32;
 pub const MAX_AUTHORIZATION_BYTES: usize = 16_384;
 
 #[derive(Deserialize)]
@@ -46,7 +47,13 @@ pub(crate) struct OriginInput {
     #[serde(default)]
     pub(crate) audience: String,
     #[serde(default)]
+    pub(crate) require_exp: bool,
+    #[serde(default)]
+    pub(crate) validate_nbf: bool,
+    #[serde(default)]
     pub(crate) clock_skew_secs: u64,
+    #[serde(default)]
+    pub(crate) claim_rules: Vec<ClaimRuleInput>,
     #[serde(default)]
     pub(crate) forward_headers: Vec<ForwardHeaderInput>,
 }
@@ -71,6 +78,17 @@ pub(crate) struct KeyInput {
     pub(crate) secret: String,
     #[serde(default)]
     pub(crate) is_primary: bool,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub(crate) struct ClaimRuleInput {
+    pub(crate) payload_key: String,
+    #[serde(default = "default_match_all")]
+    pub(crate) values_match: String,
+    #[serde(default)]
+    pub(crate) header_key: Option<String>,
+    #[serde(default)]
+    pub(crate) required: bool,
 }
 
 #[derive(Deserialize)]
@@ -98,10 +116,11 @@ pub struct ForwardedHeader {
     pub value: String,
 }
 
-pub(crate) struct CompiledForwardHeader {
+pub(crate) struct CompiledClaimRule {
     pub(crate) payload_key: String,
-    pub(crate) header_key: String,
     pub(crate) regex: Option<Regex>,
+    pub(crate) header_key: Option<String>,
+    pub(crate) required: bool,
 }
 
 pub(crate) struct OriginPolicy {
@@ -111,7 +130,7 @@ pub(crate) struct OriginPolicy {
     pub(crate) validation: Validation,
     pub(crate) primary_key: DecodingKey,
     pub(crate) keys_by_kid: HashMap<String, DecodingKey>,
-    pub(crate) forward_headers: Vec<CompiledForwardHeader>,
+    pub(crate) claim_rules: Vec<CompiledClaimRule>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

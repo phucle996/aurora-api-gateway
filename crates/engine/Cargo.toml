@@ -14,6 +14,10 @@ path = "src/bin/compile.rs"
 name = "rate_limit_local"
 harness = false
 
+[[bench]]
+name = "jwt_evaluate"
+harness = false
+
 [dependencies]
 hashbrown = { version = "0.17.1", default-features = false, features = ["inline-more"] }
 serde = { version = "1", features = ["derive"] }

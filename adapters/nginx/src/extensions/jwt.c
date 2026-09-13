@@ -131,10 +131,14 @@ ngx_int_t ngx_http_gateway_eval_jwt(ngx_http_request_t *r,
                          ? decision.headers_count
                          : AURORA_JWT_MAX_FORWARD_HEADERS;
     for (uint32_t i = 0; i < count; i++) {
+      if (decision.headers[i].name_len == 0) {
+        continue;
+      }
       ngx_table_elt_t *h = ngx_list_push(&r->headers_in.headers);
       if (h == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
       }
+      ngx_memzero(h, sizeof(ngx_table_elt_t));
       h->hash = 1;
 
       h->key.len = decision.headers[i].name_len;
@@ -150,6 +154,12 @@ ngx_int_t ngx_http_gateway_eval_jwt(ngx_http_request_t *r,
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
       }
       ngx_memcpy(h->value.data, decision.headers[i].value, h->value.len);
+
+      h->lowcase_key = ngx_pnalloc(r->pool, h->key.len);
+      if (h->lowcase_key == NULL) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+      }
+      ngx_strlow(h->lowcase_key, h->key.data, h->key.len);
     }
   }
 

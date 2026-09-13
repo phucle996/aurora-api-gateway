@@ -281,3 +281,132 @@ fn test_key_rotation_with_kid_lookup() {
         .unwrap();
     assert!(matches!(r_fallback, JwtDecision::Allow { .. }));
 }
+
+#[test]
+fn test_unified_claim_matrix_and_relaxed_exp() {
+    let secret = "test-secret-unified-matrix-123456";
+    let policy = serde_json::json!({
+        "schema_version": 1,
+        "generation": 2,
+        "origins": [
+            {
+                "id": "matrix-origin",
+                "origin": "api.matrix.local",
+                "path_prefix": "/api",
+                "algorithm": "HS256",
+                "secret": secret,
+                "require_exp": false,
+                "claim_rules": [
+                    { "payload_key": "iss", "values_match": "https://auth.matrix.local", "required": true },
+                    { "payload_key": "role", "values_match": "^(admin|operator)$", "header_key": "X-User-Role", "required": true },
+                    { "payload_key": "sub", "values_match": "*", "header_key": "X-User-Id", "required": true },
+                    { "payload_key": "dept", "values_match": "*", "header_key": "X-Department", "required": false }
+                ]
+            }
+        ]
+    });
+
+    let engine = JwtEngine::from_snapshot(policy.to_string().as_bytes()).unwrap();
+
+    // 1. Token WITHOUT exp field -> allowed because require_exp is false
+    let claims_no_exp = serde_json::json!({
+        "iss": "https://auth.matrix.local",
+        "role": "admin",
+        "sub": "user_42",
+        "dept": "engineering"
+    });
+    let token_no_exp = encode(
+        &Header::default(),
+        &claims_no_exp,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    ).unwrap();
+
+    let res = engine.evaluate(
+        b"api.matrix.local",
+        b"/api/resource",
+        Some(format!("Bearer {token_no_exp}").as_bytes()),
+    ).unwrap();
+
+    match res {
+        JwtDecision::Allow { forwarded_headers } => {
+            assert_eq!(forwarded_headers.len(), 3);
+            assert_eq!(forwarded_headers[0], ("X-User-Role".to_string(), "admin".to_string()));
+            assert_eq!(forwarded_headers[1], ("X-User-Id".to_string(), "user_42".to_string()));
+            assert_eq!(forwarded_headers[2], ("X-Department".to_string(), "engineering".to_string()));
+        }
+        _ => panic!("Expected Allow, got {:?}", res),
+    }
+
+    // 2. Token with wrong iss -> rejected (401)
+    let claims_bad_iss = serde_json::json!({
+        "iss": "https://attacker.local",
+        "role": "admin",
+        "sub": "user_42"
+    });
+    let token_bad_iss = encode(
+        &Header::default(),
+        &claims_bad_iss,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    ).unwrap();
+    assert_eq!(
+        engine.evaluate(b"api.matrix.local", b"/api/resource", Some(format!("Bearer {token_bad_iss}").as_bytes())).unwrap(),
+        JwtDecision::Unauthorized
+    );
+
+    // 3. Token with role not matching regex -> rejected (401)
+    let claims_bad_role = serde_json::json!({
+        "iss": "https://auth.matrix.local",
+        "role": "guest",
+        "sub": "user_42"
+    });
+    let token_bad_role = encode(
+        &Header::default(),
+        &claims_bad_role,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    ).unwrap();
+    assert_eq!(
+        engine.evaluate(b"api.matrix.local", b"/api/resource", Some(format!("Bearer {token_bad_role}").as_bytes())).unwrap(),
+        JwtDecision::Unauthorized
+    );
+
+    // 4. Token missing optional claim (dept) -> allowed, optional header omitted
+    let claims_no_dept = serde_json::json!({
+        "iss": "https://auth.matrix.local",
+        "role": "operator",
+        "sub": "user_99"
+    });
+    let token_no_dept = encode(
+        &Header::default(),
+        &claims_no_dept,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    ).unwrap();
+    match engine.evaluate(b"api.matrix.local", b"/api/resource", Some(format!("Bearer {token_no_dept}").as_bytes())).unwrap() {
+        JwtDecision::Allow { forwarded_headers } => {
+            assert_eq!(forwarded_headers.len(), 2);
+            assert_eq!(forwarded_headers[0], ("X-User-Role".to_string(), "operator".to_string()));
+            assert_eq!(forwarded_headers[1], ("X-User-Id".to_string(), "user_99".to_string()));
+        }
+        _ => panic!("Expected Allow"),
+    }
+
+    // 5. When require_exp is true, token without exp MUST be rejected
+    let strict_policy = serde_json::json!({
+        "schema_version": 1,
+        "generation": 3,
+        "origins": [
+            {
+                "id": "strict-origin",
+                "origin": "api.matrix.local",
+                "path_prefix": "/api",
+                "algorithm": "HS256",
+                "secret": secret,
+                "require_exp": true
+            }
+        ]
+    });
+    let strict_engine = JwtEngine::from_snapshot(strict_policy.to_string().as_bytes()).unwrap();
+    assert_eq!(
+        strict_engine.evaluate(b"api.matrix.local", b"/api/resource", Some(format!("Bearer {token_no_exp}").as_bytes())).unwrap(),
+        JwtDecision::Unauthorized
+    );
+}

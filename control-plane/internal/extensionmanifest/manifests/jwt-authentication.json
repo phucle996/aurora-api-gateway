@@ -103,13 +103,28 @@
       },
       {
         "key": "public_key_pem",
-        "label": "Public Key PEM (for RS/ES)",
+        "label": "Public Key PEM (for RS/ES/EdDSA)",
         "type": "textarea_code"
       },
       {
         "key": "exclude_paths",
         "label": "Exclude Paths (Bypass without Token)",
         "type": "list_string"
+      },
+      {
+        "key": "require_exp",
+        "label": "Require Expiration (exp claim)",
+        "type": "boolean"
+      },
+      {
+        "key": "validate_nbf",
+        "label": "Validate Not Before (nbf claim)",
+        "type": "boolean"
+      },
+      {
+        "key": "clock_skew_secs",
+        "label": "Clock skew (seconds)",
+        "type": "number"
       },
       {
         "key": "issuer",
@@ -122,9 +137,32 @@
         "type": "text"
       },
       {
-        "key": "clock_skew_secs",
-        "label": "Clock skew (seconds)",
-        "type": "number"
+        "key": "claim_rules",
+        "label": "Claim Validation & Header Forwarding Matrix",
+        "type": "list_object",
+        "object_fields": [
+          {
+            "key": "payload_key",
+            "label": "Payload Key",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "values_match",
+            "label": "Values Match (Regex or *)",
+            "type": "text"
+          },
+          {
+            "key": "header_key",
+            "label": "Forward Header Key",
+            "type": "text"
+          },
+          {
+            "key": "required",
+            "label": "Required Claim",
+            "type": "boolean"
+          }
+        ]
       }
     ]
   },
@@ -166,6 +204,14 @@
               "type": "string",
               "maxLength": 8192
             },
+            "exclude_paths": {
+              "type": "array",
+              "maxItems": 32,
+              "items": {
+                "type": "string",
+                "maxLength": 8192
+              }
+            },
             "algorithm": {
               "type": "string",
               "maxLength": 16
@@ -178,6 +224,31 @@
               "type": "string",
               "maxLength": 8192
             },
+            "keys": {
+              "type": "array",
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "kid": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "public_key_pem": {
+                    "type": "string",
+                    "maxLength": 8192
+                  },
+                  "secret": {
+                    "type": "string",
+                    "maxLength": 4096
+                  },
+                  "is_primary": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            },
             "issuer": {
               "type": "string",
               "maxLength": 512
@@ -186,10 +257,70 @@
               "type": "string",
               "maxLength": 512
             },
+            "require_exp": {
+              "type": "boolean"
+            },
+            "validate_nbf": {
+              "type": "boolean"
+            },
             "clock_skew_secs": {
               "type": "integer",
               "minimum": 0,
               "maximum": 300
+            },
+            "claim_rules": {
+              "type": "array",
+              "maxItems": 32,
+              "items": {
+                "type": "object",
+                "additionalProperties": true,
+                "required": [
+                  "payload_key"
+                ],
+                "properties": {
+                  "payload_key": {
+                    "type": "string",
+                    "maxLength": 64
+                  },
+                  "values_match": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "header_key": {
+                    "type": "string",
+                    "maxLength": 64
+                  },
+                  "required": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            },
+            "forward_headers": {
+              "type": "array",
+              "maxItems": 32,
+              "items": {
+                "type": "object",
+                "additionalProperties": true,
+                "required": [
+                  "payload_key",
+                  "header_key"
+                ],
+                "properties": {
+                  "payload_key": {
+                    "type": "string",
+                    "maxLength": 64
+                  },
+                  "header_key": {
+                    "type": "string",
+                    "maxLength": 64
+                  },
+                  "value": {
+                    "type": "string",
+                    "maxLength": 256
+                  }
+                }
+              }
             }
           }
         }
