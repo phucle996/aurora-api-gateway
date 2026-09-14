@@ -187,7 +187,10 @@ impl TrafficSplitEngine {
 
             for target in &rule.targets {
                 if bucket < target.cumulative_weight {
-                    return TrafficSplitDecision::matched(rule.id.as_str(), target.upstream.as_str());
+                    return TrafficSplitDecision::matched(
+                        rule.id.as_str(),
+                        target.upstream.as_str(),
+                    );
                 }
             }
 

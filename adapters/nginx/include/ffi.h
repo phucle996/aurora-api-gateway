@@ -393,6 +393,24 @@ uint32_t aurora_waf_format_prometheus_metrics(const char *node_id,
                                               uint8_t *out_buf, size_t max_len,
                                               size_t *written_len);
 
+/* Two-Tier Zero-Overhead Telemetry */
+uint32_t aurora_telemetry_init_shm(const char *path);
+void aurora_telemetry_record_request(uint32_t status, uint64_t duration_ms);
+void aurora_telemetry_record_waf(uint32_t action);
+void aurora_telemetry_record_access(uint32_t action);
+void aurora_telemetry_record_ratelimit(uint32_t action);
+void aurora_telemetry_record_jwt(uint32_t status);
+void aurora_telemetry_record_conn_limit(uint32_t blocked);
+void aurora_telemetry_record_traffic_shaper(uint32_t delayed);
+void aurora_telemetry_record_request_size(uint32_t rejected);
+void aurora_telemetry_record_termination(void);
+void aurora_telemetry_record_traffic_split(uint32_t secondary);
+void aurora_telemetry_record_canary(uint32_t is_canary);
+void aurora_telemetry_record_blue_green(uint32_t is_green);
+void aurora_telemetry_record_mirror(void);
+void aurora_telemetry_record_connections(uint64_t active, uint64_t reading,
+                                         uint64_t writing, uint64_t waiting);
+
 #ifdef __cplusplus
 }
 #endif

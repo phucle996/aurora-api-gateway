@@ -3,7 +3,7 @@ pub mod pull;
 pub mod push;
 
 #[allow(unused_imports)]
-pub use collector::{MetricsCollector, NodeMetrics, format_prometheus, parse_stub_status};
+pub use collector::{MetricsCollector, NodeMetrics, format_prometheus};
 pub use pull::{PrometheusExporter, PullExporter};
 pub use push::{OtlpExporter, PushExporter};
 
@@ -15,31 +15,23 @@ use tracing::{error, info};
 
 pub struct MetricsManager {
     collector: Arc<MetricsCollector>,
-    stub_status_url: String,
     pull_exporters: Vec<Arc<dyn PullExporter>>,
     push_exporters: Vec<Arc<dyn PushExporter>>,
 }
 
 impl Default for MetricsManager {
     fn default() -> Self {
-        Self::new("")
+        Self::new()
     }
 }
 
 impl MetricsManager {
-    pub fn new(stub_status_url: impl Into<String>) -> Self {
+    pub fn new() -> Self {
         Self {
             collector: Arc::new(MetricsCollector::new()),
-            stub_status_url: stub_status_url.into(),
             pull_exporters: Vec::new(),
             push_exporters: Vec::new(),
         }
-    }
-
-    #[allow(dead_code)]
-    pub fn with_stub_status_url(mut self, url: impl Into<String>) -> Self {
-        self.stub_status_url = url.into();
-        self
     }
 
     pub fn with_pull_exporter(mut self, exporter: Arc<dyn PullExporter>) -> Self {
@@ -71,14 +63,11 @@ impl MetricsManager {
             return;
         }
 
-        let stub_url = Arc::new(self.stub_status_url);
-
         // 1. Launch Push Exporters (periodic background export loops)
         for push in active_pushes {
             let col = self.collector.clone();
             let node = node_id.clone();
             let stop = shutdown.clone();
-            let s_url = stub_url.clone();
 
             tokio::spawn(async move {
                 info!(name = %push.name(), interval = ?push.interval(), "Starting metrics push exporter loop");
@@ -93,7 +82,7 @@ impl MetricsManager {
                             break;
                         }
                         _ = ticker.tick() => {
-                            let metrics = col.collect(&s_url).await;
+                            let metrics = col.collect().await;
                             if let Err(e) = push.export(&node, &metrics).await {
                                 tracing::warn!(name = %push.name(), error = %e, "Failed to push metrics sample");
                             }
@@ -119,7 +108,6 @@ impl MetricsManager {
 
             let collector = self.collector.clone();
             let pulls = Arc::new(active_pulls);
-            let s_url = stub_url.clone();
 
             tokio::spawn(async move {
                 loop {
@@ -133,7 +121,6 @@ impl MetricsManager {
                                 let node = node_id.clone();
                                 let col = collector.clone();
                                 let registered_pulls = pulls.clone();
-                                let url_target = s_url.clone();
 
                                 tokio::spawn(async move {
                                     let mut buf = [0u8; 1024];
@@ -162,7 +149,7 @@ impl MetricsManager {
 
                                         if let Some(exp) = matched_exporter {
                                             // Pure on-demand collection: Executed ONLY when scraped
-                                            let metrics = col.collect(&url_target).await;
+                                            let metrics = col.collect().await;
                                             let (body, content_type) = exp.render(&node, &metrics);
                                             let resp = format!(
                                                 "HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -195,11 +182,7 @@ mod tests {
 
     #[test]
     fn test_metrics_manager_builder() {
-        let mgr = MetricsManager::default();
-        assert_eq!(mgr.stub_status_url, "");
-
-        let custom = MetricsManager::new("http://127.0.0.1:8080/stub")
-            .with_stub_status_url("http://127.0.0.1:9090/stub_status");
-        assert_eq!(custom.stub_status_url, "http://127.0.0.1:9090/stub_status");
+        let mgr = MetricsManager::new().with_pull_exporter(Arc::new(PrometheusExporter::new(true)));
+        assert_eq!(mgr.pull_exporters.len(), 1);
     }
 }

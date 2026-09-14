@@ -1,8 +1,7 @@
 use crate::spec::extensions::ExtensionInstanceSpec;
 use crate::spec::materialize::extensions::common::{
-    array, boolean, nginx_fragment, nginx_header_name, nginx_quoted,
-    nginx_request_header_variable, object, required_string, string, string_or, strings,
-    unsigned, unsigned_or,
+    array, boolean, nginx_fragment, nginx_header_name, nginx_quoted, nginx_request_header_variable,
+    object, required_string, string, string_or, strings, unsigned, unsigned_or,
 };
 use serde_json::{Map, Value, json};
 
@@ -40,8 +39,12 @@ pub fn materialize(
 ) -> Result<(), String> {
     match renderer {
         "nginx-brotli" => {
-            sink.push_module("load_module /opt/aurora-dependencies/brotli/ngx_http_brotli_filter_module.so;\n");
-            sink.push_module("load_module /opt/aurora-dependencies/brotli/ngx_http_brotli_static_module.so;\n");
+            sink.push_module(
+                "load_module /opt/aurora-dependencies/brotli/ngx_http_brotli_filter_module.so;\n",
+            );
+            sink.push_module(
+                "load_module /opt/aurora-dependencies/brotli/ngx_http_brotli_static_module.so;\n",
+            );
             sink.push_server("brotli on;\n");
             if let Some(level) = unsigned(config, "quality") {
                 sink.push_server(&format!("brotli_comp_level {level};\n"));
@@ -120,11 +123,7 @@ pub fn materialize(
             *sink.has_server = true;
         }
         "nginx-maintenance" => {
-            let message = string_or(
-                config,
-                "message",
-                "Service undergoing planned maintenance.",
-            );
+            let message = string_or(config, "message", "Service undergoing planned maintenance.");
             let body = serde_json::to_string(&json!({ "error": message }))
                 .map_err(|error| format!("encode maintenance response: {error}"))?;
             sink.push_server(&format!(
@@ -166,10 +165,7 @@ pub fn materialize(
             sink.push_server(&format!(
                 "return {} {};\n",
                 unsigned_or(config, "status_code", 200),
-                nginx_quoted(
-                    &string_or(config, "body", r#"{"status":"mocked"}"#),
-                    "body"
-                )?
+                nginx_quoted(&string_or(config, "body", r#"{"status":"mocked"}"#), "body")?
             ));
         }
         "nginx-uri-rewrite" => {

@@ -131,7 +131,7 @@ pub unsafe extern "C" fn aurora_request_mirror_evaluate(
         return 1;
     }
 
-    match catch_unwind(AssertUnwindSafe(|| {
+    catch_unwind(AssertUnwindSafe(|| {
         let origin_slice = unsafe { slice::from_raw_parts(origin, origin_len) };
         let path_slice = unsafe { slice::from_raw_parts(path, path_len) };
         let method_slice = unsafe { slice::from_raw_parts(method, method_len) };
@@ -187,10 +187,8 @@ pub unsafe extern "C" fn aurora_request_mirror_evaluate(
 
         unsafe { ptr::write(out_decision, out) };
         0
-    })) {
-        Ok(code) => code,
-        Err(_) => 2,
-    }
+    }))
+    .unwrap_or(2)
 }
 
 #[cfg(test)]

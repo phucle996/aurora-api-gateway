@@ -70,12 +70,22 @@ where
 
 fn generate_realistic_routes(count: usize) -> Vec<RouteRule> {
     let services = [
-        "auth", "users", "orders", "payments", "catalog", "inventory",
-        "shipping", "notifications", "analytics", "search", "media", "settings",
+        "auth",
+        "users",
+        "orders",
+        "payments",
+        "catalog",
+        "inventory",
+        "shipping",
+        "notifications",
+        "analytics",
+        "search",
+        "media",
+        "settings",
     ];
     let subresources = [
-        "items", "history", "profile", "keys", "tokens", "status",
-        "events", "logs", "metrics", "reports", "export", "import",
+        "items", "history", "profile", "keys", "tokens", "status", "events", "logs", "metrics",
+        "reports", "export", "import",
     ];
 
     let mut routes = Vec::with_capacity(count);
@@ -157,14 +167,23 @@ fn run_benchmark_for_scale(scale: usize, iterations: usize) {
         ("miss_no_match", miss_path.as_slice()),
     ];
 
-    println!("==========================================================================================");
-    println!("  BENCHMARK SCALE: N = {} ROUTES (iterations: {})", scale, iterations);
-    println!("==========================================================================================");
+    println!(
+        "=========================================================================================="
+    );
+    println!(
+        "  BENCHMARK SCALE: N = {} ROUTES (iterations: {})",
+        scale, iterations
+    );
+    println!(
+        "=========================================================================================="
+    );
     println!(
         "{:<18} | {:<12} | {:<12} | {:<10} | {:<12} | {:<12}",
         "Scenario", "Linear (ns)", "Radix (ns)", "Speedup", "Linear MOps", "Radix MOps"
     );
-    println!("------------------------------------------------------------------------------------------");
+    println!(
+        "------------------------------------------------------------------------------------------"
+    );
 
     for (scenario, path) in test_cases {
         // --- Benchmark Linear find_best ---
@@ -223,10 +242,14 @@ fn run_for_each_benchmark(scale: usize, iterations: usize) {
 
     let path = b"/api/v1/orders/items/45678/details";
 
-    println!("------------------------------------------------------------------------------------------");
+    println!(
+        "------------------------------------------------------------------------------------------"
+    );
     println!("  HIERARCHICAL CASCADING MATCH (for_each_match / RateLimit multi-rule evaluation)");
     println!("  Scale N = {} routes", scale);
-    println!("------------------------------------------------------------------------------------------");
+    println!(
+        "------------------------------------------------------------------------------------------"
+    );
 
     // Linear for_each
     let mut linear_samples = [0.0_f64; 7];
@@ -264,13 +287,19 @@ fn run_for_each_benchmark(scale: usize, iterations: usize) {
 
     println!(
         "Linear: {:>8.2} ns/op ({:.2} MOps) | Radix: {:>8.2} ns/op ({:.2} MOps) | Speedup: {:>6.1}x\n",
-        linear_median, 1000.0 / linear_median, radix_median, 1000.0 / radix_median, speedup
+        linear_median,
+        1000.0 / linear_median,
+        radix_median,
+        1000.0 / radix_median,
+        speedup
     );
 }
 
 fn main() {
     println!("\n=== AURORA GATEWAY: EMPIRICAL PATH RADIX TREE VS LINEAR SCAN BENCHMARK ===");
-    println!("Platform: Rust zero-allocation benchmark (CountedAllocator assertion: 0.000 allocs/op)\n");
+    println!(
+        "Platform: Rust zero-allocation benchmark (CountedAllocator assertion: 0.000 allocs/op)\n"
+    );
 
     for scale in [10, 50, 100, 500, 1000] {
         let iterations = match scale {

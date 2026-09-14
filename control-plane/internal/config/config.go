@@ -11,16 +11,16 @@ var (
 )
 
 type Config struct {
-	Env              string
-	HTTPAddr         string
-	GRPCAddr         string
-	SQLitePath       string
-	AdminTokenFile   string
-	CompilerPath     string
-	JWTSecret        string
-	Version          string
-	BuildTime        string
-	TrustedProxies   []string
+	Env            string
+	HTTPAddr       string
+	GRPCAddr       string
+	SQLitePath     string
+	AdminTokenFile string
+	CompilerPath   string
+	JWTSecret      string
+	Version        string
+	BuildTime      string
+	TrustedProxies []string
 }
 
 func LoadConfig() Config {
@@ -39,16 +39,16 @@ func LoadConfig() Config {
 	}
 
 	return Config{
-		Env:              value("AURORA_ENV", "development"),
-		HTTPAddr:         value("AURORA_HTTP_ADDR", "127.0.0.1:8080"),
-		GRPCAddr:         value("AURORA_GRPC_ADDR", "0.0.0.0:9090"),
-		SQLitePath:       value("AURORA_SQLITE_PATH", "data/aurora.db"),
-		AdminTokenFile:   os.Getenv("AURORA_ADMIN_TOKEN_FILE"),
-		CompilerPath:     os.Getenv("AURORA_COMPILER_PATH"),
-		JWTSecret:        jwtSecret,
-		Version:          value("AURORA_VERSION", DefaultVersion),
-		BuildTime:        value("AURORA_BUILD_TIME", DefaultBuildTime),
-		TrustedProxies:   trustedProxies,
+		Env:            value("AURORA_ENV", "development"),
+		HTTPAddr:       value("AURORA_HTTP_ADDR", "127.0.0.1:8080"),
+		GRPCAddr:       value("AURORA_GRPC_ADDR", "0.0.0.0:9090"),
+		SQLitePath:     value("AURORA_SQLITE_PATH", "data/aurora.db"),
+		AdminTokenFile: os.Getenv("AURORA_ADMIN_TOKEN_FILE"),
+		CompilerPath:   os.Getenv("AURORA_COMPILER_PATH"),
+		JWTSecret:      jwtSecret,
+		Version:        value("AURORA_VERSION", DefaultVersion),
+		BuildTime:      value("AURORA_BUILD_TIME", DefaultBuildTime),
+		TrustedProxies: trustedProxies,
 	}
 }
 

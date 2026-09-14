@@ -278,11 +278,23 @@ mod tests {
             assert_eq!(decision.matched, 1);
             assert_eq!(decision.is_header_override, 1);
             assert_eq!(&decision.rule_id[..decision.rule_id_len as usize], b"bg-v1");
-            assert_eq!(&decision.upstream[..decision.upstream_len as usize], b"app_green");
-            assert_eq!(&decision.active_slot[..decision.active_slot_len as usize], b"green");
+            assert_eq!(
+                &decision.upstream[..decision.upstream_len as usize],
+                b"app_green"
+            );
+            assert_eq!(
+                &decision.active_slot[..decision.active_slot_len as usize],
+                b"green"
+            );
             assert_eq!(decision.headers_count, 1);
-            assert_eq!(&decision.headers[0].name[..decision.headers[0].name_len as usize], b"x-slot");
-            assert_eq!(&decision.headers[0].value[..decision.headers[0].value_len as usize], b"green");
+            assert_eq!(
+                &decision.headers[0].name[..decision.headers[0].name_len as usize],
+                b"x-slot"
+            );
+            assert_eq!(
+                &decision.headers[0].value[..decision.headers[0].value_len as usize],
+                b"green"
+            );
 
             aurora_blue_green_destroy(engine);
         }

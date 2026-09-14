@@ -1,10 +1,8 @@
-#[cfg(test)]
-mod tests {
-    use super::super::engine::{RequestTerminationEngine, RequestTerminationEvalRequest};
+use super::engine::{RequestTerminationEngine, RequestTerminationEvalRequest};
 
-    #[test]
-    fn test_flat_config_evaluation() {
-        let json = r#"{
+#[test]
+fn test_flat_config_evaluation() {
+    let json = r#"{
             "schema_version": 1,
             "generation": 42,
             "status_code": 503,
@@ -12,29 +10,29 @@ mod tests {
             "body": "{\"error\":\"Maintenance\"}"
         }"#;
 
-        let engine =
-            RequestTerminationEngine::from_snapshot(json.as_bytes()).expect("parse flat config");
-        assert_eq!(engine.generation(), 42);
-        assert_eq!(engine.rules_count(), 1);
+    let engine =
+        RequestTerminationEngine::from_snapshot(json.as_bytes()).expect("parse flat config");
+    assert_eq!(engine.generation(), 42);
+    assert_eq!(engine.rules_count(), 1);
 
-        let req = RequestTerminationEvalRequest {
-            host: b"api.example.com",
-            path: b"/v1/orders",
-            method: b"GET",
-            headers: &[],
-        };
+    let req = RequestTerminationEvalRequest {
+        host: b"api.example.com",
+        path: b"/v1/orders",
+        method: b"GET",
+        headers: &[],
+    };
 
-        let decision = engine.evaluate(&req);
-        assert!(decision.matched);
-        assert!(decision.should_terminate);
-        assert_eq!(decision.status_code, 503);
-        assert_eq!(decision.content_type, "application/json; charset=utf-8");
-        assert_eq!(decision.body, "{\"error\":\"Maintenance\"}");
-    }
+    let decision = engine.evaluate(&req);
+    assert!(decision.matched);
+    assert!(decision.should_terminate);
+    assert_eq!(decision.status_code, 503);
+    assert_eq!(decision.content_type, "application/json; charset=utf-8");
+    assert_eq!(decision.body, "{\"error\":\"Maintenance\"}");
+}
 
-    #[test]
-    fn test_maintenance_mode_with_bypass_header() {
-        let json = r#"{
+#[test]
+fn test_maintenance_mode_with_bypass_header() {
+    let json = r#"{
             "schema_version": 1,
             "rules": [
                 {
@@ -55,39 +53,42 @@ mod tests {
             ]
         }"#;
 
-        let engine = RequestTerminationEngine::from_snapshot(json.as_bytes()).expect("parse rule");
+    let engine = RequestTerminationEngine::from_snapshot(json.as_bytes()).expect("parse rule");
 
-        // 1. Normal user without bypass header -> Terminated with 503
-        let req_normal = RequestTerminationEvalRequest {
-            host: b"example.com",
-            path: b"/checkout",
-            method: b"POST",
-            headers: &[(b"user-agent", b"curl/7.68.0")],
-        };
-        let d_normal = engine.evaluate(&req_normal);
-        assert!(d_normal.matched);
-        assert!(d_normal.should_terminate);
-        assert_eq!(d_normal.status_code, 503);
-        assert_eq!(d_normal.content_type, "text/html; charset=utf-8");
-        assert_eq!(d_normal.headers.len(), 1);
-        assert_eq!(d_normal.headers[0].0, "Retry-After");
-        assert_eq!(d_normal.headers[0].1, "300");
+    // 1. Normal user without bypass header -> Terminated with 503
+    let req_normal = RequestTerminationEvalRequest {
+        host: b"example.com",
+        path: b"/checkout",
+        method: b"POST",
+        headers: &[(b"user-agent", b"curl/7.68.0")],
+    };
+    let d_normal = engine.evaluate(&req_normal);
+    assert!(d_normal.matched);
+    assert!(d_normal.should_terminate);
+    assert_eq!(d_normal.status_code, 503);
+    assert_eq!(d_normal.content_type, "text/html; charset=utf-8");
+    assert_eq!(d_normal.headers.len(), 1);
+    assert_eq!(d_normal.headers[0].0, "Retry-After");
+    assert_eq!(d_normal.headers[0].1, "300");
 
-        // 2. Admin with bypass header -> Matched rule, but should_terminate is FALSE!
-        let req_admin = RequestTerminationEvalRequest {
-            host: b"example.com",
-            path: b"/checkout",
-            method: b"POST",
-            headers: &[(b"x-maintenance-bypass", b"secret123")],
-        };
-        let d_admin = engine.evaluate(&req_admin);
-        assert!(d_admin.matched);
-        assert!(!d_admin.should_terminate, "Admin with valid secret must bypass termination");
-    }
+    // 2. Admin with bypass header -> Matched rule, but should_terminate is FALSE!
+    let req_admin = RequestTerminationEvalRequest {
+        host: b"example.com",
+        path: b"/checkout",
+        method: b"POST",
+        headers: &[(b"x-maintenance-bypass", b"secret123")],
+    };
+    let d_admin = engine.evaluate(&req_admin);
+    assert!(d_admin.matched);
+    assert!(
+        !d_admin.should_terminate,
+        "Admin with valid secret must bypass termination"
+    );
+}
 
-    #[test]
-    fn test_api_mocking_200_ok() {
-        let json = r#"{
+#[test]
+fn test_api_mocking_200_ok() {
+    let json = r#"{
             "schema_version": 1,
             "rules": [
                 {
@@ -106,25 +107,25 @@ mod tests {
             ]
         }"#;
 
-        let engine = RequestTerminationEngine::from_snapshot(json.as_bytes()).expect("parse mock");
+    let engine = RequestTerminationEngine::from_snapshot(json.as_bytes()).expect("parse mock");
 
-        let req = RequestTerminationEvalRequest {
-            host: b"example.com",
-            path: b"/api/mock/users",
-            method: b"GET",
-            headers: &[],
-        };
+    let req = RequestTerminationEvalRequest {
+        host: b"example.com",
+        path: b"/api/mock/users",
+        method: b"GET",
+        headers: &[],
+    };
 
-        let decision = engine.evaluate(&req);
-        assert!(decision.matched);
-        assert!(decision.should_terminate);
-        assert_eq!(decision.status_code, 200);
-        assert_eq!(decision.body, "{\"users\":[{\"id\":1,\"name\":\"Alice\"}]}");
-    }
+    let decision = engine.evaluate(&req);
+    assert!(decision.matched);
+    assert!(decision.should_terminate);
+    assert_eq!(decision.status_code, 200);
+    assert_eq!(decision.body, "{\"users\":[{\"id\":1,\"name\":\"Alice\"}]}");
+}
 
-    #[test]
-    fn test_decommissioned_endpoint_410() {
-        let json = r#"{
+#[test]
+fn test_decommissioned_endpoint_410() {
+    let json = r#"{
             "schema_version": 1,
             "rules": [
                 {
@@ -139,24 +140,24 @@ mod tests {
             ]
         }"#;
 
-        let engine = RequestTerminationEngine::from_snapshot(json.as_bytes()).expect("parse legacy");
+    let engine = RequestTerminationEngine::from_snapshot(json.as_bytes()).expect("parse legacy");
 
-        let req = RequestTerminationEvalRequest {
-            host: b"example.com",
-            path: b"/api/v0/status",
-            method: b"GET",
-            headers: &[],
-        };
+    let req = RequestTerminationEvalRequest {
+        host: b"example.com",
+        path: b"/api/v0/status",
+        method: b"GET",
+        headers: &[],
+    };
 
-        let decision = engine.evaluate(&req);
-        assert!(decision.matched);
-        assert!(decision.should_terminate);
-        assert_eq!(decision.status_code, 410);
-    }
+    let decision = engine.evaluate(&req);
+    assert!(decision.matched);
+    assert!(decision.should_terminate);
+    assert_eq!(decision.status_code, 410);
+}
 
-    #[test]
-    fn test_method_and_path_filtering() {
-        let json = r#"{
+#[test]
+fn test_method_and_path_filtering() {
+    let json = r#"{
             "schema_version": 1,
             "rules": [
                 {
@@ -171,36 +172,35 @@ mod tests {
             ]
         }"#;
 
-        let engine = RequestTerminationEngine::from_snapshot(json.as_bytes()).expect("parse methods");
+    let engine = RequestTerminationEngine::from_snapshot(json.as_bytes()).expect("parse methods");
 
-        // GET passes through
-        let req_get = RequestTerminationEvalRequest {
-            host: b"example.com",
-            path: b"/api/readonly/items",
-            method: b"GET",
-            headers: &[],
-        };
-        assert!(!engine.evaluate(&req_get).matched);
+    // GET passes through
+    let req_get = RequestTerminationEvalRequest {
+        host: b"example.com",
+        path: b"/api/readonly/items",
+        method: b"GET",
+        headers: &[],
+    };
+    assert!(!engine.evaluate(&req_get).matched);
 
-        // POST is blocked
-        let req_post = RequestTerminationEvalRequest {
-            host: b"example.com",
-            path: b"/api/readonly/items",
-            method: b"POST",
-            headers: &[],
-        };
-        let d_post = engine.evaluate(&req_post);
-        assert!(d_post.matched);
-        assert_eq!(d_post.status_code, 405);
-    }
+    // POST is blocked
+    let req_post = RequestTerminationEvalRequest {
+        host: b"example.com",
+        path: b"/api/readonly/items",
+        method: b"POST",
+        headers: &[],
+    };
+    let d_post = engine.evaluate(&req_post);
+    assert!(d_post.matched);
+    assert_eq!(d_post.status_code, 405);
+}
 
-    #[test]
-    fn test_rejects_invalid_status_code() {
-        let json = r#"{
+#[test]
+fn test_rejects_invalid_status_code() {
+    let json = r#"{
             "schema_version": 1,
             "status_code": 650
         }"#;
 
-        assert!(RequestTerminationEngine::from_snapshot(json.as_bytes()).is_err());
-    }
+    assert!(RequestTerminationEngine::from_snapshot(json.as_bytes()).is_err());
 }

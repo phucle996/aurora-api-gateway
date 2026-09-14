@@ -238,8 +238,12 @@ mod tests {
             );
             assert_eq!(eval_rc, 0);
             assert_eq!(decision.matched, 1);
-            assert_eq!(&decision.rule_id[..decision.rule_id_len as usize], b"split-v1-v2");
-            let chosen = std::str::from_utf8(&decision.upstream[..decision.upstream_len as usize]).unwrap();
+            assert_eq!(
+                &decision.rule_id[..decision.rule_id_len as usize],
+                b"split-v1-v2"
+            );
+            let chosen =
+                std::str::from_utf8(&decision.upstream[..decision.upstream_len as usize]).unwrap();
             assert!(chosen == "backend_v1" || chosen == "backend_v2");
 
             aurora_traffic_split_destroy(engine);

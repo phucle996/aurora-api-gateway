@@ -157,6 +157,7 @@ ngx_int_t ngx_http_gateway_eval_waf(ngx_http_request_t *r,
   if (decision.action == 1) {
     /* Chế độ Audit: Chỉ ghi log cảnh báo, không chặn request */
     if (conf->mode == 1) {
+      aurora_telemetry_record_waf(2);
       ngx_log_t log = *r->connection->log;
       log.handler = NULL;
       ngx_log_error(NGX_LOG_NOTICE, &log, 0,
@@ -164,8 +165,10 @@ ngx_int_t ngx_http_gateway_eval_waf(ngx_http_request_t *r,
       return NGX_DECLINED;
     }
     /* Chế độ Enforce: Trả về 403 Forbidden để chặn request */
+    aurora_telemetry_record_waf(1);
     return NGX_HTTP_FORBIDDEN;
   }
 
+  aurora_telemetry_record_waf(0);
   return NGX_DECLINED;
 }

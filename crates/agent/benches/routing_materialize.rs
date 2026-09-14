@@ -139,7 +139,7 @@ fn bench_routing_materialize_100_routes() -> BenchResult {
                 upstream: format!("upstream_pool_{d_idx}_{l_idx}"),
                 strip_path: l_idx % 2 == 0,
                 websocket: l_idx == 4,
-                priority: 100 - (l_idx as i32 * 10),
+                priority: 100 - (l_idx * 10),
                 plugins_json: None,
                 origin_tls: None,
             })
@@ -205,10 +205,11 @@ fn main() {
     println!("  AURORA L7 ROUTING ENGINE: MICRO-BENCHMARKS & ALLOCATION PROFILER");
     println!("================================================================================");
 
-    let mut results = Vec::new();
-    results.push(bench_sni_matching());
-    results.push(bench_certificate_lookup());
-    results.push(bench_routing_materialize_100_routes());
+    let results = vec![
+        bench_sni_matching(),
+        bench_certificate_lookup(),
+        bench_routing_materialize_100_routes(),
+    ];
 
     for r in &results {
         println!(

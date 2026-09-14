@@ -28,7 +28,6 @@ func (m *mockSpecService) ReportSpec(ctx context.Context, cmd entity.SpecReportC
 	return nil
 }
 
-
 func TestSpecSyncHandler_SyncSpec(t *testing.T) {
 	mockSvc := &mockSpecService{
 		syncFn: func(ctx context.Context, q entity.SpecSyncQuery) (*entity.SpecSyncResult, error) {

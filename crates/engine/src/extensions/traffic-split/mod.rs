@@ -6,6 +6,6 @@ mod tests;
 
 pub use engine::TrafficSplitEngine;
 pub use types::{
-    SplitBy, SplitTargetInput, TrafficSplitDecision, TrafficSplitEvalRequest, TrafficSplitRuleInput,
-    TrafficSplitSnapshot,
+    SplitBy, SplitTargetInput, TrafficSplitDecision, TrafficSplitEvalRequest,
+    TrafficSplitRuleInput, TrafficSplitSnapshot,
 };

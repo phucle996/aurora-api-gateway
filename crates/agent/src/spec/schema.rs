@@ -75,7 +75,7 @@ mod tests {
       "key": "builtin/prometheus",
       "version": 1,
       "manifest_digest": "catalog-digest",
-      "config_json": "{\"port\":9145,\"stub_status_url\":\"http://127.0.0.1:80/stub_status\",\"prometheus\":{\"enabled\":true,\"path\":\"/metrics\"},\"otlp\":{\"enabled\":true,\"endpoint\":\"http://otel-collector:4317\",\"interval_secs\":15}}"
+      "config_json": "{\"port\":9145,\"prometheus\":{\"enabled\":true,\"path\":\"/metrics\"},\"otlp\":{\"enabled\":true,\"endpoint\":\"http://otel-collector:4317\",\"interval_secs\":15}}"
     }
   ],
   "waf": {
@@ -117,7 +117,7 @@ mod tests {
         assert_eq!(spec.extensions.len(), 1);
         let metrics = &spec.extensions[0];
         assert_eq!(metrics.key, "builtin/prometheus");
-        assert!(metrics.config_json.contains("stub_status_url"));
+        assert!(metrics.config_json.contains("port"));
         assert_eq!(spec.waf.block_paths.len(), 2);
         assert_eq!(spec.upstreams.len(), 1);
         assert_eq!(spec.routing.domains.len(), 1);

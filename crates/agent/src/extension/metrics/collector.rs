@@ -1,8 +1,10 @@
+use aurora_engine::telemetry::{
+    GatewayMetricsSnapshot, GatewaySharedMetrics, SHM_DEFAULT_PATH, SHM_FALLBACK_PATH,
+    SHM_SIZE_BYTES, TELEMETRY_MAGIC,
+};
 use std::fs;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
-use tracing::warn;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct NodeMetrics {
@@ -12,20 +14,37 @@ pub struct NodeMetrics {
     pub memory_used_bytes: u64,
     pub memory_total_bytes: u64,
 
-    // NGINX stub_status counters and gauges
+    // NGINX connection state (sourced from Shared Memory)
     pub active_connections: u64,
     pub connections_reading: u64,
     pub connections_writing: u64,
     pub connections_waiting: u64,
-    pub connections_accepted: u64,
-    pub connections_handled: u64,
     pub requests_total: u64,
+
+    // Data-Plane Gateway & Extension Metrics (read from Shared Memory)
+    pub gateway: GatewayMetricsSnapshot,
+}
+
+struct ShmMapping {
+    ptr: *const GatewaySharedMetrics,
+}
+unsafe impl Send for ShmMapping {}
+unsafe impl Sync for ShmMapping {}
+
+impl Drop for ShmMapping {
+    fn drop(&mut self) {
+        if !self.ptr.is_null() {
+            unsafe {
+                libc::munmap(self.ptr as *mut libc::c_void, SHM_SIZE_BYTES);
+            }
+        }
+    }
 }
 
 pub struct CollectorState {
     last_cpu_total: AtomicU64,
     last_cpu_idle: AtomicU64,
-    client: reqwest::Client,
+    shm: Mutex<Option<ShmMapping>>,
 }
 
 impl Default for CollectorState {
@@ -33,16 +52,19 @@ impl Default for CollectorState {
         Self {
             last_cpu_total: AtomicU64::new(0),
             last_cpu_idle: AtomicU64::new(0),
-            client: reqwest::Client::builder()
-                .timeout(Duration::from_millis(1500))
-                .build()
-                .unwrap_or_default(),
+            shm: Mutex::new(None),
         }
     }
 }
 
 pub struct MetricsCollector {
     state: Arc<CollectorState>,
+}
+
+impl Default for MetricsCollector {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MetricsCollector {
@@ -52,8 +74,51 @@ impl MetricsCollector {
         }
     }
 
+    fn read_gateway_metrics(&self) -> GatewayMetricsSnapshot {
+        let mut guard = match self.state.shm.lock() {
+            Ok(g) => g,
+            Err(_) => return GatewayMetricsSnapshot::default(),
+        };
+
+        if let Some(mapping) = guard.as_ref()
+            && !mapping.ptr.is_null()
+            && unsafe { (*mapping.ptr).magic } == TELEMETRY_MAGIC
+        {
+            return unsafe { (*mapping.ptr).snapshot() };
+        }
+
+        // Try candidate shared memory paths
+        let candidates = [SHM_DEFAULT_PATH, SHM_FALLBACK_PATH];
+        for path in candidates {
+            if let Ok(file) = fs::OpenOptions::new().read(true).open(path) {
+                let fd = std::os::unix::io::AsRawFd::as_raw_fd(&file);
+                let mmap_ptr = unsafe {
+                    libc::mmap(
+                        std::ptr::null_mut(),
+                        SHM_SIZE_BYTES,
+                        libc::PROT_READ,
+                        libc::MAP_SHARED,
+                        fd,
+                        0,
+                    )
+                };
+                if mmap_ptr != libc::MAP_FAILED && !mmap_ptr.is_null() {
+                    let metrics = mmap_ptr as *const GatewaySharedMetrics;
+                    if unsafe { (*metrics).magic } == TELEMETRY_MAGIC {
+                        let snap = unsafe { (*metrics).snapshot() };
+                        *guard = Some(ShmMapping { ptr: metrics });
+                        return snap;
+                    } else {
+                        unsafe { libc::munmap(mmap_ptr, SHM_SIZE_BYTES) };
+                    }
+                }
+            }
+        }
+        GatewayMetricsSnapshot::default()
+    }
+
     /// On-demand collection: Only executes when actively called by an exporter sink.
-    pub async fn collect(&self, stub_status_url: &str) -> NodeMetrics {
+    pub async fn collect(&self) -> NodeMetrics {
         let mut metrics = NodeMetrics::default();
 
         // 1. Sample Memory
@@ -66,73 +131,17 @@ impl MetricsCollector {
         // 2. Sample CPU
         metrics.cpu_utilization = sample_cpu(&self.state.last_cpu_total, &self.state.last_cpu_idle);
 
-        // 3. Scrape NGINX stub_status
-        if !stub_status_url.is_empty() {
-            match self.state.client.get(stub_status_url).send().await {
-                Ok(resp) if resp.status().is_success() => {
-                    if let Ok(body) = resp.text().await {
-                        parse_stub_status(&body, &mut metrics);
-                    }
-                }
-                Ok(resp) => {
-                    warn!(
-                        status = %resp.status(),
-                        url = %stub_status_url,
-                        "NGINX stub_status returned non-200 status"
-                    );
-                }
-                Err(e) => {
-                    // It's acceptable for stub_status to fail if NGINX is temporarily reloading or stub module not configured
-                    tracing::debug!(url = %stub_status_url, error = %e, "Failed to scrape NGINX stub_status");
-                }
-            }
-        }
+        // 3. Sample Gateway & Extension Data-Plane Metrics from Shared Memory
+        metrics.gateway = self.read_gateway_metrics();
+
+        // Read NGINX connection metrics directly from Shared Memory (zero network overhead, lockless)
+        metrics.active_connections = metrics.gateway.connections_active;
+        metrics.connections_reading = metrics.gateway.connections_reading;
+        metrics.connections_writing = metrics.gateway.connections_writing;
+        metrics.connections_waiting = metrics.gateway.connections_waiting;
+        metrics.requests_total = metrics.gateway.http_requests_total;
 
         metrics
-    }
-}
-
-/// Parses NGINX ngx_http_stub_status_module exposition:
-/// Active connections: 291
-/// server accepts handled requests
-///  16630948 16630948 31070465
-/// Reading: 6 Writing: 179 Waiting: 106
-pub fn parse_stub_status(raw: &str, out: &mut NodeMetrics) {
-    let lines: Vec<&str> = raw.lines().map(str::trim).collect();
-    for line in lines {
-        if line.starts_with("Active connections:") {
-            if let Some(val) = line.strip_prefix("Active connections:").map(str::trim)
-                && let Ok(parsed) = val.parse::<u64>()
-            {
-                out.active_connections = parsed;
-            }
-        } else if line.starts_with("Reading:") {
-            // Format: Reading: 6 Writing: 179 Waiting: 106
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            for i in 0..parts.len() {
-                if parts[i] == "Reading:" && i + 1 < parts.len() {
-                    out.connections_reading = parts[i + 1].parse().unwrap_or(0);
-                } else if parts[i] == "Writing:" && i + 1 < parts.len() {
-                    out.connections_writing = parts[i + 1].parse().unwrap_or(0);
-                } else if parts[i] == "Waiting:" && i + 1 < parts.len() {
-                    out.connections_waiting = parts[i + 1].parse().unwrap_or(0);
-                }
-            }
-        } else {
-            // Three numbers: accepts handled requests
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() == 3
-                && let (Ok(acc), Ok(hnd), Ok(req)) = (
-                    parts[0].parse::<u64>(),
-                    parts[1].parse::<u64>(),
-                    parts[2].parse::<u64>(),
-                )
-            {
-                out.connections_accepted = acc;
-                out.connections_handled = hnd;
-                out.requests_total = req;
-            }
-        }
     }
 }
 
@@ -257,14 +266,7 @@ pub fn format_prometheus(node_id: &str, m: &NodeMetrics) -> String {
         node_id, m.connections_waiting
     ));
 
-    // 2. Connection and Request Counters
-    out.push_str("# HELP http_connections_handled_total Total number of handled connections\n");
-    out.push_str("# TYPE http_connections_handled_total counter\n");
-    out.push_str(&format!(
-        "http_connections_handled_total{{node_id=\"{}\"}} {}\n\n",
-        node_id, m.connections_handled
-    ));
-
+    // 2. Request Counter
     out.push_str("# HELP http_requests_total Total number of HTTP requests processed\n");
     out.push_str("# TYPE http_requests_total counter\n");
     out.push_str(&format!(
@@ -301,8 +303,180 @@ pub fn format_prometheus(node_id: &str, m: &NodeMetrics) -> String {
     out.push_str("# HELP system_memory_total_bytes Total system memory in bytes\n");
     out.push_str("# TYPE system_memory_total_bytes gauge\n");
     out.push_str(&format!(
-        "system_memory_total_bytes{{node_id=\"{}\"}} {}\n",
+        "system_memory_total_bytes{{node_id=\"{}\"}} {}\n\n",
         node_id, m.memory_total_bytes
+    ));
+
+    // 4. Gateway HTTP Requests by Status Class
+    let g = &m.gateway;
+    out.push_str("# HELP gateway_http_requests_total Total HTTP requests processed by Gateway\n");
+    out.push_str("# TYPE gateway_http_requests_total counter\n");
+    out.push_str(&format!(
+        "gateway_http_requests_total{{node_id=\"{node_id}\",status=\"2xx\"}} {}\n",
+        g.http_status_2xx
+    ));
+    out.push_str(&format!(
+        "gateway_http_requests_total{{node_id=\"{node_id}\",status=\"3xx\"}} {}\n",
+        g.http_status_3xx
+    ));
+    out.push_str(&format!(
+        "gateway_http_requests_total{{node_id=\"{node_id}\",status=\"4xx\"}} {}\n",
+        g.http_status_4xx
+    ));
+    out.push_str(&format!(
+        "gateway_http_requests_total{{node_id=\"{node_id}\",status=\"5xx\"}} {}\n",
+        g.http_status_5xx
+    ));
+    out.push_str(&format!(
+        "gateway_http_requests_total{{node_id=\"{node_id}\",status=\"other\"}} {}\n\n",
+        g.http_status_other
+    ));
+
+    // 5. Gateway HTTP Request Latency Histogram
+    out.push_str("# HELP gateway_http_request_duration_seconds HTTP request duration in seconds\n");
+    out.push_str("# TYPE gateway_http_request_duration_seconds histogram\n");
+    out.push_str(&format!(
+        "gateway_http_request_duration_seconds_bucket{{node_id=\"{node_id}\",le=\"0.001\"}} {}\n",
+        g.http_duration_bucket_1ms
+    ));
+    out.push_str(&format!(
+        "gateway_http_request_duration_seconds_bucket{{node_id=\"{node_id}\",le=\"0.005\"}} {}\n",
+        g.http_duration_bucket_5ms
+    ));
+    out.push_str(&format!(
+        "gateway_http_request_duration_seconds_bucket{{node_id=\"{node_id}\",le=\"0.010\"}} {}\n",
+        g.http_duration_bucket_10ms
+    ));
+    out.push_str(&format!(
+        "gateway_http_request_duration_seconds_bucket{{node_id=\"{node_id}\",le=\"0.050\"}} {}\n",
+        g.http_duration_bucket_50ms
+    ));
+    out.push_str(&format!(
+        "gateway_http_request_duration_seconds_bucket{{node_id=\"{node_id}\",le=\"0.100\"}} {}\n",
+        g.http_duration_bucket_100ms
+    ));
+    out.push_str(&format!(
+        "gateway_http_request_duration_seconds_bucket{{node_id=\"{node_id}\",le=\"0.500\"}} {}\n",
+        g.http_duration_bucket_500ms
+    ));
+    out.push_str(&format!(
+        "gateway_http_request_duration_seconds_bucket{{node_id=\"{node_id}\",le=\"1.000\"}} {}\n",
+        g.http_duration_bucket_1000ms
+    ));
+    out.push_str(&format!(
+        "gateway_http_request_duration_seconds_bucket{{node_id=\"{node_id}\",le=\"+Inf\"}} {}\n",
+        g.http_duration_bucket_inf
+    ));
+    out.push_str(&format!(
+        "gateway_http_request_duration_seconds_sum{{node_id=\"{node_id}\"}} {:.3}\n",
+        g.http_duration_sum_ms as f64 / 1000.0
+    ));
+    out.push_str(&format!(
+        "gateway_http_request_duration_seconds_count{{node_id=\"{node_id}\"}} {}\n\n",
+        g.http_requests_total
+    ));
+
+    // 6. Core WAF Decisions
+    out.push_str("# HELP gateway_waf_evaluations_total Core WAF evaluations\n");
+    out.push_str("# TYPE gateway_waf_evaluations_total counter\n");
+    out.push_str(&format!(
+        "gateway_waf_evaluations_total{{node_id=\"{node_id}\",action=\"allow\"}} {}\n",
+        g.waf_allow
+    ));
+    out.push_str(&format!(
+        "gateway_waf_evaluations_total{{node_id=\"{node_id}\",action=\"block\"}} {}\n",
+        g.waf_block
+    ));
+    out.push_str(&format!(
+        "gateway_waf_evaluations_total{{node_id=\"{node_id}\",action=\"audit\"}} {}\n\n",
+        g.waf_audit
+    ));
+
+    // 7. Rate Limiting Decisions
+    out.push_str("# HELP gateway_ratelimit_requests_total Rate limit decisions\n");
+    out.push_str("# TYPE gateway_ratelimit_requests_total counter\n");
+    out.push_str(&format!(
+        "gateway_ratelimit_requests_total{{node_id=\"{node_id}\",action=\"allowed\"}} {}\n",
+        g.ratelimit_allowed
+    ));
+    out.push_str(&format!(
+        "gateway_ratelimit_requests_total{{node_id=\"{node_id}\",action=\"throttled\"}} {}\n",
+        g.ratelimit_throttled
+    ));
+    out.push_str(&format!(
+        "gateway_ratelimit_requests_total{{node_id=\"{node_id}\",action=\"rejected\"}} {}\n\n",
+        g.ratelimit_rejected
+    ));
+
+    // 8. JWT Authentication Decisions
+    out.push_str("# HELP gateway_jwt_validations_total JWT authentication decisions\n");
+    out.push_str("# TYPE gateway_jwt_validations_total counter\n");
+    out.push_str(&format!(
+        "gateway_jwt_validations_total{{node_id=\"{node_id}\",status=\"valid\"}} {}\n",
+        g.jwt_valid
+    ));
+    out.push_str(&format!(
+        "gateway_jwt_validations_total{{node_id=\"{node_id}\",status=\"invalid\"}} {}\n",
+        g.jwt_invalid
+    ));
+    out.push_str(&format!(
+        "gateway_jwt_validations_total{{node_id=\"{node_id}\",status=\"expired\"}} {}\n",
+        g.jwt_expired
+    ));
+    out.push_str(&format!(
+        "gateway_jwt_validations_total{{node_id=\"{node_id}\",status=\"missing\"}} {}\n\n",
+        g.jwt_missing
+    ));
+
+    // 9. Access Control Decisions
+    out.push_str("# HELP gateway_access_evaluations_total Access control decisions\n");
+    out.push_str("# TYPE gateway_access_evaluations_total counter\n");
+    out.push_str(&format!(
+        "gateway_access_evaluations_total{{node_id=\"{node_id}\",action=\"allow\"}} {}\n",
+        g.access_allow
+    ));
+    out.push_str(&format!(
+        "gateway_access_evaluations_total{{node_id=\"{node_id}\",action=\"block\"}} {}\n\n",
+        g.access_block
+    ));
+
+    // 10. Routing Extensions
+    out.push_str("# HELP gateway_canary_requests_total Canary release routing decisions\n");
+    out.push_str("# TYPE gateway_canary_requests_total counter\n");
+    out.push_str(&format!(
+        "gateway_canary_requests_total{{node_id=\"{node_id}\",slot=\"baseline\"}} {}\n",
+        g.canary_baseline
+    ));
+    out.push_str(&format!(
+        "gateway_canary_requests_total{{node_id=\"{node_id}\",slot=\"canary\"}} {}\n\n",
+        g.canary_canary
+    ));
+
+    out.push_str("# HELP gateway_traffic_split_requests_total Traffic split routing decisions\n");
+    out.push_str("# TYPE gateway_traffic_split_requests_total counter\n");
+    out.push_str(&format!(
+        "gateway_traffic_split_requests_total{{node_id=\"{node_id}\",branch=\"primary\"}} {}\n",
+        g.traffic_split_primary
+    ));
+    out.push_str(&format!(
+        "gateway_traffic_split_requests_total{{node_id=\"{node_id}\",branch=\"secondary\"}} {}\n\n",
+        g.traffic_split_secondary
+    ));
+
+    out.push_str(
+        "# HELP gateway_conn_limit_rejected_total Connection limit rejected connections\n",
+    );
+    out.push_str("# TYPE gateway_conn_limit_rejected_total counter\n");
+    out.push_str(&format!(
+        "gateway_conn_limit_rejected_total{{node_id=\"{node_id}\"}} {}\n\n",
+        g.conn_limit_rejected
+    ));
+
+    out.push_str("# HELP gateway_request_termination_total Terminated requests\n");
+    out.push_str("# TYPE gateway_request_termination_total counter\n");
+    out.push_str(&format!(
+        "gateway_request_termination_total{{node_id=\"{node_id}\"}} {}\n\n",
+        g.termination_triggered
     ));
 
     out
@@ -311,34 +485,6 @@ pub fn format_prometheus(node_id: &str, m: &NodeMetrics) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_parse_stub_status_valid() {
-        let sample = "\
-Active connections: 291 
-server accepts handled requests
- 16630948 16630948 31070465 
-Reading: 6 Writing: 179 Waiting: 106 
-";
-        let mut m = NodeMetrics::default();
-        parse_stub_status(sample, &mut m);
-
-        assert_eq!(m.active_connections, 291);
-        assert_eq!(m.connections_accepted, 16630948);
-        assert_eq!(m.connections_handled, 16630948);
-        assert_eq!(m.requests_total, 31070465);
-        assert_eq!(m.connections_reading, 6);
-        assert_eq!(m.connections_writing, 179);
-        assert_eq!(m.connections_waiting, 106);
-    }
-
-    #[test]
-    fn test_parse_stub_status_empty() {
-        let mut m = NodeMetrics::default();
-        parse_stub_status("", &mut m);
-        assert_eq!(m.active_connections, 0);
-        assert_eq!(m.requests_total, 0);
-    }
 
     #[test]
     fn test_format_prometheus_no_aurora_prefix() {
@@ -351,9 +497,8 @@ Reading: 6 Writing: 179 Waiting: 106
             connections_reading: 2,
             connections_writing: 10,
             connections_waiting: 30,
-            connections_accepted: 1000,
-            connections_handled: 1000,
             requests_total: 5000,
+            gateway: GatewayMetricsSnapshot::default(),
         };
 
         let formatted = format_prometheus("node-test-01", &m);
@@ -363,9 +508,6 @@ Reading: 6 Writing: 179 Waiting: 106
         assert!(formatted.contains("http_connections_reading{node_id=\"node-test-01\"} 2"));
         assert!(formatted.contains("http_connections_writing{node_id=\"node-test-01\"} 10"));
         assert!(formatted.contains("http_connections_waiting{node_id=\"node-test-01\"} 30"));
-        assert!(
-            formatted.contains("http_connections_handled_total{node_id=\"node-test-01\"} 1000")
-        );
         assert!(formatted.contains("http_requests_total{node_id=\"node-test-01\"} 5000"));
         assert!(
             formatted.contains("system_cpu_utilization_ratio{node_id=\"node-test-01\"} 0.1523")
@@ -376,5 +518,47 @@ Reading: 6 Writing: 179 Waiting: 106
 
         // Crucial invariant: Absolutely NO aurora_ prefix in metric names
         assert!(!formatted.contains("aurora_"));
+    }
+
+    #[test]
+    fn test_format_prometheus_with_gateway_metrics() {
+        let mut m = NodeMetrics::default();
+        m.gateway.http_requests_total = 100;
+        m.gateway.http_status_2xx = 95;
+        m.gateway.http_status_4xx = 5;
+        m.gateway.http_duration_bucket_5ms = 80;
+        m.gateway.http_duration_bucket_inf = 100;
+        m.gateway.http_duration_sum_ms = 450;
+        m.gateway.ratelimit_rejected = 3;
+        m.gateway.jwt_valid = 90;
+        m.gateway.jwt_invalid = 2;
+        m.gateway.canary_canary = 20;
+
+        let formatted = format_prometheus("node-01", &m);
+        assert!(
+            formatted
+                .contains("gateway_http_requests_total{node_id=\"node-01\",status=\"2xx\"} 95")
+        );
+        assert!(
+            formatted.contains("gateway_http_requests_total{node_id=\"node-01\",status=\"4xx\"} 5")
+        );
+        assert!(formatted.contains(
+            "gateway_http_request_duration_seconds_bucket{node_id=\"node-01\",le=\"0.005\"} 80"
+        ));
+        assert!(
+            formatted
+                .contains("gateway_http_request_duration_seconds_sum{node_id=\"node-01\"} 0.450")
+        );
+        assert!(formatted.contains(
+            "gateway_ratelimit_requests_total{node_id=\"node-01\",action=\"rejected\"} 3"
+        ));
+        assert!(
+            formatted
+                .contains("gateway_jwt_validations_total{node_id=\"node-01\",status=\"valid\"} 90")
+        );
+        assert!(
+            formatted
+                .contains("gateway_canary_requests_total{node_id=\"node-01\",slot=\"canary\"} 20")
+        );
     }
 }

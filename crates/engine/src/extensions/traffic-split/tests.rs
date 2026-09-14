@@ -44,7 +44,10 @@ fn test_valid_80_20_split_policy() {
         random_seed: 99,
     };
     let d2 = engine.evaluate(&req2, |_| None);
-    assert_eq!(d1.upstream, d2.upstream, "Client IP must be deterministic and sticky");
+    assert_eq!(
+        d1.upstream, d2.upstream,
+        "Client IP must be deterministic and sticky"
+    );
 
     // Path prefix / origin mismatch
     let req_diff_path = TrafficSplitEvalRequest {

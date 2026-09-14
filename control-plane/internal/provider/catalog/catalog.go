@@ -23,7 +23,7 @@ func DefaultCategories() []entity.MetricCatalogCategory {
 					Description:           "Tốc độ request HTTP trên giây",
 					SupportedAggregations: []string{"sum", "avg", "max"},
 					SupportedGroupBy:      []string{"node_id", "status", "host"},
-					PromQLTemplate:        "sum by ({{.GroupBy}}) (rate(nginx_http_requests_total{{.Filters}}[{{.Window}}]) or aurora_node_requests_per_second{{.Filters}} or http_requests_per_second{{.Filters}})",
+					PromQLTemplate:        "sum by ({{.GroupBy}}) (rate(http_requests_total{{.Filters}}[{{.Window}}]) or rate(gateway_http_requests_total{{.Filters}}[{{.Window}}]) or rate(nginx_http_requests_total{{.Filters}}[{{.Window}}]) or aurora_node_requests_per_second{{.Filters}} or http_requests_per_second{{.Filters}})",
 				},
 				{
 					Key:                   "traffic.connections_active",
@@ -50,7 +50,7 @@ func DefaultCategories() []entity.MetricCatalogCategory {
 					SupportedAggregations: []string{"sum", "avg"},
 					SupportedGroupBy:      []string{"node_id", "action"},
 					ExtensionRequired:     "waf_engine",
-					PromQLTemplate:        `sum by ({{.GroupBy}}) (rate(aurora_waf_action_total{action="block"{{.FiltersKV}}}[{{.Window}}]))`,
+					PromQLTemplate:        `sum by ({{.GroupBy}}) (rate(gateway_waf_evaluations_total{action="block"{{.FiltersKV}}}[{{.Window}}]) or rate(aurora_waf_action_total{action="block"{{.FiltersKV}}}[{{.Window}}]))`,
 				},
 				{
 					Key:                   "waf.rules_triggered",
@@ -78,7 +78,7 @@ func DefaultCategories() []entity.MetricCatalogCategory {
 					SupportedAggregations: []string{"sum", "avg"},
 					SupportedGroupBy:      []string{"zone", "node_id"},
 					ExtensionRequired:     "rate_limit",
-					PromQLTemplate:        "sum by ({{.GroupBy}}) (rate(aurora_rate_limit_rejected_total{{.Filters}}[{{.Window}}]))",
+					PromQLTemplate:        "sum by ({{.GroupBy}}) (rate(gateway_ratelimit_requests_total{action=\"rejected\"{{.FiltersKV}}}[{{.Window}}]) or rate(aurora_rate_limit_rejected_total{{.Filters}}[{{.Window}}]))",
 				},
 				{
 					Key:                   "rate_limit.delayed",

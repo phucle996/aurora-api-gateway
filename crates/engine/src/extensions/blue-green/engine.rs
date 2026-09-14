@@ -109,14 +109,13 @@ impl BlueGreenEngine {
                 .map(|s| s.trim().to_ascii_lowercase())
                 .filter(|s| !s.is_empty());
 
-            if let Some(ref h) = switch_header {
-                if h.len() > 64
+            if let Some(ref h) = switch_header
+                && (h.len() > 64
                     || !h
                         .bytes()
-                        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-                {
-                    return Err(Error::InvalidPolicy);
-                }
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'))
+            {
+                return Err(Error::InvalidPolicy);
             }
 
             let blue_upstream_headers = rule
@@ -173,29 +172,27 @@ impl BlueGreenEngine {
             }
 
             // Check switch header override
-            if let Some(ref header_name) = rule.switch_header {
-                if let Some(val_bytes) = header_lookup(header_name) {
-                    if let Ok(val_str) = std::str::from_utf8(val_bytes) {
-                        if let Some(override_slot) = DeploySlot::from_str_ignore_case(val_str) {
-                            return match override_slot {
-                                DeploySlot::Blue => BlueGreenDecision::matched(
-                                    rule.id.as_str(),
-                                    rule.blue_upstream.as_str(),
-                                    "blue",
-                                    true,
-                                    &rule.blue_upstream_headers,
-                                ),
-                                DeploySlot::Green => BlueGreenDecision::matched(
-                                    rule.id.as_str(),
-                                    rule.green_upstream.as_str(),
-                                    "green",
-                                    true,
-                                    &rule.green_upstream_headers,
-                                ),
-                            };
-                        }
-                    }
-                }
+            if let Some(ref header_name) = rule.switch_header
+                && let Some(val_bytes) = header_lookup(header_name)
+                && let Ok(val_str) = std::str::from_utf8(val_bytes)
+                && let Some(override_slot) = DeploySlot::from_str_ignore_case(val_str)
+            {
+                return match override_slot {
+                    DeploySlot::Blue => BlueGreenDecision::matched(
+                        rule.id.as_str(),
+                        rule.blue_upstream.as_str(),
+                        "blue",
+                        true,
+                        &rule.blue_upstream_headers,
+                    ),
+                    DeploySlot::Green => BlueGreenDecision::matched(
+                        rule.id.as_str(),
+                        rule.green_upstream.as_str(),
+                        "green",
+                        true,
+                        &rule.green_upstream_headers,
+                    ),
+                };
             }
 
             // Default to active slot

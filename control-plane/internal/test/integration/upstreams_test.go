@@ -419,4 +419,3 @@ func TestUpstream_L4ReferentialIntegrityAndCascadeRename(t *testing.T) {
 		t.Fatalf("expected 200 OK on delete after unbinding l4, got %d: %s", wDelOk.Code, wDelOk.Body.String())
 	}
 }
-

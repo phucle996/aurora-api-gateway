@@ -132,6 +132,7 @@ ngx_int_t ngx_http_gateway_eval_traffic_split(ngx_http_request_t *r,
   }
 
   if (decision.matched && decision.upstream_len > 0) {
+    aurora_telemetry_record_traffic_split(1);
     u_char *up = ngx_pnalloc(r->pool, decision.upstream_len);
     if (up == NULL) {
       return NGX_DECLINED;
@@ -154,6 +155,8 @@ ngx_int_t ngx_http_gateway_eval_traffic_split(ngx_http_request_t *r,
     ngx_log_error(
         NGX_LOG_INFO, &log, 0, "Gateway traffic split: rule %*s -> upstream %V",
         (int)decision.rule_id_len, decision.rule_id, &ctx->chosen_upstream);
+  } else {
+    aurora_telemetry_record_traffic_split(0);
   }
 
   return NGX_DECLINED;

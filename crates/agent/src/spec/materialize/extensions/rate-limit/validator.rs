@@ -213,10 +213,7 @@ pub fn validate_rate_limit_config(
                     instance.instance_id
                 )
             })?;
-        if !matches!(
-            limit_by,
-            "client_ip" | "header" | "route_path"
-        ) {
+        if !matches!(limit_by, "client_ip" | "header" | "route_path") {
             return Err(format!(
                 "rate-limit extension {} rule {id} invalid limit_by: {limit_by}",
                 instance.instance_id

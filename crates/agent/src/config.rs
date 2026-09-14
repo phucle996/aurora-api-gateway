@@ -53,9 +53,6 @@ pub struct Config {
     )]
     pub metrics_otlp_interval_secs: u64,
 
-    #[arg(long = "nginx-stub-status-url", env = "NGINX_STUB_STATUS_URL")]
-    pub nginx_stub_status_url: Option<String>,
-
     #[arg(long, env = "NO_NGINX", default_value_t = false)]
     pub no_nginx: bool,
 
@@ -168,7 +165,6 @@ mod tests {
         assert!(!cfg.metrics_prometheus);
         assert!(cfg.metrics_otlp_endpoint.is_none());
         assert_eq!(cfg.metrics_otlp_interval_secs, 15);
-        assert_eq!(cfg.nginx_stub_status_url, None);
         assert!(!cfg.no_nginx);
         cfg.validate();
     }
@@ -198,8 +194,6 @@ mod tests {
             "http://otel-collector:4317",
             "--metrics-otlp-interval",
             "30",
-            "--nginx-stub-status-url",
-            "http://127.0.0.1:8080/stub_status",
         ])
         .expect("parse config with metrics flags");
 
@@ -209,10 +203,6 @@ mod tests {
             Some("http://otel-collector:4317")
         );
         assert_eq!(cfg.metrics_otlp_interval_secs, 30);
-        assert_eq!(
-            cfg.nginx_stub_status_url.as_deref(),
-            Some("http://127.0.0.1:8080/stub_status")
-        );
     }
 
     #[test]
@@ -239,7 +229,6 @@ mod tests {
             metrics_prometheus: false,
             metrics_otlp_endpoint: None,
             metrics_otlp_interval_secs: 15,
-            nginx_stub_status_url: None,
             no_nginx: false,
             grpc_url: None,
         };
@@ -264,7 +253,6 @@ mod tests {
             metrics_prometheus: false,
             metrics_otlp_endpoint: None,
             metrics_otlp_interval_secs: 15,
-            nginx_stub_status_url: None,
             no_nginx: false,
             grpc_url: None,
         };
@@ -288,7 +276,6 @@ mod tests {
             metrics_prometheus: false,
             metrics_otlp_endpoint: None,
             metrics_otlp_interval_secs: 15,
-            nginx_stub_status_url: None,
             no_nginx: false,
             grpc_url: None,
         };

@@ -291,9 +291,7 @@ fn test_header_and_route_path_connection_limiting() {
     let tok_beta1 = d_beta1.token.unwrap();
 
     // Request missing x-tenant-id header -> falls back to client_ip
-    let d_fallback = engine
-        .acquire(host, path_tenant, ip1, |_| None)
-        .unwrap();
+    let d_fallback = engine.acquire(host, path_tenant, ip1, |_| None).unwrap();
     assert!(d_fallback.allowed);
     let tok_fallback = d_fallback.token.unwrap();
 

@@ -74,8 +74,11 @@ impl Default for AuroraTerminationDecision {
 }
 
 /// Create a new RequestTerminationEngine from JSON bytes.
+///
+/// # Safety
+/// `policy_ptr` and `engine_out` must be valid pointers for their declared sizes.
 #[unsafe(no_mangle)]
-pub extern "C" fn aurora_request_termination_create(
+pub unsafe extern "C" fn aurora_request_termination_create(
     policy_ptr: *const u8,
     policy_len: usize,
     engine_out: *mut *mut RequestTerminationEngine,
@@ -103,8 +106,13 @@ pub extern "C" fn aurora_request_termination_create(
 }
 
 /// Destroy a previously allocated RequestTerminationEngine.
+///
+/// # Safety
+/// `engine_ptr` must point to a valid engine instance or be null.
 #[unsafe(no_mangle)]
-pub extern "C" fn aurora_request_termination_destroy(engine_ptr: *mut RequestTerminationEngine) {
+pub unsafe extern "C" fn aurora_request_termination_destroy(
+    engine_ptr: *mut RequestTerminationEngine,
+) {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         if !engine_ptr.is_null() {
             unsafe {
@@ -115,6 +123,9 @@ pub extern "C" fn aurora_request_termination_destroy(engine_ptr: *mut RequestTer
 }
 
 /// Evaluate request-termination policy on the hot path.
+///
+/// # Safety
+/// All input pointers and output destination must be valid for their declared lengths.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn aurora_request_termination_evaluate(
     engine_ptr: *const RequestTerminationEngine,
@@ -232,7 +243,9 @@ mod tests {
         }"#;
 
         let mut engine_ptr: *mut RequestTerminationEngine = ptr::null_mut();
-        let status = aurora_request_termination_create(json.as_ptr(), json.len(), &mut engine_ptr);
+        let status = unsafe {
+            aurora_request_termination_create(json.as_ptr(), json.len(), &mut engine_ptr)
+        };
         assert_eq!(status, 0);
         assert!(!engine_ptr.is_null());
 
@@ -295,6 +308,8 @@ mod tests {
         assert_eq!(decision_admin.matched, 1);
         assert_eq!(decision_admin.should_terminate, 0);
 
-        aurora_request_termination_destroy(engine_ptr);
+        unsafe {
+            aurora_request_termination_destroy(engine_ptr);
+        }
     }
 }

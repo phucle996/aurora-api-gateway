@@ -156,6 +156,8 @@ ngx_int_t ngx_http_gateway_eval_request_termination(
     return NGX_DECLINED;
   }
 
+  aurora_telemetry_record_termination();
+
   /* Thiết lập HTTP Status Code */
   r->headers_out.status = (decision.status_code >= 200 &&
                            decision.status_code <= 599)

@@ -359,7 +359,6 @@ if [ ! -f /etc/aurora-waf/node.env ]; then
 NODE_ID=${NODE_ID}
 CONTROLLER_URL=http://127.0.0.1:8080
 AUTH_TOKEN=
-NGINX_STUB_STATUS_URL=http://127.0.0.1:80/stub_status
 NODE_ENV_EOF
   chmod 600 /etc/aurora-waf/node.env
 fi
@@ -490,7 +489,6 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=root
-Environment="NGINX_STUB_STATUS_URL=http://127.0.0.1:80/stub_status"
 EnvironmentFile=-/etc/aurora-waf/node.env
 ExecStart=/usr/local/bin/aurora-agent --nginx-bin ${NGINX_APPLIANCE_BIN} --nginx-conf /etc/aurora-waf/nginx.conf
 Restart=always

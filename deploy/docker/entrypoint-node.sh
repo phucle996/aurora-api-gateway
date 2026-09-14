@@ -11,7 +11,6 @@ fi
 export HEARTBEAT_INTERVAL="${HEARTBEAT_INTERVAL:-5}"
 export AURORA_SERVER_URL="${CONTROLLER_URL}"
 export AURORA_AUTH_TOKEN="${AUTH_TOKEN}"
-export NGINX_STUB_STATUS_URL="${NGINX_STUB_STATUS_URL:-http://127.0.0.1:80/stub_status}"
 if [ -z "${NGINX_RESOLVER:-}" ]; then
   NGINX_RESOLVER="$(awk '/^nameserver[[:space:]]+/ { print $2; exit }' /etc/resolv.conf)"
 fi
@@ -117,7 +116,6 @@ EXEC_ARGS=(
   --policy-dir "${POLICY_DIR:-/var/lib/aurora-policy}"
   --routing-dir "${ROUTING_DIR:-/var/lib/aurora-routing}"
   --modules-dir "${MODULES_DIR:-/opt/modules}"
-  --nginx-stub-status-url "${NGINX_STUB_STATUS_URL}"
 )
 if [ -n "${GRPC_URL:-}" ]; then
   EXEC_ARGS+=(--grpc-url "${GRPC_URL}")

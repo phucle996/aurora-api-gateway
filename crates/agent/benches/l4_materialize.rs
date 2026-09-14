@@ -186,7 +186,7 @@ fn main() {
                     "median_ns_per_op": r.median_ns_per_op,
                     "allocations_per_op": r.allocations_per_op,
                     "bytes_per_op": r.bytes_per_op,
-                    "throughput_ops_sec": if r.median_ns_per_op > 0 { 1_000_000_000 / r.median_ns_per_op } else { 0 }
+                    "throughput_ops_sec": 1_000_000_000u64.checked_div(r.median_ns_per_op).unwrap_or(0)
                 })
             })
             .collect();

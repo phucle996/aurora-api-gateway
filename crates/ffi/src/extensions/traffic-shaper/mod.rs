@@ -7,7 +7,7 @@
 use crate::extensions::connection_limit::AuroraHeaderLookupFn;
 use aurora_engine::traffic_shaper::TrafficShaperEngine;
 use std::{
-    panic::{catch_unwind, AssertUnwindSafe},
+    panic::{AssertUnwindSafe, catch_unwind},
     ptr, slice,
 };
 

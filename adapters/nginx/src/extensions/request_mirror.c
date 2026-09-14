@@ -152,6 +152,7 @@ ngx_int_t ngx_http_gateway_eval_request_mirror(ngx_http_request_t *r,
     ctx->evaluated = 1;
 
     if (decision.is_mirrored && decision.mirror_upstream_len > 0) {
+      aurora_telemetry_record_mirror();
       u_char *mirror = ngx_pnalloc(r->pool, decision.mirror_upstream_len);
       if (mirror != NULL) {
         ngx_memcpy(mirror, decision.mirror_upstream,

@@ -38,7 +38,10 @@ fn test_default_active_blue_slot() {
     assert_eq!(d.upstream, "app_blue");
     assert_eq!(d.active_slot, "blue");
     assert!(!d.is_header_override);
-    assert_eq!(d.upstream_headers, &[("x-slot".to_string(), "blue".to_string())]);
+    assert_eq!(
+        d.upstream_headers,
+        &[("x-slot".to_string(), "blue".to_string())]
+    );
 }
 
 #[test]
@@ -72,7 +75,10 @@ fn test_active_green_slot() {
     assert_eq!(d.upstream, "app_green");
     assert_eq!(d.active_slot, "green");
     assert!(!d.is_header_override);
-    assert_eq!(d.upstream_headers, &[("x-slot".to_string(), "green".to_string())]);
+    assert_eq!(
+        d.upstream_headers,
+        &[("x-slot".to_string(), "green".to_string())]
+    );
 }
 
 #[test]
@@ -104,22 +110,43 @@ fn test_switch_header_override() {
     let req = eval_req(b"example.com", b"/dashboard");
 
     // 1. Override to green
-    let d_green = engine.evaluate(&req, |k| if k == "x-deploy-slot" { Some(b"green") } else { None });
+    let d_green = engine.evaluate(&req, |k| {
+        if k == "x-deploy-slot" {
+            Some(b"green")
+        } else {
+            None
+        }
+    });
     assert!(d_green.matched);
     assert_eq!(d_green.upstream, "app_green");
     assert_eq!(d_green.active_slot, "green");
     assert!(d_green.is_header_override);
-    assert_eq!(d_green.upstream_headers, &[("x-slot".to_string(), "green".to_string())]);
+    assert_eq!(
+        d_green.upstream_headers,
+        &[("x-slot".to_string(), "green".to_string())]
+    );
 
     // 2. Override to blue
-    let d_blue = engine.evaluate(&req, |k| if k == "x-deploy-slot" { Some(b"blue") } else { None });
+    let d_blue = engine.evaluate(&req, |k| {
+        if k == "x-deploy-slot" {
+            Some(b"blue")
+        } else {
+            None
+        }
+    });
     assert!(d_blue.matched);
     assert_eq!(d_blue.upstream, "app_blue");
     assert_eq!(d_blue.active_slot, "blue");
     assert!(d_blue.is_header_override);
 
     // 3. Invalid header value falls back to active slot (blue)
-    let d_fallback = engine.evaluate(&req, |k| if k == "x-deploy-slot" { Some(b"staging") } else { None });
+    let d_fallback = engine.evaluate(&req, |k| {
+        if k == "x-deploy-slot" {
+            Some(b"staging")
+        } else {
+            None
+        }
+    });
     assert!(d_fallback.matched);
     assert_eq!(d_fallback.upstream, "app_blue");
     assert_eq!(d_fallback.active_slot, "blue");

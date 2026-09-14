@@ -125,6 +125,7 @@ ngx_int_t ngx_http_gateway_eval_request_size_limit(
   }
 
   if (decision.matched && !decision.allowed) {
+    aurora_telemetry_record_request_size(1);
     ngx_log_t log = *r->connection->log;
     log.handler = NULL;
     ngx_log_error(NGX_LOG_WARN, &log, 0,

@@ -5,8 +5,8 @@ use super::types::{
     MAX_JWT_POLICY_BYTES, OriginPolicy, Snapshot,
 };
 use crate::radix::PathRadixTree;
-use crate::{host_matches, host_specificity, Error, MAX_PATH_BYTES};
-use jsonwebtoken::{decode, decode_header, Validation};
+use crate::{Error, MAX_PATH_BYTES, host_matches, host_specificity};
+use jsonwebtoken::{Validation, decode, decode_header};
 use regex::Regex;
 use std::collections::HashSet;
 
@@ -26,8 +26,7 @@ impl JwtEngine {
         if bytes.is_empty() || bytes.len() > MAX_JWT_POLICY_BYTES {
             return Err(Error::InvalidPolicy);
         }
-        let snapshot: Snapshot =
-            serde_json::from_slice(bytes).map_err(|_| Error::InvalidPolicy)?;
+        let snapshot: Snapshot = serde_json::from_slice(bytes).map_err(|_| Error::InvalidPolicy)?;
         let mut origins_list = if !snapshot.origins.is_empty() {
             snapshot.origins
         } else {
@@ -44,13 +43,14 @@ impl JwtEngine {
 
         let mut ids = HashSet::with_capacity(origins_list.len());
         for origin in &origins_list {
-            if origin.id.trim().is_empty() || origin.id.len() > 128 || !ids.insert(origin.id.clone()) {
+            if origin.id.trim().is_empty()
+                || origin.id.len() > 128
+                || !ids.insert(origin.id.clone())
+            {
                 return Err(Error::InvalidPolicy);
             }
         }
-        origins_list.sort_by_key(|o| {
-            (o.priority, host_specificity(o.host()), o.id.clone())
-        });
+        origins_list.sort_by_key(|o| (o.priority, host_specificity(o.host()), o.id.clone()));
 
         let mut origins = PathRadixTree::new();
         for (rank, origin) in origins_list.into_iter().enumerate() {
@@ -119,7 +119,9 @@ impl JwtEngine {
                 if let Some(ref h_key) = cr.header_key
                     && (h_key.trim().is_empty()
                         || h_key.len() > 64
-                        || !h_key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'))
+                        || !h_key
+                            .bytes()
+                            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'))
                 {
                     return Err(Error::InvalidPolicy);
                 }

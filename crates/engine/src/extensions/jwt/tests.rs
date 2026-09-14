@@ -53,7 +53,9 @@ fn test_snapshot_deserialization_with_rules_and_host_origin_alias() {
 
 #[test]
 fn rejects_incomplete_or_private_key_snapshots() {
-    assert!(JwtEngine::from_snapshot(br#"{"schema_version":1,"generation":1,"origins":[]}"#).is_err());
+    assert!(
+        JwtEngine::from_snapshot(br#"{"schema_version":1,"generation":1,"origins":[]}"#).is_err()
+    );
     assert!(
         JwtEngine::from_snapshot(br#"{"schema_version":1,"generation":1,"origins":[{"id":"admin","origin":"api.example.test","public_key_pem":"-----BEGIN PRIVATE KEY-----\nkey\n-----END PRIVATE KEY-----"}]}"#).is_err()
     );
@@ -319,20 +321,32 @@ fn test_unified_claim_matrix_and_relaxed_exp() {
         &Header::default(),
         &claims_no_exp,
         &EncodingKey::from_secret(secret.as_bytes()),
-    ).unwrap();
+    )
+    .unwrap();
 
-    let res = engine.evaluate(
-        b"api.matrix.local",
-        b"/api/resource",
-        Some(format!("Bearer {token_no_exp}").as_bytes()),
-    ).unwrap();
+    let res = engine
+        .evaluate(
+            b"api.matrix.local",
+            b"/api/resource",
+            Some(format!("Bearer {token_no_exp}").as_bytes()),
+        )
+        .unwrap();
 
     match res {
         JwtDecision::Allow { forwarded_headers } => {
             assert_eq!(forwarded_headers.len(), 3);
-            assert_eq!(forwarded_headers[0], ("X-User-Role".to_string(), "admin".to_string()));
-            assert_eq!(forwarded_headers[1], ("X-User-Id".to_string(), "user_42".to_string()));
-            assert_eq!(forwarded_headers[2], ("X-Department".to_string(), "engineering".to_string()));
+            assert_eq!(
+                forwarded_headers[0],
+                ("X-User-Role".to_string(), "admin".to_string())
+            );
+            assert_eq!(
+                forwarded_headers[1],
+                ("X-User-Id".to_string(), "user_42".to_string())
+            );
+            assert_eq!(
+                forwarded_headers[2],
+                ("X-Department".to_string(), "engineering".to_string())
+            );
         }
         _ => panic!("Expected Allow, got {:?}", res),
     }
@@ -347,9 +361,16 @@ fn test_unified_claim_matrix_and_relaxed_exp() {
         &Header::default(),
         &claims_bad_iss,
         &EncodingKey::from_secret(secret.as_bytes()),
-    ).unwrap();
+    )
+    .unwrap();
     assert_eq!(
-        engine.evaluate(b"api.matrix.local", b"/api/resource", Some(format!("Bearer {token_bad_iss}").as_bytes())).unwrap(),
+        engine
+            .evaluate(
+                b"api.matrix.local",
+                b"/api/resource",
+                Some(format!("Bearer {token_bad_iss}").as_bytes())
+            )
+            .unwrap(),
         JwtDecision::Unauthorized
     );
 
@@ -363,9 +384,16 @@ fn test_unified_claim_matrix_and_relaxed_exp() {
         &Header::default(),
         &claims_bad_role,
         &EncodingKey::from_secret(secret.as_bytes()),
-    ).unwrap();
+    )
+    .unwrap();
     assert_eq!(
-        engine.evaluate(b"api.matrix.local", b"/api/resource", Some(format!("Bearer {token_bad_role}").as_bytes())).unwrap(),
+        engine
+            .evaluate(
+                b"api.matrix.local",
+                b"/api/resource",
+                Some(format!("Bearer {token_bad_role}").as_bytes())
+            )
+            .unwrap(),
         JwtDecision::Unauthorized
     );
 
@@ -379,12 +407,26 @@ fn test_unified_claim_matrix_and_relaxed_exp() {
         &Header::default(),
         &claims_no_dept,
         &EncodingKey::from_secret(secret.as_bytes()),
-    ).unwrap();
-    match engine.evaluate(b"api.matrix.local", b"/api/resource", Some(format!("Bearer {token_no_dept}").as_bytes())).unwrap() {
+    )
+    .unwrap();
+    match engine
+        .evaluate(
+            b"api.matrix.local",
+            b"/api/resource",
+            Some(format!("Bearer {token_no_dept}").as_bytes()),
+        )
+        .unwrap()
+    {
         JwtDecision::Allow { forwarded_headers } => {
             assert_eq!(forwarded_headers.len(), 2);
-            assert_eq!(forwarded_headers[0], ("X-User-Role".to_string(), "operator".to_string()));
-            assert_eq!(forwarded_headers[1], ("X-User-Id".to_string(), "user_99".to_string()));
+            assert_eq!(
+                forwarded_headers[0],
+                ("X-User-Role".to_string(), "operator".to_string())
+            );
+            assert_eq!(
+                forwarded_headers[1],
+                ("X-User-Id".to_string(), "user_99".to_string())
+            );
         }
         _ => panic!("Expected Allow"),
     }
@@ -406,7 +448,13 @@ fn test_unified_claim_matrix_and_relaxed_exp() {
     });
     let strict_engine = JwtEngine::from_snapshot(strict_policy.to_string().as_bytes()).unwrap();
     assert_eq!(
-        strict_engine.evaluate(b"api.matrix.local", b"/api/resource", Some(format!("Bearer {token_no_exp}").as_bytes())).unwrap(),
+        strict_engine
+            .evaluate(
+                b"api.matrix.local",
+                b"/api/resource",
+                Some(format!("Bearer {token_no_exp}").as_bytes())
+            )
+            .unwrap(),
         JwtDecision::Unauthorized
     );
 }

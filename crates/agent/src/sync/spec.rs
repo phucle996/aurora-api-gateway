@@ -241,7 +241,6 @@ mod tests {
             metrics_prometheus: false,
             metrics_otlp_endpoint: None,
             metrics_otlp_interval_secs: 15,
-            nginx_stub_status_url: None,
             no_nginx: false,
             grpc_url: None,
         };

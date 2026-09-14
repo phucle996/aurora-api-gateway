@@ -693,15 +693,9 @@ export const EXTENSION_DEFAULT_CONFIGS: Record<string, Record<string, any>> = {
   'prometheus': {
     enabled: true,
     port: 9145,
-    stub_status_url: 'http://127.0.0.1:80/stub_status',
     prometheus: {
       enabled: true,
       path: '/metrics'
-    },
-    otlp: {
-      enabled: false,
-      endpoint: '',
-      interval_secs: 15
     }
   },
   'opentelemetry': {

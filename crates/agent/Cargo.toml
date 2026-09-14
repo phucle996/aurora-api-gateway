@@ -38,6 +38,8 @@ anyhow = "1.0"
 tonic = "0.12"
 prost = "0.13"
 tokio-util = "0.7"
+libc = "0.2"
+aurora-engine = { path = "../engine" }
 
 [build-dependencies]
 tonic-build = "0.12"

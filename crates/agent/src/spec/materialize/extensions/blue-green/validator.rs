@@ -69,7 +69,11 @@ pub fn validate_blue_green_config(
                 instance.instance_id
             )
         })?;
-        if blue.trim().is_empty() || blue.len() > 128 || green.trim().is_empty() || green.len() > 128 {
+        if blue.trim().is_empty()
+            || blue.len() > 128
+            || green.trim().is_empty()
+            || green.len() > 128
+        {
             return Err(format!(
                 "blue-green extension {} upstream names must be 1..=128 characters",
                 instance.instance_id

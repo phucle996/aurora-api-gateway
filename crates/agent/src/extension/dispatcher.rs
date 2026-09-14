@@ -77,7 +77,6 @@ impl ExtensionDispatcher {
 
         let shutdown = CancellationToken::new();
         let node_id = Arc::clone(&self.node_id);
-        let stub_url = metrics.stub_status_url.clone().unwrap_or_default();
         let pull_enabled = metrics
             .prometheus
             .as_ref()
@@ -97,7 +96,7 @@ impl ExtensionDispatcher {
         let shutdown_token = shutdown.clone();
         let port = metrics.port;
         tokio::spawn(async move {
-            let manager = MetricsManager::new(stub_url)
+            let manager = MetricsManager::new()
                 .with_pull_exporter(Arc::new(PrometheusExporter::new(pull_enabled)))
                 .with_push_exporter(Arc::new(OtlpExporter::new(
                     push_enabled,

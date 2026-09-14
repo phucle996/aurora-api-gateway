@@ -216,3 +216,50 @@ ngx_int_t ngx_http_gateway_metrics_handler(ngx_http_request_t *r) {
 
   return ngx_http_output_filter(r, &out);
 }
+
+/*
+ * Hook vào HTTP LOG Phase của NGINX: thực thi sau khi request đã hoàn tất và
+ * client đã nhận phản hồi. Ghi nhận thời gian xử lý và mã trạng thái HTTP một
+ * cách bất đồng bộ, không block client.
+ */
+ngx_int_t ngx_http_gateway_log_handler(ngx_http_request_t *r) {
+  ngx_time_t *tp;
+  ngx_msec_int_t ms;
+  uint32_t status;
+  ngx_http_gateway_conf_t *conf;
+
+  if (r == NULL) {
+    return NGX_OK;
+  }
+
+  conf = ngx_http_get_module_loc_conf(r, ngx_http_gateway_module);
+  if (conf == NULL || !conf->enabled) {
+    return NGX_OK;
+  }
+
+  /* Ghi nhan trang thai connection NGINX truc tiep vao Shared Memory (0
+   * allocations, lockless) */
+  if (ngx_stat_active != NULL) {
+    aurora_telemetry_record_connections(
+        (uint64_t)*ngx_stat_active,
+        ngx_stat_reading ? (uint64_t)*ngx_stat_reading : 0,
+        ngx_stat_writing ? (uint64_t)*ngx_stat_writing : 0,
+        ngx_stat_waiting ? (uint64_t)*ngx_stat_waiting : 0);
+  }
+
+  tp = ngx_timeofday();
+  ms = (ngx_msec_int_t)((tp->sec - r->start_sec) * 1000 +
+                        (tp->msec - r->start_msec));
+  if (ms < 0) {
+    ms = 0;
+  }
+
+  status = (r->headers_out.status > 0) ? (uint32_t)r->headers_out.status
+                                       : (uint32_t)r->err_status;
+  if (status == 0) {
+    status = 200;
+  }
+
+  aurora_telemetry_record_request(status, (uint64_t)ms);
+  return NGX_OK;
+}

@@ -70,7 +70,7 @@ pub fn generate_l4_streams_conf(l4: &Option<L4Spec>) -> Result<String, String> {
         } else {
             ""
         };
-        let _ = write!(buf, "    listen {}{};\n", svc.listen_port, listen_opt);
+        let _ = writeln!(buf, "    listen {}{};", svc.listen_port, listen_opt);
 
         // Sort references without cloning underlying ACL rule strings
         let mut acl_refs: Vec<&_> = svc.acl.iter().collect();
@@ -106,7 +106,7 @@ pub fn generate_l4_streams_conf(l4: &Option<L4Spec>) -> Result<String, String> {
                     svc.name, acl.cidr
                 )
             })?;
-            let _ = write!(buf, "    {} {};\n", action, acl.cidr);
+            let _ = writeln!(buf, "    {} {};", action, acl.cidr);
         }
 
         let is_endpoint = svc.forward_target_type.as_deref() == Some("endpoint")
@@ -145,20 +145,20 @@ pub fn generate_l4_streams_conf(l4: &Option<L4Spec>) -> Result<String, String> {
             buf.push_str("    proxy_pass 127.0.0.1:9443;\n");
         } else if is_endpoint {
             if let Some(ref ep) = svc.endpoint {
-                let _ = write!(buf, "    proxy_pass {};\n", ep.trim());
+                let _ = writeln!(buf, "    proxy_pass {};", ep.trim());
             }
         } else if !svc.upstream.trim().is_empty() {
-            let _ = write!(buf, "    proxy_pass l4_{};\n", svc.upstream.trim());
+            let _ = writeln!(buf, "    proxy_pass l4_{};", svc.upstream.trim());
         }
         if let Some(ref pt) = svc.proxy_timeout
             && !pt.trim().is_empty()
         {
-            let _ = write!(buf, "    proxy_timeout {};\n", pt.trim());
+            let _ = writeln!(buf, "    proxy_timeout {};", pt.trim());
         }
         if let Some(ref pct) = svc.proxy_connect_timeout
             && !pct.trim().is_empty()
         {
-            let _ = write!(buf, "    proxy_connect_timeout {};\n", pct.trim());
+            let _ = writeln!(buf, "    proxy_connect_timeout {};", pct.trim());
         }
         if svc.protocol.eq_ignore_ascii_case("tcp") {
             buf.push_str("    tcp_nodelay on;\n");

@@ -198,6 +198,7 @@ ngx_int_t ngx_http_gateway_eval_conn_limit(ngx_http_request_t *r,
                   "Gateway connection limit audit: would limit path %V",
                   &r->uri);
   } else if (!decision.allowed) {
+    aurora_telemetry_record_conn_limit(1);
     ngx_uint_t h_idx;
 
     /* Append custom headers defined by client policy */

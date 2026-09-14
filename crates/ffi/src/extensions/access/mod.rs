@@ -231,9 +231,6 @@ pub unsafe extern "C" fn aurora_access_evaluate(
         }
     })) {
         Ok(Ok(d)) => {
-            if d.action == 1 {
-                crate::telemetry::record_evaluation(1);
-            }
             if d.log_matches != 0 {
                 let ip_str = unsafe {
                     std::str::from_utf8(slice::from_raw_parts(q.ip, q.ip_len)).unwrap_or("")

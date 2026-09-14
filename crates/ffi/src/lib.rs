@@ -14,6 +14,8 @@ pub mod upstream;
 
 pub use aurora_engine::Decision;
 pub use extensions::access;
+pub use extensions::canary_release;
+pub use extensions::canary_release::*;
 pub use extensions::connection_limit;
 pub use extensions::jwt;
 pub use extensions::rate_limit;
@@ -21,8 +23,6 @@ pub use extensions::request_size_limit;
 pub use extensions::traffic_shaper;
 pub use extensions::traffic_split;
 pub use extensions::traffic_split::*;
-pub use extensions::canary_release;
-pub use extensions::canary_release::*;
 pub use extensions::waf;
 pub use extensions::waf::*;
 
@@ -82,6 +82,94 @@ pub unsafe extern "C" fn aurora_waf_bind_telemetry(
     } else {
         1
     }
+}
+
+/// Initialize cross-process shared memory file for telemetry with Agent.
+///
+/// # Safety
+/// If `path` is non-null, it must point to a valid null-terminated C string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn aurora_telemetry_init_shm(path: *const std::ffi::c_char) -> u32 {
+    if unsafe { telemetry::init_shm(path) } {
+        OK
+    } else {
+        INVALID
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn aurora_telemetry_record_request(status: u32, duration_ms: u64) {
+    telemetry::record_request(status, duration_ms);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn aurora_telemetry_record_waf(action: u32) {
+    telemetry::record_waf(action);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn aurora_telemetry_record_access(action: u32) {
+    telemetry::record_access(action);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn aurora_telemetry_record_ratelimit(action: u32) {
+    telemetry::record_ratelimit(action);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn aurora_telemetry_record_jwt(status: u32) {
+    telemetry::record_jwt(status);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn aurora_telemetry_record_conn_limit(blocked: u32) {
+    telemetry::record_conn_limit(blocked != 0);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn aurora_telemetry_record_traffic_shaper(delayed: u32) {
+    telemetry::record_traffic_shaper(delayed != 0);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn aurora_telemetry_record_request_size(rejected: u32) {
+    telemetry::record_request_size(rejected != 0);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn aurora_telemetry_record_termination() {
+    telemetry::record_termination();
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn aurora_telemetry_record_traffic_split(secondary: u32) {
+    telemetry::record_traffic_split(secondary != 0);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn aurora_telemetry_record_canary(is_canary: u32) {
+    telemetry::record_canary(is_canary != 0);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn aurora_telemetry_record_blue_green(is_green: u32) {
+    telemetry::record_blue_green(is_green != 0);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn aurora_telemetry_record_mirror() {
+    telemetry::record_mirror();
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn aurora_telemetry_record_connections(
+    active: u64,
+    reading: u64,
+    writing: u64,
+    waiting: u64,
+) {
+    telemetry::record_connections(active, reading, writing, waiting);
 }
 
 /// Xuất chuỗi định dạng văn bản Prometheus / OpenMetrics phục vụ endpoint /metrics của NGINX.

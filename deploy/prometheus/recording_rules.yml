@@ -1,0 +1,8 @@
+groups:
+  - name: aurora-waf-recording-rules
+    interval: 15s
+    rules:
+      # Derived RPS gauge for GetNodeTimeline consumption.
+      # Converts the raw counter http_requests_total into an instant per-second rate.
+      - record: http_requests_per_second
+        expr: rate(http_requests_total[1m])

@@ -237,8 +237,8 @@ func (s *alertmanagerService) GetFiringAlerts(ctx context.Context) ([]entity.Pro
 }
 
 type alertmanagerSilenceResponse struct {
-	ID        string `json:"id"`
-	Status    struct {
+	ID     string `json:"id"`
+	Status struct {
 		State string `json:"state"`
 	} `json:"status"`
 	StartsAt  string                       `json:"startsAt"`

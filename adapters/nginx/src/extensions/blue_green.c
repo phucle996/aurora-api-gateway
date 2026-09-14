@@ -152,6 +152,12 @@ ngx_int_t ngx_http_gateway_eval_blue_green(ngx_http_request_t *r,
 
     ctx->is_header_override = decision.is_header_override;
     ctx->evaluated = 1;
+    uint32_t is_green = (decision.active_slot_len == 5 &&
+                         ngx_strncasecmp((u_char *)decision.active_slot,
+                                         (u_char *)"green", 5) == 0)
+                            ? 1
+                            : 0;
+    aurora_telemetry_record_blue_green(is_green);
 
     /* Forward upstream headers */
     for (uint32_t i = 0; i < decision.headers_count && i < 16; i++) {

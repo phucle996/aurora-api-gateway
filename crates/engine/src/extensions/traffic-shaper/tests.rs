@@ -62,11 +62,7 @@ fn test_traffic_shaper_header_tiering_fallback() {
 
     // 1. Request with x-tier: vip -> matches rule-vip
     let d_vip = engine.evaluate(b"example.com", b"/download/file.zip", b"1.2.3.4", |h| {
-        if h == "x-tier" {
-            Some(b"vip")
-        } else {
-            None
-        }
+        if h == "x-tier" { Some(b"vip") } else { None }
     });
     assert!(d_vip.matched);
     assert_eq!(d_vip.rule_id, "rule-vip");

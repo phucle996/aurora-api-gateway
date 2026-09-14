@@ -91,10 +91,14 @@ fn main() {
             // Warm up
             if scenario == "saturated" {
                 // Pre-acquire 1 slot so that all subsequent calls are saturated (rejected)
-                let d = engine.acquire(host, path, client_ip, header_lookup).unwrap();
+                let d = engine
+                    .acquire(host, path, client_ip, header_lookup)
+                    .unwrap();
                 assert!(d.allowed, "warmup acquire should succeed");
             } else if scenario == "no_match" {
-                let d = engine.acquire(host, path, client_ip, header_lookup).unwrap();
+                let d = engine
+                    .acquire(host, path, client_ip, header_lookup)
+                    .unwrap();
                 assert!(d.allowed, "no-match acquire should succeed without rule");
             }
 
@@ -143,9 +147,7 @@ fn main() {
             let median_ns = samples[samples.len() / 2];
             let allocs_per_op = (total_allocs as f64) / (iterations as f64);
 
-            println!(
-                "{dimension},{scenario},{rule_count},{median_ns:.2},{allocs_per_op:.2}"
-            );
+            println!("{dimension},{scenario},{rule_count},{median_ns:.2},{allocs_per_op:.2}");
 
             if require_zero && (scenario == "saturated" || scenario == "no_match") {
                 assert_eq!(

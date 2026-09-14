@@ -2,7 +2,7 @@ groups:
   - name: aurora-waf-alerts
     rules:
       - alert: AuroraHighWafBlockRate
-        expr: sum(rate(aurora_waf_evaluations_total{action="block"}[2m])) by (node_id) > 50
+        expr: (sum(rate(gateway_waf_evaluations_total{action="block"}[2m])) by (node_id) > 50) or (sum(rate(aurora_waf_evaluations_total{action="block"}[2m])) by (node_id) > 50)
         for: 1m
         labels:
           severity: critical
@@ -12,7 +12,7 @@ groups:
           description: "Phát hiện hơn 50 requests/s bị WAF chặn trong 2 phút vừa qua trên node {{ $labels.node_id }}. Có thể hệ thống đang chịu tấn công DDoS hoặc Exploit burst."
 
       - alert: AuroraNodeHighCpu
-        expr: aurora_node_cpu_percent > 85
+        expr: (system_cpu_utilization_ratio * 100 > 85) or (aurora_node_cpu_percent > 85)
         for: 3m
         labels:
           severity: high
@@ -22,7 +22,7 @@ groups:
           description: "Mức sử dụng CPU của node {{ $labels.node_id }} duy trì trên 85% trong hơn 3 phút (giá trị hiện tại: {{ $value }}%)."
 
       - alert: AuroraNodeHighMemory
-        expr: aurora_node_memory_percent > 90
+        expr: (system_memory_utilization_ratio * 100 > 90) or (aurora_node_memory_percent > 90)
         for: 3m
         labels:
           severity: high
@@ -32,7 +32,7 @@ groups:
           description: "Mức sử dụng RAM của node {{ $labels.node_id }} duy trì trên 90% trong hơn 3 phút (giá trị hiện tại: {{ $value }}%)."
 
       - alert: AuroraConnectionSpike
-        expr: sum(aurora_node_active_connections) by (node_id) > 10000
+        expr: (sum(http_connections_active) by (node_id) > 10000) or (sum(aurora_node_active_connections) by (node_id) > 10000)
         for: 2m
         labels:
           severity: medium

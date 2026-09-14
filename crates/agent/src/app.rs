@@ -107,7 +107,6 @@ impl App {
                     manifest_digest: String::new(),
                     config_json: serde_json::json!({
                         "port": self.cfg.metrics_port,
-                        "stub_status_url": self.cfg.nginx_stub_status_url,
                         "prometheus": {
                             "enabled": self.cfg.metrics_prometheus,
                             "path": "/metrics",

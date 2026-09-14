@@ -1,0 +1,9 @@
+{
+  "name": "aurora-prometheus-e2e",
+  "version": "2.0.0",
+  "description": "Comprehensive Prometheus Extension E2E Suite (Playwright UI Automation, Leak Detection Matrix, Lockless SHM Contention, Chaos Resilience & PromQL)",
+  "type": "module",
+  "scripts": {
+    "test": "node index.mjs"
+  }
+}

@@ -9,7 +9,7 @@ pub mod sampler;
 pub mod state;
 
 pub use prometheus::format_prometheus_metrics;
-pub use state::{bind, record_evaluation};
+pub use state::*;
 
 pub fn stop_telemetry() {
     state::TELEMETRY_RUNNING.store(false, std::sync::atomic::Ordering::SeqCst);

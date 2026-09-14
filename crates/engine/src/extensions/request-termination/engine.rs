@@ -57,21 +57,25 @@ impl RequestTerminationEngine {
         let mut input_rules = snapshot.rules.unwrap_or_default();
 
         // Support flat configuration
-        if input_rules.is_empty() {
-            if let Some(sc) = snapshot.status_code {
-                input_rules.push(RequestTerminationRuleInput {
-                    id: "default".to_string(),
-                    priority: 10,
-                    origin: "*".to_string(),
-                    path_prefix: "/".to_string(),
-                    methods: Vec::new(),
-                    status_code: sc,
-                    content_type: snapshot.content_type.unwrap_or_else(|| "application/json; charset=utf-8".to_string()),
-                    body: snapshot.body.unwrap_or_else(|| r#"{"error":"Service temporarily unavailable"}"#.to_string()),
-                    headers: snapshot.headers.unwrap_or_default(),
-                    bypass_headers: snapshot.bypass_headers.unwrap_or_default(),
-                });
-            }
+        if input_rules.is_empty()
+            && let Some(sc) = snapshot.status_code
+        {
+            input_rules.push(RequestTerminationRuleInput {
+                id: "default".to_string(),
+                priority: 10,
+                origin: "*".to_string(),
+                path_prefix: "/".to_string(),
+                methods: Vec::new(),
+                status_code: sc,
+                content_type: snapshot
+                    .content_type
+                    .unwrap_or_else(|| "application/json; charset=utf-8".to_string()),
+                body: snapshot.body.unwrap_or_else(|| {
+                    r#"{"error":"Service temporarily unavailable"}"#.to_string()
+                }),
+                headers: snapshot.headers.unwrap_or_default(),
+                bypass_headers: snapshot.bypass_headers.unwrap_or_default(),
+            });
         }
 
         if input_rules.len() > MAX_REQUEST_TERMINATION_RULES {

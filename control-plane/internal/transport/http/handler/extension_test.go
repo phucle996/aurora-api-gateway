@@ -329,4 +329,3 @@ func TestExtensionHandler_TransportValidation_BodyLimit(t *testing.T) {
 		t.Errorf("expected 413 for oversized config body, got %d", w.Code)
 	}
 }
-

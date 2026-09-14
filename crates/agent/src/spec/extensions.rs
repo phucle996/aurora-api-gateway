@@ -19,8 +19,6 @@ pub struct MetricsExtensionSpec {
     #[serde(default = "default_metrics_port")]
     pub port: u16,
     #[serde(default)]
-    pub stub_status_url: Option<String>,
-    #[serde(default)]
     pub prometheus: Option<PrometheusSpec>,
     #[serde(default)]
     pub otlp: Option<OtlpSpec>,
@@ -30,7 +28,6 @@ impl Default for MetricsExtensionSpec {
     fn default() -> Self {
         Self {
             port: default_metrics_port(),
-            stub_status_url: None,
             prometheus: Some(PrometheusSpec::default()),
             otlp: None,
         }

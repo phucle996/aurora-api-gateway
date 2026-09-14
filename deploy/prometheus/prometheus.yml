@@ -3,6 +3,7 @@ global:
   evaluation_interval: 2s
 
 rule_files:
+  - 'recording_rules.yml'
   - 'alerts.yml'
 
 alerting:
@@ -15,4 +16,4 @@ scrape_configs:
     honor_labels: true
     metrics_path: '/metrics'
     static_configs:
-      - targets: ['node:80']
+      - targets: ['node:9145']

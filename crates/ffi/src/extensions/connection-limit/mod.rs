@@ -4,9 +4,7 @@
 //! the in-process and distributed connection limiting engine. All functions are wrapped
 //! in catch_unwind to prevent panics from crossing the foreign function boundary.
 
-use aurora_engine::connection_limit::{
-    ActionOnExceeded, ConnLimitToken, ConnectionLimitEngine,
-};
+use aurora_engine::connection_limit::{ActionOnExceeded, ConnLimitToken, ConnectionLimitEngine};
 use std::{
     panic::{AssertUnwindSafe, catch_unwind},
     ptr, slice,
@@ -137,7 +135,15 @@ pub unsafe extern "C" fn aurora_conn_limit_acquire(
             let f = lookup_fn?;
             let mut val_ptr: *const u8 = ptr::null();
             let mut val_len: usize = 0;
-            let rc = unsafe { f(lookup_ctx, name.as_ptr(), name.len(), &mut val_ptr, &mut val_len) };
+            let rc = unsafe {
+                f(
+                    lookup_ctx,
+                    name.as_ptr(),
+                    name.len(),
+                    &mut val_ptr,
+                    &mut val_len,
+                )
+            };
             if rc == 0 && !val_ptr.is_null() && val_len > 0 && val_len <= 16_384 {
                 Some(unsafe { slice::from_raw_parts(val_ptr, val_len) })
             } else {

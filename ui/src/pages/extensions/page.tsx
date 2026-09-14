@@ -131,6 +131,7 @@ export default function ExtensionsPage() {
     setExtensions((prev) =>
       prev.map((item) => (item.id === id ? { ...item, enabled: newEnabled } : item))
     );
+    setConfiguringExt((prev) => (prev && prev.id === id ? { ...prev, enabled: newEnabled } : prev));
 
     try {
       await extensionsApi.updateStatus(id, newEnabled);
@@ -139,6 +140,7 @@ export default function ExtensionsPage() {
       setExtensions((prev) =>
         prev.map((item) => (item.id === id ? { ...item, enabled: !newEnabled } : item))
       );
+      setConfiguringExt((prev) => (prev && prev.id === id ? { ...prev, enabled: !newEnabled } : prev));
       setError(e instanceof Error ? e.message : 'Failed to update extension status');
     } finally {
       setTogglingIds((prev) => {

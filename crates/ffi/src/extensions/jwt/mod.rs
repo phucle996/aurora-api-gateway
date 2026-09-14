@@ -186,11 +186,7 @@ mod tests {
 
         let mut engine_ptr: *mut JwtEngine = ptr::null_mut();
         let create_res = unsafe {
-            aurora_jwt_create(
-                policy_bytes.as_ptr(),
-                policy_bytes.len(),
-                &mut engine_ptr,
-            )
+            aurora_jwt_create(policy_bytes.as_ptr(), policy_bytes.len(), &mut engine_ptr)
         };
         assert_eq!(create_res, 0);
         assert!(!engine_ptr.is_null());
@@ -243,7 +239,8 @@ mod tests {
             &Header::default(),
             &claims,
             &EncodingKey::from_secret(secret.as_bytes()),
-        ).unwrap();
+        )
+        .unwrap();
         let auth_hdr = format!("Bearer {token}");
 
         let st3 = unsafe {
@@ -262,13 +259,23 @@ mod tests {
         assert_eq!(decision.allowed, 1);
         assert_eq!(decision.headers_count, 2);
 
-        let h0_name = std::str::from_utf8(&decision.headers[0].name[..decision.headers[0].name_len as usize]).unwrap();
-        let h0_val = std::str::from_utf8(&decision.headers[0].value[..decision.headers[0].value_len as usize]).unwrap();
+        let h0_name =
+            std::str::from_utf8(&decision.headers[0].name[..decision.headers[0].name_len as usize])
+                .unwrap();
+        let h0_val = std::str::from_utf8(
+            &decision.headers[0].value[..decision.headers[0].value_len as usize],
+        )
+        .unwrap();
         assert_eq!(h0_name, "X-User-Id");
         assert_eq!(h0_val, "admin_user_42");
 
-        let h1_name = std::str::from_utf8(&decision.headers[1].name[..decision.headers[1].name_len as usize]).unwrap();
-        let h1_val = std::str::from_utf8(&decision.headers[1].value[..decision.headers[1].value_len as usize]).unwrap();
+        let h1_name =
+            std::str::from_utf8(&decision.headers[1].name[..decision.headers[1].name_len as usize])
+                .unwrap();
+        let h1_val = std::str::from_utf8(
+            &decision.headers[1].value[..decision.headers[1].value_len as usize],
+        )
+        .unwrap();
         assert_eq!(h1_name, "X-User-Role");
         assert_eq!(h1_val, "admin");
 

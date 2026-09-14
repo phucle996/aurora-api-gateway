@@ -96,5 +96,3 @@ func TestAuditMetricsConcurrentConfigDurableAuthority(t *testing.T) {
 func TestAuditStandaloneRollupSurvivesRequestCancellation(t *testing.T) {
 	t.Skip("deprecated: standalone mode rollup worker has been removed in favor of external TSDB query engine")
 }
-
-

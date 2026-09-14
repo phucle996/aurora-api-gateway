@@ -73,7 +73,7 @@ pub struct RequestTerminationSnapshot {
     pub rules: Option<Vec<RequestTerminationRuleInput>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct TerminationDecision<'a> {
     pub matched: bool,
     pub should_terminate: bool,
@@ -82,18 +82,4 @@ pub struct TerminationDecision<'a> {
     pub body: &'a str,
     pub headers: &'a [(String, String)],
     pub rule_id: &'a str,
-}
-
-impl<'a> Default for TerminationDecision<'a> {
-    fn default() -> Self {
-        Self {
-            matched: false,
-            should_terminate: false,
-            status_code: 0,
-            content_type: "",
-            body: "",
-            headers: &[],
-            rule_id: "",
-        }
-    }
 }

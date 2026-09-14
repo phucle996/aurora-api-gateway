@@ -301,11 +301,22 @@ static ngx_int_t ngx_http_gateway_init(ngx_conf_t *cf) {
   }
   *handler = ngx_http_gateway_handler;
 
+  /* Đăng ký handler vào Log Phase của NGINX */
+  handler = ngx_array_push(&main->phases[NGX_HTTP_LOG_PHASE].handlers);
+  if (handler == NULL) {
+    return NGX_ERROR;
+  }
+  *handler = ngx_http_gateway_log_handler;
+
   return NGX_OK;
 }
 
 static ngx_int_t ngx_http_gateway_init_process(ngx_cycle_t *cycle) {
   (void)cycle;
+
+  /* Khởi tạo vùng nhớ chia sẻ liên tiến trình (SHM) phục vụ Agent Exporter */
+  aurora_telemetry_init_shm(NULL);
+
   if (gateway_telemetry_zone == NULL || gateway_telemetry_zone->data == NULL) {
     return NGX_OK;
   }

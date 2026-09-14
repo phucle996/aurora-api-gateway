@@ -4,7 +4,7 @@
   "id": "prometheus",
   "name": "Prometheus Metrics",
   "category": "observability",
-  "description": "Runs the agent metrics exporter.",
+  "description": "Runs the agent metrics exporter in Prometheus / OpenMetrics format.",
   "renderer": "agent-metrics",
   "builtin": true,
   "default_config": {
@@ -16,7 +16,22 @@
   },
   "ui_schema": {
     "layout_type": "form",
-    "fields": []
+    "fields": [
+      {
+        "key": "port",
+        "label": "Exporter Port",
+        "type": "number",
+        "description": "Cổng lắng nghe Prometheus metrics (mặc định: 9145)",
+        "required": true
+      },
+      {
+        "key": "prometheus.path",
+        "label": "Metrics Scrape Path",
+        "type": "text",
+        "description": "Đường dẫn endpoint cào metrics (mặc định: /metrics)",
+        "required": true
+      }
+    ]
   },
   "config_schema": {
     "type": "object",
@@ -26,10 +41,6 @@
         "type": "integer",
         "minimum": 1024,
         "maximum": 65535
-      },
-      "stub_status_url": {
-        "type": "string",
-        "maxLength": 2048
       },
       "prometheus": {
         "type": "object",
@@ -41,24 +52,6 @@
           "path": {
             "type": "string",
             "maxLength": 256
-          }
-        }
-      },
-      "otlp": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "enabled": {
-            "type": "boolean"
-          },
-          "endpoint": {
-            "type": "string",
-            "maxLength": 2048
-          },
-          "interval_secs": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 3600
           }
         }
       }

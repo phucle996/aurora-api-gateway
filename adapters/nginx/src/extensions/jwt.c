@@ -108,6 +108,7 @@ ngx_int_t ngx_http_gateway_eval_jwt(ngx_http_request_t *r,
       conf->jwt_engine, host.data, host.len, r->uri.data, r->uri.len,
       authorization_data, authorization_len, &decision);
   if (status == 1 || (status == 0 && decision.allowed == 0)) {
+    aurora_telemetry_record_jwt(1);
     ngx_table_elt_t *challenge = ngx_list_push(&r->headers_out.headers);
     if (challenge == NULL) {
       return NGX_HTTP_INTERNAL_SERVER_ERROR;
@@ -118,12 +119,15 @@ ngx_int_t ngx_http_gateway_eval_jwt(ngx_http_request_t *r,
     return NGX_HTTP_UNAUTHORIZED;
   }
   if (status != 0) {
+    aurora_telemetry_record_jwt(1);
     ngx_log_t log = *r->connection->log;
     log.handler = NULL;
     ngx_log_error(NGX_LOG_ERR, &log, 0, "Gateway JWT evaluation failed: %ui",
                   (ngx_uint_t)status);
     return NGX_HTTP_SERVICE_UNAVAILABLE;
   }
+
+  aurora_telemetry_record_jwt(0);
 
   /* Inject forwarded headers into request headers before proxy_pass */
   if (decision.headers_count > 0) {

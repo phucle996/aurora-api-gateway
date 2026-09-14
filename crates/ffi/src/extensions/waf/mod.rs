@@ -128,7 +128,6 @@ pub unsafe extern "C" fn aurora_waf_evaluate_v3(
         }
     })) {
         Ok(Ok(decision)) => {
-            crate::telemetry::record_evaluation(decision.action);
             unsafe {
                 *out = decision;
             }
@@ -185,7 +184,6 @@ pub unsafe extern "C" fn aurora_waf_evaluate_v4(
         }
     })) {
         Ok(Ok(decision)) => {
-            crate::telemetry::record_evaluation(decision.action);
             unsafe {
                 *out = decision;
             }
@@ -246,7 +244,6 @@ pub unsafe extern "C" fn aurora_waf_evaluate(
     })) {
         Ok(Ok(blocked)) => {
             let act = u32::from(blocked);
-            crate::telemetry::record_evaluation(act);
             unsafe {
                 *action = act;
             }

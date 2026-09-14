@@ -14,4 +14,3 @@ type SpecSyncRepository interface {
 	GetActiveSpecRelease(ctx context.Context) (*entity.ClusterSpecRelease, error)
 	PublishSpecRelease(ctx context.Context, release entity.ClusterSpecRelease) (*entity.ClusterSpecRelease, error)
 }
-

@@ -62,13 +62,6 @@ http {
         location = /metrics {
             gateway_metrics;
         }
-
-        location = /stub_status {
-            stub_status;
-            access_log off;
-            allow 127.0.0.1;
-            deny all;
-        }
     }
 
     # Stream Continue traffic enters through this loopback-only bridge. The stream

@@ -2,7 +2,7 @@ package entity
 
 // AnalyticsQueryItem biểu diễn một truy vấn metric đơn lẻ trong một batch query (ví dụ: Query A, Query B).
 type AnalyticsQueryItem struct {
-	ID          string            `json:"id"`                     // Ví dụ: "A", "B"
+	ID          string            `json:"id"`                    // Ví dụ: "A", "B"
 	MetricKey   string            `json:"metric_key"`            // Ví dụ: "traffic.requests_rate", "waf.blocks_rate"
 	Aggregation string            `json:"aggregation,omitempty"` // "sum", "avg", "max", "min"
 	Filters     map[string]string `json:"filters,omitempty"`     // node_id, status, domain, etc.
@@ -83,8 +83,8 @@ type MetricCatalogResponse struct {
 
 // RuntimeMetadata phản ánh dữ liệu trạng thái thời gian thực của máy chủ Telemetry.
 type RuntimeMetadata struct {
-	Engine        string `json:"engine"`          // "Prometheus", "VictoriaMetrics", "OpenTelemetry"
-	Version       string `json:"version"`         // Ví dụ: "v2.51.0"
+	Engine        string `json:"engine"`  // "Prometheus", "VictoriaMetrics", "OpenTelemetry"
+	Version       string `json:"version"` // Ví dụ: "v2.51.0"
 	Revision      string `json:"revision,omitempty"`
 	LatencyMs     int64  `json:"latency_ms"`      // Roundtrip latency
 	ActiveTargets int    `json:"active_targets"`  // Số targets/nodes đang UP
@@ -143,4 +143,3 @@ type ConnectionStatusResponse struct {
 	Config           MetricsIntegrationConfig `json:"config"`
 	Metadata         *RuntimeMetadata         `json:"metadata,omitempty"`
 }
-

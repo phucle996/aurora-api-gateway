@@ -165,13 +165,8 @@ fn test_limit_by_header_regex_matching() {
     }"#;
     let engine = RequestSizeLimitEngine::from_snapshot(json).unwrap();
 
-    let vip_header_lookup = |name: &str| -> Option<&[u8]> {
-        if name == "x-role" {
-            Some(b"vip")
-        } else {
-            None
-        }
-    };
+    let vip_header_lookup =
+        |name: &str| -> Option<&[u8]> { if name == "x-role" { Some(b"vip") } else { None } };
 
     let user_header_lookup = |name: &str| -> Option<&[u8]> {
         if name == "x-role" {
@@ -199,7 +194,10 @@ fn test_limit_by_header_regex_matching() {
     let d_user = engine.evaluate(&large_upload, user_header_lookup);
     assert!(!d_user.allowed);
     assert_eq!(d_user.rule_id, "standard-upload");
-    assert_eq!(d_user.response_body, b"{\"error\":\"standard_quota_exceeded\"}");
+    assert_eq!(
+        d_user.response_body,
+        b"{\"error\":\"standard_quota_exceeded\"}"
+    );
 }
 
 #[test]
