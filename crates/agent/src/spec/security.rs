@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct WafSpec {
-    #[serde(default = "default_waf_mode")]
+pub struct SecuritySpec {
+    #[serde(default = "default_security_mode")]
     pub mode: String,
     #[serde(default)]
     pub block_paths: Vec<String>,
@@ -12,10 +12,10 @@ pub struct WafSpec {
     pub raw_json: Option<String>,
 }
 
-impl Default for WafSpec {
+impl Default for SecuritySpec {
     fn default() -> Self {
         Self {
-            mode: default_waf_mode(),
+            mode: default_security_mode(),
             block_paths: Vec::new(),
             rules: Vec::new(),
             raw_json: None,
@@ -23,6 +23,6 @@ impl Default for WafSpec {
     }
 }
 
-fn default_waf_mode() -> String {
+fn default_security_mode() -> String {
     "enforce".to_string()
 }

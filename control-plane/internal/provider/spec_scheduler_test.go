@@ -26,10 +26,10 @@ func (m *mockSpecSyncRepo) GetAuthorityData(ctx context.Context, nodeID string) 
 		return m.authorityData, nil
 	}
 	return &entity.SpecAuthorityData{
-		NodeID:        nodeID,
-		WAFReleaseID:  1,
-		WAFPayload:    []byte(`{"rules":[]}`),
-		UpstreamsConf: "upstream test { server 127.0.0.1:8080; }\n",
+		NodeID:            nodeID,
+		SecurityReleaseID: 1,
+		SecurityPayload:   []byte(`{"rules":[]}`),
+		UpstreamsConf:     "upstream test { server 127.0.0.1:8080; }\n",
 
 		RoutingRecords: []entity.SpecRoutingRecord{
 			{

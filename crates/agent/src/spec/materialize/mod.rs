@@ -48,21 +48,21 @@ pub async fn materialize_nginx(
     let rendered_extensions = render_extensions(&spec.extensions)
         .map_err(|error| format!("render extension instances: {error}"))?;
 
-    // 1. WAF Policy
+    // 1. Security Policy
     let policy_path = policy_dir.join("active-policy.json");
-    let policy_json = if let Some(ref raw) = spec.waf.raw_json {
+    let policy_json = if let Some(ref raw) = spec.security.raw_json {
         raw.clone()
-    } else if !spec.waf.rules.is_empty() {
+    } else if !spec.security.rules.is_empty() {
         serde_json::to_string_pretty(&serde_json::json!({
             "schema_version": 2,
             "generation": spec.release_id,
-            "rules": spec.waf.rules,
+            "rules": spec.security.rules,
         }))?
     } else {
-        let block_paths = if spec.waf.block_paths.is_empty() {
+        let block_paths = if spec.security.block_paths.is_empty() {
             vec!["/blocked".to_string(), "/__aurora_blocked".to_string()]
         } else {
-            spec.waf.block_paths.clone()
+            spec.security.block_paths.clone()
         };
         serde_json::to_string_pretty(&serde_json::json!({
             "schema_version": 1,

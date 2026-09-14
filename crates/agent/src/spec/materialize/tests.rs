@@ -15,7 +15,7 @@ async fn test_materialize_nginx_files() {
 
     let spec = Spec {
         release_id: 99,
-        waf: crate::spec::waf::WafSpec {
+        security: crate::spec::security::SecuritySpec {
             mode: "enforce".to_string(),
             block_paths: vec!["/blocked".to_string()],
             ..Default::default()

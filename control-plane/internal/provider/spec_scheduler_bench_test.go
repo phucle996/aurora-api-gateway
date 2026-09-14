@@ -65,10 +65,10 @@ func buildAuthorityData(routesCount, upstreamsCount, extensionsCount, l4Services
 	}
 
 	return &entity.SpecAuthorityData{
-		NodeID:         "node-benchmark",
-		WAFReleaseID:   1,
-		WAFPayload:     []byte(`{"block_paths":["/blocked","/__aurora_blocked"]}`),
-		UpstreamsConf:  "upstream test { server 127.0.0.1:8080; }\n",
+		NodeID:            "node-benchmark",
+		SecurityReleaseID: 1,
+		SecurityPayload:   []byte(`{"block_paths":["/blocked","/__aurora_blocked"]}`),
+		UpstreamsConf:     "upstream test { server 127.0.0.1:8080; }\n",
 		RoutingRecords: routes,
 		Extensions:     extensions,
 		L4Services:     l4Services,

@@ -5,8 +5,8 @@ use super::certificate::CertificateSpec;
 use super::extensions::ExtensionInstanceSpec;
 use super::l4::L4Spec;
 use super::routing::RoutingSpec;
+use super::security::SecuritySpec;
 use super::upstream::UpstreamSpec;
-use super::waf::WafSpec;
 
 /// Root Declarative Manifest representing the entire desired state of the cluster gateway.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -25,7 +25,7 @@ pub struct Spec {
     pub extensions: Vec<ExtensionInstanceSpec>,
 
     #[serde(default)]
-    pub waf: WafSpec,
+    pub security: SecuritySpec,
 
     #[serde(default)]
     pub upstreams: Vec<UpstreamSpec>,
@@ -78,7 +78,7 @@ mod tests {
       "config_json": "{\"port\":9145,\"prometheus\":{\"enabled\":true,\"path\":\"/metrics\"},\"otlp\":{\"enabled\":true,\"endpoint\":\"http://otel-collector:4317\",\"interval_secs\":15}}"
     }
   ],
-  "waf": {
+  "security": {
     "mode": "enforce",
     "block_paths": [
       "/blocked",
@@ -118,7 +118,7 @@ mod tests {
         let metrics = &spec.extensions[0];
         assert_eq!(metrics.key, "builtin/prometheus");
         assert!(metrics.config_json.contains("port"));
-        assert_eq!(spec.waf.block_paths.len(), 2);
+        assert_eq!(spec.security.block_paths.len(), 2);
         assert_eq!(spec.upstreams.len(), 1);
         assert_eq!(spec.routing.domains.len(), 1);
 
