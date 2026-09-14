@@ -1,4 +1,6 @@
 pub mod dispatcher;
-pub mod metrics;
+pub mod opentelemetry_logs;
+pub mod opentelemetry_metrics;
+pub mod prometheus;
 
 pub use dispatcher::ExtensionDispatcher;

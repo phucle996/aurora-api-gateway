@@ -49,6 +49,41 @@ static ngx_int_t ngx_http_gateway_generation(ngx_http_request_t *r,
   return NGX_OK;
 }
 
+static ngx_int_t ngx_http_gateway_variable_log_active(
+    ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data) {
+  (void)r;
+  (void)data;
+  if (aurora_telemetry_is_log_active()) {
+    v->len = 1;
+    v->data = (u_char *)"1";
+  } else {
+    v->len = 1;
+    v->data = (u_char *)"0";
+  }
+  v->valid = 1;
+  v->no_cacheable = 1;
+  v->not_found = 0;
+  return NGX_OK;
+}
+
+static ngx_int_t ngx_http_gateway_variable_waf_action(
+    ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data) {
+  (void)data;
+  ngx_http_gateway_ctx_t *ctx =
+      ngx_http_get_module_ctx(r, ngx_http_gateway_module);
+  if (ctx != NULL && ctx->is_waf_blocked) {
+    v->len = 5;
+    v->data = (u_char *)"block";
+  } else {
+    v->len = 0;
+    v->data = (u_char *)"";
+  }
+  v->valid = 1;
+  v->no_cacheable = 1;
+  v->not_found = 0;
+  return NGX_OK;
+}
+
 /* Optional observability variables, not an all-workers activation
  * acknowledgement. */
 ngx_int_t ngx_http_gateway_variables(ngx_conf_t *cf) {
@@ -132,6 +167,20 @@ ngx_int_t ngx_http_gateway_variables(ngx_conf_t *cf) {
     return NGX_ERROR;
   }
   v->get_handler = ngx_http_gateway_variable_termination_status;
+
+  ngx_str_t log_active_name = ngx_string("gateway_log_active");
+  v = ngx_http_add_variable(cf, &log_active_name, NGX_HTTP_VAR_NOCACHEABLE);
+  if (v == NULL) {
+    return NGX_ERROR;
+  }
+  v->get_handler = ngx_http_gateway_variable_log_active;
+
+  ngx_str_t waf_action_name = ngx_string("gateway_waf_action");
+  v = ngx_http_add_variable(cf, &waf_action_name, NGX_HTTP_VAR_NOCACHEABLE);
+  if (v == NULL) {
+    return NGX_ERROR;
+  }
+  v->get_handler = ngx_http_gateway_variable_waf_action;
 
   return NGX_OK;
 }

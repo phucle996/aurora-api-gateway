@@ -27,7 +27,8 @@ http {
     set_real_ip_from 127.0.0.1;
     set_real_ip_from ::1;
     real_ip_recursive off;
-    access_log /var/log/nginx/access.log;
+    log_format aurora_json escape=json '{"time_local":"$time_iso8601","remote_addr":"$remote_addr","request_method":"$request_method","request_uri":"$request_uri","status":$status,"request_time":$request_time,"body_bytes_sent":$body_bytes_sent,"host":"$host","http_user_agent":"$http_user_agent","waf_action":"$gateway_waf_action"}';
+    access_log syslog:server=unix:/dev/shm/aurora_access.sock,nohostname aurora_json if=$gateway_log_active;
     sendfile on;
     lingering_close always;
     lingering_time 30s;

@@ -7,7 +7,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 pub const TELEMETRY_MAGIC: u32 = 0x4155524F; // "AURO"
 pub const TELEMETRY_VERSION: u32 = 1;
 pub const SHM_DEFAULT_PATH: &str = "/dev/shm/aurora_gateway_telemetry.bin";
-pub const SHM_FALLBACK_PATH: &str = "/tmp/aurora_gateway_telemetry.bin";
 pub const SHM_SIZE_BYTES: usize = 4096;
 
 /// Fixed latency bucket upper bounds in milliseconds:
@@ -86,8 +85,11 @@ pub struct GatewaySharedMetrics {
     pub connections_writing: AtomicU64,
     pub connections_waiting: AtomicU64,
 
-    // Padding up to exactly 4096 bytes (352 bytes of fields + 3744 bytes padding)
-    _reserved: [u8; 4096 - 352],
+    // Dynamic Log Consumer Registration
+    pub active_log_consumers: AtomicU64,
+
+    // Padding up to exactly 4096 bytes (360 bytes of fields + 3736 bytes padding)
+    _reserved: [u8; 4096 - 360],
 }
 
 impl Default for GatewaySharedMetrics {
@@ -144,7 +146,8 @@ impl GatewaySharedMetrics {
             connections_reading: AtomicU64::new(0),
             connections_writing: AtomicU64::new(0),
             connections_waiting: AtomicU64::new(0),
-            _reserved: [0u8; 4096 - 352],
+            active_log_consumers: AtomicU64::new(0),
+            _reserved: [0u8; 4096 - 360],
         }
     }
 
@@ -308,6 +311,49 @@ impl GatewaySharedMetrics {
         self.connections_waiting.store(waiting, Ordering::Relaxed);
     }
 
+    /// Register an active log consumer. Returns the updated consumer count.
+    #[inline(always)]
+    pub fn register_log_consumer(&self) -> u64 {
+        self.active_log_consumers.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    /// Unregister an active log consumer. Returns the updated consumer count.
+    #[inline(always)]
+    pub fn unregister_log_consumer(&self) -> u64 {
+        loop {
+            let current = self.active_log_consumers.load(Ordering::SeqCst);
+            if current == 0 {
+                return 0;
+            }
+            let next = current - 1;
+            if self
+                .active_log_consumers
+                .compare_exchange_weak(current, next, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+            {
+                return next;
+            }
+        }
+    }
+
+    /// Check if at least one log consumer is active.
+    #[inline(always)]
+    pub fn is_log_active(&self) -> bool {
+        self.active_log_consumers.load(Ordering::Relaxed) > 0
+    }
+
+    /// Returns the current active log consumers count.
+    #[inline(always)]
+    pub fn active_log_consumers_count(&self) -> u64 {
+        self.active_log_consumers.load(Ordering::Relaxed)
+    }
+
+    /// Resets active log consumers count to 0 (useful on agent startup/recovery).
+    #[inline(always)]
+    pub fn reset_log_consumers(&self) {
+        self.active_log_consumers.store(0, Ordering::SeqCst);
+    }
+
     /// Read non-blocking snapshot of all metrics for Prometheus formatting.
     pub fn snapshot(&self) -> GatewayMetricsSnapshot {
         GatewayMetricsSnapshot {
@@ -364,6 +410,7 @@ impl GatewaySharedMetrics {
             connections_reading: self.connections_reading.load(Ordering::Relaxed),
             connections_writing: self.connections_writing.load(Ordering::Relaxed),
             connections_waiting: self.connections_waiting.load(Ordering::Relaxed),
+            active_log_consumers: self.active_log_consumers.load(Ordering::Relaxed),
         }
     }
 }
@@ -424,6 +471,7 @@ pub struct GatewayMetricsSnapshot {
     pub connections_reading: u64,
     pub connections_writing: u64,
     pub connections_waiting: u64,
+    pub active_log_consumers: u64,
 }
 
 #[cfg(test)]
@@ -456,6 +504,13 @@ mod tests {
         metrics.record_jwt(0);
         metrics.record_connections(42, 3, 7, 32);
 
+        assert!(!metrics.is_log_active());
+        assert_eq!(metrics.register_log_consumer(), 1);
+        assert!(metrics.is_log_active());
+        assert_eq!(metrics.register_log_consumer(), 2);
+        assert_eq!(metrics.unregister_log_consumer(), 1);
+        assert!(metrics.is_log_active());
+
         let snap = metrics.snapshot();
         assert_eq!(snap.http_requests_total, 3);
         assert_eq!(snap.http_status_2xx, 1);
@@ -476,5 +531,10 @@ mod tests {
         assert_eq!(snap.connections_reading, 3);
         assert_eq!(snap.connections_writing, 7);
         assert_eq!(snap.connections_waiting, 32);
+        assert_eq!(snap.active_log_consumers, 1);
+
+        assert_eq!(metrics.unregister_log_consumer(), 0);
+        assert!(!metrics.is_log_active());
+        assert_eq!(metrics.unregister_log_consumer(), 0); // safe underflow protection
     }
 }

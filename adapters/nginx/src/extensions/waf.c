@@ -165,6 +165,17 @@ ngx_int_t ngx_http_gateway_eval_waf(ngx_http_request_t *r,
       return NGX_DECLINED;
     }
     /* Chế độ Enforce: Trả về 403 Forbidden để chặn request */
+    ngx_http_gateway_ctx_t *ctx =
+        ngx_http_get_module_ctx(r, ngx_http_gateway_module);
+    if (ctx == NULL) {
+      ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_gateway_ctx_t));
+      if (ctx != NULL) {
+        ngx_http_set_ctx(r, ctx, ngx_http_gateway_module);
+      }
+    }
+    if (ctx != NULL) {
+      ctx->is_waf_blocked = 1;
+    }
     aurora_telemetry_record_waf(1);
     return NGX_HTTP_FORBIDDEN;
   }

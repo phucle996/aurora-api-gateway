@@ -7,7 +7,6 @@ pub mod common;
 #[path = "connection-limit/mod.rs"]
 pub mod connection_limit;
 pub mod jwt;
-pub mod metrics;
 pub mod nginx;
 #[path = "rate-limit/mod.rs"]
 pub mod rate_limit;
@@ -58,6 +57,8 @@ pub fn render_extensions(
     let mut access_rules = Vec::new();
     let mut used_access_rule_ids = HashSet::new();
     let mut metrics_instances = 0;
+    let mut opentelemetry_metrics_instances = 0;
+    let mut opentelemetry_logs_instances = 0;
     let mut jwt_policy = None;
     let mut rate_limit_policy = None;
     let mut conn_limit_policy = None;
@@ -100,7 +101,21 @@ pub fn render_extensions(
                 &mut access_rules,
                 &mut used_access_rule_ids,
             )?,
-            "agent-metrics" => metrics::materialize(instance, config, &mut metrics_instances)?,
+            "agent-metrics" => {
+                crate::extension::prometheus::materialize(instance, config, &mut metrics_instances)?
+            }
+            "opentelemetry-metrics" | "opentelemetry" => {
+                crate::extension::opentelemetry_metrics::materialize(
+                    instance,
+                    config,
+                    &mut opentelemetry_metrics_instances,
+                )?
+            }
+            "opentelemetry-logs" => crate::extension::opentelemetry_logs::materialize(
+                instance,
+                config,
+                &mut opentelemetry_logs_instances,
+            )?,
             "engine-jwt-rs256" => jwt::materialize(
                 instance,
                 config,

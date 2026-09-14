@@ -245,9 +245,10 @@ mod tests {
             grpc_url: None,
         };
         let nginx = NginxManager::new(nginx_bin, cfg.nginx_conf.clone());
-        let dispatcher = Arc::new(Mutex::new(ExtensionDispatcher::new(Arc::new(
-            cfg.node_id.clone(),
-        ))));
+        let dispatcher = Arc::new(Mutex::new(ExtensionDispatcher::new(
+            Arc::new(cfg.node_id.clone()),
+            None,
+        )));
         let grpc = GrpcClient::new("http://127.0.0.1:9090", "test-token")
             .expect("create lazy grpc client");
         let runner = SpecSyncRunner::new(cfg, nginx, dispatcher, grpc);

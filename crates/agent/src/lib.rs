@@ -4,6 +4,8 @@ pub mod app;
 pub mod config;
 pub mod extension;
 pub mod grpc;
+pub mod logs;
+pub mod metrics;
 pub mod nginx;
 pub mod spec;
 pub mod sync;

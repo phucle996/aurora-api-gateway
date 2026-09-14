@@ -1,9 +1,7 @@
-use aurora_engine::telemetry::{
-    GatewaySharedMetrics, SHM_DEFAULT_PATH, SHM_FALLBACK_PATH, SHM_SIZE_BYTES,
-};
+use aurora_engine::telemetry::{GatewaySharedMetrics, SHM_DEFAULT_PATH, SHM_SIZE_BYTES};
 use std::ffi::CStr;
 use std::fs::OpenOptions;
-use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::os::unix::io::AsRawFd;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
 
@@ -26,6 +24,14 @@ pub fn gateway_metrics() -> Option<&'static GatewaySharedMetrics> {
     }
 }
 
+/// Check if at least one log consumer is registered in Shared Memory.
+#[inline(always)]
+pub fn is_log_active() -> bool {
+    gateway_metrics()
+        .map(|m| m.is_log_active())
+        .unwrap_or(false)
+}
+
 /// Initialize shared memory file for cross-process telemetry with Aurora Agent.
 ///
 /// Tries `path` if provided, then `/dev/shm/aurora_gateway_telemetry.bin`, then `/tmp/...`.
@@ -43,44 +49,39 @@ pub unsafe fn init_shm(path: *const std::ffi::c_char) -> bool {
         None
     };
 
-    let candidates = if let Some(p) = target_path {
-        vec![p, SHM_DEFAULT_PATH, SHM_FALLBACK_PATH]
-    } else {
-        vec![SHM_DEFAULT_PATH, SHM_FALLBACK_PATH]
-    };
+    let target = target_path.unwrap_or(SHM_DEFAULT_PATH);
 
-    for candidate in candidates {
-        let file_res = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .mode(0o666)
-            .open(candidate);
+    let file_res = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .mode(0o666)
+        .open(target);
 
-        if let Ok(file) = file_res {
-            let _ = file.set_len(SHM_SIZE_BYTES as u64);
-            let fd = file.as_raw_fd();
-            let mmap_ptr = unsafe {
-                libc::mmap(
-                    std::ptr::null_mut(),
-                    SHM_SIZE_BYTES,
-                    libc::PROT_READ | libc::PROT_WRITE,
-                    libc::MAP_SHARED,
-                    fd,
-                    0,
-                )
-            };
+    if let Ok(file) = file_res {
+        let _ = file.set_len(SHM_SIZE_BYTES as u64);
+        let _ = file.set_permissions(std::fs::Permissions::from_mode(0o666));
+        let fd = file.as_raw_fd();
+        let mmap_ptr = unsafe {
+            libc::mmap(
+                std::ptr::null_mut(),
+                SHM_SIZE_BYTES,
+                libc::PROT_READ | libc::PROT_WRITE,
+                libc::MAP_SHARED,
+                fd,
+                0,
+            )
+        };
 
-            if mmap_ptr != libc::MAP_FAILED && !mmap_ptr.is_null() {
-                let metrics_ptr = mmap_ptr as *mut GatewaySharedMetrics;
-                unsafe {
-                    (*metrics_ptr).ensure_header();
-                }
-                GATEWAY_METRICS.store(metrics_ptr, Ordering::Release);
-                SHARED.store(mmap_ptr as *mut AtomicU64, Ordering::Release);
-                return true;
+        if mmap_ptr != libc::MAP_FAILED && !mmap_ptr.is_null() {
+            let metrics_ptr = mmap_ptr as *mut GatewaySharedMetrics;
+            unsafe {
+                (*metrics_ptr).ensure_header();
             }
+            GATEWAY_METRICS.store(metrics_ptr, Ordering::Release);
+            SHARED.store(mmap_ptr as *mut AtomicU64, Ordering::Release);
+            return true;
         }
     }
     false
@@ -91,7 +92,8 @@ pub unsafe fn init_shm(path: *const std::ffi::c_char) -> bool {
 /// NGINX shared-zone allocation, active is ngx_stat_active. Both outlive
 /// all worker threads. The supported adapter platform uses lock-free 64-bit atomics.
 pub unsafe fn bind(shared: *mut AtomicU64, len: usize, active: *mut AtomicU64) -> bool {
-    if shared.is_null()
+    if len < 64
+        || shared.is_null()
         || active.is_null()
         || !(shared as usize).is_multiple_of(8)
         || !(active as usize).is_multiple_of(8)

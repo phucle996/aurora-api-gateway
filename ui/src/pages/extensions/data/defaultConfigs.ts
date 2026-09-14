@@ -698,13 +698,23 @@ export const EXTENSION_DEFAULT_CONFIGS: Record<string, Record<string, any>> = {
       path: '/metrics'
     }
   },
-  'opentelemetry': {
+  'opentelemetry-metrics': {
     enabled: true,
-    endpoint: 'http://127.0.0.1:4317',
-    protocol: 'grpc',
+    endpoint: 'http://127.0.0.1:4318',
+    protocol: 'http',
+    interval_secs: 15,
+    timeout_ms: 5000,
+    service_name: 'aurora-gateway'
+  },
+  'opentelemetry-logs': {
+    enabled: true,
+    endpoint: 'http://127.0.0.1:4318',
+    protocol: 'http',
+    batch_size: 100,
+    flush_interval_ms: 2000,
+    timeout_ms: 5000,
     service_name: 'aurora-gateway',
-    sampling_rate: 0.05,
-    propagation_format: 'w3c'
+    log_level: 'info'
   },
   'zipkin': {
     enabled: true,

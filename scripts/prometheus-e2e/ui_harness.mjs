@@ -193,15 +193,16 @@ export class ExtensionsUiHarness {
       throw new Error(`Failed to save config for ${displayName}: HTTP ${res.status()} ${await res.text()}`);
     }
 
-    await this.page.waitForTimeout(500);
-
-    // Close modal
-    const closeBtn = modal.locator('button').filter({ has: this.page.locator('svg.lucide-x') }).first();
-    if (await closeBtn.isVisible().catch(() => false)) {
-      await closeBtn.click();
-    } else {
-      await this.page.keyboard.press('Escape');
-    }
+    // Modal automatically closes after save in ExtensionConfigModal; wait for it to hide
+    await modal.waitFor({ state: 'hidden', timeout: 3000 }).catch(async () => {
+      const closeBtn = modal.locator('button').filter({ has: this.page.locator('svg.lucide-x') }).first();
+      if (await closeBtn.isVisible().catch(() => false)) {
+        await closeBtn.click().catch(() => {});
+      } else {
+        await this.page.keyboard.press('Escape');
+      }
+      await modal.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {});
+    });
     await this.page.waitForTimeout(300);
     return true;
   }

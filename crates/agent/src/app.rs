@@ -1,6 +1,7 @@
 use crate::config::Config;
 use crate::extension::ExtensionDispatcher;
 use crate::grpc::GrpcClient;
+use crate::logs::{LogBus, LogShmHandle};
 use crate::nginx::NginxManager;
 use crate::sync;
 use anyhow::Result;
@@ -8,12 +9,13 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 pub struct App {
     pub cfg: Arc<Config>,
     pub nginx: Arc<NginxManager>,
     pub grpc_client: GrpcClient,
+    pub log_bus: Option<Arc<LogBus>>,
     pub started_at: i64,
 }
 
@@ -65,7 +67,23 @@ impl App {
             .await;
         }
 
-        // 3. Initialize NGINX Manager
+        // 3. Initialize high-performance LogBus before starting NGINX
+        let shm_handle = LogShmHandle::open_or_create().map(Arc::new);
+        let log_bus = match LogBus::bind(None, shm_handle) {
+            Ok(bus) => {
+                info!(
+                    path = %bus.socket_path().display(),
+                    "Initialized LogBus Unix datagram socket"
+                );
+                Some(Arc::new(bus))
+            }
+            Err(e) => {
+                warn!("Failed to bind LogBus Unix datagram socket: {e}");
+                None
+            }
+        };
+
+        // 4. Initialize NGINX Manager
         let nginx = NginxManager::new(cfg.nginx_bin.clone(), cfg.nginx_conf.clone());
         if !cfg.no_nginx {
             nginx.start().await.map_err(|e| {
@@ -74,7 +92,7 @@ impl App {
             })?;
         }
 
-        // 4. Initialize gRPC Client
+        // 5. Initialize gRPC Client
         let grpc_endpoint = cfg.grpc_endpoint();
         info!(grpc_endpoint = %grpc_endpoint, "Connecting to Control Plane via gRPC");
         let grpc_client = GrpcClient::new(&grpc_endpoint, &cfg.auth_token)?;
@@ -83,6 +101,7 @@ impl App {
             cfg,
             nginx,
             grpc_client,
+            log_bus,
             started_at,
         })
     }
@@ -91,9 +110,10 @@ impl App {
         info!("Starting Aurora Dataplane Agent background sync workers");
 
         // Initialize Extension Dispatcher
-        let dispatcher = Arc::new(Mutex::new(ExtensionDispatcher::new(Arc::new(
-            self.cfg.node_id.clone(),
-        ))));
+        let dispatcher = Arc::new(Mutex::new(ExtensionDispatcher::new(
+            Arc::new(self.cfg.node_id.clone()),
+            self.log_bus.clone(),
+        )));
 
         // Baseline initialization from CLI flags (if any) until first spec sync
         let metrics_enabled =

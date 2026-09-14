@@ -64,17 +64,74 @@ fn default_metrics_path() -> String {
     "/metrics".to_string()
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct OtlpSpec {
     #[serde(default)]
     pub enabled: bool,
     #[serde(default)]
     pub endpoint: String,
+    #[serde(default = "default_otlp_protocol")]
+    pub protocol: String,
     #[serde(default = "default_otlp_interval")]
     pub interval_secs: u64,
+    #[serde(default = "default_otlp_timeout")]
+    pub timeout_ms: u64,
+    #[serde(default = "default_otlp_service_name")]
+    pub service_name: String,
+}
+
+impl Default for OtlpSpec {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            endpoint: String::new(),
+            protocol: default_otlp_protocol(),
+            interval_secs: default_otlp_interval(),
+            timeout_ms: default_otlp_timeout(),
+            service_name: default_otlp_service_name(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct OpenTelemetryMetricsSpec {
+    pub enabled: bool,
+    pub endpoint: String,
+    pub protocol: String,
+    pub interval_secs: u64,
+    pub timeout_ms: u64,
+    pub service_name: String,
+}
+
+pub type OpenTelemetrySpec = OpenTelemetryMetricsSpec;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct OpenTelemetryLogsSpec {
+    pub enabled: bool,
+    pub endpoint: String,
+    pub protocol: String,
+    pub batch_size: usize,
+    pub flush_interval_ms: u64,
+    pub timeout_ms: u64,
+    pub service_name: String,
+    pub log_level: String,
 }
 
 fn default_otlp_interval() -> u64 {
     15
+}
+
+fn default_otlp_protocol() -> String {
+    "http".to_string()
+}
+
+fn default_otlp_timeout() -> u64 {
+    5000
+}
+
+fn default_otlp_service_name() -> String {
+    "aurora-gateway".to_string()
 }

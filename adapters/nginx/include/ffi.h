@@ -410,6 +410,7 @@ void aurora_telemetry_record_blue_green(uint32_t is_green);
 void aurora_telemetry_record_mirror(void);
 void aurora_telemetry_record_connections(uint64_t active, uint64_t reading,
                                          uint64_t writing, uint64_t waiting);
+uint32_t aurora_telemetry_is_log_active(void);
 
 #ifdef __cplusplus
 }

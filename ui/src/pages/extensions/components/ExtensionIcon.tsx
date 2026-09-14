@@ -300,7 +300,8 @@ export function ExtensionIcon({ id, category, className = 'w-5 h-5' }: Extension
     case 'prometheus':
     case 'metrics':
       return <Activity className={className} />;
-    case 'opentelemetry':
+    case 'opentelemetry-metrics':
+    case 'opentelemetry-logs':
     case 'distributed_tracing':
       return <Waypoints className={className} />;
     case 'zipkin':

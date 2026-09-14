@@ -1,0 +1,112 @@
+{
+  "key": "builtin/opentelemetry-metrics",
+  "version": 1,
+  "id": "opentelemetry-metrics",
+  "name": "OpenTelemetry Metrics",
+  "category": "observability",
+  "description": "Periodically pushes telemetry metrics (RPS, Latencies, WAF blocks, Active connections) to OpenTelemetry Collector via OTLP (HTTP/gRPC).",
+  "renderer": "opentelemetry-metrics",
+  "builtin": true,
+  "default_config": {
+    "enabled": true,
+    "endpoint": "http://127.0.0.1:4318",
+    "protocol": "http",
+    "interval_secs": 15,
+    "timeout_ms": 5000,
+    "service_name": "aurora-gateway"
+  },
+  "ui_schema": {
+    "layout_type": "form",
+    "fields": [
+      {
+        "key": "endpoint",
+        "label": "Collector Endpoint",
+        "type": "text",
+        "description": "Địa chỉ OTel Collector (ví dụ: http://127.0.0.1:4318 cho HTTP hoặc http://127.0.0.1:4317 cho gRPC)",
+        "required": true
+      },
+      {
+        "key": "protocol",
+        "label": "Protocol",
+        "type": "select",
+        "options": [
+          {
+            "label": "HTTP (JSON/Protobuf - port 4318)",
+            "value": "http"
+          },
+          {
+            "label": "gRPC (port 4317)",
+            "value": "grpc"
+          }
+        ],
+        "description": "Giao thức truyền dữ liệu OTLP",
+        "required": true
+      },
+      {
+        "key": "interval_secs",
+        "label": "Export Interval (seconds)",
+        "type": "number",
+        "description": "Chu kỳ đẩy metrics (giây, mặc định: 15)",
+        "required": true
+      },
+      {
+        "key": "service_name",
+        "label": "Service Name",
+        "type": "text",
+        "description": "Tên service gắn vào resource attributes (mặc định: aurora-gateway)",
+        "required": true
+      },
+      {
+        "key": "timeout_ms",
+        "label": "Request Timeout (ms)",
+        "type": "number",
+        "description": "Thời gian timeout tối đa cho mỗi lần export (ms)",
+        "required": true
+      }
+    ]
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "enabled",
+      "endpoint",
+      "protocol",
+      "interval_secs",
+      "timeout_ms",
+      "service_name"
+    ],
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "endpoint": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      },
+      "protocol": {
+        "type": "string",
+        "enum": [
+          "http",
+          "grpc"
+        ]
+      },
+      "interval_secs": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 3600
+      },
+      "timeout_ms": {
+        "type": "integer",
+        "minimum": 100,
+        "maximum": 60000
+      },
+      "service_name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    }
+  }
+}

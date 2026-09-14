@@ -244,6 +244,7 @@ pub unsafe extern "C" fn aurora_waf_evaluate(
     })) {
         Ok(Ok(blocked)) => {
             let act = u32::from(blocked);
+            crate::telemetry::record_evaluation(act);
             unsafe {
                 *action = act;
             }

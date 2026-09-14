@@ -48,6 +48,7 @@ typedef struct {
   ngx_uint_t is_header_override;
   ngx_uint_t is_mirrored;
   ngx_uint_t is_terminated;
+  ngx_uint_t is_waf_blocked;
 } ngx_http_gateway_ctx_t;
 
 extern ngx_module_t ngx_http_gateway_module;

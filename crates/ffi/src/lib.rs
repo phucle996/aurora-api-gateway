@@ -172,6 +172,11 @@ pub extern "C" fn aurora_telemetry_record_connections(
     telemetry::record_connections(active, reading, writing, waiting);
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn aurora_telemetry_is_log_active() -> u32 {
+    if telemetry::is_log_active() { 1 } else { 0 }
+}
+
 /// Xuất chuỗi định dạng văn bản Prometheus / OpenMetrics phục vụ endpoint /metrics của NGINX.
 ///
 /// # Safety
