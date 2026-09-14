@@ -3,7 +3,7 @@ package provider
 import (
 	"sync"
 
-	"aurora-waf.local/control-plane/internal/domain/entity"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/entity"
 )
 
 // EventHub định nghĩa hợp đồng quản lý các kết nối SSE subscribers và phát sóng sự kiện realtime.

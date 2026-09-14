@@ -10,14 +10,14 @@ import (
 	"strings"
 	"time"
 
-	"aurora-waf.local/control-plane/infra"
-	"aurora-waf.local/control-plane/internal/config"
-	"aurora-waf.local/control-plane/internal/console"
-	port "aurora-waf.local/control-plane/internal/domain/service"
-	"aurora-waf.local/control-plane/internal/provider"
-	"aurora-waf.local/control-plane/internal/service"
-	grpcserver "aurora-waf.local/control-plane/internal/transport/grpc"
-	"aurora-waf.local/control-plane/internal/transport/http/middleware"
+	"github.com/phucle996/aurora-api-gateway/control-plane/infra"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/config"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/console"
+	port "github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/service"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/provider"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/service"
+	grpcserver "github.com/phucle996/aurora-api-gateway/control-plane/internal/transport/grpc"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/transport/http/middleware"
 
 	"github.com/gin-gonic/gin"
 )

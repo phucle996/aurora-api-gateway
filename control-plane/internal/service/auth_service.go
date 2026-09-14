@@ -1,11 +1,11 @@
 package service
 
 import (
-	"aurora-waf.local/control-plane/internal/config"
-	"aurora-waf.local/control-plane/internal/domain/entity"
-	"aurora-waf.local/control-plane/internal/domain/repo"
-	port "aurora-waf.local/control-plane/internal/domain/service"
-	"aurora-waf.local/control-plane/internal/domain/taxonomy"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/config"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/entity"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/repo"
+	port "github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/service"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/taxonomy"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"

@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"aurora-waf.local/control-plane/internal/domain/entity"
-	port "aurora-waf.local/control-plane/internal/domain/service"
-	"aurora-waf.local/control-plane/internal/transport/http/dto"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/entity"
+	port "github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/service"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/transport/http/dto"
 	"github.com/gin-gonic/gin"
 )
 

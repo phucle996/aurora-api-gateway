@@ -4,7 +4,7 @@ Development rules are maintained in [AGENTS.md](AGENTS.md). Start with the workf
 
 ## Control plane
 
-The Go module is `aurora-waf.local/control-plane`. HTTP handlers decode requests; workflow services enforce authority and orchestrate mutations; dedicated repository ports read and mutate SQLite projections. Providers run background work such as spec scheduling. Composition belongs to `internal/app`.
+The Go module is `github.com/phucle996/aurora-api-gateway/control-plane`. HTTP handlers decode requests; workflow services enforce authority and orchestrate mutations; dedicated repository ports read and mutate SQLite projections. Providers run background work such as spec scheduling. Composition belongs to `internal/app`.
 
 Extension manifests in [the catalog](control-plane/internal/extensionmanifest/manifests) define schemas, renderers, defaults and UI metadata. The spec scheduler resolves persisted extension instances against these manifests. UI configuration is not an independent authority for what a node can execute.
 

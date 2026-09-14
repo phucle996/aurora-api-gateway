@@ -8,14 +8,14 @@ import (
 	"testing"
 	"time"
 
-	"aurora-waf.local/control-plane/infra"
-	"aurora-waf.local/control-plane/internal/app"
-	"aurora-waf.local/control-plane/internal/config"
-	"aurora-waf.local/control-plane/internal/domain/entity"
-	"aurora-waf.local/control-plane/internal/domain/repo"
-	"aurora-waf.local/control-plane/internal/domain/taxonomy"
-	"aurora-waf.local/control-plane/internal/repository"
-	"aurora-waf.local/control-plane/internal/service"
+	"github.com/phucle996/aurora-api-gateway/control-plane/infra"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/app"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/config"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/entity"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/repo"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/taxonomy"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/repository"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/service"
 )
 
 // Test-only scheduling gate around REAL SQLite commit. It makes a valid

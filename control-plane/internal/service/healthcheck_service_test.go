@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"aurora-waf.local/control-plane/internal/service"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/service"
 )
 
 type mockHealthcheckSystemRepo struct {

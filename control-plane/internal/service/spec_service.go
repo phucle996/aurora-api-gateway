@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"aurora-waf.local/control-plane/internal/domain/entity"
-	"aurora-waf.local/control-plane/internal/domain/repo"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/entity"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/repo"
 )
 
 // SpecSyncService handles node declarative configuration sync queries and status reports.

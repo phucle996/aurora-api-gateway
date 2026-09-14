@@ -17,10 +17,10 @@ import (
 	"testing"
 	"time"
 
-	"aurora-waf.local/control-plane/infra"
-	"aurora-waf.local/control-plane/internal/app"
-	"aurora-waf.local/control-plane/internal/config"
-	"aurora-waf.local/control-plane/migrations"
+	"github.com/phucle996/aurora-api-gateway/control-plane/infra"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/app"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/config"
+	"github.com/phucle996/aurora-api-gateway/control-plane/migrations"
 	"github.com/gin-gonic/gin"
 )
 

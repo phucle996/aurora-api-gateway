@@ -8,12 +8,12 @@ import (
 	"sync"
 	"time"
 
-	"aurora-waf.local/control-plane/internal/domain/entity"
-	"aurora-waf.local/control-plane/internal/domain/repo"
-	domainService "aurora-waf.local/control-plane/internal/domain/service"
-	"aurora-waf.local/control-plane/internal/domain/taxonomy"
-	"aurora-waf.local/control-plane/internal/provider"
-	"aurora-waf.local/control-plane/internal/provider/catalog"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/entity"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/repo"
+	domainService "github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/service"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/taxonomy"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/provider"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/provider/catalog"
 )
 
 type analyticsService struct {

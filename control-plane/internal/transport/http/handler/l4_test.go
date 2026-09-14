@@ -9,12 +9,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"aurora-waf.local/control-plane/internal/domain/entity"
-	"aurora-waf.local/control-plane/internal/repository"
-	"aurora-waf.local/control-plane/internal/service"
-	"aurora-waf.local/control-plane/internal/transport/http/dto"
-	"aurora-waf.local/control-plane/internal/transport/http/handler"
-	"aurora-waf.local/control-plane/migrations"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/entity"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/repository"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/service"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/transport/http/dto"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/transport/http/handler"
+	"github.com/phucle996/aurora-api-gateway/control-plane/migrations"
 	"github.com/gin-gonic/gin"
 	_ "modernc.org/sqlite"
 )

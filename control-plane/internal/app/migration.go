@@ -6,9 +6,9 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"aurora-waf.local/control-plane/internal/extensionmanifest"
-	"aurora-waf.local/control-plane/internal/service"
-	"aurora-waf.local/control-plane/migrations"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/extensionmanifest"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/service"
+	"github.com/phucle996/aurora-api-gateway/control-plane/migrations"
 )
 
 func runMigrations(ctx context.Context, db *sql.DB) error {

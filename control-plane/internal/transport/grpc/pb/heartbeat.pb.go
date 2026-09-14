@@ -350,7 +350,7 @@ const file_sync_v1_heartbeat_proto_rawDesc = "" +
 	"\x16HEALTH_STATUS_DEGRADED\x10\x02\x12\x16\n" +
 	"\x12HEALTH_STATUS_DOWN\x10\x032h\n" +
 	"\x10HeartbeatService\x12T\n" +
-	"\rSendHeartbeat\x12 .aurora.sync.v1.HeartbeatRequest\x1a!.aurora.sync.v1.HeartbeatResponseB>Z<aurora-waf.local/control-plane/internal/transport/grpc/pb;pbb\x06proto3"
+	"\rSendHeartbeat\x12 .aurora.sync.v1.HeartbeatRequest\x1a!.aurora.sync.v1.HeartbeatResponseBUZSgithub.com/phucle996/aurora-api-gateway/control-plane/internal/transport/grpc/pb;pbb\x06proto3"
 
 var (
 	file_sync_v1_heartbeat_proto_rawDescOnce sync.Once

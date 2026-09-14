@@ -3,7 +3,7 @@ package extensionmanifest_test
 import (
 	"testing"
 
-	"aurora-waf.local/control-plane/internal/extensionmanifest"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/extensionmanifest"
 )
 
 func BenchmarkAllManifests(b *testing.B) {

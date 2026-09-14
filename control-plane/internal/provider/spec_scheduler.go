@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"aurora-waf.local/control-plane/internal/domain/entity"
-	"aurora-waf.local/control-plane/internal/domain/repo"
-	"aurora-waf.local/control-plane/internal/extensionmanifest"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/entity"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/repo"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/extensionmanifest"
 )
 
 // SpecScheduler is an autonomous background provider that periodically compiles

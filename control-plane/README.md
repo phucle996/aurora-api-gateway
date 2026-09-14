@@ -1,6 +1,6 @@
 # Go control plane
 
-The Go module is `aurora-waf.local/control-plane`, using the version in [go.mod](go.mod). It serves the embedded console and management API, persists configuration in SQLite, and compiles node specs for gRPC reconciliation.
+The Go module is `github.com/phucle996/aurora-api-gateway/control-plane`, using the version in [go.mod](go.mod). It serves the embedded console and management API, persists configuration in SQLite, and compiles node specs for gRPC reconciliation.
 
 ## Local development
 

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package aurora.sync.v1;
 
-option go_package = "aurora-waf.local/control-plane/internal/transport/grpc/pb;pb";
+option go_package = "github.com/phucle996/aurora-api-gateway/control-plane/internal/transport/grpc/pb;pb";
 
 service SpecSyncService {
   rpc SyncSpec (SyncSpecRequest) returns (SyncSpecResponse);

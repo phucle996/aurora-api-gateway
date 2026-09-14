@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"aurora-waf.local/control-plane/internal/domain/entity"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/entity"
 )
 
 // DefaultCategories trả về danh mục đầy đủ các Metrics được hệ thống Aurora WAF hỗ trợ.

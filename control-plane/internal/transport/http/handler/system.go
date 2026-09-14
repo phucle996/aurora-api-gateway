@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	port "aurora-waf.local/control-plane/internal/domain/service"
+	port "github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/service"
 	"github.com/gin-gonic/gin"
 )
 

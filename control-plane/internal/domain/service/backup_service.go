@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 
-	"aurora-waf.local/control-plane/internal/domain/entity"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/entity"
 )
 
 // BackupService định nghĩa port nghiệp vụ xử lý xuất snapshot, đẩy S3, lập lịch cron và restore.

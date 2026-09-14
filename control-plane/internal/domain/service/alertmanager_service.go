@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 
-	"aurora-waf.local/control-plane/internal/domain/entity"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/entity"
 )
 
 // AlertmanagerService định nghĩa cổng dịch vụ giao tiếp với hệ sinh thái Alertmanager & Prometheus.

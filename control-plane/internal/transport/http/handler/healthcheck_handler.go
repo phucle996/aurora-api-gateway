@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"aurora-waf.local/control-plane/internal/domain/service"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/service"
 	"github.com/gin-gonic/gin"
 )
 

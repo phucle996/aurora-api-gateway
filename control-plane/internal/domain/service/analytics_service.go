@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 
-	"aurora-waf.local/control-plane/internal/domain/entity"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/entity"
 )
 
 // AnalyticsService định nghĩa port nghiệp vụ xử lý điều phối và truy vấn phân tích (Analytics Engine).

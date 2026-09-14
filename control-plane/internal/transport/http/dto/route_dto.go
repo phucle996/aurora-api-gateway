@@ -1,6 +1,6 @@
 package dto
 
-import "aurora-waf.local/control-plane/internal/domain/entity"
+import "github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/entity"
 
 type CreateRouteRequest struct {
 	Name         string `json:"name" binding:"required"`

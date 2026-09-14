@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"aurora-waf.local/control-plane/internal/domain/entity"
-	"aurora-waf.local/control-plane/internal/domain/taxonomy"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/entity"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/taxonomy"
 )
 
 // PrometheusMatrixResponse phản ánh cấu trúc ma trận trả về từ Prometheus /api/v1/query_range.

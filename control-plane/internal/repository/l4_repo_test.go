@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"testing"
 
-	"aurora-waf.local/control-plane/internal/domain/entity"
-	"aurora-waf.local/control-plane/internal/domain/taxonomy"
-	"aurora-waf.local/control-plane/internal/repository"
-	"aurora-waf.local/control-plane/migrations"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/entity"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/taxonomy"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/repository"
+	"github.com/phucle996/aurora-api-gateway/control-plane/migrations"
 	_ "modernc.org/sqlite"
 )
 

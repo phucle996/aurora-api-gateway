@@ -4,14 +4,14 @@ import (
 	"database/sql"
 	"errors"
 
-	"aurora-waf.local/control-plane/internal/config"
-	"aurora-waf.local/control-plane/internal/domain/repo"
-	port "aurora-waf.local/control-plane/internal/domain/service"
-	"aurora-waf.local/control-plane/internal/provider"
-	"aurora-waf.local/control-plane/internal/repository"
-	"aurora-waf.local/control-plane/internal/service"
-	grpchandler "aurora-waf.local/control-plane/internal/transport/grpc/handler"
-	"aurora-waf.local/control-plane/internal/transport/http/handler"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/config"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/repo"
+	port "github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/service"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/provider"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/repository"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/service"
+	grpchandler "github.com/phucle996/aurora-api-gateway/control-plane/internal/transport/grpc/handler"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/transport/http/handler"
 )
 
 // Module là "thùng chứa" tập hợp tất cả handler HTTP của ứng dụng.

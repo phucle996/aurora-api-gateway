@@ -14,9 +14,9 @@ export PATH="${HOME}/.local/bin:${HOME}/go/bin:${PATH}"
 protoc \
   --proto_path="${PROTO_DIR}" \
   --go_out="${ROOT_DIR}/control-plane" \
-  --go_opt=module=aurora-waf.local/control-plane \
+  --go_opt=module=github.com/phucle996/aurora-api-gateway/control-plane \
   --go-grpc_out="${ROOT_DIR}/control-plane" \
-  --go-grpc_opt=module=aurora-waf.local/control-plane \
+  --go-grpc_opt=module=github.com/phucle996/aurora-api-gateway/control-plane \
   "${PROTO_DIR}/sync/v1"/*.proto
 
 echo "Generated protobuf code for Go in ${OUT_DIR}"

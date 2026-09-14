@@ -6,8 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"aurora-waf.local/control-plane/internal/app"
-	"aurora-waf.local/control-plane/internal/config"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/app"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/config"
 )
 
 var (

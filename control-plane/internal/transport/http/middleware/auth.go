@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	port "aurora-waf.local/control-plane/internal/domain/service"
+	port "github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/service"
 	"crypto/sha256"
 	"crypto/subtle"
 	"net/http"

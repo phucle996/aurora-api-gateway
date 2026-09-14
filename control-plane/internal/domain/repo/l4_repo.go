@@ -3,7 +3,7 @@ package repo
 import (
 	"context"
 
-	"aurora-waf.local/control-plane/internal/domain/entity"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/entity"
 )
 
 // L4Repository định nghĩa các cổng thao tác cơ sở dữ liệu cho L4 Gateway Services.

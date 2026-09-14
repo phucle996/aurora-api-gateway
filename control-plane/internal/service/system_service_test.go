@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"aurora-waf.local/control-plane/internal/config"
-	"aurora-waf.local/control-plane/internal/service"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/config"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/service"
 )
 
 type mockSystemRepo struct{}

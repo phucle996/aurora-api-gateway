@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"aurora-waf.local/control-plane/internal/transport/http/middleware"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/transport/http/middleware"
 	"github.com/gin-gonic/gin"
 )
 

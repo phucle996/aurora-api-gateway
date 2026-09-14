@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"aurora-waf.local/control-plane/internal/domain/entity"
-	"aurora-waf.local/control-plane/internal/domain/repo"
-	domainService "aurora-waf.local/control-plane/internal/domain/service"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/entity"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/repo"
+	domainService "github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/service"
 )
 
 var validUpstreamNameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)

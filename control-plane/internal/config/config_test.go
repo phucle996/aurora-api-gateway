@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"aurora-waf.local/control-plane/internal/config"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/config"
 )
 
 func TestLoadConfig_PanicsWhenJWTSecretEmpty(t *testing.T) {

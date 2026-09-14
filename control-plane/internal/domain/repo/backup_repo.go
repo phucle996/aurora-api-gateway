@@ -3,7 +3,7 @@ package repo
 import (
 	"context"
 
-	"aurora-waf.local/control-plane/internal/domain/entity"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/entity"
 )
 
 // BackupRepository định nghĩa port truy xuất và lưu trữ cấu hình backup cùng nhật ký lịch sử.

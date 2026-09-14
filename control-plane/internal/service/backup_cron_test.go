@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"aurora-waf.local/control-plane/internal/service"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/service"
 )
 
 func TestValidateCron(t *testing.T) {

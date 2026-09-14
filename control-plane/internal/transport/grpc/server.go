@@ -3,8 +3,8 @@ package grpc
 import (
 	"net"
 
-	"aurora-waf.local/control-plane/internal/transport/grpc/handler"
-	"aurora-waf.local/control-plane/internal/transport/grpc/pb"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/transport/grpc/handler"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/transport/grpc/pb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )

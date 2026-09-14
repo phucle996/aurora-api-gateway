@@ -5,9 +5,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 
-	"aurora-waf.local/control-plane/internal/domain/entity"
-	"aurora-waf.local/control-plane/internal/domain/repo"
-	domainservice "aurora-waf.local/control-plane/internal/domain/service"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/entity"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/repo"
+	domainservice "github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/service"
 )
 
 type l4Service struct {

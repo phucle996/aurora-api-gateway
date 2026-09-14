@@ -3,7 +3,7 @@ package repo
 import (
 	"context"
 
-	"aurora-waf.local/control-plane/internal/domain/entity"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/entity"
 )
 
 // UpstreamRepository định nghĩa cổng lưu trữ cho Upstream workflow (CTE-first).

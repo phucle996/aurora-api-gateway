@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	grpcserver "aurora-waf.local/control-plane/internal/transport/grpc"
+	grpcserver "github.com/phucle996/aurora-api-gateway/control-plane/internal/transport/grpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"

@@ -8,8 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"aurora-waf.local/control-plane/internal/domain/entity"
-	"aurora-waf.local/control-plane/internal/transport/http/handler"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/entity"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/transport/http/handler"
 	"github.com/gin-gonic/gin"
 )
 

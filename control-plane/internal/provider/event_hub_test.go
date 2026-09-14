@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"aurora-waf.local/control-plane/internal/provider"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/provider"
 )
 
 func TestEventHub_SubscribeAndBroadcast(t *testing.T) {

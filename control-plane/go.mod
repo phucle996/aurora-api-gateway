@@ -1,4 +1,4 @@
-module aurora-waf.local/control-plane
+module github.com/phucle996/aurora-api-gateway/control-plane
 
 go 1.27.1
 

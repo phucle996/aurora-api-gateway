@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"aurora-waf.local/control-plane/internal/domain/entity"
-	"aurora-waf.local/control-plane/internal/transport/grpc/handler"
-	"aurora-waf.local/control-plane/internal/transport/grpc/pb"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/entity"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/transport/grpc/handler"
+	"github.com/phucle996/aurora-api-gateway/control-plane/internal/transport/grpc/pb"
 )
 
 type mockSpecService struct {

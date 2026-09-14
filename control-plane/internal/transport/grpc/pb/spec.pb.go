@@ -287,7 +287,7 @@ const file_sync_v1_spec_proto_rawDesc = "" +
 	"\x0fSpecSyncService\x12M\n" +
 	"\bSyncSpec\x12\x1f.aurora.sync.v1.SyncSpecRequest\x1a .aurora.sync.v1.SyncSpecResponse\x12S\n" +
 	"\n" +
-	"ReportSpec\x12!.aurora.sync.v1.ReportSpecRequest\x1a\".aurora.sync.v1.ReportSpecResponseB>Z<aurora-waf.local/control-plane/internal/transport/grpc/pb;pbb\x06proto3"
+	"ReportSpec\x12!.aurora.sync.v1.ReportSpecRequest\x1a\".aurora.sync.v1.ReportSpecResponseBUZSgithub.com/phucle996/aurora-api-gateway/control-plane/internal/transport/grpc/pb;pbb\x06proto3"
 
 var (
 	file_sync_v1_spec_proto_rawDescOnce sync.Once
