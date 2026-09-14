@@ -7,15 +7,15 @@ use std::path::Path;
 
 /// Matches hostname against SNI pattern (supports exact match and wildcard *.example.com).
 pub fn matches_sni(pattern: &str, host: &str) -> bool {
-    let p = pattern.trim().to_ascii_lowercase();
-    let h = host.trim().to_ascii_lowercase();
-    if p == h || p == "*" {
+    let p = pattern.trim();
+    let h = host.trim();
+    if p.eq_ignore_ascii_case(h) || p == "*" {
         return true;
     }
     if let Some(suffix) = p.strip_prefix("*.")
         && let Some((sub, base)) = h.split_once('.')
     {
-        return !sub.is_empty() && base == suffix;
+        return !sub.is_empty() && base.eq_ignore_ascii_case(suffix);
     }
     false
 }
