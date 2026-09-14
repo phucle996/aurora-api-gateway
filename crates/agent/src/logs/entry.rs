@@ -5,24 +5,68 @@ use opentelemetry_proto::tonic::logs::v1::{LogRecord, SeverityNumber};
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+struct OptF64Visitor;
+
+impl<'de> serde::de::Visitor<'de> for OptF64Visitor {
+    type Value = Option<f64>;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a float, an integer, a string representation of a float, or null")
+    }
+
+    fn visit_none<E>(self) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(None)
+    }
+
+    fn visit_unit<E>(self) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(None)
+    }
+
+    fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(Some(v))
+    }
+
+    fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(Some(v as f64))
+    }
+
+    fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(Some(v as f64))
+    }
+
+    fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        let trimmed = s.trim();
+        if trimmed.is_empty() || trimmed == "-" {
+            Ok(None)
+        } else {
+            Ok(trimmed.parse::<f64>().ok())
+        }
+    }
+}
+
 fn deserialize_opt_f64_lenient<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    let opt = Option::<serde_json::Value>::deserialize(deserializer)?;
-    match opt {
-        None | Some(serde_json::Value::Null) => Ok(None),
-        Some(serde_json::Value::Number(n)) => Ok(n.as_f64()),
-        Some(serde_json::Value::String(s)) => {
-            let trimmed = s.trim();
-            if trimmed.is_empty() || trimmed == "-" {
-                Ok(None)
-            } else {
-                Ok(trimmed.parse::<f64>().ok())
-            }
-        }
-        _ => Ok(None),
-    }
+    deserializer.deserialize_any(OptF64Visitor)
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -91,34 +135,43 @@ impl GatewayLogEntry {
             (SeverityNumber::Info as i32, "INFO".to_string())
         };
 
-        let mut attributes = vec![
-            KeyValue {
-                key: "service.name".to_string(),
-                value: Some(AnyValue {
-                    value: Some(AnyValueUnion::StringValue(service_name.to_string())),
-                }),
-            },
-            KeyValue {
-                key: "telemetry.sdk.name".to_string(),
-                value: Some(AnyValue {
-                    value: Some(AnyValueUnion::StringValue("aurora-waf".to_string())),
-                }),
-            },
-        ];
+        let effective_dur = self.effective_duration_ms();
+        let body_str = if let Some(msg) = self.message {
+            msg
+        } else {
+            let m = self.method.as_deref().unwrap_or("GET");
+            let u = self.uri.as_deref().unwrap_or("/");
+            let d = effective_dur.unwrap_or(0.0);
+            format!("{m} {u} -> {status} ({d:.2}ms)")
+        };
 
-        if let Some(ref m) = self.method {
+        let mut attributes = Vec::with_capacity(14);
+        attributes.push(KeyValue {
+            key: "service.name".to_string(),
+            value: Some(AnyValue {
+                value: Some(AnyValueUnion::StringValue(service_name.to_string())),
+            }),
+        });
+        attributes.push(KeyValue {
+            key: "telemetry.sdk.name".to_string(),
+            value: Some(AnyValue {
+                value: Some(AnyValueUnion::StringValue("aurora-waf".to_string())),
+            }),
+        });
+
+        if let Some(m) = self.method {
             attributes.push(KeyValue {
                 key: "http.request.method".to_string(),
                 value: Some(AnyValue {
-                    value: Some(AnyValueUnion::StringValue(m.clone())),
+                    value: Some(AnyValueUnion::StringValue(m)),
                 }),
             });
         }
-        if let Some(ref u) = self.uri {
+        if let Some(u) = self.uri {
             attributes.push(KeyValue {
                 key: "url.path".to_string(),
                 value: Some(AnyValue {
-                    value: Some(AnyValueUnion::StringValue(u.clone())),
+                    value: Some(AnyValueUnion::StringValue(u)),
                 }),
             });
         }
@@ -130,15 +183,14 @@ impl GatewayLogEntry {
                 }),
             });
         }
-        if let Some(ref ip) = self.client_ip {
+        if let Some(ip) = self.client_ip {
             attributes.push(KeyValue {
                 key: "client.address".to_string(),
                 value: Some(AnyValue {
-                    value: Some(AnyValueUnion::StringValue(ip.clone())),
+                    value: Some(AnyValueUnion::StringValue(ip)),
                 }),
             });
         }
-        let effective_dur = self.effective_duration_ms();
         if let Some(d) = effective_dur {
             attributes.push(KeyValue {
                 key: "http.request.duration_ms".to_string(),
@@ -155,47 +207,38 @@ impl GatewayLogEntry {
                 }),
             });
         }
-        if let Some(ref h) = self.host {
+        if let Some(h) = self.host {
             attributes.push(KeyValue {
                 key: "server.address".to_string(),
                 value: Some(AnyValue {
-                    value: Some(AnyValueUnion::StringValue(h.clone())),
+                    value: Some(AnyValueUnion::StringValue(h)),
                 }),
             });
         }
-        if let Some(ref ua) = self.user_agent {
+        if let Some(ua) = self.user_agent {
             attributes.push(KeyValue {
                 key: "user_agent.original".to_string(),
                 value: Some(AnyValue {
-                    value: Some(AnyValueUnion::StringValue(ua.clone())),
+                    value: Some(AnyValueUnion::StringValue(ua)),
                 }),
             });
         }
-        if let Some(ref a) = self.waf_action {
+        if let Some(a) = self.waf_action {
             attributes.push(KeyValue {
                 key: "waf.action".to_string(),
                 value: Some(AnyValue {
-                    value: Some(AnyValueUnion::StringValue(a.clone())),
+                    value: Some(AnyValueUnion::StringValue(a)),
                 }),
             });
         }
-        if let Some(ref r) = self.waf_rule_id {
+        if let Some(r) = self.waf_rule_id {
             attributes.push(KeyValue {
                 key: "waf.rule_id".to_string(),
                 value: Some(AnyValue {
-                    value: Some(AnyValueUnion::StringValue(r.clone())),
+                    value: Some(AnyValueUnion::StringValue(r)),
                 }),
             });
         }
-
-        let body_str = if let Some(ref msg) = self.message {
-            msg.clone()
-        } else {
-            let m = self.method.as_deref().unwrap_or("GET");
-            let u = self.uri.as_deref().unwrap_or("/");
-            let d = effective_dur.unwrap_or(0.0);
-            format!("{m} {u} -> {status} ({d:.2}ms)")
-        };
 
         LogRecord {
             time_unix_nano,

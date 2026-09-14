@@ -716,6 +716,13 @@ export const EXTENSION_DEFAULT_CONFIGS: Record<string, Record<string, any>> = {
     service_name: 'aurora-gateway',
     log_level: 'info'
   },
+  'std-log': {
+    enabled: true,
+    format: 'json',
+    split_streams: true,
+    log_level: 'info',
+    include_waf_details: true
+  },
   'zipkin': {
     enabled: true,
     endpoint: 'http://127.0.0.1:9411/api/v2/spans',

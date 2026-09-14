@@ -1,261 +1,108 @@
 # Aurora API Gateway
 
-<div align="center">
+Aurora combines an NGINX data plane, a Rust policy engine and node agent, a Go control plane backed by SQLite, and a React management console.
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Rust](https://img.shields.io/badge/Rust-1.98.1%20(Edition%202024)-orange.svg)](https://www.rust-lang.org/)
-[![Go](https://img.shields.io/badge/Go-1.27.1-00ADD8.svg)](https://golang.org/)
-[![React](https://img.shields.io/badge/React-18.x%20%7C%20TypeScript-61DAFB.svg)](https://react.dev/)
-[![NGINX](https://img.shields.io/badge/NGINX-Dynamic%20Module%20(C%20ABI%20v3)-009639.svg)](https://nginx.org/)
+## Architecture
 
-**An enterprise-grade, high-performance API Gateway with Integrated WAF for NGINX.**  
-Engineered with a **zero-allocation Rust runtime**, **native C dynamic module adapter**,  
-**distributed Go control plane**, and an intuitive **React management console**.
-
-[Features](#-key-features) • [Architecture](#-architecture) • [Quick Start](#-quick-start) • [Local Development](#-local-development) • [Documentation](#-documentation) • [License](#-license)
-
-</div>
-
----
-
-## 🌟 Overview
-
-**Aurora API Gateway** provides robust, low-latency API traffic orchestration and real-time security protection for modern web infrastructure without compromising throughput. Built to overcome the memory and speed limitations of Lua-based proxies and WAFs, Aurora API Gateway separates policy preparation and control-plane orchestration from high-speed request evaluation on the data-plane hot path.
-
-- **Zero-Allocation Data Plane**: The Rust core engine inspects requests in the NGINX access phase with zero unnecessary heap allocations.
-- **Fail-Safe Resilience**: Worker nodes cache compiled rules and routing configurations locally, continuing to inspect and forward traffic even during complete control-plane outages.
-- **Atomic Zero-Downtime Reloads**: Policy changes and routing updates take effect dynamically with zero dropped connections or worker process restarts.
-
----
-
-## 🏗️ Architecture
-
-Aurora API Gateway is organized into four decoupled layers:
-
-```
-                          ┌────────────────────────┐
-                          │   Browser / Client     │
-                          └───────────┬────────────┘
-                                      │ HTTP/HTTPS Requests
-                                      ▼
-                        ┌───────────────────────────┐
-                        │    NGINX Cluster / LB     │
-                        │        (:8090)            │
-                        └─────────────┬─────────────┘
-                                      │
-                 ┌────────────────────┴────────────────────┐
-                 ▼                                         ▼
-      ┌─────────────────────┐                   ┌─────────────────────┐
-      │   Aurora Node 01    │                   │   Aurora Node 02    │
-      │   (NGINX + C Mod)   │                   │   (NGINX + C Mod)   │
-      │          ▲          │                   │          ▲          │
-      │          │ C ABI v3 │                   │          │ C ABI v3 │
-      │          ▼          │                   │          ▼          │
-      │   Rust Core Engine  │                   │   Rust Core Engine  │
-      │  (Zero-Alloc Path)  │                   │  (Zero-Alloc Path)  │
-      │          ▲          │                   │          ▲          │
-      │          │ IPC      │                   │          │ IPC      │
-      │          ▼          │                   │          ▼          │
-      │   Dataplane Agent   │                   │   Dataplane Agent   │
-      │  (JSON Materializer)│                   │  (JSON Materializer)│
-      └──────────▲──────────┘                   └──────────▲──────────┘
-                 │                                         │
-                 │ ── gRPC Declarative JSON Spec Sync ──── │
-                 │        (:9090 - Protobuf Stream)        │
-                 │                                         │
-      ┌──────────┴─────────────────────────────────────────┴──────────┐
-      │                   Aurora Control Plane                        │
-      │            Go Daemon + Embedded SQLite (:8080, :9090)         │
-      │  - CTE-First Repositories        - SpecScheduler (JSON Comp)  │
-      │  - gRPC Sync Server (:9090)      - AWS S3 Disaster Recovery   │
-      └───────────────────────────────▲───────────────────────────────┘
-                                      │
-                                      │ REST API / WebSocket (:8080)
-                                      ▼
-                      ┌───────────────────────────────┐
-                      │    Aurora Management Console  │
-                      │    React + Vite + TypeScript  │
-                      └───────────────────────────────┘
+```text
+Console / API -> Control plane -> SQLite authority and spec releases
+                        ^
+                        | gRPC SyncSpec / ReportSpec (periodic agent calls)
+                        v
+                   Node agent -> local policy and NGINX configuration files
+                        |                         |
+                        |                   NGINX + Rust FFI -> upstreams
+                        |                         |
+                        +<-- shared metrics / Unix datagram access logs
+                        |
+                        +--> Prometheus, OTLP metrics/logs, stdout/stderr
 ```
 
-### Core Subsystems
+| Component | Source | Responsibility |
+| --- | --- | --- |
+| Engine | [crates/engine](crates/engine) | Policy compilation and request evaluation |
+| FFI and adapter | [crates/ffi](crates/ffi), [adapters/nginx](adapters/nginx) | C ABI, NGINX request phases and telemetry |
+| Agent | [crates/agent](crates/agent) | Spec reconciliation, configuration materialization, NGINX supervision and observability workers |
+| Control plane | [control-plane](control-plane) | Administration, durable configuration, spec compilation and distribution |
+| Console | [ui](ui) | Domain, routing, policy and extension management |
 
-| Component | Technology | Directory | Responsibility |
-| :--- | :--- | :--- | :--- |
-| **Core Engine** | Rust (Edition 2024) | [`crates/engine`](crates/engine) | Zero-allocation request evaluation, exact-path & Aho-Corasick matching, token bucket, IP reputation. |
-| **C ABI Boundary** | Rust / C FFI | [`crates/ffi`](crates/ffi) | C-compatible stable ABI boundary (v3) for native NGINX module integration. |
-| **NGINX Adapter** | C | [`adapters/nginx`](adapters/nginx) | Native NGINX dynamic HTTP module hooking into the `NGX_HTTP_ACCESS_PHASE`. |
-| **Dataplane Agent** | Rust (Edition 2024) | [`crates/agent`](crates/agent) | High-performance gRPC client, declarative **JSON Spec materializer**, and 115 modular extensions runtime. |
-| **Control Plane** | Go 1.27 | [`control-plane`](control-plane) | Cluster management, **gRPC declarative JSON Spec scheduler (:9090)**, rule compiler, REST API (:8080), S3 backup. |
-| **Console UI** | React / TypeScript | [`ui`](ui) | Modern management dashboard for domains, WAF policies, extensions (with visual rules builder & raw JSON modes), and analytics. |
+Features include WAF enforcement, domain/upstream routing, TLS configuration, manifest-driven extensions, Prometheus analytics, OTLP export, and backup/restore workflows. Available extension contracts are defined by the [manifest catalog](control-plane/internal/extensionmanifest/manifests); catalog entries and UI choices should not be interpreted as a guarantee that every proposed gateway capability is implemented.
 
----
+The agent checks for specs periodically over gRPC. Changed NGINX configuration is tested before a graceful reload. An accepted reload request is not an acknowledgement from every NGINX worker. See the [spec lifecycle](docs/spec-sync-architecture.md) for failure and recovery boundaries.
 
-## 🚀 Key Features
+## Quick start with Docker Compose
 
-### 🛡️ Real-Time Request Inspection & WAF Engine
-- **Multi-Phase Matchers**: URI path, query parameters, request headers, client IP (CIDR), and request method.
-- **Rule Actions**: `ALLOW`, `BLOCK` (custom HTTP status and payload), `LOG` (audit only), or `CHALLENGE`.
-- **Pre-Compiled Policies**: Rules are verified, syntax-checked, and compiled into binary memory structures before reaching data-plane nodes.
-
-### 🌐 Multi-Domain Routing & Upstream Management
-- **Reverse Proxy Orchestration**: Dynamic virtual host configuration for domains and wildcards.
-- **Load Balancing Algorithms**: Round Robin, Least Connections, and IP Hash.
-- **Origin Security**: Upstream TLS verification and mutual TLS (**mTLS**) authentication with custom CA bundles and client certificates.
-- **Health Probing**: Active HTTP/HTTPS health checks with configurable intervals, probe paths, and failure thresholds.
-
-### ⚡ Declarative JSON Spec Engine & gRPC Synchronization
-- **Unified Declarative `Spec` in JSON**: The entire cluster configuration (WAF mitigation rules, Radix IP access tree, Upstream pools, Domain routing, and all 115 modular extensions) is compiled into a single unified, deterministic **JSON** manifest.
-- **High-Performance gRPC Pipeline (`:9090`)**: Worker nodes connect over persistent HTTP/2 gRPC channels using Protobuf (`sync.v1.SpecSyncService`), eliminating polling overhead and stale states.
-- **Cryptographic SHA-256 Digest Validation**: Changes take effect with sub-second latency only when the JSON digest changes, avoiding redundant reloads and preventing thundering herds via jitter-based reconciliation.
-- **In-Process Modular Extensions (115 Extensions)**: Modular capabilities (Rate Limiting, Bot Detection, Header Transformation, Authentication, etc.) dynamically managed with cooperative cancellation tokens and configurable via Visual UI Builder or raw JSON.
-
-### 📊 Comprehensive Analytics & Prometheus Telemetry
-- **Direct TSDB / Prometheus Integration**: Direct query proxy via `/api/v1/analytics/query` for Prometheus, VictoriaMetrics, or compatible TSDB backends.
-- **Built-in Metric Catalog**: Out-of-the-box telemetry catalog for request rates, WAF mitigation blocks, rate limit rejections, upstream latency, and error distributions.
-- **Zero TSDB Bloat on Control Plane**: Telemetry writes bypass the control plane database entirely, keeping the SQLite authority lean and rock-solid.
-
-### 💾 Automated Disaster Recovery & S3 Cloud Storage
-- **Atomic Local Snapshots**: Creates consistent SQLite snapshots using `VACUUM INTO` without locking live readers.
-- **AWS S3 / MinIO / Cloudflare R2 Integration**: Direct AWS Signature V4 protocol implementation without heavy 3rd-party SDKs.
-- **Automated Retention**: Built-in cron scheduler and automatic pruning of expired cloud backups.
-- **Live Restore**: In-place integrity verification (`PRAGMA integrity_check`) and atomic restore.
-
----
-
-## ⚡ Quick Start
-
-### Standalone Linux / Systemd (One-Line Installer)
-
-Install Aurora API Gateway (Control Plane + NGINX dynamic modules) on any Linux server:
+Run from the repository root with Docker Compose available:
 
 ```bash
-# Install latest release
-curl -fsSL https://raw.githubusercontent.com/phucle996/aurora-api-gateway/main/install.sh | sudo bash
-
-# Or install a specific version
-curl -fsSL https://raw.githubusercontent.com/phucle996/aurora-api-gateway/main/install.sh | sudo bash -s -- -v v0.1.0
+docker compose up -d --build
+docker compose ps
+docker compose logs -f controller node
 ```
 
-The script automatically detects your installed NGINX version, matches the appropriate pre-compiled WAF module, configures systemd units, and starts the service.
+The checked-in [Compose file](docker-compose.yml) starts one controller, one gateway node, Prometheus, Alertmanager and an OpenTelemetry Collector. It contains development credentials and publishes local test ports; configure credentials and network exposure before deploying it elsewhere.
 
-### Running with Docker Compose
+| Service | Host address | Purpose |
+| --- | --- | --- |
+| Console / API | http://localhost:8080 | Management UI and HTTP API |
+| Controller gRPC | `localhost:9099` | Agent spec sync in Compose |
+| Gateway HTTP | http://localhost:8090 or port `80` | Both map to the same node |
+| Gateway HTTPS | port `443` TCP/UDP | TLS / QUIC listener mappings |
+| Agent Prometheus | http://localhost:9145/metrics | Available when the Prometheus exporter is enabled |
+| Prometheus | http://localhost:9090 | Metrics backend |
+| Alertmanager | http://localhost:9093 | Alert management |
+| OTLP Collector | ports `4317` / `4318` | gRPC / HTTP receivers |
+| Collector metrics | ports `8888` / `8889` | Collector telemetry / exported Prometheus metrics |
 
-The fastest way to test Aurora API Gateway with a complete multi-node cluster and load balancer is via Docker Compose:
-
-```bash
-# Clone the repository
-git clone https://github.com/phucle996/aurora-api-gateway.git
-cd aurora-api-gateway
-
-# Start controller, 2 WAF worker nodes, and fronting load balancer
-docker compose up -d
-```
-
-Once started, the following services are available:
-
-| Service | Address | Protocol | Description |
-| :--- | :--- | :--- | :--- |
-| **Aurora Console** | [http://localhost:8080](http://localhost:8080) | HTTP / REST | Control Plane Management UI & REST API |
-| **Aurora Spec Sync** | `localhost:9090` | gRPC / Protobuf | Declarative JSON Spec & Heartbeat streaming |
-| **Cluster Load Balancer** | [http://localhost:8090](http://localhost:8090) | HTTP | Fronting ingress routing to WAF nodes |
-| **WAF Node 01** | [http://localhost:8091](http://localhost:8091) | HTTP | Standalone Data Plane Node 1 |
-| **WAF Node 02** | [http://localhost:8092](http://localhost:8092) | HTTP | Standalone Data Plane Node 2 |
-
-#### Testing the WAF Data Plane
+The standalone controller defaults to gRPC port `9090`; Compose overrides this to `9099` because Prometheus uses `9090`.
 
 ```bash
-# Allowed request
+curl --fail http://localhost:8080/readyz
 curl -i http://localhost:8090/ok
-
-# Test blocked route (default bootstrap policy)
 curl -i http://localhost:8090/__aurora_blocked
-# HTTP/1.1 403 Forbidden
 ```
 
----
+The final request expects HTTP 403 with the bootstrap WAF policy. Routing and policy changes can alter these responses.
 
-## 🛠️ Local Development
+For release installation, see the [systemd release guide](deploy/systemd/RELEASE_README.md) and [installer](install.sh).
 
-### Prerequisites
+## Local development
 
-Ensure the following tools are installed on your Linux machine (see [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md)):
-- **Rust** 1.98.1+ (`rustup toolchain install 1.98.1`)
-- **Go** 1.27.1+
-- **Node.js** 26.8.1+ & `npm` 12+
-- **GCC / Clang** & GNU Make
-- **NGINX development headers** (`libnginx-mod-http-ndk`, `nginx-dev` or source)
+Use the versions declared by the repository:
 
-### Building and Testing
+- Rust 1.98.1, Edition 2024: [rust-toolchain.toml](rust-toolchain.toml).
+- Go 1.27.1: [control-plane/go.mod](control-plane/go.mod).
+- Node.js 26.8.1–26.x and npm 12.0.2–12.x: [ui/package.json](ui/package.json).
+- C compiler, GNU Make and the NGINX build dependencies required by [scripts/build-nginx-module.sh](scripts/build-nginx-module.sh).
+
+The console currently uses React 19, TypeScript 7 and Vite 8.
 
 ```bash
-# 1. Install UI dependencies
 make ui-install
-
-# 2. Run static analysis, fmt checks, and unit tests
-make check
-
-# 3. Build Rust engine, C FFI module, Go controller, and React bundle
-make build
-
-# 4. Verify FFI boundary and C integration
-make ffi-smoke
-
-# 5. Start the full development stack
-make run
+make check       # Rust fmt/clippy/tests, Go checks, UI build, FFI smoke
+make build       # Release binaries and NGINX module
+make docker-up   # Build and start the Compose stack
 ```
 
----
+For UI development, run `make ui`. For the local controller, set `AURORA_JWT_SECRET` and run `make controller`; see [control-plane/README.md](control-plane/README.md). All Make commands above are defined in the [Makefile](Makefile).
 
-## 📚 Documentation
+## Observability
 
-Detailed architectural and operating documentation is maintained in [`docs/`](docs/):
+Prometheus, OpenTelemetry Metrics, OpenTelemetry Logs and Standard Stream Logs have separate extension lifecycles. NGINX sends access logs to a Unix datagram bus when at least one log consumer is active. `std-log` supports JSON, text and combined formats, with optional stdout/stderr splitting.
 
-- **[System Architecture](docs/ARCHITECTURE.md)**: Design philosophy, boundaries, and data flow.
-- **[Zero-Downtime & High Availability](docs/HA_ZERO_DOWNTIME.md)**: Dynamic reloads, state transfer, and crash resilience.
-- **[Threat Model](docs/THREAT_MODEL.md)**: Security boundaries, attack vectors, and mitigations.
-- **[Rules Engine & Compiler Backend](docs/RULES_BACKEND.md)**: AST, SQLite schema migrations, and compilation pipeline.
-- **[NGINX Runtime Contract](docs/RUNTIME.md)**: Event loop hooks, access-phase interceptors, and error handling.
-- **[C ABI & FFI Boundary](docs/FFI.md)**: ABI v3 memory safety, layout, and lifetime conventions.
-- **[Observability & Prometheus](docs/OBSERVABILITY.md)**: Metrics, health probes, and audit logging.
-- **[High Pressure Performance Audit](docs/METRICS_PRESSURE_AUDIT.md)**: Benchmark results under 20M+ requests.
-- **[Local Run Guide](docs/LOCAL_RUN.md)**: Step-by-step setup on Debian/Ubuntu systems.
+Logs are best-effort: queues and output limits can drop records, and they are not a durable audit trail. Configuration examples, stream limits and verification commands are in [Observability](docs/observability.md).
 
----
+## Documentation
 
-## 🤝 Contributing
+- [Codebase ownership and boundaries](CODEBASE.md)
+- [Spec synchronization and recovery](docs/spec-sync-architecture.md)
+- [Gateway runtime model](docs/gateway-runtime-model.md)
+- [Observability](docs/observability.md)
+- [NGINX adapter](adapters/nginx/README.md)
+- [Control plane](control-plane/README.md)
+- [Console development](ui/README.md)
+- [Contributing](CONTRIBUTING.md), [Code of Conduct](CODE_OF_CONDUCT.md), [Security](SECURITY.md)
 
-We welcome community contributions! Please read our **[Contributing Guidelines](CONTRIBUTING.md)** and **[Code of Conduct](CODE_OF_CONDUCT.md)** before submitting pull requests.
+## License
 
-Our codebase enforces strict architectural rules:
-- **Workflow Isolation**: Avoid god contexts and shared generic helpers; keep logic at the workflow owner.
-- **CTE-First SQL**: Repositories use CTEs for traceable, deterministic database interactions.
-- **Zero Allocations on Hot Path**: Keep data-plane request evaluation memory overhead minimal.
-
----
-
-## 🔒 Security
-
-For instructions on reporting security vulnerabilities, please refer to our **[Security Policy](SECURITY.md)**. Please **do not** report vulnerabilities through public GitHub issues.
-
----
-
-## 📄 License
-
-Aurora API Gateway is licensed under the **[Apache License, Version 2.0](LICENSE)**.
-
-```
-Copyright 2026 Aurora API Gateway Authors
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-```
+[Apache License 2.0](LICENSE).

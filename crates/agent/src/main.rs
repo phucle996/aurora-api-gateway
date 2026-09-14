@@ -43,7 +43,10 @@ async fn main() -> Result<()> {
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "info,aurora_agent=debug".into()),
         )
-        .with(tracing_subscriber::fmt::layer())
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(aurora_agent::extension::std_log::output::DiagnosticWriter),
+        )
         .init();
 
     // 2. Load Configuration

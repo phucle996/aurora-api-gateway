@@ -59,6 +59,7 @@ pub fn render_extensions(
     let mut metrics_instances = 0;
     let mut opentelemetry_metrics_instances = 0;
     let mut opentelemetry_logs_instances = 0;
+    let mut std_log_instances = 0;
     let mut jwt_policy = None;
     let mut rate_limit_policy = None;
     let mut conn_limit_policy = None;
@@ -116,6 +117,9 @@ pub fn render_extensions(
                 config,
                 &mut opentelemetry_logs_instances,
             )?,
+            "std-log" | "stdout-logs" | "stdout-stderr-logs" => {
+                crate::extension::std_log::materialize(instance, config, &mut std_log_instances)?
+            }
             "engine-jwt-rs256" => jwt::materialize(
                 instance,
                 config,

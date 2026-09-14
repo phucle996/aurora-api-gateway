@@ -249,6 +249,7 @@ func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*Spec, 
 			if err != nil {
 				return nil, "", "", fmt.Errorf("resolve extension manifest digest: %w", err)
 			}
+			doc.Extensions = make([]ExtensionInstanceSpec, 0, len(auth.Extensions))
 			for _, ext := range auth.Extensions {
 				manifest, ok := extensionmanifest.Find(ext.ManifestKey, ext.ManifestVersion)
 				if !ok {

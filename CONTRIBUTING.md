@@ -8,7 +8,7 @@ By participating, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md
 
 ## Architecture & Development Principles
 
-Before contributing code, please review [Architecture](docs/ARCHITECTURE.md) and adhere to our core architectural invariants:
+Before contributing code, please review [Codebase ownership](CODEBASE.md) and adhere to our core architectural invariants:
 
 1. **Workflow-First Development**:
    - Focus on end-to-end workflows over arbitrary abstractions or premature utility layers.
@@ -30,11 +30,11 @@ Before contributing code, please review [Architecture](docs/ARCHITECTURE.md) and
 
 ## Development Environment & Toolchain
 
-Ensure your system meets the baseline toolchain requirements (see [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md)):
+Ensure your system meets the baseline toolchain requirements (see [README prerequisites](README.md#local-development)):
 - **Rust**: 1.98.1+ (Edition 2024)
 - **Go**: 1.27.1+
 - **Node.js**: 26.8.1+ / npm 12+
-- **Docker & Docker Compose**: For multi-node cluster verification
+- **Docker & Docker Compose**: For gateway/controller integration verification
 - **C Compiler & Make**: `gcc` / `clang`, GNU Make
 
 ### Quick Verification
@@ -92,7 +92,6 @@ Before opening a PR, ensure code adheres to standard formatting:
 - **UI (React / TypeScript)**:
   ```bash
   cd ui
-  npm run lint
   npm run build
   ```
 

@@ -31,6 +31,8 @@ type Manifest struct {
 	DefaultConfig     json.RawMessage `json:"default_config"`
 	RequiredForEnable []string        `json:"required_for_enable"`
 	Builtin           bool            `json:"builtin"`
+
+	parsedSchema map[string]any
 }
 
 var catalog struct {
@@ -71,15 +73,15 @@ func load() error {
 				catalog.err = fmt.Errorf("invalid extension manifest %q in %s", manifest.Key, entry.Name())
 				return
 			}
-			var configSchema struct {
-				Properties map[string]json.RawMessage `json:"properties"`
-			}
-			if err := json.Unmarshal(manifest.ConfigSchema, &configSchema); err != nil {
+			var fullSchema map[string]any
+			if err := json.Unmarshal(manifest.ConfigSchema, &fullSchema); err != nil {
 				catalog.err = fmt.Errorf("decode config schema for %s: %w", manifest.Key, err)
 				return
 			}
+			manifest.parsedSchema = fullSchema
+			properties, _ := fullSchema["properties"].(map[string]any)
 			for _, field := range manifest.RequiredForEnable {
-				if strings.TrimSpace(field) == "" || configSchema.Properties[field] == nil {
+				if strings.TrimSpace(field) == "" || properties[field] == nil {
 					catalog.err = fmt.Errorf("extension manifest %q has invalid required_for_enable field %q", manifest.Key, field)
 					return
 				}
@@ -156,9 +158,11 @@ func ValidateConfig(manifest Manifest, raw string) (string, error) {
 		}
 		return "", fmt.Errorf("decode trailing config JSON: %w", err)
 	}
-	var schema map[string]any
-	if err := json.Unmarshal(manifest.ConfigSchema, &schema); err != nil {
-		return "", fmt.Errorf("decode config schema: %w", err)
+	schema := manifest.parsedSchema
+	if schema == nil {
+		if err := json.Unmarshal(manifest.ConfigSchema, &schema); err != nil {
+			return "", fmt.Errorf("decode config schema: %w", err)
+		}
 	}
 	if err := validateValue(schema, value, "config"); err != nil {
 		return "", err
@@ -222,14 +226,6 @@ func validateValue(schema map[string]any, value any, path string) error {
 			return fmt.Errorf("%s must be an object", path)
 		}
 		properties, _ := schema["properties"].(map[string]any)
-		propertySchemas := make(map[string]map[string]any, len(properties))
-		for key, rawProperty := range properties {
-			property, ok := rawProperty.(map[string]any)
-			if !ok {
-				return fmt.Errorf("schema property %s is invalid", key)
-			}
-			propertySchemas[key] = property
-		}
 		if required, ok := schema["required"].([]any); ok {
 			for _, rawRequired := range required {
 				key, ok := rawRequired.(string)
@@ -243,12 +239,16 @@ func validateValue(schema map[string]any, value any, path string) error {
 		}
 		additional, _ := schema["additionalProperties"].(bool)
 		for key, child := range object {
-			property, exists := propertySchemas[key]
+			rawProperty, exists := properties[key]
 			if !exists {
 				if !additional {
 					return fmt.Errorf("%s.%s is not supported", path, key)
 				}
 				continue
+			}
+			property, ok := rawProperty.(map[string]any)
+			if !ok {
+				return fmt.Errorf("schema property %s is invalid", key)
 			}
 			if err := validateValue(property, child, path+"."+key); err != nil {
 				return err

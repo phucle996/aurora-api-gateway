@@ -5,10 +5,14 @@ use super::opentelemetry_metrics::{
     OtlpMetricsConfig, OtlpMetricsExporter, spawn_otlp_metrics_worker,
 };
 use super::prometheus::spawn_prometheus_server;
+use super::std_log::{
+    StdLogConfig, StdLogFormat, StdLogLevel, StdLogWorkerHandle, spawn_std_log_worker,
+};
 use crate::logs::LogBus;
 use crate::metrics::MetricsCollector;
 use crate::spec::extensions::{
     ExtensionInstanceSpec, MetricsExtensionSpec, OpenTelemetryLogsSpec, OpenTelemetryMetricsSpec,
+    StdLogSpec,
 };
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
@@ -32,6 +36,10 @@ pub struct ExtensionDispatcher {
     // OpenTelemetry logs extension lifecycle
     pub(crate) logs_worker: Option<OtlpLogsWorkerHandle>,
     last_otel_logs_spec: Option<OpenTelemetryLogsSpec>,
+
+    // Standard stream logs (stdout/stderr) extension lifecycle
+    pub(crate) std_log_worker: Option<StdLogWorkerHandle>,
+    last_std_log_spec: Option<StdLogSpec>,
 }
 
 impl ExtensionDispatcher {
@@ -46,6 +54,8 @@ impl ExtensionDispatcher {
             last_otel_metrics_config: None,
             logs_worker: None,
             last_otel_logs_spec: None,
+            std_log_worker: None,
+            last_std_log_spec: None,
         }
     }
 
@@ -53,6 +63,7 @@ impl ExtensionDispatcher {
         let mut metrics = None;
         let mut otel = None;
         let mut otel_logs = None;
+        let mut std_log = None;
 
         for instance in instances {
             match instance.renderer.as_str() {
@@ -142,6 +153,38 @@ impl ExtensionDispatcher {
                     }
                     otel_logs = Some(spec);
                 }
+                "std-log" | "stdout-logs" | "stdout-stderr-logs" => {
+                    if std_log.is_some() {
+                        return Err("NodeSpec contains more than one std-log extension".to_string());
+                    }
+                    let spec = serde_json::from_str::<StdLogSpec>(&instance.config_json).map_err(
+                        |error| {
+                            format!(
+                                "decode std-log extension instance {} config: {error}",
+                                instance.instance_id
+                            )
+                        },
+                    )?;
+                    if !matches!(
+                        spec.format.to_ascii_lowercase().as_str(),
+                        "json" | "text" | "combined"
+                    ) {
+                        return Err(format!(
+                            "std-log extension instance {} unsupported format: {}",
+                            instance.instance_id, spec.format
+                        ));
+                    }
+                    if !matches!(
+                        spec.log_level.to_ascii_lowercase().as_str(),
+                        "info" | "warn" | "error" | "all"
+                    ) {
+                        return Err(format!(
+                            "std-log extension instance {} unsupported log_level: {}",
+                            instance.instance_id, spec.log_level
+                        ));
+                    }
+                    std_log = Some(spec);
+                }
                 _ => {}
             }
         }
@@ -181,6 +224,9 @@ impl ExtensionDispatcher {
 
         // Dispatch OpenTelemetry logs background exporter independently
         self.dispatch_logs(otel_logs.as_ref()).await;
+
+        // Dispatch Standard stream logs (stdout/stderr) independently
+        self.dispatch_std_log(std_log.as_ref()).await;
 
         Ok(())
     }
@@ -312,6 +358,63 @@ impl ExtensionDispatcher {
         self.last_otel_logs_spec = otel_logs_spec.cloned();
     }
 
+    async fn dispatch_std_log(&mut self, std_log_spec: Option<&StdLogSpec>) {
+        let is_active = std_log_spec.filter(|s| s.enabled).is_some();
+
+        if !is_active {
+            if let Some(mut worker) = self.std_log_worker.take() {
+                info!("Stopping standard stream logs extension");
+                worker.shutdown(std::time::Duration::from_secs(3)).await;
+            }
+            self.last_std_log_spec = None;
+            return;
+        }
+
+        if self.std_log_worker.is_some() && self.last_std_log_spec.as_ref() == std_log_spec {
+            return;
+        }
+
+        if let Some(mut worker) = self.std_log_worker.take() {
+            info!("Reloading standard stream logs extension with updated configuration");
+            worker.shutdown(std::time::Duration::from_secs(3)).await;
+        }
+
+        let spec = std_log_spec.unwrap();
+        let format = match StdLogFormat::parse(&spec.format) {
+            Ok(f) => f,
+            Err(e) => {
+                tracing::error!("Failed to parse std-log format: {e}");
+                return;
+            }
+        };
+        let log_level = match StdLogLevel::parse(&spec.log_level) {
+            Ok(l) => l,
+            Err(e) => {
+                tracing::error!("Failed to parse std-log log_level: {e}");
+                return;
+            }
+        };
+
+        let config = StdLogConfig {
+            enabled: spec.enabled,
+            format,
+            split_streams: spec.split_streams,
+            log_level,
+            include_waf_details: spec.include_waf_details,
+        };
+
+        let subscription = self.log_bus.as_ref().map(|b| b.subscribe("std-log"));
+        let handle = spawn_std_log_worker(config, subscription);
+        self.std_log_worker = Some(handle);
+        info!(
+            format = %spec.format,
+            split_streams = spec.split_streams,
+            log_level = %spec.log_level,
+            "Spawned standard stream logs background worker"
+        );
+        self.last_std_log_spec = std_log_spec.cloned();
+    }
+
     pub async fn shutdown_all(&mut self) {
         if let Some(cancel) = self.prometheus_shutdown.take() {
             cancel.cancel();
@@ -322,9 +425,13 @@ impl ExtensionDispatcher {
         if let Some(mut worker) = self.logs_worker.take() {
             worker.shutdown(std::time::Duration::from_secs(3)).await;
         }
+        if let Some(mut worker) = self.std_log_worker.take() {
+            worker.shutdown(std::time::Duration::from_secs(3)).await;
+        }
         self.last_prometheus_port = None;
         self.last_otel_metrics_config = None;
         self.last_otel_logs_spec = None;
+        self.last_std_log_spec = None;
     }
 }
 
@@ -514,5 +621,64 @@ mod tests {
         }];
         let err = dispatcher.apply_spec(&instances).await.unwrap_err();
         assert!(err.contains("decode opentelemetry-logs extension instance logs-missing config"));
+    }
+
+    #[tokio::test]
+    async fn dispatcher_starts_and_stops_std_log_instance() {
+        let mut dispatcher = ExtensionDispatcher::new(Arc::new("node-01".to_string()), None);
+        let instances = vec![ExtensionInstanceSpec {
+            instance_id: "std-log-inst".to_string(),
+            key: "builtin/std-log".to_string(),
+            version: 1,
+            renderer: "std-log".to_string(),
+            manifest_digest: String::new(),
+            config_json: r#"{"enabled":true,"format":"json","split_streams":true,"log_level":"info","include_waf_details":true}"#.to_string(),
+        }];
+
+        dispatcher.apply_spec(&instances).await.unwrap();
+        assert!(dispatcher.std_log_worker.is_some());
+
+        dispatcher.apply_spec(&[]).await.unwrap();
+        assert!(dispatcher.std_log_worker.is_none());
+    }
+
+    #[tokio::test]
+    async fn dispatcher_errors_on_duplicate_std_log() {
+        let mut dispatcher = ExtensionDispatcher::new(Arc::new("node-01".to_string()), None);
+        let instances = vec![
+            ExtensionInstanceSpec {
+                instance_id: "std-log-1".to_string(),
+                key: "builtin/std-log".to_string(),
+                version: 1,
+                renderer: "std-log".to_string(),
+                manifest_digest: String::new(),
+                config_json: r#"{"enabled":true,"format":"json","split_streams":true,"log_level":"info","include_waf_details":true}"#.to_string(),
+            },
+            ExtensionInstanceSpec {
+                instance_id: "std-log-2".to_string(),
+                key: "builtin/std-log".to_string(),
+                version: 1,
+                renderer: "std-log".to_string(),
+                manifest_digest: String::new(),
+                config_json: r#"{"enabled":true,"format":"json","split_streams":true,"log_level":"info","include_waf_details":true}"#.to_string(),
+            },
+        ];
+        let err = dispatcher.apply_spec(&instances).await.unwrap_err();
+        assert!(err.contains("NodeSpec contains more than one std-log extension"));
+    }
+
+    #[tokio::test]
+    async fn dispatcher_rejects_invalid_format_in_std_log() {
+        let mut dispatcher = ExtensionDispatcher::new(Arc::new("node-01".to_string()), None);
+        let instances = vec![ExtensionInstanceSpec {
+            instance_id: "std-log-bad-fmt".to_string(),
+            key: "builtin/std-log".to_string(),
+            version: 1,
+            renderer: "std-log".to_string(),
+            manifest_digest: String::new(),
+            config_json: r#"{"enabled":true,"format":"binary","split_streams":true,"log_level":"info","include_waf_details":true}"#.to_string(),
+        }];
+        let err = dispatcher.apply_spec(&instances).await.unwrap_err();
+        assert!(err.contains("unsupported format: binary"));
     }
 }

@@ -7,8 +7,8 @@ func TestCatalogDefaultsMatchTheirRuntimeSchemas(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load catalog: %v", err)
 	}
-	if len(manifests) != 22 {
-		t.Fatalf("expected 22 packaged manifests, got %d", len(manifests))
+	if len(manifests) != 23 {
+		t.Fatalf("expected 23 packaged manifests, got %d", len(manifests))
 	}
 	digest, err := Digest()
 	if err != nil || len(digest) != 64 {
@@ -188,5 +188,48 @@ func TestOpenTelemetryLogsManifestValidation(t *testing.T) {
 	invalidLevelEnum := `{"enabled":true,"endpoint":"http://127.0.0.1:4318","protocol":"http","batch_size":100,"flush_interval_ms":2000,"timeout_ms":5000,"service_name":"aurora","log_level":"verbose"}`
 	if _, err := ValidateConfig(manifest, invalidLevelEnum); err == nil {
 		t.Fatal("expected invalid log_level enum to be rejected")
+	}
+}
+
+func TestStdLogManifestValidation(t *testing.T) {
+	manifest, ok := Find("builtin/std-log", 1)
+	if !ok {
+		t.Fatal("std-log manifest not found in catalog")
+	}
+
+	// Valid default config
+	valid := `{"enabled":true,"format":"json","split_streams":true,"log_level":"info","include_waf_details":true}`
+	if _, err := ValidateConfig(manifest, valid); err != nil {
+		t.Fatalf("expected valid std-log config: %v", err)
+	}
+
+	// Valid text format
+	validText := `{"enabled":true,"format":"text","split_streams":false,"log_level":"warn","include_waf_details":false}`
+	if _, err := ValidateConfig(manifest, validText); err != nil {
+		t.Fatalf("expected valid text std-log config: %v", err)
+	}
+
+	// Invalid format enum
+	invalidFormat := `{"enabled":true,"format":"xml","split_streams":true,"log_level":"info","include_waf_details":true}`
+	if _, err := ValidateConfig(manifest, invalidFormat); err == nil {
+		t.Fatal("expected invalid format to be rejected")
+	}
+
+	// Invalid log_level enum
+	invalidLogLevel := `{"enabled":true,"format":"json","split_streams":true,"log_level":"debug","include_waf_details":true}`
+	if _, err := ValidateConfig(manifest, invalidLogLevel); err == nil {
+		t.Fatal("expected invalid log_level to be rejected")
+	}
+
+	// Missing format
+	missingFormat := `{"enabled":true,"split_streams":true,"log_level":"info","include_waf_details":true}`
+	if _, err := ValidateConfig(manifest, missingFormat); err == nil {
+		t.Fatal("expected missing format to be rejected")
+	}
+
+	// Missing split_streams
+	missingSplit := `{"enabled":true,"format":"json","log_level":"info","include_waf_details":true}`
+	if _, err := ValidateConfig(manifest, missingSplit); err == nil {
+		t.Fatal("expected missing split_streams to be rejected")
 	}
 }

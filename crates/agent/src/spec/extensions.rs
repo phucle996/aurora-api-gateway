@@ -135,3 +135,25 @@ fn default_otlp_timeout() -> u64 {
 fn default_otlp_service_name() -> String {
     "aurora-gateway".to_string()
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct StdLogSpec {
+    pub enabled: bool,
+    #[serde(default = "default_std_log_format")]
+    pub format: String,
+    #[serde(default = "default_true")]
+    pub split_streams: bool,
+    #[serde(default = "default_std_log_level")]
+    pub log_level: String,
+    #[serde(default = "default_true")]
+    pub include_waf_details: bool,
+}
+
+fn default_std_log_format() -> String {
+    "json".to_string()
+}
+
+fn default_std_log_level() -> String {
+    "info".to_string()
+}

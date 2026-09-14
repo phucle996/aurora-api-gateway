@@ -1,0 +1,121 @@
+{
+  "key": "builtin/std-log",
+  "version": 1,
+  "id": "std-log",
+  "name": "Standard Stream Logs",
+  "category": "observability",
+  "description": "Streams structured HTTP access and security audit logs directly to standard streams (stdout for general traffic, stderr for errors and WAF blocks).",
+  "renderer": "std-log",
+  "builtin": true,
+  "default_config": {
+    "enabled": true,
+    "format": "json",
+    "split_streams": true,
+    "log_level": "info",
+    "include_waf_details": true
+  },
+  "ui_schema": {
+    "layout_type": "form",
+    "fields": [
+      {
+        "key": "format",
+        "label": "Log Format",
+        "type": "select",
+        "options": [
+          {
+            "label": "JSON (Structured, 12-Factor/Cloud-Native)",
+            "value": "json"
+          },
+          {
+            "label": "Text (Human-Readable Console Output)",
+            "value": "text"
+          },
+          {
+            "label": "Combined (Standard NGINX Combined Log)",
+            "value": "combined"
+          }
+        ],
+        "description": "Định dạng xuất dòng log ra console",
+        "required": true
+      },
+      {
+        "key": "split_streams",
+        "label": "Split stdout & stderr",
+        "type": "boolean",
+        "description": "Đẩy request 2xx/3xx/4xx ra stdout, lỗi 5xx và WAF blocks ra stderr",
+        "required": true
+      },
+      {
+        "key": "log_level",
+        "label": "Log Level Filter",
+        "type": "select",
+        "options": [
+          {
+            "label": "INFO (Standard Access + Security)",
+            "value": "info"
+          },
+          {
+            "label": "WARN (Warnings & Throttled)",
+            "value": "warn"
+          },
+          {
+            "label": "ERROR (WAF Blocks & 5xx Only)",
+            "value": "error"
+          },
+          {
+            "label": "ALL (Capture All Severity Levels)",
+            "value": "all"
+          }
+        ],
+        "description": "Mức độ log tối thiểu được xuất ra terminal/stream",
+        "required": true
+      },
+      {
+        "key": "include_waf_details",
+        "label": "Include WAF Security Details",
+        "type": "boolean",
+        "description": "Kèm theo hành vi WAF (allow/block) và Rule ID trong log",
+        "required": true
+      }
+    ]
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "enabled",
+      "format",
+      "split_streams",
+      "log_level",
+      "include_waf_details"
+    ],
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "format": {
+        "type": "string",
+        "enum": [
+          "json",
+          "text",
+          "combined"
+        ]
+      },
+      "split_streams": {
+        "type": "boolean"
+      },
+      "log_level": {
+        "type": "string",
+        "enum": [
+          "info",
+          "warn",
+          "error",
+          "all"
+        ]
+      },
+      "include_waf_details": {
+        "type": "boolean"
+      }
+    }
+  }
+}

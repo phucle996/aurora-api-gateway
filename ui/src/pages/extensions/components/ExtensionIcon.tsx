@@ -309,6 +309,10 @@ export function ExtensionIcon({ id, category, className = 'w-5 h-5' }: Extension
     case 'datadog':
     case 'datadog_apm':
       return <LineChart className={className} />;
+    case 'std-log':
+    case 'stdout-logs':
+    case 'stdout-stderr-logs':
+      return <Terminal className={className} />;
     case 'access-log':
     case 'access_logger':
       return <FileText className={className} />;

@@ -1,0 +1,9 @@
+{
+  "name": "aurora-std-log-e2e",
+  "version": "1.0.0",
+  "description": "Cross-Tier E2E Playbook for Aurora Standard Stream Logs (std-log) Extension (Playwright UI, Non-Fallback Schema, SHM LogBus, Stream Splitting, Format Matrix, Chaos Leak Audit)",
+  "type": "module",
+  "scripts": {
+    "test": "node index.mjs"
+  }
+}
