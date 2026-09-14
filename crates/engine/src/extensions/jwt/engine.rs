@@ -4,15 +4,21 @@ use super::types::{
     MAX_CLAIM_RULES_PER_ORIGIN, MAX_EXCLUDE_PATHS_PER_ORIGIN, MAX_JWT_ORIGINS,
     MAX_JWT_POLICY_BYTES, OriginPolicy, Snapshot,
 };
+use crate::radix::PathRadixTree;
 use crate::{host_matches, host_specificity, Error, MAX_PATH_BYTES};
 use jsonwebtoken::{decode, decode_header, Validation};
 use regex::Regex;
 use std::collections::HashSet;
 
+pub(crate) struct IndexedOrigin {
+    pub(crate) rank: usize,
+    pub(crate) policy: OriginPolicy,
+}
+
 /// Immutable, request-safe JWT engine snapshot.
 pub struct JwtEngine {
     generation: u64,
-    origins: Vec<OriginPolicy>,
+    origins: PathRadixTree<IndexedOrigin>,
 }
 
 impl JwtEngine {
@@ -46,8 +52,8 @@ impl JwtEngine {
             (o.priority, host_specificity(o.host()), o.id.clone())
         });
 
-        let mut origins = Vec::with_capacity(origins_list.len());
-        for origin in origins_list {
+        let mut origins = PathRadixTree::new();
+        for (rank, origin) in origins_list.into_iter().enumerate() {
             let host_bytes = origin.host().as_bytes().to_vec();
             if !valid_host(origin.host())
                 || !valid_path_prefix(&origin.path_prefix)
@@ -130,15 +136,17 @@ impl JwtEngine {
                 });
             }
 
-            origins.push(OriginPolicy {
+            let prefix_bytes = origin.path_prefix.as_bytes().to_vec();
+            let policy = OriginPolicy {
                 host: host_bytes,
-                path_prefix: origin.path_prefix.into_bytes(),
+                path_prefix: prefix_bytes.clone(),
                 exclude_paths,
                 validation,
                 primary_key,
                 keys_by_kid,
                 claim_rules,
-            });
+            };
+            origins.insert(&prefix_bytes, IndexedOrigin { rank, policy });
         }
 
         Ok(Self {
@@ -167,15 +175,16 @@ impl JwtEngine {
             return Err(Error::InvalidRequest);
         }
 
-        let Some(origin) = self
-            .origins
-            .iter()
-            .find(|o| host_matches(&o.host, host) && path_matches(&o.path_prefix, path))
-        else {
+        let Some(matched) = self.origins.find_best(
+            path,
+            |item| host_matches(&item.policy.host, host),
+            |item| item.rank,
+        ) else {
             return Ok(JwtDecision::Allow {
                 forwarded_headers: Vec::new(),
             });
         };
+        let origin = &matched.policy;
 
         // Check exclude_paths (Default-Deny bypass list)
         if origin.exclude_paths.iter().any(|ex| path_matches(ex, path)) {

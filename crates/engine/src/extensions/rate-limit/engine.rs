@@ -5,15 +5,21 @@ use crate::extensions::rate_limit::types::{
     MAX_RATE_LIMIT_RULES, NUM_SHARDS, OnErrorAction, RateLimitDecision, RateLimitMode,
     ResolvedHeader, Snapshot,
 };
+use crate::radix::PathRadixTree;
 use crate::{Error, MAX_PATH_BYTES, host_matches, host_specificity};
 use std::sync::Mutex;
 use std::time::SystemTime;
+
+pub(crate) struct IndexedRule {
+    pub(crate) idx: usize,
+    pub(crate) rule: CompiledRule,
+}
 
 pub struct RateLimitEngine {
     generation: u64,
     mode: RateLimitMode,
     shard_cfg: ShardConfig,
-    rules: Vec<CompiledRule>,
+    rules: PathRadixTree<IndexedRule>,
     shards: Vec<Mutex<Shard>>,
     redis: Option<RedisRateLimiter>,
 }
@@ -23,13 +29,6 @@ fn now_epoch_secs_and_ms() -> (u64, u64) {
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap_or_default();
     (now.as_secs(), now.as_millis() as u64)
-}
-
-fn path_matches(prefix: &[u8], path: &[u8]) -> bool {
-    path.starts_with(prefix)
-        && (prefix.ends_with(b"/")
-            || path.len() == prefix.len()
-            || path.get(prefix.len()) == Some(&b'/'))
 }
 
 fn render_template(template: &str, vars: &[(&str, &str)]) -> String {
@@ -266,6 +265,11 @@ impl RateLimitEngine {
             None
         };
 
+        let mut rules_tree = PathRadixTree::new();
+        for (idx, rule) in rules.into_iter().enumerate() {
+            rules_tree.insert(&rule.path_prefix.clone(), IndexedRule { idx, rule });
+        }
+
         Ok(Self {
             generation: snapshot.generation,
             mode: snapshot.mode,
@@ -275,7 +279,7 @@ impl RateLimitEngine {
                 overflow_strategy: snapshot.overflow_strategy,
                 algorithm: snapshot.algorithm,
             },
-            rules,
+            rules: rules_tree,
             shards,
             redis,
         })
@@ -311,10 +315,19 @@ impl RateLimitEngine {
         let mut min_remaining = u32::MAX;
         let mut max_reset_epoch = 0;
         let mut audit_decision = None;
+        let mut blocked_decision = None;
+        let mut eval_err = None;
 
-        for (idx, rule) in self.rules.iter().enumerate() {
-            if !host_matches(&rule.host, host) || !path_matches(&rule.path_prefix, path) {
-                continue;
+        self.rules.for_each_match(path, |item| {
+            if eval_err.is_some() || blocked_decision.is_some() {
+                return;
+            }
+
+            let idx = item.idx;
+            let rule = &item.rule;
+
+            if !host_matches(&rule.host, host) {
+                return;
             }
 
             matched_any = true;
@@ -322,10 +335,19 @@ impl RateLimitEngine {
                 LimitBy::ClientIp => client_ip,
                 LimitBy::RoutePath => path,
                 LimitBy::Header => {
-                    let h_name = rule.header_name.as_deref().ok_or(Error::InvalidRequest)?;
+                    let h_name = match rule.header_name.as_deref().ok_or(Error::InvalidRequest) {
+                        Ok(h) => h,
+                        Err(e) => {
+                            eval_err = Some(e);
+                            return;
+                        }
+                    };
                     match header_lookup(h_name) {
                         Some(v) if !v.is_empty() => v,
-                        _ => return Err(Error::InvalidRequest),
+                        _ => {
+                            eval_err = Some(Error::InvalidRequest);
+                            return;
+                        }
                     }
                 }
             };
@@ -360,7 +382,8 @@ impl RateLimitEngine {
             };
             if !decision.allowed {
                 apply_custom_response(&mut decision, rule);
-                return Ok(decision);
+                blocked_decision = Some(decision);
+                return;
             }
             if decision.remaining < min_remaining {
                 min_remaining = decision.remaining;
@@ -371,6 +394,13 @@ impl RateLimitEngine {
             if decision.action == ActionOnExceeded::Audit {
                 audit_decision = Some(decision);
             }
+        });
+
+        if let Some(err) = eval_err {
+            return Err(err);
+        }
+        if let Some(decision) = blocked_decision {
+            return Ok(decision);
         }
 
         if let Some(mut audit) = audit_decision {

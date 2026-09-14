@@ -50,6 +50,10 @@ harness = false
 name = "request_termination"
 harness = false
 
+[[bench]]
+name = "radix_vs_linear"
+harness = false
+
 [dependencies]
 hashbrown = { version = "0.17.1", default-features = false, features = ["inline-more"] }
 serde = { version = "1", features = ["derive"] }

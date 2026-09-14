@@ -119,6 +119,14 @@ export async function runPhase5(fixture) {
   }
   console.log('     • HTTP/2 multiplexing: 5 concurrent streams multiplexed on single connection SUCCESS');
 
+  // 4c. HTTP/3 (QUIC) Alt-Svc Advertisement & UDP Listener Verification
+  assert.ok(h2Res.headers['alt-svc']?.includes('h3=":443"'), `Expected Alt-Svc header advertising h3=":443", got ${h2Res.headers['alt-svc']}`);
+  console.log(`     • HTTP/3 (QUIC) Alt-Svc Discovery: ${h2Res.headers['alt-svc']}`);
+
+  const quicProbe = await fixture.probeQuicUdp(3000);
+  assert.ok(quicProbe.alive, 'Expected QUIC UDP listener to be reachable');
+  console.log(`     • HTTP/3 (QUIC) UDP 443 Listener: Port ${fixture.gatewayQuicPort} active and accepting QUIC datagrams`);
+
   // 5. Verify Server-Sent Events (SSE) Streaming
   console.log('  [5/6] Verifying Server-Sent Events (SSE) streaming delivery...');
   const sseRes = await fixture.requestSse('/sse', { host: 'protocols.aurora.local' });

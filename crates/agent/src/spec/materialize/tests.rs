@@ -833,8 +833,8 @@ fn test_generate_domain_routing_conf_features() {
     // 1. Check HTTP server block
     assert!(conf.contains("server {\n    listen 80;\n    server_name api.aurora.local;"));
 
-    // 2. Check HTTPS server block with mTLS
-    assert!(conf.contains("server {\n    listen 443 ssl;\n    listen 127.0.0.1:9443 ssl proxy_protocol;\n    server_name api.aurora.local;"));
+    // 2. Check HTTPS server block with mTLS & HTTP/3
+    assert!(conf.contains("server {\n    listen 443 ssl;\n    listen 443 quic reuseport;\n    listen 127.0.0.1:9443 ssl proxy_protocol;\n    server_name api.aurora.local;"));
     assert!(conf.contains("ssl_certificate /var/lib/aurora-routing/certs/cert_123.crt;"));
     assert!(conf.contains("ssl_certificate_key /var/lib/aurora-routing/certs/cert_123.key;"));
     assert!(conf.contains("ssl_client_certificate /var/lib/aurora-routing/certs/cert_123_ca.crt;"));

@@ -125,6 +125,7 @@ pub(crate) struct CompiledClaimRule {
 
 pub(crate) struct OriginPolicy {
     pub(crate) host: Vec<u8>,
+    #[allow(dead_code)]
     pub(crate) path_prefix: Vec<u8>,
     pub(crate) exclude_paths: Vec<Vec<u8>>,
     pub(crate) validation: Validation,

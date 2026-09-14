@@ -31,6 +31,7 @@ export class L7RouteFixture {
     this.gatewayBase = null;
     this.gatewayHttpsPort = null;
     this.gatewayHttpsBase = null;
+    this.gatewayQuicPort = null;
     this.metricsPort = null;
 
     this.originCorePort = null;
@@ -258,7 +259,8 @@ IP.1 = 127.0.0.1
         },
         ports: [
           '127.0.0.1::80',
-          '127.0.0.1::443',
+          '127.0.0.1::443/tcp',
+          '127.0.0.1::443/udp',
           '127.0.0.1::9145',
         ],
         volumes: [
@@ -292,9 +294,12 @@ IP.1 = 127.0.0.1
     this.gatewayPort = parseInt(gwPortOutput.split(':').pop(), 10);
     this.gatewayBase = `http://127.0.0.1:${this.gatewayPort}`;
 
-    const gwHttpsOutput = (await this.docker(['port', 'node', '443'])).stdout.trim();
+    const gwHttpsOutput = (await this.docker(['port', '--protocol=tcp', 'node', '443'])).stdout.trim();
     this.gatewayHttpsPort = parseInt(gwHttpsOutput.split(':').pop(), 10);
     this.gatewayHttpsBase = `https://127.0.0.1:${this.gatewayHttpsPort}`;
+
+    const gwQuicOutput = (await this.docker(['port', '--protocol=udp', 'node', '443'])).stdout.trim();
+    this.gatewayQuicPort = parseInt(gwQuicOutput.split(':').pop(), 10);
 
     const metricsOutput = (await this.docker(['port', 'node', '9145'])).stdout.trim();
     this.metricsPort = parseInt(metricsOutput.split(':').pop(), 10);
@@ -689,6 +694,41 @@ IP.1 = 127.0.0.1
         });
         req.end();
       });
+    });
+  }
+
+  async probeQuicUdp(timeoutMs = 3000) {
+    const dgram = await import('node:dgram');
+    return new Promise((resolve, reject) => {
+      const socket = dgram.createSocket('udp4');
+      const timer = setTimeout(() => {
+        socket.close();
+        resolve({ alive: true, responded: false });
+      }, timeoutMs);
+
+      // RFC 9000 QUIC Initial datagram probe (1200 bytes minimum)
+      const probe = Buffer.alloc(1200);
+      probe[0] = 0xc0 | 0x03; // Long header + Initial packet
+      probe.writeUInt32BE(0x00000001, 1); // QUIC v1
+      probe[5] = 8; // DCID len
+      probe.fill(0x01, 6, 14); // DCID
+      probe[14] = 8; // SCID len
+      probe.fill(0x02, 15, 23); // SCID
+      probe[23] = 0; // Token len 0
+
+      socket.on('message', (msg) => {
+        clearTimeout(timer);
+        socket.close();
+        resolve({ alive: true, responded: true, msg });
+      });
+
+      socket.on('error', (err) => {
+        clearTimeout(timer);
+        socket.close();
+        reject(err);
+      });
+
+      socket.send(probe, this.gatewayQuicPort, '127.0.0.1');
     });
   }
 

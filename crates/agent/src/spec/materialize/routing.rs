@@ -66,6 +66,7 @@ pub fn generate_domain_routing_conf(spec: &Spec, routing_dir: &Path) -> String {
             .extend(d.locations.clone());
     }
 
+    let mut is_first_quic = true;
     for (host, locations) in host_map {
         // Deduplicate identical paths within the same host, preserving highest priority
         let mut path_map: HashMap<String, LocationRoutingSpec> = HashMap::new();
@@ -97,8 +98,15 @@ pub fn generate_domain_routing_conf(spec: &Spec, routing_dir: &Path) -> String {
         if let Some(cert) = matched_cert {
             let cert_file = certs_dir.join(format!("{}.crt", cert.id));
             let key_file = certs_dir.join(format!("{}.key", cert.id));
+            let quic_listen = if is_first_quic {
+                is_first_quic = false;
+                "    listen 443 quic reuseport;\n"
+            } else {
+                "    listen 443 quic;\n"
+            };
             buf.push_str(&format!(
-                "server {{\n    listen 443 ssl;\n    listen 127.0.0.1:9443 ssl proxy_protocol;\n    server_name {};\n    include /etc/nginx/domain-waf.conf;\n\n    ssl_certificate {};\n    ssl_certificate_key {};\n    ssl_protocols TLSv1.2 TLSv1.3;\n    ssl_ciphers HIGH:!aNULL:!MD5;\n",
+                "server {{\n    listen 443 ssl;\n{}    listen 127.0.0.1:9443 ssl proxy_protocol;\n    server_name {};\n    include /etc/nginx/domain-waf.conf;\n\n    ssl_certificate {};\n    ssl_certificate_key {};\n    ssl_protocols TLSv1.2 TLSv1.3;\n    ssl_ciphers HIGH:!aNULL:!MD5;\n\n    http2 on;\n    http3 on;\n    quic_retry on;\n    add_header Alt-Svc 'h3=\":443\"; ma=86400' always;\n",
+                quic_listen,
                 host,
                 cert_file.display(),
                 key_file.display()
@@ -228,5 +236,146 @@ pub fn render_locations_into(
             "        proxy_pass {}://{};\n        proxy_next_upstream error timeout http_502 http_503;\n    }}\n",
             scheme, loc.upstream
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::spec::certificate::CertificateSpec;
+    use crate::spec::routing::{DomainRoutingSpec, LocationRoutingSpec, RoutingSpec};
+    use crate::spec::schema::Spec;
+
+    #[test]
+    fn test_matches_sni() {
+        assert!(matches_sni("api.aurora.local", "api.aurora.local"));
+        assert!(matches_sni("API.Aurora.Local", "api.aurora.local"));
+        assert!(matches_sni("*.aurora.local", "api.aurora.local"));
+        assert!(matches_sni("*.aurora.local", "billing.aurora.local"));
+        assert!(!matches_sni("*.aurora.local", "aurora.local"));
+        assert!(!matches_sni("*.aurora.local", "foo.bar.aurora.local"));
+        assert!(matches_sni("*", "anything.com"));
+        assert!(!matches_sni("api.aurora.local", "other.aurora.local"));
+    }
+
+    #[test]
+    fn test_find_matching_certificate() {
+        let certs = vec![
+            CertificateSpec {
+                id: "wildcard-cert".to_string(),
+                name: "Wildcard".to_string(),
+                snis: vec!["*.aurora.local".to_string()],
+                cert_pem: "CERT1".to_string(),
+                key_pem: "KEY1".to_string(),
+                mtls_enabled: false,
+                client_ca_pem: String::new(),
+                verify_depth: 1,
+            },
+            CertificateSpec {
+                id: "exact-cert".to_string(),
+                name: "Exact".to_string(),
+                snis: vec!["api.aurora.local".to_string()],
+                cert_pem: "CERT2".to_string(),
+                key_pem: "KEY2".to_string(),
+                mtls_enabled: true,
+                client_ca_pem: "CA".to_string(),
+                verify_depth: 2,
+            },
+        ];
+
+        let exact = find_matching_certificate(&certs, "api.aurora.local");
+        assert!(exact.is_some());
+        assert_eq!(exact.unwrap().id, "exact-cert");
+
+        let wildcard = find_matching_certificate(&certs, "billing.aurora.local");
+        assert!(wildcard.is_some());
+        assert_eq!(wildcard.unwrap().id, "wildcard-cert");
+
+        let none = find_matching_certificate(&certs, "other-domain.com");
+        assert!(none.is_none());
+    }
+
+    #[test]
+    fn test_http3_quic_reuseport_materialization() {
+        let certs = vec![
+            CertificateSpec {
+                id: "cert-1".to_string(),
+                name: "Cert 1".to_string(),
+                snis: vec!["a.aurora.local".to_string()],
+                cert_pem: "C1".to_string(),
+                key_pem: "K1".to_string(),
+                mtls_enabled: false,
+                client_ca_pem: String::new(),
+                verify_depth: 1,
+            },
+            CertificateSpec {
+                id: "cert-2".to_string(),
+                name: "Cert 2".to_string(),
+                snis: vec!["b.aurora.local".to_string()],
+                cert_pem: "C2".to_string(),
+                key_pem: "K2".to_string(),
+                mtls_enabled: false,
+                client_ca_pem: String::new(),
+                verify_depth: 1,
+            },
+        ];
+
+        let spec = Spec {
+            routing: RoutingSpec {
+                domains: vec![
+                    DomainRoutingSpec {
+                        host: "a.aurora.local".to_string(),
+                        locations: vec![LocationRoutingSpec {
+                            path: "/".to_string(),
+                            upstream: "pool_a".to_string(),
+                            strip_path: false,
+                            websocket: false,
+                            priority: 10,
+                            plugins_json: None,
+                            origin_tls: None,
+                        }],
+                    },
+                    DomainRoutingSpec {
+                        host: "b.aurora.local".to_string(),
+                        locations: vec![LocationRoutingSpec {
+                            path: "/".to_string(),
+                            upstream: "pool_b".to_string(),
+                            strip_path: false,
+                            websocket: false,
+                            priority: 10,
+                            plugins_json: None,
+                            origin_tls: None,
+                        }],
+                    },
+                ],
+            },
+            certificates: certs,
+            ..Default::default()
+        };
+
+        let conf = generate_domain_routing_conf(&spec, Path::new("/var/lib/aurora-routing"));
+
+        // Verify that reuseport is only present ONCE across the entire configuration
+        let reuseport_count = conf.matches("listen 443 quic reuseport;").count();
+        assert_eq!(
+            reuseport_count, 1,
+            "reuseport must appear exactly once to avoid NGINX duplicate listen options error"
+        );
+
+        // Verify that the second HTTPS server block has listen 443 quic; without reuseport
+        let quic_non_reuseport_count = conf.matches("listen 443 quic;\n").count();
+        assert_eq!(
+            quic_non_reuseport_count, 1,
+            "second server block must use standard 'listen 443 quic;' without reuseport"
+        );
+
+        // Verify HTTP/3 and Alt-Svc directives are present in both
+        assert_eq!(conf.matches("http3 on;").count(), 2);
+        assert_eq!(conf.matches("quic_retry on;").count(), 2);
+        assert_eq!(
+            conf.matches("add_header Alt-Svc 'h3=\":443\"; ma=86400' always;")
+                .count(),
+            2
+        );
     }
 }

@@ -226,6 +226,8 @@ fn main() {
                 r.name, r.allocs_per_op
             );
         }
-        println!("  ✅ Strict Zero-Warm-Allocation Invariant PASSED (0.00 allocs in lookup/matching)!");
+        println!(
+            "  ✅ Strict Zero-Warm-Allocation Invariant PASSED (0.00 allocs in lookup/matching)!"
+        );
     }
 }

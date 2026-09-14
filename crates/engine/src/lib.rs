@@ -1,7 +1,10 @@
 //! Aurora Gateway Engine - In-process Policy Matching and Security Extensions.
 
 pub mod extensions;
+pub mod radix;
 pub mod redis_pool;
+
+pub use radix::PathRadixTree;
 
 pub use extensions::access;
 pub use extensions::connection_limit;
