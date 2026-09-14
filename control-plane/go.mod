@@ -4,7 +4,7 @@ go 1.27.1
 
 require (
 	github.com/gin-gonic/gin v1.12.0
-	github.com/quic-go/quic-go v0.59.0
+	github.com/quic-go/quic-go v0.59.1
 	golang.org/x/crypto v0.56.0
 	golang.org/x/net v0.58.0
 	google.golang.org/grpc v1.83.2
