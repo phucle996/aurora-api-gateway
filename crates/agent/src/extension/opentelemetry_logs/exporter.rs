@@ -117,18 +117,21 @@ impl OtlpLogsExporter {
                     value: Some(AnyValue {
                         value: Some(AnyValueUnion::StringValue(self.service_name.clone())),
                     }),
+                    ..Default::default()
                 },
                 KeyValue {
                     key: "host.id".to_string(),
                     value: Some(AnyValue {
                         value: Some(AnyValueUnion::StringValue(node_id.to_string())),
                     }),
+                    ..Default::default()
                 },
                 KeyValue {
                     key: "telemetry.sdk.name".to_string(),
                     value: Some(AnyValue {
                         value: Some(AnyValueUnion::StringValue("aurora-waf".to_string())),
                     }),
+                    ..Default::default()
                 },
             ],
             ..Default::default()

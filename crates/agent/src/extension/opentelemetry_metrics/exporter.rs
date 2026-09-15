@@ -91,6 +91,7 @@ impl OtlpMetricsExporter {
             value: Some(AnyValue {
                 value: Some(AnyValueUnion::StringValue(val.to_string())),
             }),
+            ..Default::default()
         }
     }
 

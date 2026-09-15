@@ -145,99 +145,61 @@ impl GatewayLogEntry {
             format!("{m} {u} -> {status} ({d:.2}ms)")
         };
 
+        let make_str_attr = |k: &str, v: String| KeyValue {
+            key: k.to_string(),
+            value: Some(AnyValue {
+                value: Some(AnyValueUnion::StringValue(v)),
+            }),
+            ..Default::default()
+        };
+        let make_int_attr = |k: &str, v: i64| KeyValue {
+            key: k.to_string(),
+            value: Some(AnyValue {
+                value: Some(AnyValueUnion::IntValue(v)),
+            }),
+            ..Default::default()
+        };
+        let make_double_attr = |k: &str, v: f64| KeyValue {
+            key: k.to_string(),
+            value: Some(AnyValue {
+                value: Some(AnyValueUnion::DoubleValue(v)),
+            }),
+            ..Default::default()
+        };
+
         let mut attributes = Vec::with_capacity(14);
-        attributes.push(KeyValue {
-            key: "service.name".to_string(),
-            value: Some(AnyValue {
-                value: Some(AnyValueUnion::StringValue(service_name.to_string())),
-            }),
-        });
-        attributes.push(KeyValue {
-            key: "telemetry.sdk.name".to_string(),
-            value: Some(AnyValue {
-                value: Some(AnyValueUnion::StringValue("aurora-waf".to_string())),
-            }),
-        });
+        attributes.push(make_str_attr("service.name", service_name.to_string()));
+        attributes.push(make_str_attr("telemetry.sdk.name", "aurora-waf".to_string()));
 
         if let Some(m) = self.method {
-            attributes.push(KeyValue {
-                key: "http.request.method".to_string(),
-                value: Some(AnyValue {
-                    value: Some(AnyValueUnion::StringValue(m)),
-                }),
-            });
+            attributes.push(make_str_attr("http.request.method", m));
         }
         if let Some(u) = self.uri {
-            attributes.push(KeyValue {
-                key: "url.path".to_string(),
-                value: Some(AnyValue {
-                    value: Some(AnyValueUnion::StringValue(u)),
-                }),
-            });
+            attributes.push(make_str_attr("url.path", u));
         }
         if let Some(s) = self.status {
-            attributes.push(KeyValue {
-                key: "http.response.status_code".to_string(),
-                value: Some(AnyValue {
-                    value: Some(AnyValueUnion::IntValue(s as i64)),
-                }),
-            });
+            attributes.push(make_int_attr("http.response.status_code", s as i64));
         }
         if let Some(ip) = self.client_ip {
-            attributes.push(KeyValue {
-                key: "client.address".to_string(),
-                value: Some(AnyValue {
-                    value: Some(AnyValueUnion::StringValue(ip)),
-                }),
-            });
+            attributes.push(make_str_attr("client.address", ip));
         }
         if let Some(d) = effective_dur {
-            attributes.push(KeyValue {
-                key: "http.request.duration_ms".to_string(),
-                value: Some(AnyValue {
-                    value: Some(AnyValueUnion::DoubleValue(d)),
-                }),
-            });
+            attributes.push(make_double_attr("http.request.duration_ms", d));
         }
         if let Some(b) = self.bytes_sent {
-            attributes.push(KeyValue {
-                key: "http.response.body.size".to_string(),
-                value: Some(AnyValue {
-                    value: Some(AnyValueUnion::IntValue(b as i64)),
-                }),
-            });
+            attributes.push(make_int_attr("http.response.body.size", b as i64));
         }
         if let Some(h) = self.host {
-            attributes.push(KeyValue {
-                key: "server.address".to_string(),
-                value: Some(AnyValue {
-                    value: Some(AnyValueUnion::StringValue(h)),
-                }),
-            });
+            attributes.push(make_str_attr("server.address", h));
         }
         if let Some(ua) = self.user_agent {
-            attributes.push(KeyValue {
-                key: "user_agent.original".to_string(),
-                value: Some(AnyValue {
-                    value: Some(AnyValueUnion::StringValue(ua)),
-                }),
-            });
+            attributes.push(make_str_attr("user_agent.original", ua));
         }
         if let Some(a) = self.waf_action {
-            attributes.push(KeyValue {
-                key: "waf.action".to_string(),
-                value: Some(AnyValue {
-                    value: Some(AnyValueUnion::StringValue(a)),
-                }),
-            });
+            attributes.push(make_str_attr("waf.action", a));
         }
         if let Some(r) = self.waf_rule_id {
-            attributes.push(KeyValue {
-                key: "waf.rule_id".to_string(),
-                value: Some(AnyValue {
-                    value: Some(AnyValueUnion::StringValue(r)),
-                }),
-            });
+            attributes.push(make_str_attr("waf.rule_id", r));
         }
 
         LogRecord {
@@ -253,6 +215,7 @@ impl GatewayLogEntry {
             flags: 0,
             trace_id: vec![],
             span_id: vec![],
+            ..Default::default()
         }
     }
 }
