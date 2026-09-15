@@ -47,4 +47,4 @@ aurora-engine = { path = "../engine" }
 opentelemetry-proto = { version = "0.27", default-features = false, features = ["gen-tonic", "metrics", "logs", "with-serde"] }
 
 [build-dependencies]
-tonic-build = "0.12"
+tonic-build = "0.14"
