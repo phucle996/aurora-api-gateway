@@ -278,6 +278,9 @@ func validateValue(schema map[string]any, value any, path string) error {
 		if !ok {
 			return fmt.Errorf("%s must be a string", path)
 		}
+		if minimum, ok := schema["minLength"].(float64); ok && len(stringValue) < int(minimum) {
+			return fmt.Errorf("%s must be at least %d characters", path, int(minimum))
+		}
 		if maximum, ok := schema["maxLength"].(float64); ok && len(stringValue) > int(maximum) {
 			return fmt.Errorf("%s exceeds %d characters", path, int(maximum))
 		}

@@ -1,0 +1,139 @@
+{
+  "key": "builtin/correlation-id",
+  "version": 1,
+  "id": "correlation-id",
+  "name": "Correlation ID & W3C Trace Context",
+  "category": "observability",
+  "description": "Generates and propagates unique Request ID and W3C traceparent headers for microservice correlation, with conditional access log embedding.",
+  "renderer": "nginx-correlation-id",
+  "builtin": true,
+  "default_config": {
+    "request_id": {
+      "enabled": true,
+      "header_name": "X-Request-ID",
+      "send_in_response": true,
+      "include_in_access_log": true
+    },
+    "trace_id": {
+      "enabled": true,
+      "header_name": "traceparent",
+      "send_in_response": false,
+      "include_in_access_log": true
+    }
+  },
+  "ui_schema": {
+    "layout_type": "form",
+    "fields": [
+      {
+        "key": "request_id.enabled",
+        "label": "Enable Request ID",
+        "type": "boolean",
+        "description": "Generate and inject a unique Request ID for each transaction"
+      },
+      {
+        "key": "request_id.header_name",
+        "label": "Request ID Header Name",
+        "type": "text",
+        "description": "HTTP header name sent to backend upstream (default: X-Request-ID)"
+      },
+      {
+        "key": "request_id.send_in_response",
+        "label": "Send in Response",
+        "type": "boolean",
+        "description": "Return Request ID in client HTTP response headers"
+      },
+      {
+        "key": "request_id.include_in_access_log",
+        "label": "Log in Access Logs",
+        "type": "boolean",
+        "description": "Include request_id in access log JSON"
+      },
+      {
+        "key": "trace_id.enabled",
+        "label": "Enable W3C Trace Context",
+        "type": "boolean",
+        "description": "Generate W3C traceparent (00-{trace_id}-{span_id}-01) for distributed tracing"
+      },
+      {
+        "key": "trace_id.header_name",
+        "label": "Traceparent Header Name",
+        "type": "text",
+        "description": "HTTP header name for W3C trace context (default: traceparent)"
+      },
+      {
+        "key": "trace_id.send_in_response",
+        "label": "Send Traceparent in Response",
+        "type": "boolean",
+        "description": "Return traceparent header in client HTTP response headers"
+      },
+      {
+        "key": "trace_id.include_in_access_log",
+        "label": "Log Trace ID in Access Logs",
+        "type": "boolean",
+        "description": "Include trace_id in access log JSON"
+      }
+    ]
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "request_id",
+      "trace_id"
+    ],
+    "properties": {
+      "request_id": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "enabled",
+          "header_name",
+          "send_in_response",
+          "include_in_access_log"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "header_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "send_in_response": {
+            "type": "boolean"
+          },
+          "include_in_access_log": {
+            "type": "boolean"
+          }
+        }
+      },
+      "trace_id": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "enabled",
+          "header_name",
+          "send_in_response",
+          "include_in_access_log"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "header_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "send_in_response": {
+            "type": "boolean"
+          },
+          "include_in_access_log": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

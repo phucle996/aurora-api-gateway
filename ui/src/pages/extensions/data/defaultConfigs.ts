@@ -796,6 +796,20 @@ export const EXTENSION_DEFAULT_CONFIGS: Record<string, Record<string, any>> = {
       password: 'changeme'
     }
   },
+  'correlation-id': {
+    request_id: {
+      enabled: true,
+      header_name: 'X-Request-ID',
+      send_in_response: true,
+      include_in_access_log: true
+    },
+    trace_id: {
+      enabled: true,
+      header_name: 'traceparent',
+      send_in_response: false,
+      include_in_access_log: true
+    }
+  },
   'request-id': {
     enabled: true,
     header_name: 'X-Request-ID',

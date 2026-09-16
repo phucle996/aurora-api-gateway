@@ -270,6 +270,7 @@ mod tests {
             message: None,
             level: None,
             timestamp_unix_nano: Some(1700000000000000000),
+            ..Default::default()
         };
 
         let record = entry.into_log_record("aurora-gateway");
@@ -306,6 +307,7 @@ mod tests {
             message: None,
             level: None,
             timestamp_unix_nano: None,
+            ..Default::default()
         };
 
         let blocked_rec = waf_blocked.into_log_record("aurora-gateway");

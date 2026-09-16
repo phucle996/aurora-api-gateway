@@ -7,8 +7,8 @@ func TestCatalogDefaultsMatchTheirRuntimeSchemas(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load catalog: %v", err)
 	}
-	if len(manifests) != 24 {
-		t.Fatalf("expected 24 packaged manifests, got %d", len(manifests))
+	if len(manifests) != 25 {
+		t.Fatalf("expected 25 packaged manifests, got %d", len(manifests))
 	}
 	digest, err := Digest()
 	if err != nil || len(digest) != 64 {
@@ -267,3 +267,28 @@ func TestStdLogManifestValidation(t *testing.T) {
 		t.Fatal("expected missing split_streams to be rejected")
 	}
 }
+
+func TestCorrelationIDManifestValidation(t *testing.T) {
+	manifest, ok := Find("builtin/correlation-id", 1)
+	if !ok {
+		t.Fatal("Correlation ID manifest not installed")
+	}
+
+	valid := `{"request_id":{"enabled":true,"header_name":"X-Request-ID","send_in_response":true,"include_in_access_log":true},"trace_id":{"enabled":true,"header_name":"traceparent","send_in_response":false,"include_in_access_log":true}}`
+	if _, err := ValidateConfig(manifest, valid); err != nil {
+		t.Fatalf("expected valid correlation-id config: %v", err)
+	}
+
+	// Missing trace_id
+	missingTraceID := `{"request_id":{"enabled":true,"header_name":"X-Request-ID","send_in_response":true,"include_in_access_log":true}}`
+	if _, err := ValidateConfig(manifest, missingTraceID); err == nil {
+		t.Fatal("expected missing trace_id to be rejected")
+	}
+
+	// Empty header_name
+	emptyHeader := `{"request_id":{"enabled":true,"header_name":"","send_in_response":true,"include_in_access_log":true},"trace_id":{"enabled":true,"header_name":"traceparent","send_in_response":false,"include_in_access_log":true}}`
+	if _, err := ValidateConfig(manifest, emptyHeader); err == nil {
+		t.Fatal("expected empty header_name to be rejected")
+	}
+}
+

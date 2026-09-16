@@ -69,6 +69,24 @@ where
     deserializer.deserialize_any(OptF64Visitor)
 }
 
+fn deserialize_opt_non_empty_str<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let opt = Option::<String>::deserialize(deserializer)?;
+    match opt {
+        Some(s) => {
+            let trimmed = s.trim();
+            if trimmed.is_empty() || trimmed == "-" {
+                Ok(None)
+            } else {
+                Ok(Some(trimmed.to_string()))
+            }
+        }
+        None => Ok(None),
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GatewayLogEntry {
     #[serde(default, alias = "remote_addr")]
@@ -99,6 +117,18 @@ pub struct GatewayLogEntry {
     pub level: Option<String>,
     #[serde(default)]
     pub timestamp_unix_nano: Option<u64>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_opt_non_empty_str",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub request_id: Option<String>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_opt_non_empty_str",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub trace_id: Option<String>,
 }
 
 impl GatewayLogEntry {
@@ -169,7 +199,10 @@ impl GatewayLogEntry {
 
         let mut attributes = Vec::with_capacity(14);
         attributes.push(make_str_attr("service.name", service_name.to_string()));
-        attributes.push(make_str_attr("telemetry.sdk.name", "aurora-waf".to_string()));
+        attributes.push(make_str_attr(
+            "telemetry.sdk.name",
+            "aurora-waf".to_string(),
+        ));
 
         if let Some(m) = self.method {
             attributes.push(make_str_attr("http.request.method", m));
@@ -201,6 +234,15 @@ impl GatewayLogEntry {
         if let Some(r) = self.waf_rule_id {
             attributes.push(make_str_attr("waf.rule_id", r));
         }
+        if let Some(ref rid) = self.request_id {
+            attributes.push(make_str_attr("http.request.id", rid.clone()));
+        }
+        let trace_id_bytes = if let Some(ref tid) = self.trace_id {
+            attributes.push(make_str_attr("trace_id", tid.clone()));
+            hex::decode(tid).unwrap_or_default()
+        } else {
+            vec![]
+        };
 
         LogRecord {
             time_unix_nano,
@@ -213,7 +255,7 @@ impl GatewayLogEntry {
             attributes,
             dropped_attributes_count: 0,
             flags: 0,
-            trace_id: vec![],
+            trace_id: trace_id_bytes,
             span_id: vec![],
             ..Default::default()
         }

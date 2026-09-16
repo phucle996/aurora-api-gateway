@@ -324,6 +324,7 @@ export function ExtensionIcon({ id, category, className = 'w-5 h-5' }: Extension
       return <Flame className={className} />;
     case 'elasticsearch-logger':
       return <SearchCode className={className} />;
+    case 'correlation-id':
     case 'request-id':
       return <Fingerprint className={className} />;
     case 'audit-log':

@@ -327,20 +327,8 @@ pub fn parse_log_payload(raw: &str) -> GatewayLogEntry {
         entry
     } else {
         GatewayLogEntry {
-            client_ip: None,
-            method: None,
-            uri: None,
-            status: None,
-            duration_ms: None,
-            request_time: None,
-            bytes_sent: None,
-            user_agent: None,
-            host: None,
-            waf_action: None,
-            waf_rule_id: None,
             message: Some(raw.to_string()),
-            level: None,
-            timestamp_unix_nano: None,
+            ..Default::default()
         }
     }
 }

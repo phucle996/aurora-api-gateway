@@ -125,7 +125,16 @@ fn random_id<const N: usize>() -> [u8; N] {
     buf
 }
 
-pub fn entry_to_span(entry: &GatewayLogEntry) -> Span {
+pub fn entry_to_span(entry: &GatewayLogEntry) -> Option<Span> {
+    let trace_id_str = entry.trace_id.as_deref()?;
+    if trace_id_str.is_empty() {
+        return None;
+    }
+    let trace_id_bytes = hex::decode(trace_id_str).ok()?;
+    if trace_id_bytes.len() != 16 {
+        return None;
+    }
+
     let now_nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos() as u64)
@@ -205,13 +214,12 @@ pub fn entry_to_span(entry: &GatewayLogEntry) -> Span {
         attributes.push(make_str_attr("waf.rule_id", rule_id.clone()));
     }
 
-    let trace_id = random_id::<16>();
     let span_id = random_id::<8>();
     let method_str = entry.method.as_deref().unwrap_or("HTTP");
     let name = format!("{method_str} {}", entry.uri.as_deref().unwrap_or("/"));
 
-    Span {
-        trace_id: trace_id.to_vec(),
+    Some(Span {
+        trace_id: trace_id_bytes,
         span_id: span_id.to_vec(),
         trace_state: String::new(),
         parent_span_id: Vec::new(),
@@ -227,8 +235,7 @@ pub fn entry_to_span(entry: &GatewayLogEntry) -> Span {
         links: Vec::new(),
         dropped_links_count: 0,
         status: Some(span_status),
-        ..Default::default()
-    }
+    })
 }
 
 pub fn spawn_otlp_tracing_worker(
@@ -256,8 +263,8 @@ pub fn spawn_otlp_tracing_worker(
             tokio::select! {
                 _ = channel_cancel.cancelled() => {
                     while let Ok(entry) = rx.try_recv() {
-                        let span = entry_to_span(&entry);
-                        if let Ok(trace_id_arr) = <[u8; 16]>::try_from(span.trace_id.as_slice())
+                        if let Some(span) = entry_to_span(&entry)
+                            && let Ok(trace_id_arr) = <[u8; 16]>::try_from(span.trace_id.as_slice())
                             && sampler.should_sample(&trace_id_arr)
                         {
                             let _ = sender_for_channel.send(span).await;
@@ -268,8 +275,8 @@ pub fn spawn_otlp_tracing_worker(
                 entry_opt = rx.recv() => {
                     match entry_opt {
                         Some(entry) => {
-                            let span = entry_to_span(&entry);
-                            if let Ok(trace_id_arr) = <[u8; 16]>::try_from(span.trace_id.as_slice())
+                            if let Some(span) = entry_to_span(&entry)
+                                && let Ok(trace_id_arr) = <[u8; 16]>::try_from(span.trace_id.as_slice())
                                 && sampler.should_sample(&trace_id_arr)
                             {
                                 let _ = sender_for_channel.send(span).await;
@@ -294,8 +301,8 @@ pub fn spawn_otlp_tracing_worker(
                     res = sub.recv() => {
                         match res {
                             Ok(entry) => {
-                                let span = entry_to_span(entry.as_ref());
-                                if let Ok(trace_id_arr) = <[u8; 16]>::try_from(span.trace_id.as_slice())
+                                if let Some(span) = entry_to_span(entry.as_ref())
+                                    && let Ok(trace_id_arr) = <[u8; 16]>::try_from(span.trace_id.as_slice())
                                     && sampler.should_sample(&trace_id_arr)
                                 {
                                     // Non-blocking try_send: if buffer is full, drop span without blocking log bus
@@ -390,10 +397,11 @@ mod tests {
             waf_action: Some("allow".to_string()),
             waf_rule_id: None,
             timestamp_unix_nano: Some(1_700_000_000_000_000_000),
+            trace_id: Some("0123456789abcdef0123456789abcdef".to_string()),
             ..Default::default()
         };
 
-        let span = entry_to_span(&entry);
+        let span = entry_to_span(&entry).expect("span should be created when trace_id present");
         assert_eq!(span.trace_id.len(), 16);
         assert_eq!(span.span_id.len(), 8);
         assert_eq!(span.name, "GET /api/v1/orders");
@@ -418,6 +426,31 @@ mod tests {
     }
 
     #[test]
+    fn test_entry_to_span_none_when_no_trace_id() {
+        let entry_no_trace = GatewayLogEntry {
+            client_ip: Some("10.0.0.1".to_string()),
+            method: Some("GET".to_string()),
+            uri: Some("/test".to_string()),
+            status: Some(200),
+            trace_id: None,
+            ..Default::default()
+        };
+        assert!(entry_to_span(&entry_no_trace).is_none());
+
+        let entry_empty_trace = GatewayLogEntry {
+            trace_id: Some("".to_string()),
+            ..Default::default()
+        };
+        assert!(entry_to_span(&entry_empty_trace).is_none());
+
+        let entry_invalid_hex = GatewayLogEntry {
+            trace_id: Some("not-hex-at-all".to_string()),
+            ..Default::default()
+        };
+        assert!(entry_to_span(&entry_invalid_hex).is_none());
+    }
+
+    #[test]
     fn test_entry_to_span_waf_block_marked_error() {
         let entry = GatewayLogEntry {
             client_ip: Some("1.2.3.4".to_string()),
@@ -426,10 +459,11 @@ mod tests {
             status: Some(403),
             waf_action: Some("block".to_string()),
             waf_rule_id: Some("942100".to_string()),
+            trace_id: Some("0123456789abcdef0123456789abcdef".to_string()),
             ..Default::default()
         };
 
-        let span = entry_to_span(&entry);
+        let span = entry_to_span(&entry).expect("span should be created when trace_id present");
         let status = span.status.unwrap();
         assert_eq!(status.code, StatusCode::Error as i32);
         assert!(status.message.contains("WAF"));
@@ -458,6 +492,7 @@ mod tests {
                 method: Some("GET".to_string()),
                 uri: Some(format!("/test/{i}")),
                 status: Some(200),
+                trace_id: Some(format!("{i:032x}")),
                 ..Default::default()
             };
             sender.send(entry).await.unwrap();

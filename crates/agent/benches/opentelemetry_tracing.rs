@@ -115,6 +115,7 @@ fn main() {
         waf_action: Some("allow".to_string()),
         waf_rule_id: None,
         timestamp_unix_nano: Some(1_700_000_000_000_000_000),
+        trace_id: Some("0123456789abcdef0123456789abcdef".to_string()),
         ..Default::default()
     };
 
@@ -130,6 +131,7 @@ fn main() {
         waf_action: Some("block".to_string()),
         waf_rule_id: Some("rule-942100-sqli".to_string()),
         timestamp_unix_nano: Some(1_700_000_000_000_000_000),
+        trace_id: Some("0123456789abcdef0123456789abcdef".to_string()),
         ..Default::default()
     };
 
@@ -145,6 +147,7 @@ fn main() {
         waf_action: None,
         waf_rule_id: None,
         timestamp_unix_nano: Some(1_700_000_000_000_000_000),
+        trace_id: Some("0123456789abcdef0123456789abcdef".to_string()),
         ..Default::default()
     };
 
@@ -165,8 +168,8 @@ fn main() {
         .collect();
 
     let exporter = OtlpTracingExporter::new(OtlpTracingConfig::default()).unwrap();
-    let sample_spans_10: Vec<_> = (0..10).map(|_| entry_to_span(&clean_entry)).collect();
-    let sample_spans_100: Vec<_> = (0..100).map(|_| entry_to_span(&clean_entry)).collect();
+    let sample_spans_10: Vec<_> = (0..10).map(|_| entry_to_span(&clean_entry).unwrap()).collect();
+    let sample_spans_100: Vec<_> = (0..100).map(|_| entry_to_span(&clean_entry).unwrap()).collect();
 
     let mut trace_idx = 0;
 
@@ -191,9 +194,10 @@ fn main() {
             let _ = black_box(sampler_100.should_sample(black_box(tid)));
         }),
         bench_op("pipeline_step_ingest_sample", 2000, || {
-            let span = entry_to_span(black_box(&clean_entry));
-            if let Ok(tid) = <[u8; 16]>::try_from(span.trace_id.as_slice()) {
-                let _ = black_box(sampler_50.should_sample(&tid));
+            if let Some(span) = entry_to_span(black_box(&clean_entry)) {
+                if let Ok(tid) = <[u8; 16]>::try_from(span.trace_id.as_slice()) {
+                    let _ = black_box(sampler_50.should_sample(&tid));
+                }
             }
         }),
         bench_op("build_traces_req_batch_10", 1000, || {

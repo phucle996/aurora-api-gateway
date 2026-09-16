@@ -1194,3 +1194,100 @@ fn test_l4_streams_memory_leak_audit() {
         drop(conf);
     }
 }
+
+#[test]
+fn test_render_extensions_correlation_id() {
+    use crate::spec::extensions::ExtensionInstanceSpec;
+
+    // Both request_id and trace_id enabled
+    let instances = vec![ExtensionInstanceSpec {
+        instance_id: "corr-1".to_string(),
+        key: "builtin/correlation-id".to_string(),
+        version: 1,
+        renderer: "nginx-correlation-id".to_string(),
+        manifest_digest: String::new(),
+        config_json: serde_json::json!({
+            "request_id": {
+                "enabled": true,
+                "header_name": "X-Request-ID",
+                "send_in_response": true,
+                "include_in_access_log": true
+            },
+            "trace_id": {
+                "enabled": true,
+                "header_name": "traceparent",
+                "send_in_response": false,
+                "include_in_access_log": true
+            }
+        })
+        .to_string(),
+    }];
+
+    let rendered = render_extensions(&instances).expect("render must succeed");
+    assert!(
+        rendered
+            .server_conf
+            .contains("set $aurora_req_id $request_id;")
+    );
+    assert!(
+        rendered
+            .server_conf
+            .contains("proxy_set_header X-Request-ID $request_id;")
+    );
+    assert!(
+        rendered
+            .server_conf
+            .contains("add_header X-Request-ID $request_id always;")
+    );
+    assert!(
+        rendered
+            .server_conf
+            .contains("set $aurora_trace_id $request_id;")
+    );
+    assert!(
+        rendered
+            .server_conf
+            .contains("proxy_set_header traceparent \"00-${request_id}-${aurora_span_id}-01\";")
+    );
+    // trace_id.send_in_response was false:
+    assert!(!rendered.server_conf.contains("add_header traceparent"));
+
+    // Only trace_id enabled, request_id disabled
+    let instances_trace_only = vec![ExtensionInstanceSpec {
+        instance_id: "corr-2".to_string(),
+        key: "builtin/correlation-id".to_string(),
+        version: 1,
+        renderer: "nginx-correlation-id".to_string(),
+        manifest_digest: String::new(),
+        config_json: serde_json::json!({
+            "request_id": {
+                "enabled": false,
+                "header_name": "X-Request-ID",
+                "send_in_response": true,
+                "include_in_access_log": true
+            },
+            "trace_id": {
+                "enabled": true,
+                "header_name": "X-Custom-Trace",
+                "send_in_response": true,
+                "include_in_access_log": false
+            }
+        })
+        .to_string(),
+    }];
+
+    let rendered2 = render_extensions(&instances_trace_only).expect("render must succeed");
+    assert!(!rendered2.server_conf.contains("$aurora_req_id"));
+    assert!(!rendered2.server_conf.contains("X-Request-ID"));
+    assert!(!rendered2.server_conf.contains("set $aurora_trace_id")); // include_in_access_log is false
+    assert!(
+        rendered2
+            .server_conf
+            .contains("proxy_set_header X-Custom-Trace \"00-${request_id}-${aurora_span_id}-01\";")
+    );
+    assert!(
+        rendered2.server_conf.contains(
+            "add_header X-Custom-Trace \"00-${request_id}-${aurora_span_id}-01\" always;"
+        )
+    );
+}
