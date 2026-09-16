@@ -1,13 +1,14 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { Plus, RefreshCw, Search, Route, Filter, ChevronDown } from 'lucide-react';
 import type { RouteItem } from './types';
 import { routesApi } from '../../lib/api/routes';
 import { RouteStats } from './sections/RouteStats';
 import { RouteTable } from './sections/RouteTable';
-import { RouteModal } from './sections/RouteModal';
 import { DeleteRouteDialog } from './sections/DeleteRouteDialog';
 
 export default function RoutesPage() {
+  const navigate = useNavigate();
   const [routes, setRoutes] = useState<RouteItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -19,9 +20,7 @@ export default function RoutesPage() {
   const [upstreamFilter, setUpstreamFilter] = useState<string>('ALL');
   const [statFilter, setStatFilter] = useState<string | null>(null);
 
-  // Modals state
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingRoute, setEditingRoute] = useState<RouteItem | null>(null);
+  // Dialogs state
   const [deletingRoute, setDeletingRoute] = useState<RouteItem | null>(null);
   const [togglingIds, setTogglingIds] = useState<Record<string, boolean>>({});
 
@@ -168,17 +167,13 @@ export default function RoutesPage() {
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setEditingRoute(null);
-              setIsModalOpen(true);
-            }}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-primary-foreground bg-primary hover:bg-primary/90 rounded-xl shadow-xs transition-colors cursor-pointer"
+          <Link
+            to="/routes/create"
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-primary-foreground bg-primary hover:bg-primary/90 rounded-md shadow-xs transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Create Route</span>
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -280,23 +275,12 @@ export default function RoutesPage() {
       ) : (
         <RouteTable
           routes={filteredRoutes}
-          onEdit={(r) => {
-            setEditingRoute(r);
-            setIsModalOpen(true);
-          }}
+          onEdit={(r) => navigate(`/routes/${r.id}/edit`)}
           onDelete={(r) => setDeletingRoute(r)}
           onToggle={handleToggle}
           togglingIds={togglingIds}
         />
       )}
-
-      {/* Create / Edit Modal */}
-      <RouteModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSuccess={() => void fetchRoutes()}
-        editingRoute={editingRoute}
-      />
 
       {/* Delete Confirmation Dialog */}
       <DeleteRouteDialog

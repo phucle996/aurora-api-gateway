@@ -76,12 +76,22 @@ prometheus-test: module
 rolling-test: module
 	node scripts/test-rolling-reload-e2e.mjs
 
-.PHONY: docker-up docker-down docker-logs docker-status
+.PHONY: docker-up docker-down docker-logs docker-status dev dev-down dev-logs
 docker-up:
 	docker compose up -d --build
 
 docker-down:
 	docker compose down
+
+dev:
+	docker compose -f docker-compose.dev.yml up
+
+dev-down:
+	docker compose -f docker-compose.dev.yml down
+
+dev-logs:
+	docker compose -f docker-compose.dev.yml logs -f
+
 
 docker-logs:
 	docker compose logs -f

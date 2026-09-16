@@ -1,0 +1,9 @@
+{
+  "name": "aurora-opentelemetry-tracing-e2e",
+  "version": "1.0.0",
+  "description": "Production Behavioral E2E Suite for Aurora OpenTelemetry Distributed Tracing Extension (Playwright UI, OTLP HTTP/gRPC Push, Span Kind Server, Semantic Conventions, Deterministic Sampling, Backpressure & Latency Benchmarking)",
+  "type": "module",
+  "scripts": {
+    "test": "node index.mjs"
+  }
+}

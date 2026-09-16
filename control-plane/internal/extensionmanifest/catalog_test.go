@@ -7,8 +7,8 @@ func TestCatalogDefaultsMatchTheirRuntimeSchemas(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load catalog: %v", err)
 	}
-	if len(manifests) != 23 {
-		t.Fatalf("expected 23 packaged manifests, got %d", len(manifests))
+	if len(manifests) != 24 {
+		t.Fatalf("expected 24 packaged manifests, got %d", len(manifests))
 	}
 	digest, err := Digest()
 	if err != nil || len(digest) != 64 {
@@ -188,6 +188,40 @@ func TestOpenTelemetryLogsManifestValidation(t *testing.T) {
 	invalidLevelEnum := `{"enabled":true,"endpoint":"http://127.0.0.1:4318","protocol":"http","batch_size":100,"flush_interval_ms":2000,"timeout_ms":5000,"service_name":"aurora","log_level":"verbose"}`
 	if _, err := ValidateConfig(manifest, invalidLevelEnum); err == nil {
 		t.Fatal("expected invalid log_level enum to be rejected")
+	}
+}
+
+func TestOpenTelemetryTracingManifestValidation(t *testing.T) {
+	manifest, ok := Find("builtin/opentelemetry-tracing", 1)
+	if !ok {
+		t.Fatal("OpenTelemetry Tracing manifest not installed")
+	}
+	valid := `{"enabled":true,"endpoint":"http://127.0.0.1:4318","protocol":"http","sample_rate":1.0,"batch_size":100,"flush_interval_ms":2000,"timeout_ms":5000,"service_name":"aurora-gateway"}`
+	if _, err := ValidateConfig(manifest, valid); err != nil {
+		t.Fatalf("expected valid OpenTelemetry Tracing config: %v", err)
+	}
+
+	validGrpc := `{"enabled":true,"endpoint":"http://127.0.0.1:4317","protocol":"grpc","sample_rate":0.5,"batch_size":500,"flush_interval_ms":1000,"timeout_ms":3000,"service_name":"aurora-grpc"}`
+	if _, err := ValidateConfig(manifest, validGrpc); err != nil {
+		t.Fatalf("expected valid gRPC OpenTelemetry Tracing config: %v", err)
+	}
+
+	// Missing endpoint should fail
+	invalidEndpoint := `{"enabled":true,"protocol":"http","sample_rate":1.0,"batch_size":100,"flush_interval_ms":2000,"timeout_ms":5000,"service_name":"aurora"}`
+	if _, err := ValidateConfig(manifest, invalidEndpoint); err == nil {
+		t.Fatal("expected config missing endpoint to be rejected")
+	}
+
+	// Missing sample_rate should fail
+	invalidSample := `{"enabled":true,"endpoint":"http://127.0.0.1:4318","protocol":"http","batch_size":100,"flush_interval_ms":2000,"timeout_ms":5000,"service_name":"aurora"}`
+	if _, err := ValidateConfig(manifest, invalidSample); err == nil {
+		t.Fatal("expected config missing sample_rate to be rejected")
+	}
+
+	// Invalid protocol should fail
+	invalidProto := `{"enabled":true,"endpoint":"http://127.0.0.1:4318","protocol":"udp","sample_rate":1.0,"batch_size":100,"flush_interval_ms":2000,"timeout_ms":5000,"service_name":"aurora"}`
+	if _, err := ValidateConfig(manifest, invalidProto); err == nil {
+		t.Fatal("expected invalid protocol to be rejected")
 	}
 }
 

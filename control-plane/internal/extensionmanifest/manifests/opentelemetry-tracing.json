@@ -1,0 +1,138 @@
+{
+  "key": "builtin/opentelemetry-tracing",
+  "version": 1,
+  "id": "opentelemetry-tracing",
+  "name": "OpenTelemetry Tracing",
+  "category": "observability",
+  "description": "Exports distributed trace spans for gateway requests to OpenTelemetry Collector via OTLP (HTTP/gRPC) with configurable sampling and semantic conventions.",
+  "renderer": "opentelemetry-tracing",
+  "builtin": true,
+  "default_config": {
+    "enabled": true,
+    "endpoint": "http://127.0.0.1:4318",
+    "protocol": "http",
+    "sample_rate": 1.0,
+    "batch_size": 100,
+    "flush_interval_ms": 2000,
+    "timeout_ms": 5000,
+    "service_name": "aurora-gateway"
+  },
+  "ui_schema": {
+    "layout_type": "form",
+    "fields": [
+      {
+        "key": "endpoint",
+        "label": "Collector Endpoint",
+        "type": "text",
+        "description": "Địa chỉ OTel Collector (ví dụ: http://127.0.0.1:4318 cho HTTP hoặc http://127.0.0.1:4317 cho gRPC)",
+        "required": true
+      },
+      {
+        "key": "protocol",
+        "label": "Protocol",
+        "type": "select",
+        "options": [
+          {
+            "label": "HTTP (JSON/Protobuf - port 4318)",
+            "value": "http"
+          },
+          {
+            "label": "gRPC (port 4317)",
+            "value": "grpc"
+          }
+        ],
+        "description": "Giao thức truyền dữ liệu OTLP Traces",
+        "required": true
+      },
+      {
+        "key": "sample_rate",
+        "label": "Sample Rate",
+        "type": "number",
+        "description": "Tỷ lệ lấy mẫu spans từ 0.0 (tắt) đến 1.0 (100% requests, mặc định: 1.0)",
+        "required": true
+      },
+      {
+        "key": "batch_size",
+        "label": "Batch Size",
+        "type": "number",
+        "description": "Số lượng trace spans tối đa trong một batch gửi (1 - 5000, mặc định: 100)",
+        "required": true
+      },
+      {
+        "key": "flush_interval_ms",
+        "label": "Flush Interval (ms)",
+        "type": "number",
+        "description": "Chu kỳ tối đa đẩy spans nếu chưa đầy batch (100 - 60000ms, mặc định: 2000)",
+        "required": true
+      },
+      {
+        "key": "service_name",
+        "label": "Service Name",
+        "type": "text",
+        "description": "Tên service gắn vào resource attributes của traces (mặc định: aurora-gateway)",
+        "required": true
+      },
+      {
+        "key": "timeout_ms",
+        "label": "Request Timeout (ms)",
+        "type": "number",
+        "description": "Thời gian timeout tối đa cho mỗi lần export traces (ms)",
+        "required": true
+      }
+    ]
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "enabled",
+      "endpoint",
+      "protocol",
+      "sample_rate",
+      "batch_size",
+      "flush_interval_ms",
+      "timeout_ms",
+      "service_name"
+    ],
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "endpoint": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      },
+      "protocol": {
+        "type": "string",
+        "enum": [
+          "http",
+          "grpc"
+        ]
+      },
+      "sample_rate": {
+        "type": "number"
+      },
+      "batch_size": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 5000
+      },
+      "flush_interval_ms": {
+        "type": "integer",
+        "minimum": 100,
+        "maximum": 60000
+      },
+      "timeout_ms": {
+        "type": "integer",
+        "minimum": 100,
+        "maximum": 60000
+      },
+      "service_name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    }
+  }
+}

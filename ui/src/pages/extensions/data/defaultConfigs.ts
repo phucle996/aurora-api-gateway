@@ -716,6 +716,16 @@ export const EXTENSION_DEFAULT_CONFIGS: Record<string, Record<string, any>> = {
     service_name: 'aurora-gateway',
     log_level: 'info'
   },
+  'opentelemetry-tracing': {
+    enabled: true,
+    endpoint: 'http://127.0.0.1:4318',
+    protocol: 'http',
+    sample_rate: 1.0,
+    batch_size: 100,
+    flush_interval_ms: 2000,
+    timeout_ms: 5000,
+    service_name: 'aurora-gateway'
+  },
   'std-log': {
     enabled: true,
     format: 'json',

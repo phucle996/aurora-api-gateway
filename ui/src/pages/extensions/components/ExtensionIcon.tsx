@@ -298,10 +298,10 @@ export function ExtensionIcon({ id, category, className = 'w-5 h-5' }: Extension
 
     // 7. Observability (12) - All Unique
     case 'prometheus':
-    case 'metrics':
       return <Activity className={className} />;
     case 'opentelemetry-metrics':
     case 'opentelemetry-logs':
+    case 'opentelemetry-tracing':
     case 'distributed_tracing':
       return <Waypoints className={className} />;
     case 'zipkin':
@@ -310,8 +310,6 @@ export function ExtensionIcon({ id, category, className = 'w-5 h-5' }: Extension
     case 'datadog_apm':
       return <LineChart className={className} />;
     case 'std-log':
-    case 'stdout-logs':
-    case 'stdout-stderr-logs':
       return <Terminal className={className} />;
     case 'access-log':
     case 'access_logger':

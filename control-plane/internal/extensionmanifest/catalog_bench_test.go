@@ -68,6 +68,23 @@ func BenchmarkValidateConfig_ValidOpenTelemetryLogs(b *testing.B) {
 	}
 }
 
+func BenchmarkValidateConfig_ValidOpenTelemetryTracing(b *testing.B) {
+	manifest, ok := extensionmanifest.Find("builtin/opentelemetry-tracing", 1)
+	if !ok {
+		b.Fatal("opentelemetry-tracing manifest not found")
+	}
+	validConfig := `{"enabled":true,"endpoint":"http://otel-collector:4318","protocol":"http","sample_rate":1.0,"batch_size":100,"flush_interval_ms":2000,"timeout_ms":5000,"service_name":"aurora-gateway"}`
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := extensionmanifest.ValidateConfig(manifest, validConfig)
+		if err != nil {
+			b.Fatalf("validation failed: %v", err)
+		}
+	}
+}
+
 func BenchmarkValidateConfig_InvalidRejection(b *testing.B) {
 	manifest, ok := extensionmanifest.Find("builtin/std-log", 1)
 	if !ok {

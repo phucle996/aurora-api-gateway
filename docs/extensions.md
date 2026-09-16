@@ -60,6 +60,7 @@ Extensions are compiled by the control plane into the node spec wire format and 
 | **Prometheus** | `builtin/prometheus` | Agent Worker | In-memory atomic telemetry collector exposing standard Prometheus `/metrics` endpoint. |
 | **OpenTelemetry Metrics** | `builtin/opentelemetry-metrics` | Agent Worker | Pushes gateway latency, throughput, and error metrics via OTLP (gRPC or HTTP). |
 | **OpenTelemetry Logs** | `builtin/opentelemetry-logs` | Agent Worker | Streams structured access logs to OpenTelemetry collectors over OTLP. |
+| **OpenTelemetry Tracing** | `builtin/opentelemetry-tracing` | Agent Worker | Exports distributed trace spans via OTLP (gRPC or HTTP) with configurable sampling. |
 | **Standard Log (std-log)** | `builtin/std-log` | Agent Worker | High-performance access log streamer to stdout/stderr in JSON, Combined, or Text format. |
 
 ---

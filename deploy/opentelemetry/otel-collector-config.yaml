@@ -28,4 +28,8 @@ service:
       receivers: [otlp]
       processors: [batch]
       exporters: [debug]
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
 

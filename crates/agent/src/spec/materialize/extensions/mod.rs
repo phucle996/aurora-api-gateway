@@ -59,6 +59,7 @@ pub fn render_extensions(
     let mut metrics_instances = 0;
     let mut opentelemetry_metrics_instances = 0;
     let mut opentelemetry_logs_instances = 0;
+    let mut opentelemetry_tracing_instances = 0;
     let mut std_log_instances = 0;
     let mut jwt_policy = None;
     let mut rate_limit_policy = None;
@@ -116,6 +117,11 @@ pub fn render_extensions(
                 instance,
                 config,
                 &mut opentelemetry_logs_instances,
+            )?,
+            "opentelemetry-tracing" => crate::extension::opentelemetry_tracing::materialize(
+                instance,
+                config,
+                &mut opentelemetry_tracing_instances,
             )?,
             "std-log" | "stdout-logs" | "stdout-stderr-logs" => {
                 crate::extension::std_log::materialize(instance, config, &mut std_log_instances)?

@@ -120,6 +120,19 @@ pub struct OpenTelemetryLogsSpec {
     pub log_level: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct OpenTelemetryTracingSpec {
+    pub enabled: bool,
+    pub endpoint: String,
+    pub protocol: String,
+    pub sample_rate: f64,
+    pub batch_size: usize,
+    pub flush_interval_ms: u64,
+    pub timeout_ms: u64,
+    pub service_name: String,
+}
+
 fn default_otlp_interval() -> u64 {
     15
 }

@@ -4,6 +4,9 @@ use super::opentelemetry_logs::{
 use super::opentelemetry_metrics::{
     OtlpMetricsConfig, OtlpMetricsExporter, spawn_otlp_metrics_worker,
 };
+use super::opentelemetry_tracing::{
+    OtlpTracingConfig, OtlpTracingExporter, OtlpTracingWorkerHandle, spawn_otlp_tracing_worker,
+};
 use super::prometheus::spawn_prometheus_server;
 use super::std_log::{
     StdLogConfig, StdLogFormat, StdLogLevel, StdLogWorkerHandle, spawn_std_log_worker,
@@ -12,7 +15,7 @@ use crate::logs::LogBus;
 use crate::metrics::MetricsCollector;
 use crate::spec::extensions::{
     ExtensionInstanceSpec, MetricsExtensionSpec, OpenTelemetryLogsSpec, OpenTelemetryMetricsSpec,
-    StdLogSpec,
+    OpenTelemetryTracingSpec, StdLogSpec,
 };
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
@@ -37,6 +40,10 @@ pub struct ExtensionDispatcher {
     pub(crate) logs_worker: Option<OtlpLogsWorkerHandle>,
     last_otel_logs_spec: Option<OpenTelemetryLogsSpec>,
 
+    // OpenTelemetry tracing extension lifecycle
+    pub(crate) otel_tracing_worker: Option<OtlpTracingWorkerHandle>,
+    last_otel_tracing_spec: Option<OpenTelemetryTracingSpec>,
+
     // Standard stream logs (stdout/stderr) extension lifecycle
     pub(crate) std_log_worker: Option<StdLogWorkerHandle>,
     last_std_log_spec: Option<StdLogSpec>,
@@ -54,6 +61,8 @@ impl ExtensionDispatcher {
             last_otel_metrics_config: None,
             logs_worker: None,
             last_otel_logs_spec: None,
+            otel_tracing_worker: None,
+            last_otel_tracing_spec: None,
             std_log_worker: None,
             last_std_log_spec: None,
         }
@@ -63,6 +72,7 @@ impl ExtensionDispatcher {
         let mut metrics = None;
         let mut otel = None;
         let mut otel_logs = None;
+        let mut otel_tracing = None;
         let mut std_log = None;
 
         for instance in instances {
@@ -153,6 +163,48 @@ impl ExtensionDispatcher {
                     }
                     otel_logs = Some(spec);
                 }
+                "opentelemetry-tracing" => {
+                    if otel_tracing.is_some() {
+                        return Err(
+                            "NodeSpec contains more than one opentelemetry-tracing extension"
+                                .to_string(),
+                        );
+                    }
+                    let spec = serde_json::from_str::<OpenTelemetryTracingSpec>(
+                        &instance.config_json,
+                    )
+                    .map_err(|error| {
+                        format!(
+                            "decode opentelemetry-tracing extension instance {} config: {error}",
+                            instance.instance_id
+                        )
+                    })?;
+                    if spec.endpoint.trim().is_empty() {
+                        return Err(format!(
+                            "opentelemetry-tracing extension instance {} endpoint cannot be empty",
+                            instance.instance_id
+                        ));
+                    }
+                    if spec.protocol != "http" && spec.protocol != "grpc" {
+                        return Err(format!(
+                            "opentelemetry-tracing extension instance {} unsupported protocol: {}",
+                            instance.instance_id, spec.protocol
+                        ));
+                    }
+                    if !(0.0..=1.0).contains(&spec.sample_rate) {
+                        return Err(format!(
+                            "opentelemetry-tracing extension instance {} sample_rate {} must be between 0.0 and 1.0",
+                            instance.instance_id, spec.sample_rate
+                        ));
+                    }
+                    if spec.service_name.trim().is_empty() {
+                        return Err(format!(
+                            "opentelemetry-tracing extension instance {} service_name cannot be empty",
+                            instance.instance_id
+                        ));
+                    }
+                    otel_tracing = Some(spec);
+                }
                 "std-log" | "stdout-logs" | "stdout-stderr-logs" => {
                     if std_log.is_some() {
                         return Err("NodeSpec contains more than one std-log extension".to_string());
@@ -224,6 +276,9 @@ impl ExtensionDispatcher {
 
         // Dispatch OpenTelemetry logs background exporter independently
         self.dispatch_logs(otel_logs.as_ref()).await;
+
+        // Dispatch OpenTelemetry tracing background exporter independently
+        self.dispatch_tracing(otel_tracing.as_ref()).await;
 
         // Dispatch Standard stream logs (stdout/stderr) independently
         self.dispatch_std_log(std_log.as_ref()).await;
@@ -358,6 +413,66 @@ impl ExtensionDispatcher {
         self.last_otel_logs_spec = otel_logs_spec.cloned();
     }
 
+    async fn dispatch_tracing(&mut self, otel_tracing_spec: Option<&OpenTelemetryTracingSpec>) {
+        let is_active = otel_tracing_spec
+            .filter(|o| o.enabled && !o.endpoint.trim().is_empty())
+            .is_some();
+
+        if !is_active {
+            if let Some(mut worker) = self.otel_tracing_worker.take() {
+                info!("Stopping OpenTelemetry tracing extension");
+                worker.shutdown(std::time::Duration::from_secs(3)).await;
+            }
+            self.last_otel_tracing_spec = None;
+            return;
+        }
+
+        if self.otel_tracing_worker.is_some()
+            && self.last_otel_tracing_spec.as_ref() == otel_tracing_spec
+        {
+            return;
+        }
+
+        if let Some(mut worker) = self.otel_tracing_worker.take() {
+            info!("Reloading OpenTelemetry tracing extension with updated configuration");
+            worker.shutdown(std::time::Duration::from_secs(3)).await;
+        }
+
+        let spec = otel_tracing_spec.unwrap();
+        let tracing_config = OtlpTracingConfig {
+            enabled: spec.enabled,
+            endpoint: spec.endpoint.clone(),
+            protocol: spec.protocol.clone(),
+            sample_rate: spec.sample_rate,
+            batch_size: spec.batch_size,
+            flush_interval_ms: spec.flush_interval_ms,
+            timeout_ms: spec.timeout_ms,
+            service_name: spec.service_name.clone(),
+        };
+        match OtlpTracingExporter::new(tracing_config) {
+            Ok(exporter) => {
+                let node_id = (*self.node_id).clone();
+                let subscription = self
+                    .log_bus
+                    .as_ref()
+                    .map(|b| b.subscribe("opentelemetry-tracing"));
+                let handle = spawn_otlp_tracing_worker(node_id, exporter, subscription);
+                self.otel_tracing_worker = Some(handle);
+                info!(
+                    endpoint = %spec.endpoint,
+                    protocol = %spec.protocol,
+                    sample_rate = spec.sample_rate,
+                    batch_size = spec.batch_size,
+                    "Spawned OpenTelemetry tracing background exporter"
+                );
+            }
+            Err(err) => {
+                tracing::error!("Failed to initialize OpenTelemetry tracing exporter: {err}");
+            }
+        }
+        self.last_otel_tracing_spec = otel_tracing_spec.cloned();
+    }
+
     async fn dispatch_std_log(&mut self, std_log_spec: Option<&StdLogSpec>) {
         let is_active = std_log_spec.filter(|s| s.enabled).is_some();
 
@@ -425,12 +540,16 @@ impl ExtensionDispatcher {
         if let Some(mut worker) = self.logs_worker.take() {
             worker.shutdown(std::time::Duration::from_secs(3)).await;
         }
+        if let Some(mut worker) = self.otel_tracing_worker.take() {
+            worker.shutdown(std::time::Duration::from_secs(3)).await;
+        }
         if let Some(mut worker) = self.std_log_worker.take() {
             worker.shutdown(std::time::Duration::from_secs(3)).await;
         }
         self.last_prometheus_port = None;
         self.last_otel_metrics_config = None;
         self.last_otel_logs_spec = None;
+        self.last_otel_tracing_spec = None;
         self.last_std_log_spec = None;
     }
 }
@@ -680,5 +799,49 @@ mod tests {
         }];
         let err = dispatcher.apply_spec(&instances).await.unwrap_err();
         assert!(err.contains("unsupported format: binary"));
+    }
+
+    #[tokio::test]
+    async fn dispatcher_starts_and_stops_tracing_from_instance() {
+        let mut dispatcher = ExtensionDispatcher::new(Arc::new("node-01".to_string()), None);
+        let instances = vec![ExtensionInstanceSpec {
+            instance_id: "otel-tracing-1".to_string(),
+            key: "builtin/opentelemetry-tracing".to_string(),
+            version: 1,
+            renderer: "opentelemetry-tracing".to_string(),
+            manifest_digest: String::new(),
+            config_json: r#"{"enabled":true,"endpoint":"http://127.0.0.1:4318","protocol":"http","sample_rate":1.0,"batch_size":100,"flush_interval_ms":2000,"timeout_ms":5000,"service_name":"aurora-gateway"}"#.to_string(),
+        }];
+
+        dispatcher.apply_spec(&instances).await.unwrap();
+        assert!(dispatcher.otel_tracing_worker.is_some());
+
+        dispatcher.apply_spec(&[]).await.unwrap();
+        assert!(dispatcher.otel_tracing_worker.is_none());
+    }
+
+    #[tokio::test]
+    async fn dispatcher_errors_on_duplicate_tracing() {
+        let mut dispatcher = ExtensionDispatcher::new(Arc::new("node-01".to_string()), None);
+        let instances = vec![
+            ExtensionInstanceSpec {
+                instance_id: "otel-tracing-1".to_string(),
+                key: "builtin/opentelemetry-tracing".to_string(),
+                version: 1,
+                renderer: "opentelemetry-tracing".to_string(),
+                manifest_digest: String::new(),
+                config_json: r#"{"enabled":true,"endpoint":"http://127.0.0.1:4318","protocol":"http","sample_rate":1.0,"batch_size":100,"flush_interval_ms":2000,"timeout_ms":5000,"service_name":"aurora-gateway"}"#.to_string(),
+            },
+            ExtensionInstanceSpec {
+                instance_id: "otel-tracing-2".to_string(),
+                key: "builtin/opentelemetry-tracing".to_string(),
+                version: 1,
+                renderer: "opentelemetry-tracing".to_string(),
+                manifest_digest: String::new(),
+                config_json: r#"{"enabled":true,"endpoint":"http://127.0.0.1:4318","protocol":"http","sample_rate":1.0,"batch_size":100,"flush_interval_ms":2000,"timeout_ms":5000,"service_name":"aurora-gateway"}"#.to_string(),
+            },
+        ];
+        let err = dispatcher.apply_spec(&instances).await.unwrap_err();
+        assert!(err.contains("NodeSpec contains more than one opentelemetry-tracing extension"));
     }
 }

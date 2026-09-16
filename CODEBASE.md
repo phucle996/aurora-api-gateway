@@ -10,7 +10,7 @@ Extension manifests in [the catalog](control-plane/internal/extensionmanifest/ma
 
 ## Node agent
 
-[Spec synchronization](crates/agent/src/sync/spec.rs) owns periodic gRPC reconciliation and local `node-spec.json` recovery. [Materialization](crates/agent/src/spec/materialize/mod.rs) produces workflow-specific policies and NGINX configuration. [Extension dispatch](crates/agent/src/extension/dispatcher.rs) owns Prometheus, OTLP metrics/logs and std-log worker lifecycles; it is not a generic runtime for every catalog entry.
+[Spec synchronization](crates/agent/src/sync/spec.rs) owns periodic gRPC reconciliation and local `node-spec.json` recovery. [Materialization](crates/agent/src/spec/materialize/mod.rs) produces workflow-specific policies and NGINX configuration. [Extension dispatch](crates/agent/src/extension/dispatcher.rs) owns Prometheus, OTLP metrics/logs/traces and std-log worker lifecycles; it is not a generic runtime for every catalog entry.
 
 See [spec-sync-architecture.md](docs/spec-sync-architecture.md) for ordering and failure behavior. Individual file replacement is atomic; the entire materialized configuration set is not a single filesystem transaction.
 

@@ -1,0 +1,23 @@
+FROM golang:1.24-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Air for Golang live reloading
+RUN go install github.com/air-verse/air@latest
+
+WORKDIR /app
+
+ENV AURORA_COMPILER_PATH="/app/aurora-compile"
+ENV AURORA_HTTP_ADDR="0.0.0.0:8080"
+ENV AURORA_GRPC_ADDR="0.0.0.0:9099"
+ENV AURORA_SQLITE_PATH="/data/aurora.db"
+ENV AURORA_ADMIN_TOKEN_FILE="/data/admin.token"
+
+EXPOSE 8080
+EXPOSE 9099
+
+ENTRYPOINT ["deploy/docker/entrypoint-controller-dev.sh"]

@@ -26,6 +26,10 @@ harness = false
 name = "log_processing"
 harness = false
 
+[[bench]]
+name = "opentelemetry_tracing"
+harness = false
+
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
@@ -45,7 +49,7 @@ prost = "0.14"
 tokio-util = "0.7"
 libc = "0.2"
 aurora-engine = { path = "../engine" }
-opentelemetry-proto = { version = "0.32", default-features = false, features = ["gen-tonic", "metrics", "logs", "with-serde"] }
+opentelemetry-proto = { version = "0.32", default-features = false, features = ["gen-tonic", "metrics", "logs", "trace", "with-serde"] }
 
 [build-dependencies]
 tonic-prost-build = "0.14"

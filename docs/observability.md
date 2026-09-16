@@ -7,6 +7,7 @@
 | `builtin/prometheus` | `agent-metrics` | Agent HTTP scrape endpoint, normally `:9145/metrics` |
 | `builtin/opentelemetry-metrics` | `opentelemetry-metrics` | Periodic OTLP metrics over HTTP or gRPC |
 | `builtin/opentelemetry-logs` | `opentelemetry-logs` | Batched OTLP access logs over HTTP or gRPC |
+| `builtin/opentelemetry-tracing` | `opentelemetry-tracing` | Batched OTLP trace spans with head sampling over HTTP or gRPC |
 | `builtin/std-log` | `std-log` | Access logs to agent stdout/stderr |
 
 The [manifest files](../control-plane/internal/extensionmanifest/manifests) define required fields, ranges and defaults. The [dispatcher](../crates/agent/src/extension/dispatcher.rs) manages these exporters separately. Set the extension status and configuration through the console/API; changing a JSON `enabled` field alone is not a substitute for the extension activation workflow.
@@ -46,7 +47,7 @@ Output is best-effort and bounded. Complete records including newline are limite
 
 For a node in the Compose network, use `http://otel-collector:4318` with `protocol: "http"`, or `http://otel-collector:4317` with `protocol: "grpc"`. `127.0.0.1` inside the node container refers to that node, not the collector container.
 
-HTTP exporters append `/v1/metrics` or `/v1/logs` when absent. gRPC exporters configure connection and RPC timeouts; HTTPS gRPC uses WebPKI certificate roots. The current configuration does not expose custom collector CA bundles or client certificates.
+HTTP exporters append `/v1/metrics`, `/v1/logs`, or `/v1/traces` when absent. gRPC exporters configure connection and RPC timeouts; HTTPS gRPC uses WebPKI certificate roots. The current configuration does not expose custom collector CA bundles or client certificates.
 
 The [Compose collector configuration](../deploy/opentelemetry/otel-collector-config.yaml) sends logs to its debug exporter and metrics to debug plus Prometheus on port `8889`. Debug output is not durable log storage.
 

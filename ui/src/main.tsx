@@ -7,6 +7,8 @@ import AnalyticsPage from './pages/analytics/page';
 import ExtensionsPage from './pages/extensions/page';
 import SettingsPage from './pages/settings/page';
 import RoutesPage from './pages/routes/page';
+import CreateRoutePage from './pages/routes/create/page';
+import EditRoutePage from './pages/routes/edit/page';
 import CertificatesPage from './pages/certificates/page';
 import UpstreamsPage from './pages/upstreams/page';
 import CreateUpstreamPage from './pages/upstreams/create/page';
@@ -34,6 +36,10 @@ createRoot(document.getElementById('root')!).render(
           
           {/* Traffic / Routing & Certificates */}
           <Route path="/routes" element={<RoutesPage />} />
+          <Route path="/routes/create" element={<CreateRoutePage />} />
+          <Route path="/routes/add" element={<CreateRoutePage />} />
+          <Route path="/routes/:id/edit" element={<EditRoutePage />} />
+          <Route path="/routes/edit/:id" element={<EditRoutePage />} />
           <Route path="/certificates" element={<CertificatesPage />} />
           <Route path="/domains/*" element={<Navigate to="/routes" replace />} />
           <Route path="/domains" element={<Navigate to="/routes" replace />} />
