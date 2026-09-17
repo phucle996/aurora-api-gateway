@@ -141,7 +141,6 @@ impl JwtEngine {
             let prefix_bytes = origin.path_prefix.as_bytes().to_vec();
             let policy = OriginPolicy {
                 host: host_bytes,
-                path_prefix: prefix_bytes.clone(),
                 exclude_paths,
                 validation,
                 primary_key,

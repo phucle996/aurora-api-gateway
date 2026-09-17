@@ -9,14 +9,6 @@ pub enum Error {
     InvalidRequest,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(u32)]
-pub enum Action {
-    Allow = 0,
-    Block = 1,
-    Log = 2,
-}
-
 /// Decision output struct compatible with C ABI.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[repr(C)]

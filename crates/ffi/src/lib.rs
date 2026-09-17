@@ -10,7 +10,6 @@
 
 pub mod extensions;
 pub mod telemetry;
-pub mod upstream;
 
 pub use aurora_engine::Decision;
 pub use extensions::access;
@@ -35,36 +34,6 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 /// Mã trạng thái trả về cho caller C:
 pub(crate) const OK: u32 = 0;
 pub(crate) const INVALID: u32 = 1;
-#[allow(dead_code)]
-pub(crate) const PANIC: u32 = 2;
-
-/// Deprecated no-op: Runtime and control-plane synchronization is now handled out-of-process
-/// by aurora-agent. Retained for C ABI symbol backward-compatibility.
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_waf_start_runtime(
-    _controller_url: *const std::ffi::c_char,
-    _node_id: *const std::ffi::c_char,
-    _token: *const std::ffi::c_char,
-    _interval_seconds: u32,
-    _active_release_id: i64,
-    _policy_path: *const std::ffi::c_char,
-    _access_path: *const std::ffi::c_char,
-    _is_leader: u32,
-) -> u32 {
-    OK
-}
-
-/// Deprecated no-op: Retained for C ABI symbol backward-compatibility.
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_waf_start_telemetry(
-    _controller_url: *const std::ffi::c_char,
-    _node_id: *const std::ffi::c_char,
-    _token: *const std::ffi::c_char,
-    _interval_seconds: u32,
-    _active_release_id: i64,
-) -> u32 {
-    OK
-}
 
 /// Deprecated no-op: Retained for C ABI symbol backward-compatibility.
 #[unsafe(no_mangle)]
@@ -223,21 +192,24 @@ pub unsafe extern "C" fn aurora_waf_format_prometheus_metrics(
 mod tests {
     use super::*;
     use crate::access::{
-        AccessInput, aurora_access_evaluate, aurora_access_generation, aurora_access_record_match,
-        aurora_access_swap_engine, drain_access_matches,
+        AccessInput, aurora_access_create, aurora_access_destroy, aurora_access_evaluate,
+        aurora_access_generation,
     };
 
     #[test]
-    fn test_dynamic_access_hot_swap_and_match_buffer() {
+    fn test_access_ffi_lifecycle() {
         let snapshot_json = br#"{"schema_version":1,"generation":42,"rules":[{"id":101,"priority":1,"action":"block","networks":["192.168.1.0/24"],"host":"*","path_prefix":"/api","method":"*","schedule":"always","expires_at":0,"log":true,"reputation":false,"alert":false}]}"#;
 
-        let ret = unsafe { aurora_access_swap_engine(snapshot_json.as_ptr(), snapshot_json.len()) };
+        let mut engine = std::ptr::null_mut();
+        let ret = unsafe {
+            aurora_access_create(snapshot_json.as_ptr(), snapshot_json.len(), &mut engine)
+        };
         assert_eq!(ret, 0);
+        assert!(!engine.is_null());
 
-        let generation = unsafe { aurora_access_generation(std::ptr::null()) };
+        let generation = unsafe { aurora_access_generation(engine) };
         assert_eq!(generation, 42);
 
-        // Evaluate request against hot-swapped engine in RAM (without static engine handle)
         let ip = b"192.168.1.50";
         let host = b"example.com";
         let path = b"/api/v1/resource";
@@ -254,29 +226,12 @@ mod tests {
             now: 1000,
         };
         let mut decision = Decision::default();
-        let eval_status =
-            unsafe { aurora_access_evaluate(std::ptr::null(), &input, &mut decision) };
+        let eval_status = unsafe { aurora_access_evaluate(engine, &input, &mut decision) };
         assert_eq!(eval_status, 0);
         assert_eq!(decision.action, 1); // blocked
         assert_eq!(decision.rule_id, 101);
         assert_eq!(decision.generation, 42);
-        assert_eq!(decision.log_matches, 1);
 
-        // Verify match event was automatically enqueued in RAM
-        let matches = drain_access_matches(10);
-        assert_eq!(matches.len(), 1);
-        assert_eq!(matches[0].release_id, 42);
-        assert_eq!(matches[0].rule_id, 101);
-        assert_eq!(matches[0].ip, "192.168.1.50");
-
-        // Explicit match record C ABI
-        let explicit_ip = b"10.0.0.99";
-        let rec_status =
-            unsafe { aurora_access_record_match(42, 999, explicit_ip.as_ptr(), explicit_ip.len()) };
-        assert_eq!(rec_status, 0);
-        let explicit_matches = drain_access_matches(10);
-        assert_eq!(explicit_matches.len(), 1);
-        assert_eq!(explicit_matches[0].rule_id, 999);
-        assert_eq!(explicit_matches[0].ip, "10.0.0.99");
+        unsafe { aurora_access_destroy(engine) };
     }
 }
