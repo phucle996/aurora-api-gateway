@@ -125,6 +125,9 @@ pub fn materialize(
         "nginx-correlation-id" => {
             materialize_correlation_id(sink, config)?;
         }
+        "nginx-ingress-header-sanitizer" => {
+            materialize_ingress_header_sanitizer(sink, config)?;
+        }
         "nginx-maintenance" => {
             let message = string_or(config, "message", "Service undergoing planned maintenance.");
             let body = serde_json::to_string(&json!({ "error": message }))
@@ -300,6 +303,45 @@ fn materialize_correlation_id(
             sink.push_server(&format!(
                 "add_header {header_directive} \"00-${{request_id}}-${{aurora_span_id}}-01\" always;\n"
             ));
+        }
+    }
+
+    Ok(())
+}
+
+fn materialize_ingress_header_sanitizer(
+    sink: &mut NginxDirectiveSink<'_>,
+    config: &Map<String, Value>,
+) -> Result<(), String> {
+    if !boolean(config, "enabled").unwrap_or(true) {
+        return Ok(());
+    }
+
+    let mode = string_or(config, "mode", "denylist");
+    match mode.as_str() {
+        "allowlist" => {
+            sink.push_server("proxy_pass_request_headers off;\n");
+            sink.push_server("proxy_set_header Host $host;\n");
+            sink.push_server("proxy_set_header Content-Type $content_type;\n");
+            sink.push_server("proxy_set_header Content-Length $content_length;\n");
+            if let Some(headers) = strings(config, "allowlist") {
+                for name in headers {
+                    let header_directive = nginx_header_name(&name)?;
+                    let variable = nginx_request_header_variable(&name)?;
+                    sink.push_server(&format!(
+                        "proxy_set_header {header_directive} {variable};\n"
+                    ));
+                }
+            }
+        }
+        _ => {
+            // denylist mode (default)
+            if let Some(headers) = strings(config, "denylist") {
+                for name in headers {
+                    let header_directive = nginx_header_name(&name)?;
+                    sink.push_server(&format!("proxy_set_header {header_directive} \"\";\n"));
+                }
+            }
         }
     }
 

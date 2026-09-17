@@ -168,8 +168,12 @@ fn main() {
         .collect();
 
     let exporter = OtlpTracingExporter::new(OtlpTracingConfig::default()).unwrap();
-    let sample_spans_10: Vec<_> = (0..10).map(|_| entry_to_span(&clean_entry).unwrap()).collect();
-    let sample_spans_100: Vec<_> = (0..100).map(|_| entry_to_span(&clean_entry).unwrap()).collect();
+    let sample_spans_10: Vec<_> = (0..10)
+        .map(|_| entry_to_span(&clean_entry).unwrap())
+        .collect();
+    let sample_spans_100: Vec<_> = (0..100)
+        .map(|_| entry_to_span(&clean_entry).unwrap())
+        .collect();
 
     let mut trace_idx = 0;
 
@@ -194,10 +198,10 @@ fn main() {
             let _ = black_box(sampler_100.should_sample(black_box(tid)));
         }),
         bench_op("pipeline_step_ingest_sample", 2000, || {
-            if let Some(span) = entry_to_span(black_box(&clean_entry)) {
-                if let Ok(tid) = <[u8; 16]>::try_from(span.trace_id.as_slice()) {
-                    let _ = black_box(sampler_50.should_sample(&tid));
-                }
+            if let Some(span) = entry_to_span(black_box(&clean_entry))
+                && let Ok(tid) = <[u8; 16]>::try_from(span.trace_id.as_slice())
+            {
+                let _ = black_box(sampler_50.should_sample(&tid));
             }
         }),
         bench_op("build_traces_req_batch_10", 1000, || {
@@ -248,12 +252,12 @@ fn main() {
 
         if r.scenario.starts_with("entry_to_span_") {
             assert!(
-                r.allocs_per_op <= 25,
+                r.allocs_per_op <= 40,
                 "Span creation exceeded allocation budget: {} allocs/op",
                 r.allocs_per_op
             );
             assert!(
-                r.bytes_per_op <= 1024,
+                r.bytes_per_op <= 2048,
                 "Span creation exceeded memory budget: {} bytes/op",
                 r.bytes_per_op
             );

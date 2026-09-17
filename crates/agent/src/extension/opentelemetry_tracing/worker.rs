@@ -102,29 +102,6 @@ impl Drop for OtlpTracingWorkerHandle {
         }
     }
 }
-
-fn random_id<const N: usize>() -> [u8; N] {
-    let mut buf = [0u8; N];
-    let res = unsafe { libc::getentropy(buf.as_mut_ptr() as *mut libc::c_void, N) };
-    if res != 0 {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(42);
-        let mut state = nanos as u64 ^ 0x517cc1b727220a95;
-        for byte in buf.iter_mut() {
-            state ^= state << 13;
-            state ^= state >> 7;
-            state ^= state << 17;
-            *byte = (state & 0xFF) as u8;
-        }
-    }
-    if buf.iter().all(|&b| b == 0) {
-        buf[0] = 1;
-    }
-    buf
-}
-
 pub fn entry_to_span(entry: &GatewayLogEntry) -> Option<Span> {
     let trace_id_str = entry.trace_id.as_deref()?;
     if trace_id_str.is_empty() {
@@ -181,29 +158,53 @@ pub fn entry_to_span(entry: &GatewayLogEntry) -> Option<Span> {
         }),
         ..Default::default()
     };
+    let make_double_attr = |k: &str, v: f64| KeyValue {
+        key: k.to_string(),
+        value: Some(AnyValue {
+            value: Some(AnyValueUnion::DoubleValue(v)),
+        }),
+        ..Default::default()
+    };
 
-    let mut attributes = Vec::with_capacity(8);
+    let mut attributes = Vec::with_capacity(16);
 
     if let Some(ref method) = entry.method {
         attributes.push(make_str_attr("http.method", method.clone()));
+        attributes.push(make_str_attr("http.request.method", method.clone()));
     }
 
     if let Some(ref uri) = entry.uri {
         attributes.push(make_str_attr("http.target", uri.clone()));
+        attributes.push(make_str_attr("url.path", uri.clone()));
     }
 
     attributes.push(make_int_attr("http.status_code", status_code as i64));
+    attributes.push(make_int_attr(
+        "http.response.status_code",
+        status_code as i64,
+    ));
 
     if let Some(ref host) = entry.host {
         attributes.push(make_str_attr("http.host", host.clone()));
+        attributes.push(make_str_attr("server.address", host.clone()));
     }
 
     if let Some(ref ip) = entry.client_ip {
         attributes.push(make_str_attr("http.client_ip", ip.clone()));
+        attributes.push(make_str_attr("client.address", ip.clone()));
     }
 
     if let Some(ref ua) = entry.user_agent {
         attributes.push(make_str_attr("http.user_agent", ua.clone()));
+        attributes.push(make_str_attr("user_agent.original", ua.clone()));
+    }
+
+    if let Some(ref rid) = entry.request_id {
+        attributes.push(make_str_attr("http.request.id", rid.clone()));
+    }
+
+    if let Some(duration_ms) = entry.effective_duration_ms() {
+        attributes.push(make_double_attr("http.request.duration_ms", duration_ms));
     }
 
     if let Some(ref action) = entry.waf_action {
@@ -214,13 +215,16 @@ pub fn entry_to_span(entry: &GatewayLogEntry) -> Option<Span> {
         attributes.push(make_str_attr("waf.rule_id", rule_id.clone()));
     }
 
-    let span_id = random_id::<8>();
+    let mut span_id = trace_id_bytes[0..8].to_vec();
+    if span_id.iter().all(|&b| b == 0) {
+        span_id[0] = 1;
+    }
     let method_str = entry.method.as_deref().unwrap_or("HTTP");
     let name = format!("{method_str} {}", entry.uri.as_deref().unwrap_or("/"));
 
     Some(Span {
         trace_id: trace_id_bytes,
-        span_id: span_id.to_vec(),
+        span_id,
         trace_state: String::new(),
         parent_span_id: Vec::new(),
         flags: 1, // SAMPLED flag
@@ -398,12 +402,14 @@ mod tests {
             waf_rule_id: None,
             timestamp_unix_nano: Some(1_700_000_000_000_000_000),
             trace_id: Some("0123456789abcdef0123456789abcdef".to_string()),
+            request_id: Some("req-12345".to_string()),
             ..Default::default()
         };
 
         let span = entry_to_span(&entry).expect("span should be created when trace_id present");
         assert_eq!(span.trace_id.len(), 16);
         assert_eq!(span.span_id.len(), 8);
+        assert_eq!(span.span_id, &span.trace_id[0..8]);
         assert_eq!(span.name, "GET /api/v1/orders");
         assert_eq!(span.kind, SpanKind::Server as i32);
         assert_eq!(span.end_time_unix_nano, 1_700_000_000_000_000_000);
@@ -415,14 +421,61 @@ mod tests {
         let status = span.status.unwrap();
         assert_eq!(status.code, StatusCode::Ok as i32);
 
-        let has_ip = span.attributes.iter().any(|kv| {
-            kv.key == "http.client_ip"
-                && match &kv.value.as_ref().unwrap().value {
-                    Some(AnyValueUnion::StringValue(v)) => v == "10.0.0.1",
-                    _ => false,
-                }
-        });
-        assert!(has_ip);
+        let has_str_attr = |key: &str, val: &str| {
+            span.attributes.iter().any(|kv| {
+                kv.key == key
+                    && match &kv.value.as_ref().unwrap().value {
+                        Some(AnyValueUnion::StringValue(v)) => v == val,
+                        _ => false,
+                    }
+            })
+        };
+        assert!(has_str_attr("http.client_ip", "10.0.0.1"));
+        assert!(has_str_attr("client.address", "10.0.0.1"));
+        assert!(has_str_attr("http.method", "GET"));
+        assert!(has_str_attr("http.request.method", "GET"));
+        assert!(has_str_attr("http.target", "/api/v1/orders"));
+        assert!(has_str_attr("url.path", "/api/v1/orders"));
+        assert!(has_str_attr("http.host", "example.com"));
+        assert!(has_str_attr("server.address", "example.com"));
+        assert!(has_str_attr("http.user_agent", "curl/7.81.0"));
+        assert!(has_str_attr("user_agent.original", "curl/7.81.0"));
+        assert!(has_str_attr("http.request.id", "req-12345"));
+        assert!(has_str_attr("waf.action", "allow"));
+
+        let has_int_attr = |key: &str, val: i64| {
+            span.attributes.iter().any(|kv| {
+                kv.key == key
+                    && match &kv.value.as_ref().unwrap().value {
+                        Some(AnyValueUnion::IntValue(v)) => *v == val,
+                        _ => false,
+                    }
+            })
+        };
+        assert!(has_int_attr("http.status_code", 200));
+        assert!(has_int_attr("http.response.status_code", 200));
+
+        let has_double_attr = |key: &str, val: f64| {
+            span.attributes.iter().any(|kv| {
+                kv.key == key
+                    && match &kv.value.as_ref().unwrap().value {
+                        Some(AnyValueUnion::DoubleValue(v)) => (*v - val).abs() < f64::EPSILON,
+                        _ => false,
+                    }
+            })
+        };
+        assert!(has_double_attr("http.request.duration_ms", 45.5));
+    }
+
+    #[test]
+    fn test_entry_to_span_zero_prefix_fallback() {
+        let entry = GatewayLogEntry {
+            trace_id: Some("00000000000000001234567890abcdef".to_string()),
+            ..Default::default()
+        };
+        let span = entry_to_span(&entry).expect("span should be created");
+        assert_eq!(span.span_id[0], 1);
+        assert_eq!(&span.span_id[1..], &[0u8; 7]);
     }
 
     #[test]
