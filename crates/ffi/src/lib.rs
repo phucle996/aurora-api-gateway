@@ -23,8 +23,12 @@ pub use extensions::request_size_limit;
 pub use extensions::traffic_shaper;
 pub use extensions::traffic_split;
 pub use extensions::traffic_split::*;
-pub use extensions::waf;
-pub use extensions::waf::*;
+/// Trả về số phiên bản ABI hiện tại của Aurora Gateway (hiện tại là 4).
+/// Module NGINX sẽ gọi hàm này lúc khởi động để kiểm tra tính tương thích nhị phân.
+#[unsafe(no_mangle)]
+pub extern "C" fn aurora_waf_abi_version() -> u32 {
+    4
+}
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
@@ -274,33 +278,5 @@ mod tests {
         assert_eq!(explicit_matches.len(), 1);
         assert_eq!(explicit_matches[0].rule_id, 999);
         assert_eq!(explicit_matches[0].ip, "10.0.0.99");
-    }
-
-    #[test]
-    fn test_dynamic_policy_hot_swap() {
-        let policy_json = br#"{"schema_version":1,"block_paths":["/admin","/restricted"]}"#;
-        let ret = unsafe { aurora_waf_swap_policy(policy_json.as_ptr(), policy_json.len()) };
-        assert_eq!(ret, 0);
-
-        let path = b"/admin";
-        let mut decision = Decision::default();
-        let status = unsafe {
-            aurora_waf_evaluate_v3(std::ptr::null(), path.as_ptr(), path.len(), &mut decision)
-        };
-        assert_eq!(status, 0);
-        assert_eq!(decision.action, 1); // Blocked
-
-        let safe_path = b"/public/index.html";
-        let mut safe_decision = Decision::default();
-        let safe_status = unsafe {
-            aurora_waf_evaluate_v3(
-                std::ptr::null(),
-                safe_path.as_ptr(),
-                safe_path.len(),
-                &mut safe_decision,
-            )
-        };
-        assert_eq!(safe_status, 0);
-        assert_eq!(safe_decision.action, 0); // Allowed
     }
 }

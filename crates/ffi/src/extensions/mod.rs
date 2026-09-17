@@ -20,4 +20,3 @@ pub mod request_termination;
 pub mod traffic_shaper;
 #[path = "traffic-split/mod.rs"]
 pub mod traffic_split;
-pub mod waf;

@@ -1,6 +1,7 @@
 //! Aurora Engine In-process Extensions.
-
-pub mod access;
+#[path = "ip-restriction/mod.rs"]
+pub mod ip_restriction;
+pub use ip_restriction as access;
 #[path = "blue-green/mod.rs"]
 pub mod blue_green;
 #[path = "canary-release/mod.rs"]
@@ -20,4 +21,3 @@ pub mod request_termination;
 pub mod traffic_shaper;
 #[path = "traffic-split/mod.rs"]
 pub mod traffic_split;
-pub mod waf;
