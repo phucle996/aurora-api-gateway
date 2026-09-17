@@ -51,7 +51,7 @@ export class RateLimitFixture {
     };
     this.report.artifactHashes = Object.fromEntries(Object.entries(binaries).map(([name, file]) =>
       [name, { file, sha256: createHash('sha256').update(readFileSync(file)).digest('hex') }]));
-    const domain = `gateway on;\ngateway_waf_policy /var/lib/aurora-policy/active-policy.json;\ngateway_waf_mode enforce;\ninclude /var/lib/aurora-policy/active-extensions.conf;\nadd_header X-Lab-Worker $pid always;\n`;
+    const domain = `gateway on;\ninclude /var/lib/aurora-policy/active-extensions.conf;\nadd_header X-Lab-Worker $pid always;\n`;
     writeFileSync(path.join(this.dir, 'private/domain-waf.conf'), domain);
     writeFileSync(path.join(this.dir, 'private/nginx.conf'), `
 load_module /opt/modules/ngx_http_gateway_module.so;

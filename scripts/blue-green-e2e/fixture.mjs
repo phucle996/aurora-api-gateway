@@ -30,7 +30,6 @@ export class BlueGreenFixture {
     );
 
     this.blueGreenPolicyPath = path.join(this.dir, 'active-blue-green.json');
-    this.wafPolicyPath = path.join(this.dir, 'waf-policy.json');
     this.nginxConfPath = path.join(this.dir, 'nginx.conf');
     this.pidFile = path.join(this.dir, 'nginx.pid');
 
@@ -210,7 +209,6 @@ export class BlueGreenFixture {
     const modulePath = possibleModules.find(p => existsSync(p));
     assert.ok(modulePath, `NGINX gateway module not found at: ${possibleModules.join(' or ')}`);
 
-    writeFileSync(this.wafPolicyPath, JSON.stringify({ schema_version: 1, block_paths: [] }));
 
     const conf = `
 daemon off;
@@ -253,7 +251,6 @@ http {
         server_name localhost example.com bluegreen.example.com other.example.com;
 
         gateway on;
-        gateway_waf_policy ${this.wafPolicyPath};
         gateway_blue_green_policy ${this.blueGreenPolicyPath};
 
         location / {

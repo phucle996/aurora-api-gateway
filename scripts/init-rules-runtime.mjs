@@ -7,7 +7,6 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 for (const [relative, payload] of [
   ['control-plane/data/admin.token', randomBytes(32).toString('hex') + '\n'],
-  ['build/runtime/active-policy.json', readFileSync(path.join(root, 'examples/runtime-policy.json'))],
 ]) {
   const target = path.join(root, relative);
   mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });

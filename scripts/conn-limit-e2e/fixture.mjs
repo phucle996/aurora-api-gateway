@@ -34,7 +34,6 @@ export class ConnLimitFixture {
 
     this.clPolicyPath = path.join(this.dir, 'active-connection-limit.json');
     this.rlPolicyPath = path.join(this.dir, 'active-rate-limit.json');
-    this.wafPolicyPath = path.join(this.dir, 'waf-policy.json');
     this.nginxConfPath = path.join(this.dir, 'nginx.conf');
     this.pidFile = path.join(this.dir, 'nginx.pid');
 
@@ -112,7 +111,6 @@ export class ConnLimitFixture {
     assert.ok(modulePath, `NGINX gateway module not found at: ${possibleModules.join(' or ')}`);
 
     // Write initial clean WAF and Rate-Limit policies
-    writeFileSync(this.wafPolicyPath, JSON.stringify({ schema_version: 1, block_paths: [] }));
     this.writeRateLimitPolicy({
       schema_version: 1,
       generation: 1,
@@ -160,7 +158,6 @@ http {
         server_name localhost;
 
         gateway on;
-        gateway_waf_policy ${this.wafPolicyPath};
         gateway_rate_limit_policy ${this.rlPolicyPath};
         gateway_conn_limit_policy ${this.clPolicyPath};
 

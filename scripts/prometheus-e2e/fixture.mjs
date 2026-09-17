@@ -27,7 +27,7 @@ export async function getFreePort() {
 
 export function cleanShm() {
   if (existsSync(SHM_PATH)) {
-    try { unlinkSync(SHM_PATH); } catch {}
+    try { unlinkSync(SHM_PATH); } catch { }
   }
 }
 
@@ -45,66 +45,66 @@ export function readShmSnapshot() {
   closeSync(fd);
 
   return {
-    magic:          buf.readUInt32LE(0),
-    version:        buf.readUInt32LE(4),
-    generation:     Number(buf.readBigUInt64LE(8)),
+    magic: buf.readUInt32LE(0),
+    version: buf.readUInt32LE(4),
+    generation: Number(buf.readBigUInt64LE(8)),
 
     // HTTP requests and status classes
     http_requests_total: Number(buf.readBigUInt64LE(16)),
-    http_status_2xx:     Number(buf.readBigUInt64LE(24)),
-    http_status_3xx:     Number(buf.readBigUInt64LE(32)),
-    http_status_4xx:     Number(buf.readBigUInt64LE(40)),
-    http_status_5xx:     Number(buf.readBigUInt64LE(48)),
-    http_status_other:   Number(buf.readBigUInt64LE(56)),
+    http_status_2xx: Number(buf.readBigUInt64LE(24)),
+    http_status_3xx: Number(buf.readBigUInt64LE(32)),
+    http_status_4xx: Number(buf.readBigUInt64LE(40)),
+    http_status_5xx: Number(buf.readBigUInt64LE(48)),
+    http_status_other: Number(buf.readBigUInt64LE(56)),
 
     // Latency histogram buckets (cumulative counts)
-    http_duration_bucket_1ms:    Number(buf.readBigUInt64LE(64)),
-    http_duration_bucket_5ms:    Number(buf.readBigUInt64LE(72)),
-    http_duration_bucket_10ms:   Number(buf.readBigUInt64LE(80)),
-    http_duration_bucket_50ms:   Number(buf.readBigUInt64LE(88)),
-    http_duration_bucket_100ms:  Number(buf.readBigUInt64LE(96)),
-    http_duration_bucket_500ms:  Number(buf.readBigUInt64LE(104)),
+    http_duration_bucket_1ms: Number(buf.readBigUInt64LE(64)),
+    http_duration_bucket_5ms: Number(buf.readBigUInt64LE(72)),
+    http_duration_bucket_10ms: Number(buf.readBigUInt64LE(80)),
+    http_duration_bucket_50ms: Number(buf.readBigUInt64LE(88)),
+    http_duration_bucket_100ms: Number(buf.readBigUInt64LE(96)),
+    http_duration_bucket_500ms: Number(buf.readBigUInt64LE(104)),
     http_duration_bucket_1000ms: Number(buf.readBigUInt64LE(112)),
-    http_duration_bucket_inf:    Number(buf.readBigUInt64LE(120)),
-    http_duration_sum_ms:        Number(buf.readBigUInt64LE(128)),
+    http_duration_bucket_inf: Number(buf.readBigUInt64LE(120)),
+    http_duration_sum_ms: Number(buf.readBigUInt64LE(128)),
 
     // Core WAF
-    waf_allow:  Number(buf.readBigUInt64LE(136)),
-    waf_block:  Number(buf.readBigUInt64LE(144)),
-    waf_audit:  Number(buf.readBigUInt64LE(152)),
+    waf_allow: Number(buf.readBigUInt64LE(136)),
+    waf_block: Number(buf.readBigUInt64LE(144)),
+    waf_audit: Number(buf.readBigUInt64LE(152)),
 
     // Access Control
     access_allow: Number(buf.readBigUInt64LE(160)),
     access_block: Number(buf.readBigUInt64LE(168)),
 
     // Rate Limiting
-    ratelimit_allowed:   Number(buf.readBigUInt64LE(176)),
+    ratelimit_allowed: Number(buf.readBigUInt64LE(176)),
     ratelimit_throttled: Number(buf.readBigUInt64LE(184)),
-    ratelimit_rejected:  Number(buf.readBigUInt64LE(192)),
+    ratelimit_rejected: Number(buf.readBigUInt64LE(192)),
 
     // JWT Authentication
-    jwt_valid:   Number(buf.readBigUInt64LE(200)),
+    jwt_valid: Number(buf.readBigUInt64LE(200)),
     jwt_invalid: Number(buf.readBigUInt64LE(208)),
     jwt_expired: Number(buf.readBigUInt64LE(216)),
     jwt_missing: Number(buf.readBigUInt64LE(224)),
 
     // Policy extensions
-    conn_limit_rejected:     Number(buf.readBigUInt64LE(232)),
-    traffic_shaper_delayed:  Number(buf.readBigUInt64LE(240)),
-    request_size_rejected:   Number(buf.readBigUInt64LE(248)),
-    termination_triggered:   Number(buf.readBigUInt64LE(256)),
+    conn_limit_rejected: Number(buf.readBigUInt64LE(232)),
+    traffic_shaper_delayed: Number(buf.readBigUInt64LE(240)),
+    request_size_rejected: Number(buf.readBigUInt64LE(248)),
+    termination_triggered: Number(buf.readBigUInt64LE(256)),
 
     // Routing extensions
-    traffic_split_primary:   Number(buf.readBigUInt64LE(264)),
+    traffic_split_primary: Number(buf.readBigUInt64LE(264)),
     traffic_split_secondary: Number(buf.readBigUInt64LE(272)),
-    canary_baseline:         Number(buf.readBigUInt64LE(280)),
-    canary_canary:           Number(buf.readBigUInt64LE(288)),
-    blue_green_blue:         Number(buf.readBigUInt64LE(296)),
-    blue_green_green:        Number(buf.readBigUInt64LE(304)),
-    mirror_sampled:          Number(buf.readBigUInt64LE(312)),
+    canary_baseline: Number(buf.readBigUInt64LE(280)),
+    canary_canary: Number(buf.readBigUInt64LE(288)),
+    blue_green_blue: Number(buf.readBigUInt64LE(296)),
+    blue_green_green: Number(buf.readBigUInt64LE(304)),
+    mirror_sampled: Number(buf.readBigUInt64LE(312)),
 
     // NGINX Connection state
-    connections_active:  Number(buf.readBigUInt64LE(320)),
+    connections_active: Number(buf.readBigUInt64LE(320)),
     connections_reading: Number(buf.readBigUInt64LE(328)),
     connections_writing: Number(buf.readBigUInt64LE(336)),
     connections_waiting: Number(buf.readBigUInt64LE(344)),
@@ -149,10 +149,10 @@ export class PrometheusE2EFixture {
   async setup() {
     cleanShm();
     this.controllerPort = await getFreePort();
-    this.grpcPort       = await getFreePort();
-    this.nginxPort       = await getFreePort();
-    this.metricsPort    = await getFreePort();
-    this.upstreamPort   = await getFreePort();
+    this.grpcPort = await getFreePort();
+    this.nginxPort = await getFreePort();
+    this.metricsPort = await getFreePort();
+    this.upstreamPort = await getFreePort();
 
     writeFileSync(path.join(this.dir, 'token'), this.token, { mode: 0o600 });
     mkdirSync(path.join(this.dir, 'html'), { recursive: true });
@@ -163,14 +163,8 @@ export class PrometheusE2EFixture {
     writeFileSync(path.join(this.dir, 'html/ok'), 'Aurora Gateway OK\n');
     writeFileSync(path.join(this.dir, 'html/fast'), 'fast-response\n');
 
-    // WAF policy: block /blocked and /blocked/*
-    writeFileSync(path.join(this.dir, 'policy/active-policy.json'), JSON.stringify({
-      schema_version: 1,
-      block_paths: ['/blocked']
-    }));
-
     // Access control policy: block 192.0.2.0/24 from /admin
-    writeFileSync(path.join(this.dir, 'policy/active-access.json'), JSON.stringify({
+    writeFileSync(path.join(this.dir, 'policy/active-ip-restriction.json'), JSON.stringify({
       schema_version: 1,
       generation: 1,
       rules: [{
@@ -194,7 +188,7 @@ export class PrometheusE2EFixture {
       if (existsSync(this.promConfigPath)) {
         this.originalPromConfig = readFileSync(this.promConfigPath, 'utf8');
       }
-    } catch {}
+    } catch { }
   }
 
   /**
@@ -258,7 +252,7 @@ export class PrometheusE2EFixture {
       try {
         const res = await fetch(`http://127.0.0.1:${this.controllerPort}/readyz`);
         if (res.ok) return;
-      } catch {}
+      } catch { }
       if (this.controller.exitCode !== null) {
         throw new Error(`Controller failed to start: ${stderr}`);
       }
@@ -290,8 +284,7 @@ http {
     listen 127.0.0.1:${this.nginxPort};
     root ${this.dir}/html;
     gateway on;
-    gateway_waf_policy ${this.dir}/policy/active-policy.json;
-    gateway_access_policy ${this.dir}/policy/active-access.json;
+    gateway_access_policy ${this.dir}/policy/active-ip-restriction.json;
 
     # Static file serving (fast, no upstream)
     location /ok { try_files $uri =404; }
@@ -338,7 +331,7 @@ http {
       try {
         const res = await fetch(`http://127.0.0.1:${this.nginxPort}/ok`);
         if (res.ok) return;
-      } catch {}
+      } catch { }
       if (this.nginx.exitCode !== null) {
         throw new Error('NGINX process exited unexpectedly');
       }
@@ -371,7 +364,7 @@ http {
       try {
         const res = await fetch(`http://127.0.0.1:${port}/healthz`);
         if (res.ok) return;
-      } catch {}
+      } catch { }
       if (this.agent.exitCode !== null) {
         throw new Error('Aurora Agent exited unexpectedly');
       }
@@ -382,23 +375,23 @@ http {
 
   async cleanup() {
     if (this.agent) {
-      try { this.agent.kill('SIGTERM'); } catch {}
+      try { this.agent.kill('SIGTERM'); } catch { }
     }
     if (this.nginx) {
-      try { this.nginx.kill('SIGQUIT'); } catch {}
+      try { this.nginx.kill('SIGQUIT'); } catch { }
     }
     if (this.controller) {
-      try { this.controller.kill('SIGTERM'); } catch {}
+      try { this.controller.kill('SIGTERM'); } catch { }
     }
     if (this.upstream) {
-      try { this.upstream.close(); } catch {}
+      try { this.upstream.close(); } catch { }
     }
 
     if (this.originalPromConfig && existsSync(this.promConfigPath)) {
       try {
         writeFileSync(this.promConfigPath, this.originalPromConfig);
-        await fetch(`${PROMETHEUS_URL}/-/reload`, { method: 'POST' }).catch(() => {});
-      } catch {}
+        await fetch(`${PROMETHEUS_URL}/-/reload`, { method: 'POST' }).catch(() => { });
+      } catch { }
     }
 
     cleanShm();

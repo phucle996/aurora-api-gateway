@@ -30,7 +30,6 @@ export class RequestSizeFixture {
     );
 
     this.rslPolicyPath = path.join(this.dir, 'active-request-size-limit.json');
-    this.wafPolicyPath = path.join(this.dir, 'waf-policy.json');
     this.nginxConfPath = path.join(this.dir, 'nginx.conf');
     this.pidFile = path.join(this.dir, 'nginx.pid');
 
@@ -86,7 +85,6 @@ export class RequestSizeFixture {
     const modulePath = possibleModules.find(p => existsSync(p));
     assert.ok(modulePath, `NGINX gateway module not found at: ${possibleModules.join(' or ')}`);
 
-    writeFileSync(this.wafPolicyPath, JSON.stringify({ schema_version: 1, block_paths: [] }));
 
     const conf = `
 daemon off;
@@ -118,7 +116,6 @@ http {
         server_name localhost;
 
         gateway on;
-        gateway_waf_policy ${this.wafPolicyPath};
         gateway_request_size_limit_policy ${this.rslPolicyPath};
 
         location / {

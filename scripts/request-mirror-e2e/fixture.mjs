@@ -30,7 +30,6 @@ export class RequestMirrorFixture {
     );
 
     this.mirrorPolicyPath = path.join(this.dir, 'active-request-mirror.json');
-    this.wafPolicyPath = path.join(this.dir, 'waf-policy.json');
     this.nginxConfPath = path.join(this.dir, 'nginx.conf');
     this.pidFile = path.join(this.dir, 'nginx.pid');
 
@@ -241,7 +240,6 @@ export class RequestMirrorFixture {
     const modulePath = possibleModules.find(p => existsSync(p));
     assert.ok(modulePath, `NGINX gateway module not found at: ${possibleModules.join(' or ')}`);
 
-    writeFileSync(this.wafPolicyPath, JSON.stringify({ schema_version: 1, block_paths: [] }));
 
     const conf = `
 daemon off;
@@ -284,7 +282,6 @@ http {
         server_name localhost example.com mirror.example.com other.example.com;
 
         gateway on;
-        gateway_waf_policy ${this.wafPolicyPath};
         gateway_request_mirror_policy ${this.mirrorPolicyPath};
 
         location / {

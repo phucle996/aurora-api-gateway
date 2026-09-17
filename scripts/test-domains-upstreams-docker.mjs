@@ -96,14 +96,6 @@ try{
  await settledBackend('A');report.checks.push('least_conn with unavailable primary uses backup');
  await api('PUT',`/api/v1/upstreams/${u.id}`,{...renamed,servers:[{id:'B',address:`${gateway}:${backends[1].port}`,weight:1,maxFails:0}]});
  await settledBackend('B');
- const activePolicy=JSON.parse((await execAsync('docker',['exec','aurora-node-01','cat','/var/lib/aurora-policy/active-policy.json'],{encoding:'utf8'})).stdout);
- const blockedPath=activePolicy.policies?.find(p=>p.host==='*')?.rules?.find(r=>r.action==='block')?.path ?? activePolicy.block_paths?.[0];
- assert.ok(blockedPath,'a published blocking rule is required for the WAF regression check');
- const baseline=await request('localhost',8091,blockedPath);
- const routedBlock=await request('domain-a.aurora.test',8091,blockedPath);
- assert.equal(baseline.status,403,'WAF baseline must enforce the published blocking policy');
- assert.equal(routedBlock.status,403,'domain proxy must preserve WAF enforcement');
- report.checks.push('WAF blocks requests before proxying to origin');
  // Browser create/edit must survive reload and be present in SQLite-backed APIs.
  await page.goto('http://localhost:8080/domains/create');
  await page.getByLabel('Domain hostname').fill('browser-routing.aurora.test');

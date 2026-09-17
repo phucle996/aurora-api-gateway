@@ -42,21 +42,6 @@ chmod 644 /etc/nginx/aurora-config-view.conf
 # Policy directory survives container replacement in a per-node volume.
 umask 077
 mkdir -p /var/lib/aurora-policy
-if [ ! -f /var/lib/aurora-policy/active-policy.json ] || ! grep -q '"schema_version"' /var/lib/aurora-policy/active-policy.json 2>/dev/null || grep -q '"mode"' /var/lib/aurora-policy/active-policy.json 2>/dev/null; then
-    cat <<EOF > /var/lib/aurora-policy/active-policy.json
-{
-  "schema_version": 1,
-  "block_paths": [
-    "/blocked",
-    "/__aurora_blocked"
-  ]
-}
-EOF
-fi
-
-if [ ! -f /var/lib/aurora-policy/active-access.json ] || ! grep -q '"generation"' /var/lib/aurora-policy/active-access.json 2>/dev/null; then
-    printf '%s' '{"schema_version":1,"generation":0,"rules":[]}' > /var/lib/aurora-policy/active-access.json
-fi
 
 if [ ! -f /var/lib/aurora-policy/active-upstreams.conf ]; then
     printf '%s\n' '# Aurora API Gateway initial active upstreams' > /var/lib/aurora-policy/active-upstreams.conf
@@ -76,9 +61,6 @@ chmod 700 /var/lib/aurora-policy
 # Routing servers share the same WAF enforcement and node identity as the workload server.
 cat > /etc/nginx/domain-waf.conf <<EOF
 gateway on;
-gateway_waf_policy /var/lib/aurora-policy/active-policy.json;
-gateway_access_policy /var/lib/aurora-policy/active-access.json;
-gateway_waf_mode enforce;
 real_ip_header proxy_protocol;
 set_real_ip_from 127.0.0.1;
 set_real_ip_from ::1;
