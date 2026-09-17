@@ -16,11 +16,6 @@ async fn test_materialize_nginx_files() {
 
     let spec = Spec {
         release_id: 99,
-        security: crate::spec::security::SecuritySpec {
-            mode: "enforce".to_string(),
-            block_paths: vec!["/blocked".to_string()],
-            ..Default::default()
-        },
         upstreams: vec![crate::spec::upstream::UpstreamSpec {
             name: "backend".to_string(),
             servers: vec![crate::spec::upstream::UpstreamServerSpec {

@@ -56,10 +56,8 @@ fn get_bytes() -> usize {
     BYTES_ALLOCATED.load(Ordering::Relaxed)
 }
 
-#[allow(dead_code)]
 struct BenchResult {
     name: String,
-    iterations: usize,
     median_ns: f64,
     allocs_per_op: usize,
     bytes_per_op: usize,
@@ -85,7 +83,6 @@ fn bench_sni_matching() -> BenchResult {
 
     BenchResult {
         name: "matches_sni_wildcard".to_string(),
-        iterations: iters,
         median_ns: elapsed.as_nanos() as f64 / iters as f64,
         allocs_per_op: total_allocs / iters,
         bytes_per_op: total_bytes / iters,
@@ -123,7 +120,6 @@ fn bench_certificate_lookup() -> BenchResult {
 
     BenchResult {
         name: "find_matching_certificate_50_certs".to_string(),
-        iterations: iters,
         median_ns: elapsed.as_nanos() as f64 / iters as f64,
         allocs_per_op: total_allocs / iters,
         bytes_per_op: total_bytes / iters,
@@ -190,7 +186,6 @@ fn bench_routing_materialize_100_routes() -> BenchResult {
 
     BenchResult {
         name: "materialize_100_locations_20_hosts".to_string(),
-        iterations: iters,
         median_ns: elapsed.as_nanos() as f64 / iters as f64,
         allocs_per_op: total_allocs / iters,
         bytes_per_op: total_bytes / iters,
