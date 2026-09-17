@@ -52,7 +52,7 @@ export class RateLimitFixture {
     this.report.artifactHashes = Object.fromEntries(Object.entries(binaries).map(([name, file]) =>
       [name, { file, sha256: createHash('sha256').update(readFileSync(file)).digest('hex') }]));
     const domain = `gateway on;\ninclude /var/lib/aurora-policy/active-extensions.conf;\nadd_header X-Lab-Worker $pid always;\n`;
-    writeFileSync(path.join(this.dir, 'private/domain-waf.conf'), domain);
+    writeFileSync(path.join(this.dir, 'private/gateway-pipeline.conf'), domain);
     writeFileSync(path.join(this.dir, 'private/nginx.conf'), `
 load_module /opt/modules/ngx_http_gateway_module.so;
 worker_processes ${this.options.workers};
@@ -124,7 +124,7 @@ exec /usr/local/bin/aurora-agent
         ports: ['127.0.0.1::80', '127.0.0.1::9145'],
         volumes: [`${id}-policy:/var/lib/aurora-policy`, `${id}-routing:/var/lib/aurora-routing`,
         `${binaries.agent}:/usr/local/bin/aurora-agent:ro`, `${module}:/opt/modules/ngx_http_gateway_module.so:ro`,
-        `${this.dir}/private/nginx.conf:/etc/nginx/nginx.conf:ro`, `${this.dir}/private/domain-waf.conf:/etc/nginx/domain-waf.conf:ro`,
+        `${this.dir}/private/nginx.conf:/etc/nginx/nginx.conf:ro`, `${this.dir}/private/gateway-pipeline.conf:/etc/nginx/gateway-pipeline.conf:ro`,
         `${this.dir}/private/start-node.sh:/lab/start-node.sh:ro`]
       };
       this.nodes.push({ id });

@@ -86,10 +86,8 @@ RUN ln -sf /usr/local/bin/aurora-gateway /opt/nginx/usr/sbin/nginx
 
 COPY deploy/docker/nginx-node.conf.template /etc/nginx/nginx-node.conf.template
 COPY deploy/docker/entrypoint-node.sh /entrypoint.sh
-COPY deploy/docker/extension-modules.sh /extension-modules.sh
 
-RUN ln -sf /extension-modules.sh /node-modules.sh \
-    && chmod +x /usr/local/bin/aurora-agent /usr/local/bin/aurora-gateway /extension-modules.sh /node-modules.sh /entrypoint.sh \
+RUN chmod +x /usr/local/bin/aurora-agent /usr/local/bin/aurora-gateway /entrypoint.sh \
     && mkdir -p /usr/share/aurora-demo \
     && printf 'Aurora demo backend: allowed.\n' > /usr/share/aurora-demo/ok \
     && printf 'Aurora demo backend: this file must not be served in enforce mode.\n' > /usr/share/aurora-demo/__aurora_blocked

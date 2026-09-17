@@ -5,7 +5,7 @@
   "name": "URI Rewrite",
   "category": "request_transformation",
   "description": "Applies configured URI rewrite rules.",
-  "renderer": "nginx-uri-rewrite",
+  "renderer": "uri-rewrite",
   "builtin": true,
   "default_config": {
     "rules": []

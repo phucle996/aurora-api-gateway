@@ -1,6 +1,84 @@
-use crate::spec::l4::L4Spec;
 use ipnet::IpNet;
+use serde::{Deserialize, Serialize};
 use std::fmt::Write;
+
+/// L4Spec represents Layer 4 (TCP/UDP) transport proxying and ACL configuration.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct L4Spec {
+    #[serde(default)]
+    pub upstreams: Vec<L4UpstreamSpec>,
+    #[serde(default)]
+    pub services: Vec<L4ServiceSpec>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct L4UpstreamSpec {
+    pub name: String,
+    #[serde(default = "default_tcp")]
+    pub protocol: String,
+    #[serde(default = "default_round_robin")]
+    pub algorithm: String,
+    #[serde(default)]
+    pub servers: Vec<L4ServerSpec>,
+}
+
+fn default_tcp() -> String {
+    "tcp".to_string()
+}
+
+fn default_round_robin() -> String {
+    "round_robin".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct L4ServerSpec {
+    pub addr: String,
+    #[serde(default = "default_weight")]
+    pub weight: u32,
+    #[serde(default)]
+    pub max_fails: Option<u32>,
+    #[serde(default)]
+    pub fail_timeout: Option<String>,
+    #[serde(default)]
+    pub backup: bool,
+}
+
+fn default_weight() -> u32 {
+    1
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct L4ServiceSpec {
+    pub name: String,
+    #[serde(default = "default_tcp")]
+    pub protocol: String,
+    pub listen_port: u16,
+    #[serde(default)]
+    pub forward_target_type: Option<String>,
+    #[serde(default)]
+    pub upstream: String,
+    #[serde(default)]
+    pub endpoint: Option<String>,
+    #[serde(default)]
+    pub acl: Vec<L4AclRuleSpec>,
+    #[serde(default)]
+    pub proxy_timeout: Option<String>,
+    #[serde(default)]
+    pub proxy_connect_timeout: Option<String>,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct L4AclRuleSpec {
+    pub cidr: String,
+    pub action: String, // "allow" | "deny"
+    pub priority: u32,
+}
 
 /// Generates NGINX stream block configuration for L4 stream proxying and CIDR access control.
 pub fn generate_l4_streams_conf(l4: &Option<L4Spec>) -> Result<String, String> {
@@ -117,33 +195,7 @@ pub fn generate_l4_streams_conf(l4: &Option<L4Spec>) -> Result<String, String> {
                     .map(|e| !e.trim().is_empty())
                     .unwrap_or(false));
 
-        let is_l7_http_pipeline = is_endpoint
-            && svc.protocol.eq_ignore_ascii_case("tcp")
-            && svc
-                .endpoint
-                .as_deref()
-                .map(|endpoint| endpoint.trim() == "127.0.0.1:80")
-                .unwrap_or(false);
-
-        let is_l7_tls_pipeline = is_endpoint
-            && svc.protocol.eq_ignore_ascii_case("tcp")
-            && svc
-                .endpoint
-                .as_deref()
-                .map(|endpoint| endpoint.trim() == "127.0.0.1:9443")
-                .unwrap_or(false);
-
-        if is_l7_http_pipeline {
-            // The internal HTTP bridge restores the client address from this PROXY header
-            // before forwarding to the domain routing servers.
-            buf.push_str("    proxy_protocol on;\n");
-            buf.push_str("    proxy_pass 127.0.0.1:9082;\n");
-        } else if is_l7_tls_pipeline {
-            // The TLS bridge terminates HTTPS after reading PROXY protocol, so
-            // the L7 access engine receives the original stream client IP.
-            buf.push_str("    proxy_protocol on;\n");
-            buf.push_str("    proxy_pass 127.0.0.1:9443;\n");
-        } else if is_endpoint {
+        if is_endpoint {
             if let Some(ref ep) = svc.endpoint {
                 let _ = writeln!(buf, "    proxy_pass {};", ep.trim());
             }

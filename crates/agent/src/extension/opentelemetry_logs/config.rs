@@ -49,7 +49,10 @@ impl LogLevelFilter {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OtlpLogsConfig {
     pub enabled: bool,
     pub endpoint: String,
@@ -59,6 +62,21 @@ pub struct OtlpLogsConfig {
     pub timeout_ms: u64,
     pub service_name: String,
     pub log_level: String,
+}
+
+impl Default for OtlpLogsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            endpoint: "http://collector:4318".to_string(),
+            protocol: "http".to_string(),
+            batch_size: 100,
+            flush_interval_ms: 2000,
+            timeout_ms: 5000,
+            service_name: "aurora".to_string(),
+            log_level: "info".to_string(),
+        }
+    }
 }
 
 #[cfg(test)]

@@ -1,9 +1,58 @@
-use crate::spec::certificate::CertificateSpec;
-use crate::spec::routing::LocationRoutingSpec;
+use super::atomic_write_if_changed;
+use super::tls::CertificateSpec;
 use crate::spec::schema::Spec;
+use serde::{Deserialize, Serialize};
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
+use tracing::info;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct RoutingSpec {
+    #[serde(default)]
+    pub domains: Vec<DomainRoutingSpec>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct DomainRoutingSpec {
+    pub host: String,
+    #[serde(default)]
+    pub locations: Vec<LocationRoutingSpec>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct LocationRoutingSpec {
+    pub path: String,
+    pub upstream: String,
+    #[serde(default)]
+    pub strip_path: bool,
+    #[serde(default)]
+    pub websocket: bool,
+    #[serde(default)]
+    pub priority: i32,
+    #[serde(default)]
+    pub plugins_json: Option<String>,
+    #[serde(default)]
+    pub origin_tls: Option<OriginTLSSpec>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct OriginTLSSpec {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub verify_cert: bool,
+    #[serde(default)]
+    pub sni_host: String,
+    #[serde(default)]
+    pub ca_cert: String,
+    #[serde(default)]
+    pub mtls: bool,
+    #[serde(default)]
+    pub client_cert: String,
+    #[serde(default)]
+    pub client_key: String,
+}
 
 /// Matches hostname against SNI pattern (supports exact match and wildcard *.example.com).
 pub fn matches_sni(pattern: &str, host: &str) -> bool {
@@ -20,25 +69,25 @@ pub fn matches_sni(pattern: &str, host: &str) -> bool {
     false
 }
 
-/// Finds the most appropriate SSL CertificateSpec matching given host.
+/// Finds the most appropriate SSL CertificateSpec matching given host based on its SANs.
 pub fn find_matching_certificate<'a>(
     certs: &'a [CertificateSpec],
     host: &str,
 ) -> Option<&'a CertificateSpec> {
-    // 1. Exact SNI match
+    // 1. Exact SAN match
     for cert in certs {
         if cert
-            .snis
+            .sans()
             .iter()
             .any(|s| s.trim().eq_ignore_ascii_case(host))
         {
             return Some(cert);
         }
     }
-    // 2. Wildcard SNI match
+    // 2. Wildcard SAN match
     certs
         .iter()
-        .find(|cert| cert.snis.iter().any(|s| matches_sni(s, host)))
+        .find(|cert| cert.sans().iter().any(|s| matches_sni(s, host)))
 }
 
 /// Generates consolidated active-domain-routing.conf with SNI matching, mTLS, and longest prefix location sorting.
@@ -88,7 +137,7 @@ pub fn generate_domain_routing_conf(spec: &Spec, routing_dir: &Path) -> String {
 
         // 1. HTTP Server Block
         buf.push_str(&format!(
-            "server {{\n    listen 80;\n    server_name {};\n    include /etc/nginx/domain-waf.conf;\n",
+            "server {{\n    listen 80;\n    server_name {};\n    include /etc/nginx/gateway-pipeline.conf;\n",
             host
         ));
         render_locations_into(&mut buf, &deduped, routing_dir);
@@ -105,7 +154,7 @@ pub fn generate_domain_routing_conf(spec: &Spec, routing_dir: &Path) -> String {
                 "    listen 443 quic;\n"
             };
             buf.push_str(&format!(
-                "server {{\n    listen 443 ssl;\n{}    listen 127.0.0.1:9443 ssl proxy_protocol;\n    server_name {};\n    include /etc/nginx/domain-waf.conf;\n\n    ssl_certificate {};\n    ssl_certificate_key {};\n    ssl_protocols TLSv1.2 TLSv1.3;\n    ssl_ciphers HIGH:!aNULL:!MD5;\n\n    http2 on;\n    http3 on;\n    quic_retry on;\n    add_header Alt-Svc 'h3=\":443\"; ma=86400' always;\n",
+                "server {{\n    listen 443 ssl;\n{}    server_name {};\n    include /etc/nginx/gateway-pipeline.conf;\n\n    ssl_certificate {};\n    ssl_certificate_key {};\n    ssl_protocols TLSv1.2 TLSv1.3;\n    ssl_ciphers HIGH:!aNULL:!MD5;\n\n    http2 on;\n    http3 on;\n    quic_retry on;\n    add_header Alt-Svc 'h3=\":443\"; ma=86400' always;\n",
                 quic_listen,
                 host,
                 cert_file.display(),
@@ -159,37 +208,6 @@ pub fn render_locations_into(
             ));
         }
 
-        if let Some(ref plugins_str) = loc.plugins_json
-            && let Ok(val) = serde_json::from_str::<serde_json::Value>(plugins_str)
-            && let Some(rules) = val
-                .get("uri-rewrite")
-                .and_then(|uri_rewrite| uri_rewrite.get("rules"))
-                .and_then(|rules| rules.as_array())
-        {
-            for rule in rules {
-                if let Some(rewrite_path) = rule.get("rewrite_path").and_then(|path| path.as_str())
-                {
-                    if let Some(match_header) = rule
-                        .get("match_header")
-                        .and_then(|header| header.as_object())
-                    {
-                        for (header_name, header_value) in match_header {
-                            let value = header_value.as_str().unwrap_or("");
-                            let variable = format!(
-                                "$http_{}",
-                                header_name.to_ascii_lowercase().replace('-', "_")
-                            );
-                            buf.push_str(&format!(
-                                "        if ({variable} = \"{value}\") {{\n            rewrite ^ {rewrite_path} break;\n        }}\n"
-                            ));
-                        }
-                    } else {
-                        buf.push_str(&format!("        rewrite ^ {rewrite_path} break;\n"));
-                    }
-                }
-            }
-        }
-
         buf.push_str("        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_connect_timeout 5s;\n");
 
         let mut scheme = "http";
@@ -239,11 +257,23 @@ pub fn render_locations_into(
     }
 }
 
+/// Materializes domain routing configuration into `routing_dir/active-domain-routing.conf`.
+pub async fn materialize_routes(
+    spec: &Spec,
+    routing_dir: &Path,
+) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    let routing_path = routing_dir.join("active-domain-routing.conf");
+    let routing_content = generate_domain_routing_conf(spec, routing_dir);
+    if atomic_write_if_changed(&routing_path, routing_content.as_bytes()).await? {
+        info!("Updated active-domain-routing.conf");
+        return Ok(true);
+    }
+    Ok(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::spec::certificate::CertificateSpec;
-    use crate::spec::routing::{DomainRoutingSpec, LocationRoutingSpec, RoutingSpec};
     use crate::spec::schema::Spec;
 
     #[test]
@@ -376,6 +406,10 @@ mod tests {
             conf.matches("add_header Alt-Svc 'h3=\":443\"; ma=86400' always;")
                 .count(),
             2
+        );
+        assert!(
+            conf.contains("include /etc/nginx/gateway-pipeline.conf;"),
+            "server blocks must include gateway-pipeline.conf"
         );
     }
 }

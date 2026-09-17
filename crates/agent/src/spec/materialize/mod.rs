@@ -1,16 +1,20 @@
 pub mod extensions;
 pub mod l4;
-pub mod routing;
+pub mod route;
+pub mod tls;
+pub mod upstream;
 
 #[cfg(test)]
 mod tests;
 
 pub use extensions::render_extensions;
 pub use l4::generate_l4_streams_conf;
-pub use routing::generate_domain_routing_conf;
+pub use route::generate_domain_routing_conf;
+pub use route as routing;
+pub use tls::materialize_tls;
+pub use upstream::generate_upstreams_conf;
 
 use super::schema::Spec;
-use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use tracing::info;
 
@@ -38,6 +42,37 @@ pub async fn atomic_write_if_changed(dest: &Path, content: &[u8]) -> std::io::Re
     Ok(true)
 }
 
+/// Materialize an extension policy snapshot JSON. The NGINX module owns request-time
+/// evaluation through FFI; the agent only materializes its desired state.
+async fn materialize_policy_snapshot(
+    policy_dir: &Path,
+    filename: &str,
+    release_id: u64,
+    config: Option<&serde_json::Value>,
+) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    let path = policy_dir.join(filename);
+    if let Some(config) = config {
+        let mut obj = config
+            .as_object()
+            .ok_or_else(|| format!("{filename} config must be a JSON object"))?
+            .clone();
+        obj.insert("schema_version".to_string(), serde_json::json!(1));
+        obj.insert("generation".to_string(), serde_json::json!(release_id));
+        let json = serde_json::to_string_pretty(&serde_json::Value::Object(obj))?;
+        if atomic_write_if_changed(&path, json.as_bytes()).await? {
+            info!("Updated {filename} (release_id: {release_id})");
+            return Ok(true);
+        }
+    } else {
+        match tokio::fs::remove_file(&path).await {
+            Ok(()) => return Ok(true),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(Box::new(error)),
+        }
+    }
+    Ok(false)
+}
+
 /// Materialize declarative Spec to concrete NGINX filesystem configuration files.
 pub async fn materialize_nginx(
     spec: &Spec,
@@ -48,352 +83,130 @@ pub async fn materialize_nginx(
     let rendered_extensions = render_extensions(&spec.extensions)
         .map_err(|error| format!("render extension instances: {error}"))?;
 
-    // 1. IP Restriction snapshot. The NGINX module owns request-time
-    // evaluation through FFI; the agent only materializes its desired state.
-    let access_path = policy_dir.join("active-ip-restriction.json");
-    if let Some(access_config) = rendered_extensions.ip_restriction_policy.as_ref() {
-        let mut access_obj = access_config
-            .as_object()
-            .ok_or_else(|| "ip-restriction config must be a JSON object".to_string())?
-            .clone();
-        access_obj.insert("schema_version".to_string(), serde_json::json!(1));
-        access_obj.insert("generation".to_string(), serde_json::json!(spec.release_id));
-        let access_json = serde_json::to_string_pretty(&serde_json::Value::Object(access_obj))?;
-        if atomic_write_if_changed(&access_path, access_json.as_bytes()).await? {
-            info!(
-                "Updated active-ip-restriction.json (release_id: {})",
-                spec.release_id
-            );
-            changed = true;
-        }
-    } else {
-        match tokio::fs::remove_file(&access_path).await {
-            Ok(()) => changed = true,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(Box::new(error)),
-        }
+    // 1. Extension policy snapshots (evaluated by Rust Engine FFI)
+    if materialize_policy_snapshot(
+        policy_dir,
+        "active-ip-restriction.json",
+        spec.release_id,
+        rendered_extensions.ip_restriction_policy.as_ref(),
+    )
+    .await?
+    {
+        changed = true;
     }
-
-    // 3. JWT authorization snapshot. The NGINX module owns request-time
-    // verification through FFI; the agent only materializes its desired state.
-    let jwt_path = policy_dir.join("active-jwt.json");
-    if let Some(jwt_config) = rendered_extensions.jwt_policy.as_ref() {
-        let mut jwt_obj = jwt_config
-            .as_object()
-            .ok_or_else(|| "jwt config must be a JSON object".to_string())?
-            .clone();
-        jwt_obj.insert("schema_version".to_string(), serde_json::json!(1));
-        jwt_obj.insert("generation".to_string(), serde_json::json!(spec.release_id));
-        let jwt_json = serde_json::to_string_pretty(&serde_json::Value::Object(jwt_obj))?;
-        if atomic_write_if_changed(&jwt_path, jwt_json.as_bytes()).await? {
-            info!("Updated active-jwt.json");
-            changed = true;
-        }
-    } else {
-        match tokio::fs::remove_file(&jwt_path).await {
-            Ok(()) => changed = true,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(Box::new(error)),
-        }
+    if materialize_policy_snapshot(
+        policy_dir,
+        "active-jwt.json",
+        spec.release_id,
+        rendered_extensions.jwt_policy.as_ref(),
+    )
+    .await?
+    {
+        changed = true;
     }
-
-    // 4. Rate Limiting snapshot. The NGINX module owns request-time
-    // evaluation through FFI; the agent only materializes its desired state.
-    let rate_limit_path = policy_dir.join("active-rate-limit.json");
-    if let Some(rl_config) = rendered_extensions.rate_limit_policy.as_ref() {
-        let mut rl_obj = rl_config
-            .as_object()
-            .ok_or_else(|| "rate-limit config must be a JSON object".to_string())?
-            .clone();
-        rl_obj.insert("schema_version".to_string(), serde_json::json!(1));
-        rl_obj.insert("generation".to_string(), serde_json::json!(spec.release_id));
-        let rl_json = serde_json::to_string_pretty(&serde_json::Value::Object(rl_obj))?;
-        if atomic_write_if_changed(&rate_limit_path, rl_json.as_bytes()).await? {
-            info!("Updated active-rate-limit.json");
-            changed = true;
-        }
-    } else {
-        match tokio::fs::remove_file(&rate_limit_path).await {
-            Ok(()) => changed = true,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(Box::new(error)),
-        }
+    if materialize_policy_snapshot(
+        policy_dir,
+        "active-rate-limit.json",
+        spec.release_id,
+        rendered_extensions.rate_limit_policy.as_ref(),
+    )
+    .await?
+    {
+        changed = true;
     }
-
-    // 5. Connection Limiting snapshot.
-    let conn_limit_path = policy_dir.join("active-connection-limit.json");
-    if let Some(cl_config) = rendered_extensions.conn_limit_policy.as_ref() {
-        let mut cl_obj = cl_config
-            .as_object()
-            .ok_or_else(|| "connection-limit config must be a JSON object".to_string())?
-            .clone();
-        cl_obj.insert("schema_version".to_string(), serde_json::json!(1));
-        cl_obj.insert("generation".to_string(), serde_json::json!(spec.release_id));
-        let cl_json = serde_json::to_string_pretty(&serde_json::Value::Object(cl_obj))?;
-        if atomic_write_if_changed(&conn_limit_path, cl_json.as_bytes()).await? {
-            info!("Updated active-connection-limit.json");
-            changed = true;
-        }
-    } else {
-        match tokio::fs::remove_file(&conn_limit_path).await {
-            Ok(()) => changed = true,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(Box::new(error)),
-        }
+    if materialize_policy_snapshot(
+        policy_dir,
+        "active-connection-limit.json",
+        spec.release_id,
+        rendered_extensions.conn_limit_policy.as_ref(),
+    )
+    .await?
+    {
+        changed = true;
     }
-
-    // 6. Traffic Shaper snapshot.
-    let traffic_shaper_path = policy_dir.join("active-traffic-shaper.json");
-    if let Some(ts_config) = rendered_extensions.traffic_shaper_policy.as_ref() {
-        let mut ts_obj = ts_config
-            .as_object()
-            .ok_or_else(|| "traffic-shaper config must be a JSON object".to_string())?
-            .clone();
-        ts_obj.insert("schema_version".to_string(), serde_json::json!(1));
-        ts_obj.insert("generation".to_string(), serde_json::json!(spec.release_id));
-        let ts_json = serde_json::to_string_pretty(&serde_json::Value::Object(ts_obj))?;
-        if atomic_write_if_changed(&traffic_shaper_path, ts_json.as_bytes()).await? {
-            info!("Updated active-traffic-shaper.json");
-            changed = true;
-        }
-    } else {
-        match tokio::fs::remove_file(&traffic_shaper_path).await {
-            Ok(()) => changed = true,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(Box::new(error)),
-        }
+    if materialize_policy_snapshot(
+        policy_dir,
+        "active-traffic-shaper.json",
+        spec.release_id,
+        rendered_extensions.traffic_shaper_policy.as_ref(),
+    )
+    .await?
+    {
+        changed = true;
     }
-
-    // 7. Request Size Limit snapshot.
-    let request_size_limit_path = policy_dir.join("active-request-size-limit.json");
-    if let Some(rsl_config) = rendered_extensions.request_size_limit_policy.as_ref() {
-        let mut rsl_obj = rsl_config
-            .as_object()
-            .ok_or_else(|| "request-size-limit config must be a JSON object".to_string())?
-            .clone();
-        rsl_obj.insert("schema_version".to_string(), serde_json::json!(1));
-        rsl_obj.insert("generation".to_string(), serde_json::json!(spec.release_id));
-        let rsl_json = serde_json::to_string_pretty(&serde_json::Value::Object(rsl_obj))?;
-        if atomic_write_if_changed(&request_size_limit_path, rsl_json.as_bytes()).await? {
-            info!("Updated active-request-size-limit.json");
-            changed = true;
-        }
-    } else {
-        match tokio::fs::remove_file(&request_size_limit_path).await {
-            Ok(()) => changed = true,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(Box::new(error)),
-        }
+    if materialize_policy_snapshot(
+        policy_dir,
+        "active-request-size-limit.json",
+        spec.release_id,
+        rendered_extensions.request_size_limit_policy.as_ref(),
+    )
+    .await?
+    {
+        changed = true;
     }
-
-    // 8. Traffic Split snapshot.
-    let traffic_split_path = policy_dir.join("active-traffic-split.json");
-    if let Some(ts_config) = rendered_extensions.traffic_split_policy.as_ref() {
-        let mut ts_obj = ts_config
-            .as_object()
-            .ok_or_else(|| "traffic-split config must be a JSON object".to_string())?
-            .clone();
-        ts_obj.insert("schema_version".to_string(), serde_json::json!(1));
-        ts_obj.insert("generation".to_string(), serde_json::json!(spec.release_id));
-        let ts_json = serde_json::to_string_pretty(&serde_json::Value::Object(ts_obj))?;
-        if atomic_write_if_changed(&traffic_split_path, ts_json.as_bytes()).await? {
-            info!("Updated active-traffic-split.json");
-            changed = true;
-        }
-    } else {
-        match tokio::fs::remove_file(&traffic_split_path).await {
-            Ok(()) => changed = true,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(Box::new(error)),
-        }
+    if materialize_policy_snapshot(
+        policy_dir,
+        "active-traffic-split.json",
+        spec.release_id,
+        rendered_extensions.traffic_split_policy.as_ref(),
+    )
+    .await?
+    {
+        changed = true;
     }
-
-    // 9. Canary Release snapshot.
-    let canary_release_path = policy_dir.join("active-canary-release.json");
-    if let Some(cr_config) = rendered_extensions.canary_release_policy.as_ref() {
-        let mut cr_obj = cr_config
-            .as_object()
-            .ok_or_else(|| "canary-release config must be a JSON object".to_string())?
-            .clone();
-        cr_obj.insert("schema_version".to_string(), serde_json::json!(1));
-        cr_obj.insert("generation".to_string(), serde_json::json!(spec.release_id));
-        let cr_json = serde_json::to_string_pretty(&serde_json::Value::Object(cr_obj))?;
-        if atomic_write_if_changed(&canary_release_path, cr_json.as_bytes()).await? {
-            info!("Updated active-canary-release.json");
-            changed = true;
-        }
-    } else {
-        match tokio::fs::remove_file(&canary_release_path).await {
-            Ok(()) => changed = true,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(Box::new(error)),
-        }
+    if materialize_policy_snapshot(
+        policy_dir,
+        "active-canary-release.json",
+        spec.release_id,
+        rendered_extensions.canary_release_policy.as_ref(),
+    )
+    .await?
+    {
+        changed = true;
     }
-
-    // 10. Blue-Green snapshot.
-    let blue_green_path = policy_dir.join("active-blue-green.json");
-    if let Some(bg_config) = rendered_extensions.blue_green_policy.as_ref() {
-        let mut bg_obj = bg_config
-            .as_object()
-            .ok_or_else(|| "blue-green config must be a JSON object".to_string())?
-            .clone();
-        bg_obj.insert("schema_version".to_string(), serde_json::json!(1));
-        bg_obj.insert("generation".to_string(), serde_json::json!(spec.release_id));
-        let bg_json = serde_json::to_string_pretty(&serde_json::Value::Object(bg_obj))?;
-        if atomic_write_if_changed(&blue_green_path, bg_json.as_bytes()).await? {
-            info!("Updated active-blue-green.json");
-            changed = true;
-        }
-    } else {
-        match tokio::fs::remove_file(&blue_green_path).await {
-            Ok(()) => changed = true,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(Box::new(error)),
-        }
+    if materialize_policy_snapshot(
+        policy_dir,
+        "active-blue-green.json",
+        spec.release_id,
+        rendered_extensions.blue_green_policy.as_ref(),
+    )
+    .await?
+    {
+        changed = true;
     }
-
-    // 11. Request Mirror snapshot.
-    let request_mirror_path = policy_dir.join("active-request-mirror.json");
-    if let Some(rm_config) = rendered_extensions.request_mirror_policy.as_ref() {
-        let mut rm_obj = rm_config
-            .as_object()
-            .ok_or_else(|| "request-mirror config must be a JSON object".to_string())?
-            .clone();
-        rm_obj.insert("schema_version".to_string(), serde_json::json!(1));
-        rm_obj.insert("generation".to_string(), serde_json::json!(spec.release_id));
-        let rm_json = serde_json::to_string_pretty(&serde_json::Value::Object(rm_obj))?;
-        if atomic_write_if_changed(&request_mirror_path, rm_json.as_bytes()).await? {
-            info!("Updated active-request-mirror.json");
-            changed = true;
-        }
-    } else {
-        match tokio::fs::remove_file(&request_mirror_path).await {
-            Ok(()) => changed = true,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(Box::new(error)),
-        }
+    if materialize_policy_snapshot(
+        policy_dir,
+        "active-request-mirror.json",
+        spec.release_id,
+        rendered_extensions.request_mirror_policy.as_ref(),
+    )
+    .await?
+    {
+        changed = true;
     }
-
-    // 12. Request Termination snapshot.
-    let request_termination_path = policy_dir.join("active-request-termination.json");
-    if let Some(rt_config) = rendered_extensions.request_termination_policy.as_ref() {
-        let mut rt_obj = rt_config
-            .as_object()
-            .ok_or_else(|| "request-termination config must be a JSON object".to_string())?
-            .clone();
-        rt_obj.insert("schema_version".to_string(), serde_json::json!(1));
-        rt_obj.insert("generation".to_string(), serde_json::json!(spec.release_id));
-        let rt_json = serde_json::to_string_pretty(&serde_json::Value::Object(rt_obj))?;
-        if atomic_write_if_changed(&request_termination_path, rt_json.as_bytes()).await? {
-            info!("Updated active-request-termination.json");
-            changed = true;
-        }
-    } else {
-        match tokio::fs::remove_file(&request_termination_path).await {
-            Ok(()) => changed = true,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(Box::new(error)),
-        }
-    }
-
-    // 13. Upstreams Config
-    let upstreams_path = policy_dir.join("active-upstreams.conf");
-    let upstreams_content = if let Some(ref raw) = spec.upstreams_conf {
-        raw.clone()
-    } else if !spec.upstreams.is_empty() {
-        let mut buf = String::from("# Generated by Aurora Dataplane Agent\n");
-        for up in &spec.upstreams {
-            buf.push_str(&format!("upstream {} {{\n", up.name));
-            buf.push_str(&format!("    zone aurora_http_{} 64k;\n", up.name));
-            for s in &up.servers {
-                buf.push_str(&format!(
-                    "    server {} weight={} resolve;\n",
-                    s.addr, s.weight
-                ));
-            }
-            buf.push_str("}\n");
-        }
-        buf
-    } else {
-        "# No active upstreams configured\n".to_string()
-    };
-    if atomic_write_if_changed(&upstreams_path, upstreams_content.as_bytes()).await? {
-        info!("Updated active-upstreams.conf");
+    if materialize_policy_snapshot(
+        policy_dir,
+        "active-request-termination.json",
+        spec.release_id,
+        rendered_extensions.request_termination_policy.as_ref(),
+    )
+    .await?
+    {
         changed = true;
     }
 
-    // 3.5 Materialize SSL Certificates
-    let certs_dir = routing_dir.join("certs");
-    for cert in &spec.certificates {
-        if !cert.cert_pem.trim().is_empty() {
-            let cert_file = certs_dir.join(format!("{}.crt", cert.id));
-            if atomic_write_if_changed(&cert_file, cert.cert_pem.as_bytes()).await? {
-                info!("Updated SSL certificate file {}", cert_file.display());
-                changed = true;
-            }
-        }
-        if !cert.key_pem.trim().is_empty() {
-            let key_file = certs_dir.join(format!("{}.key", cert.id));
-            if atomic_write_if_changed(&key_file, cert.key_pem.as_bytes()).await? {
-                info!("Updated SSL private key file {}", key_file.display());
-                changed = true;
-            }
-            tokio::fs::set_permissions(&key_file, std::fs::Permissions::from_mode(0o600)).await?;
-        }
-        if cert.mtls_enabled && !cert.client_ca_pem.trim().is_empty() {
-            let ca_file = certs_dir.join(format!("{}_ca.crt", cert.id));
-            if atomic_write_if_changed(&ca_file, cert.client_ca_pem.as_bytes()).await? {
-                info!("Updated SSL client CA file {}", ca_file.display());
-                changed = true;
-            }
-        }
+    // 2. Upstream Configuration (Object: Upstream)
+    if upstream::materialize_upstreams(spec, policy_dir).await? {
+        changed = true;
     }
 
-    // 3.6 Materialize origin TLS trust and client credentials. These files are
-    // referenced only from the route that owns the selected upstream.
-    let origin_tls_dir = routing_dir.join("origin-tls");
-    for domain in &spec.routing.domains {
-        for location in &domain.locations {
-            let Some(tls) = location.origin_tls.as_ref().filter(|tls| tls.enabled) else {
-                continue;
-            };
-
-            if tls.verify_cert && !tls.ca_cert.trim().is_empty() {
-                let ca_file = origin_tls_dir.join(format!("{}_ca.crt", location.upstream));
-                if atomic_write_if_changed(&ca_file, tls.ca_cert.as_bytes()).await? {
-                    info!("Updated origin TLS CA file {}", ca_file.display());
-                    changed = true;
-                }
-            }
-            if tls.mtls {
-                let cert_file = origin_tls_dir.join(format!("{}_client.crt", location.upstream));
-                if atomic_write_if_changed(&cert_file, tls.client_cert.as_bytes()).await? {
-                    info!(
-                        "Updated origin TLS client certificate {}",
-                        cert_file.display()
-                    );
-                    changed = true;
-                }
-
-                let key_file = origin_tls_dir.join(format!("{}_client.key", location.upstream));
-                if atomic_write_if_changed(&key_file, tls.client_key.as_bytes()).await? {
-                    info!(
-                        "Updated origin TLS client private key {}",
-                        key_file.display()
-                    );
-                    changed = true;
-                }
-                tokio::fs::set_permissions(&key_file, std::fs::Permissions::from_mode(0o600))
-                    .await?;
-            }
-        }
+    // 3. TLS Certificates & Origin Credentials (Object: Certificate / TLS)
+    if tls::materialize_tls(spec, routing_dir).await? {
+        changed = true;
     }
 
-    // 4. Domain Routing Config
-    let routing_path = routing_dir.join("active-domain-routing.conf");
-    let routing_content = generate_domain_routing_conf(spec, routing_dir);
-    if atomic_write_if_changed(&routing_path, routing_content.as_bytes()).await? {
-        info!("Updated active-domain-routing.conf");
+    // 4. L7 Domain & Route Configuration (Object: Route)
+    if route::materialize_routes(spec, routing_dir).await? {
         changed = true;
     }
 
@@ -425,7 +238,7 @@ pub async fn materialize_nginx(
         changed = true;
     }
 
-    // 8. L4 Stream Configuration (active-l4-streams.conf)
+    // 8. L4 Stream Configuration (Object: L4)
     let l4_path = routing_dir.join("active-l4-streams.conf");
     let l4_content = generate_l4_streams_conf(&spec.l4)
         .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;

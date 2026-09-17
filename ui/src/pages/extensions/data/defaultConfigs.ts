@@ -130,17 +130,6 @@ export const EXTENSION_DEFAULT_CONFIGS: Record<string, Record<string, any>> = {
     replacement: '[REDACTED]',
     inspect_content_types: ['application/json', 'text/plain', 'text/html']
   },
-  'ingress-header-sanitizer': {
-    enabled: true,
-    mode: 'denylist',
-    denylist: [
-      'traceparent',
-      'x-request-id',
-      'x-user-id',
-      'x-consumer-id'
-    ],
-    allowlist: []
-  },
   'custom-waf-rules': {
     enabled: true,
     default_action: 'pass',
@@ -550,11 +539,13 @@ export const EXTENSION_DEFAULT_CONFIGS: Record<string, Record<string, any>> = {
   // 5. Request Transformation (10)
   'request-header-transform': {
     enabled: true,
+    mode: 'denylist',
     add_headers: {
       'X-Forwarded-By': 'Aurora-API-Gateway',
       'X-Gateway-Env': 'production'
     },
-    remove_headers: ['X-Internal-Token', 'X-Powered-By']
+    remove_headers: ['X-Internal-Token', 'X-Powered-By'],
+    allowlist: []
   },
   'request-query-transform': {
     enabled: true,
@@ -672,18 +663,6 @@ export const EXTENSION_DEFAULT_CONFIGS: Record<string, Record<string, any>> = {
   'compression-gzip': {
     enabled: true,
     level: 6,
-    min_length: 1024,
-    types: [
-      'text/html',
-      'application/json',
-      'application/javascript',
-      'text/css',
-      'application/xml'
-    ]
-  },
-  'compression-brotli': {
-    enabled: true,
-    quality: 6,
     min_length: 1024,
     types: [
       'text/html',

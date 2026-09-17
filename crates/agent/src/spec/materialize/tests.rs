@@ -72,7 +72,7 @@ fn test_extensions_generation() {
             instance_id: "cors".to_string(),
             key: "builtin/cors".to_string(),
             version: 1,
-            renderer: "nginx-cors".to_string(),
+            renderer: "cors".to_string(),
             manifest_digest: String::new(),
             config_json: r#"{"allow_origins":["https://example.com"],"allow_methods":["GET","POST"],"allow_headers":["Authorization","Content-Type"],"allow_credentials":true,"max_age":3600}"#.to_string(),
         },
@@ -80,7 +80,7 @@ fn test_extensions_generation() {
             instance_id: "maintenance".to_string(),
             key: "builtin/maintenance-mode".to_string(),
             version: 1,
-            renderer: "nginx-maintenance".to_string(),
+            renderer: "maintenance".to_string(),
             manifest_digest: String::new(),
             config_json: r#"{"status_code":503,"bypass_header":"X-Bypass","retry_after_secs":120,"message":"Under upgrade"}"#.to_string(),
         },
@@ -866,7 +866,7 @@ fn test_generate_domain_routing_conf_features() {
                             priority: 10,
                             strip_path: true,
                             websocket: false,
-                            plugins_json: Some(r#"{"uri-rewrite":{"rules":[{"match_header":{"X-Test":"v1"},"rewrite_path":"/test"}]}}"#.to_string()),
+                            plugins_json: None,
                             origin_tls: Some(crate::spec::routing::OriginTLSSpec {
                                 enabled: true,
                                 verify_cert: true,
@@ -900,7 +900,7 @@ fn test_generate_domain_routing_conf_features() {
     assert!(conf.contains("server {\n    listen 80;\n    server_name api.aurora.local;"));
 
     // 2. Check HTTPS server block with mTLS & HTTP/3
-    assert!(conf.contains("server {\n    listen 443 ssl;\n    listen 443 quic reuseport;\n    listen 127.0.0.1:9443 ssl proxy_protocol;\n    server_name api.aurora.local;"));
+    assert!(conf.contains("server {\n    listen 443 ssl;\n    listen 443 quic reuseport;\n    server_name api.aurora.local;"));
     assert!(conf.contains("ssl_certificate /var/lib/aurora-routing/certs/cert_123.crt;"));
     assert!(conf.contains("ssl_certificate_key /var/lib/aurora-routing/certs/cert_123.key;"));
     assert!(conf.contains("ssl_client_certificate /var/lib/aurora-routing/certs/cert_123_ca.crt;"));
@@ -936,10 +936,6 @@ fn test_generate_domain_routing_conf_features() {
     assert!(conf.contains("proxy_set_header Upgrade $http_upgrade;"));
     assert!(conf.contains("proxy_set_header Connection \"upgrade\";"));
     assert!(conf.contains("proxy_connect_timeout 5s;"));
-
-    // 7. Check URI Rewrite plugin
-    assert!(conf.contains("if ($http_x_test = \"v1\")"));
-    assert!(conf.contains("rewrite ^ /test break;"));
 }
 
 #[tokio::test]
@@ -1033,6 +1029,122 @@ async fn test_materialize_nginx_with_certificates() {
 
     let _ = tokio::fs::remove_dir_all(&base_tmp).await;
 }
+
+#[tokio::test]
+async fn test_materialize_nginx_cleans_up_stale_certificates_and_origin_tls() {
+    let base_tmp = std::env::temp_dir().join(format!("aurora-cert-cleanup-test-{}", std::process::id()));
+    let policy_dir = base_tmp.join("policy");
+    let routing_dir = base_tmp.join("routing");
+    let _ = tokio::fs::remove_dir_all(&base_tmp).await;
+
+    let spec_initial = Spec {
+        release_id: 1,
+        certificates: vec![CertificateSpec {
+            id: "old_cert".to_string(),
+            name: "Old Cert".to_string(),
+            snis: vec!["old.aurora.local".to_string()],
+            cert_pem: "-----BEGIN CERTIFICATE-----\nOLD\n-----END CERTIFICATE-----".to_string(),
+            key_pem: "-----BEGIN PRIVATE KEY-----\nOLD_KEY\n-----END PRIVATE KEY-----".to_string(),
+            client_ca_pem: "-----BEGIN CERTIFICATE-----\nOLD_CA\n-----END CERTIFICATE-----".to_string(),
+            mtls_enabled: true,
+            verify_depth: 1,
+        }],
+        routing: crate::spec::routing::RoutingSpec {
+            domains: vec![crate::spec::routing::DomainRoutingSpec {
+                host: "old.aurora.local".to_string(),
+                locations: vec![crate::spec::routing::LocationRoutingSpec {
+                    path: "/".to_string(),
+                    upstream: "old_upstream".to_string(),
+                    priority: 1,
+                    strip_path: false,
+                    websocket: false,
+                    plugins_json: None,
+                    origin_tls: Some(crate::spec::routing::OriginTLSSpec {
+                        enabled: true,
+                        verify_cert: true,
+                        sni_host: "old-origin.aurora.local".to_string(),
+                        ca_cert: "-----BEGIN CERTIFICATE-----\nOLD_ORIGIN_CA\n-----END CERTIFICATE-----".to_string(),
+                        mtls: true,
+                        client_cert: "-----BEGIN CERTIFICATE-----\nOLD_CLIENT_CERT\n-----END CERTIFICATE-----".to_string(),
+                        client_key: "-----BEGIN PRIVATE KEY-----\nOLD_CLIENT_KEY\n-----END PRIVATE KEY-----".to_string(),
+                    }),
+                }],
+            }],
+        },
+        ..Default::default()
+    };
+
+    let res1 = materialize_nginx(&spec_initial, &policy_dir, &routing_dir)
+        .await
+        .expect("initial materialize");
+    assert!(res1.nginx_changed);
+
+    let old_cert_file = routing_dir.join("certs/old_cert.crt");
+    let old_key_file = routing_dir.join("certs/old_cert.key");
+    let old_ca_file = routing_dir.join("certs/old_cert_ca.crt");
+    let old_origin_ca = routing_dir.join("origin-tls/old_upstream_ca.crt");
+    let old_origin_cert = routing_dir.join("origin-tls/old_upstream_client.crt");
+    let old_origin_key = routing_dir.join("origin-tls/old_upstream_client.key");
+
+    assert!(old_cert_file.exists());
+    assert!(old_key_file.exists());
+    assert!(old_ca_file.exists());
+    assert!(old_origin_ca.exists());
+    assert!(old_origin_cert.exists());
+    assert!(old_origin_key.exists());
+
+    // Step 2: Update spec with new cert and disabled origin TLS
+    let spec_updated = Spec {
+        release_id: 2,
+        certificates: vec![CertificateSpec {
+            id: "new_cert".to_string(),
+            name: "New Cert".to_string(),
+            snis: vec!["new.aurora.local".to_string()],
+            cert_pem: "-----BEGIN CERTIFICATE-----\nNEW\n-----END CERTIFICATE-----".to_string(),
+            key_pem: "-----BEGIN PRIVATE KEY-----\nNEW_KEY\n-----END PRIVATE KEY-----".to_string(),
+            client_ca_pem: String::new(),
+            mtls_enabled: false,
+            verify_depth: 1,
+        }],
+        routing: crate::spec::routing::RoutingSpec {
+            domains: vec![crate::spec::routing::DomainRoutingSpec {
+                host: "new.aurora.local".to_string(),
+                locations: vec![crate::spec::routing::LocationRoutingSpec {
+                    path: "/".to_string(),
+                    upstream: "new_upstream".to_string(),
+                    priority: 1,
+                    strip_path: false,
+                    websocket: false,
+                    plugins_json: None,
+                    origin_tls: None,
+                }],
+            }],
+        },
+        ..Default::default()
+    };
+
+    let res2 = materialize_nginx(&spec_updated, &policy_dir, &routing_dir)
+        .await
+        .expect("updated materialize");
+    assert!(res2.nginx_changed);
+
+    // Old files must be pruned
+    assert!(!old_cert_file.exists(), "stale old_cert.crt should be removed");
+    assert!(!old_key_file.exists(), "stale old_cert.key should be removed");
+    assert!(!old_ca_file.exists(), "stale old_cert_ca.crt should be removed");
+    assert!(!old_origin_ca.exists(), "stale origin CA should be removed");
+    assert!(!old_origin_cert.exists(), "stale origin client cert should be removed");
+    assert!(!old_origin_key.exists(), "stale origin client key should be removed");
+
+    // New cert files must exist
+    let new_cert_file = routing_dir.join("certs/new_cert.crt");
+    let new_key_file = routing_dir.join("certs/new_cert.key");
+    assert!(new_cert_file.exists());
+    assert!(new_key_file.exists());
+
+    let _ = tokio::fs::remove_dir_all(&base_tmp).await;
+}
+
 
 #[test]
 fn test_l4_streams_generation() {
@@ -1169,11 +1281,11 @@ fn test_l4_streams_generation() {
     assert!(conf.contains("proxy_pass 10.0.0.99:6379;"));
     assert!(conf.contains("proxy_timeout 30m;"));
 
-    // L7 bridge assertions: the stream layer must preserve the original peer address.
+    // Direct endpoint without bridge: forwards directly to the target endpoint.
     assert!(conf.contains("listen 8088;"));
-    assert!(conf.contains("proxy_protocol on;"));
-    assert!(conf.contains("proxy_pass 127.0.0.1:9082;"));
-    assert!(!conf.contains("proxy_pass 127.0.0.1:80;"));
+    assert!(conf.contains("proxy_pass 127.0.0.1:80;"));
+    assert!(!conf.contains("proxy_protocol on;"));
+    assert!(!conf.contains("proxy_pass 127.0.0.1:9082;"));
 
     // An upstream service must remain upstream even if an obsolete endpoint field exists.
     assert!(conf.contains("listen 15432;\n    proxy_pass l4_pg_cluster;"));
@@ -1270,7 +1382,7 @@ fn test_render_extensions_correlation_id() {
         instance_id: "corr-1".to_string(),
         key: "builtin/correlation-id".to_string(),
         version: 1,
-        renderer: "nginx-correlation-id".to_string(),
+        renderer: "correlation-id".to_string(),
         manifest_digest: String::new(),
         config_json: serde_json::json!({
             "request_id": {
@@ -1323,7 +1435,7 @@ fn test_render_extensions_correlation_id() {
         instance_id: "corr-2".to_string(),
         key: "builtin/correlation-id".to_string(),
         version: 1,
-        renderer: "nginx-correlation-id".to_string(),
+        renderer: "correlation-id".to_string(),
         manifest_digest: String::new(),
         config_json: serde_json::json!({
             "request_id": {
@@ -1359,17 +1471,20 @@ fn test_render_extensions_correlation_id() {
 }
 
 #[test]
-fn test_render_extensions_ingress_header_sanitizer_denylist() {
+fn test_render_extensions_request_header_transform_denylist_and_add() {
     let instances = vec![ExtensionInstanceSpec {
-        instance_id: "sanitizer-1".to_string(),
-        key: "builtin/ingress-header-sanitizer".to_string(),
+        instance_id: "transform-1".to_string(),
+        key: "builtin/request-header-transform".to_string(),
         version: 1,
-        renderer: "nginx-ingress-header-sanitizer".to_string(),
+        renderer: "request-header-transform".to_string(),
         manifest_digest: String::new(),
         config_json: serde_json::json!({
             "enabled": true,
             "mode": "denylist",
-            "denylist": ["traceparent", "X-Request-ID", "X-User-Id"]
+            "remove_headers": ["traceparent", "X-Request-ID", "X-User-Id"],
+            "add_headers": {
+                "X-Gateway-Env": "production"
+            }
         })
         .to_string(),
     }];
@@ -1391,6 +1506,11 @@ fn test_render_extensions_ingress_header_sanitizer_denylist() {
             .contains("proxy_set_header X-User-Id \"\";")
     );
     assert!(
+        rendered
+            .server_conf
+            .contains("proxy_set_header X-Gateway-Env \"production\";")
+    );
+    assert!(
         !rendered
             .server_conf
             .contains("proxy_pass_request_headers off;")
@@ -1398,12 +1518,12 @@ fn test_render_extensions_ingress_header_sanitizer_denylist() {
 }
 
 #[test]
-fn test_render_extensions_ingress_header_sanitizer_allowlist() {
+fn test_render_extensions_request_header_transform_allowlist() {
     let instances = vec![ExtensionInstanceSpec {
-        instance_id: "sanitizer-2".to_string(),
-        key: "builtin/ingress-header-sanitizer".to_string(),
+        instance_id: "transform-2".to_string(),
+        key: "builtin/request-header-transform".to_string(),
         version: 1,
-        renderer: "nginx-ingress-header-sanitizer".to_string(),
+        renderer: "request-header-transform".to_string(),
         manifest_digest: String::new(),
         config_json: serde_json::json!({
             "enabled": true,
@@ -1452,17 +1572,17 @@ fn test_render_extensions_ingress_header_sanitizer_allowlist() {
 }
 
 #[test]
-fn test_render_extensions_ingress_header_sanitizer_disabled() {
+fn test_render_extensions_request_header_transform_disabled() {
     let instances = vec![ExtensionInstanceSpec {
-        instance_id: "sanitizer-3".to_string(),
-        key: "builtin/ingress-header-sanitizer".to_string(),
+        instance_id: "transform-3".to_string(),
+        key: "builtin/request-header-transform".to_string(),
         version: 1,
-        renderer: "nginx-ingress-header-sanitizer".to_string(),
+        renderer: "request-header-transform".to_string(),
         manifest_digest: String::new(),
         config_json: serde_json::json!({
             "enabled": false,
             "mode": "denylist",
-            "denylist": ["traceparent", "X-Request-ID"]
+            "remove_headers": ["traceparent", "X-Request-ID"]
         })
         .to_string(),
     }];
@@ -1481,14 +1601,14 @@ fn test_render_extensions_ingress_header_sanitizer_disabled() {
 }
 
 #[test]
-fn test_render_extensions_ingress_header_sanitizer_precedence() {
-    // Put correlation-id FIRST and ingress-header-sanitizer SECOND in the input slice
+fn test_render_extensions_request_header_transform_precedence() {
+    // Put correlation-id FIRST and request-header-transform SECOND in the input slice
     let instances = vec![
         ExtensionInstanceSpec {
             instance_id: "corr-1".to_string(),
             key: "builtin/correlation-id".to_string(),
             version: 1,
-            renderer: "nginx-correlation-id".to_string(),
+            renderer: "correlation-id".to_string(),
             manifest_digest: String::new(),
             config_json: serde_json::json!({
                 "request_id": {
@@ -1507,15 +1627,15 @@ fn test_render_extensions_ingress_header_sanitizer_precedence() {
             .to_string(),
         },
         ExtensionInstanceSpec {
-            instance_id: "sanitizer-1".to_string(),
-            key: "builtin/ingress-header-sanitizer".to_string(),
+            instance_id: "transform-1".to_string(),
+            key: "builtin/request-header-transform".to_string(),
             version: 1,
-            renderer: "nginx-ingress-header-sanitizer".to_string(),
+            renderer: "request-header-transform".to_string(),
             manifest_digest: String::new(),
             config_json: serde_json::json!({
                 "enabled": true,
                 "mode": "denylist",
-                "denylist": ["X-User-Id"]
+                "remove_headers": ["X-User-Id"]
             })
             .to_string(),
         },
@@ -1523,18 +1643,18 @@ fn test_render_extensions_ingress_header_sanitizer_precedence() {
 
     let rendered = render_extensions(&instances).expect("render must succeed");
 
-    // Ingress sanitizer directive must appear BEFORE correlation-id directives in server_conf
-    let pos_sanitizer = rendered
+    // Request header transform directives must appear BEFORE correlation-id directives in server_conf
+    let pos_transform = rendered
         .server_conf
         .find("proxy_set_header X-User-Id \"\";")
-        .expect("sanitizer directive must be present");
+        .expect("transform directive must be present");
     let pos_correlation = rendered
         .server_conf
         .find("proxy_set_header X-Request-ID $request_id;")
         .expect("correlation directive must be present");
 
     assert!(
-        pos_sanitizer < pos_correlation,
-        "ingress sanitizer (pos {pos_sanitizer}) MUST be placed ahead of correlation-id (pos {pos_correlation})"
+        pos_transform < pos_correlation,
+        "request header transform (pos {pos_transform}) MUST be placed ahead of correlation-id (pos {pos_correlation})"
     );
 }

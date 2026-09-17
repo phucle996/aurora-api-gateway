@@ -1,4 +1,3 @@
-include /var/lib/aurora-routing/dependencies/current/modules.conf;
 env NODE_ROLE;
 env AURORA_METRICS_SCOPE;
 env NODE_VERSION;
@@ -16,7 +15,6 @@ events {
 
 http {
     resolver ${NGINX_RESOLVER} valid=10s ipv6=off;
-    include /var/lib/aurora-routing/dependencies/current/http.conf;
     include /var/lib/aurora-policy/active-extensions-http.conf;
     include /var/lib/aurora-policy/active-upstreams.conf;
     http2 on;
@@ -72,29 +70,6 @@ http {
         }
     }
 
-    # Stream Continue traffic enters through this loopback-only bridge. The stream
-    # proxy sends PROXY protocol, then this server preserves the verified source IP
-    # while handing the original HTTP request to the normal domain route listener.
-    server {
-        listen 127.0.0.1:9082 proxy_protocol;
-        server_name _;
-
-        real_ip_header proxy_protocol;
-        set_real_ip_from 127.0.0.1;
-        set_real_ip_from ::1;
-
-        gateway on;
-
-        location / {
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            # The downstream L7 route appends the verified client once. Drop any
-            # client-supplied chain here so Continue does not duplicate or trust it.
-            proxy_set_header X-Forwarded-For "";
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_pass http://127.0.0.1:80;
-        }
-    }
 
     include /var/lib/aurora-routing/active-domain-routing.conf;
     # Keep workload server first for the existing telemetry config inheritance.

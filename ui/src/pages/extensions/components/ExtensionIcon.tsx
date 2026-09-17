@@ -178,8 +178,6 @@ export function ExtensionIcon({ id, category, className = 'w-5 h-5' }: Extension
       return <SlidersHorizontal className={className} />;
     case 'owasp-crs':
       return <ShieldCheck className={className} />;
-    case 'ingress-header-sanitizer':
-      return <ShieldAlert className={className} />;
 
     // 2. Authentication (12) - All Unique
     case 'basic-auth':

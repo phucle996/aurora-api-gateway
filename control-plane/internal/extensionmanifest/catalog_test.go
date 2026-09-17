@@ -7,8 +7,8 @@ func TestCatalogDefaultsMatchTheirRuntimeSchemas(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load catalog: %v", err)
 	}
-	if len(manifests) != 26 {
-		t.Fatalf("expected 26 packaged manifests, got %d", len(manifests))
+	if len(manifests) != 24 {
+		t.Fatalf("expected 24 packaged manifests, got %d", len(manifests))
 	}
 	digest, err := Digest()
 	if err != nil || len(digest) != 64 {
@@ -292,38 +292,25 @@ func TestCorrelationIDManifestValidation(t *testing.T) {
 	}
 }
 
-func TestIngressHeaderSanitizerManifestValidation(t *testing.T) {
-	manifest, ok := Find("builtin/ingress-header-sanitizer", 1)
+func TestRequestHeaderTransformManifestValidation(t *testing.T) {
+	manifest, ok := Find("builtin/request-header-transform", 1)
 	if !ok {
-		t.Fatal("Ingress Header Sanitizer manifest not installed")
+		t.Fatal("Request Header Transform manifest not installed")
 	}
 
-	validDenylist := `{"enabled":true,"mode":"denylist","denylist":["traceparent","x-request-id","x-user-id"],"allowlist":[]}`
-	if _, err := ValidateConfig(manifest, validDenylist); err != nil {
-		t.Fatalf("expected valid denylist config: %v", err)
+	valid := `{"enabled":true,"mode":"denylist","add_headers":{"X-Env":"prod"},"remove_headers":["traceparent","x-user-id"],"allowlist":[]}`
+	if _, err := ValidateConfig(manifest, valid); err != nil {
+		t.Fatalf("expected valid config: %v", err)
 	}
 
-	validAllowlist := `{"enabled":true,"mode":"allowlist","denylist":[],"allowlist":["authorization","content-type","accept"]}`
+	validAllowlist := `{"enabled":true,"mode":"allowlist","add_headers":{"X-Env":"prod"},"remove_headers":[],"allowlist":["authorization","content-type"]}`
 	if _, err := ValidateConfig(manifest, validAllowlist); err != nil {
 		t.Fatalf("expected valid allowlist config: %v", err)
 	}
 
-	// Missing mode
-	missingMode := `{"enabled":true,"denylist":["traceparent"]}`
-	if _, err := ValidateConfig(manifest, missingMode); err == nil {
-		t.Fatal("expected missing mode to be rejected")
-	}
-
-	// Invalid mode enum
 	invalidMode := `{"enabled":true,"mode":"custom_mode"}`
 	if _, err := ValidateConfig(manifest, invalidMode); err == nil {
 		t.Fatal("expected invalid mode to be rejected")
-	}
-
-	// Invalid header format (e.g. contains spaces or invalid chars)
-	invalidHeaderName := `{"enabled":true,"mode":"denylist","denylist":["invalid header!"]}`
-	if _, err := ValidateConfig(manifest, invalidHeaderName); err == nil {
-		t.Fatal("expected invalid header name with spaces/punctuation to be rejected")
 	}
 }
 

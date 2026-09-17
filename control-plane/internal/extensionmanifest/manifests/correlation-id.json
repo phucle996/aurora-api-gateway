@@ -5,7 +5,7 @@
   "name": "Correlation ID & W3C Trace Context",
   "category": "observability",
   "description": "Generates and propagates unique Request ID and W3C traceparent headers for microservice correlation, with conditional access log embedding.",
-  "renderer": "nginx-correlation-id",
+  "renderer": "correlation-id",
   "builtin": true,
   "default_config": {
     "request_id": {

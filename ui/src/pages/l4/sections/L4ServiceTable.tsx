@@ -13,7 +13,6 @@ import {
   Clock,
   ArrowRight,
   Ban,
-  FastForward,
 } from 'lucide-react';
 import { L4ServiceItem, L4ACLRule } from '../../../lib/api/l4';
 
@@ -197,12 +196,6 @@ export function L4ServiceTable({
                           <div className="inline-flex items-center gap-1.5 font-mono text-xs px-2.5 py-1 rounded-md bg-destructive/10 border border-destructive/20 text-destructive">
                             <Ban className="w-3.5 h-3.5 shrink-0" />
                             <span className="font-semibold">Deny (Drop)</span>
-                          </div>
-                        ) : svc.direct_endpoint === '127.0.0.1:80' ? (
-                          <div className="inline-flex items-center gap-1.5 font-mono text-xs px-2.5 py-1 rounded-md bg-violet-500/10 border border-violet-500/20 text-violet-400">
-                            <FastForward className="w-3.5 h-3.5 shrink-0" />
-                            <span className="font-semibold">L7 Pipeline:</span>
-                            <span>{svc.direct_endpoint}</span>
                           </div>
                         ) : isEndpoint ? (
                           <div className="inline-flex items-center gap-1.5 font-mono text-xs px-2.5 py-1 rounded-md bg-sky-500/10 border border-sky-500/20 text-sky-400">

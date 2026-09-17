@@ -346,21 +346,21 @@ export async function runPhase9AdvancedScenarios(fixture) {
   subResults.push({ name: 'Control Plane Outage & Offline Edge Autonomy', passed: true });
 
   // ──────────────────────────────────────────────────────────────────────────
-  // 9.6 L4-TO-L7 PROXY PROTOCOL BRIDGE (127.0.0.1:80 -> 9082)
+  // 9.6 L4 DIRECT ENDPOINT FORWARDING (127.0.0.1:80)
   // ──────────────────────────────────────────────────────────────────────────
-  console.log('\n  [9.6] Testing L4-to-L7 PROXY Protocol Bridge (Port 10029)...');
+  console.log('\n  [9.6] Testing L4 Direct Endpoint Forwarding (Port 10029)...');
 
   await fixture.api(
     'POST',
     '/api/v1/l4/services',
     {
-      name: 'l4-l7-hybrid-bridge',
+      name: 'l4-direct-endpoint',
       protocol: 'tcp',
       listen_port: 10029,
       forward_target_type: 'endpoint',
       direct_endpoint: '127.0.0.1:80',
       enabled: true,
-      description: 'L4 frontend chaining into L7 HTTP bridge via loopback 9082',
+      description: 'L4 stream directly proxying to loopback HTTP endpoint',
     },
     201
   );
@@ -376,9 +376,9 @@ export async function runPhase9AdvancedScenarios(fixture) {
   }, 30000, 1000);
 
   const bridgeResp = await tcpExchange(10029, 'GET /ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n');
-  assert.ok(bridgeResp.text.includes('HTTP/1.1'), `Expected HTTP response from L7 bridge, got: ${bridgeResp.text}`);
-  console.log('    ✅ L4-to-L7 PROXY Protocol Bridge verified: raw TCP request seamlessly reached L7 HTTP engine!');
-  subResults.push({ name: 'L4-to-L7 PROXY Protocol Bridge (127.0.0.1:80 -> 9082)', passed: true });
+  assert.ok(bridgeResp.text.includes('HTTP/1.1'), `Expected HTTP response from direct endpoint, got: ${bridgeResp.text}`);
+  console.log('    ✅ L4 Direct Endpoint Forwarding verified: raw TCP request seamlessly reached target endpoint!');
+  subResults.push({ name: 'L4 Direct Endpoint Forwarding (127.0.0.1:80)', passed: true });
 
   console.log('\n  ✅ Phase 9 Passed: Advanced Protocols, Failover & Edge Autonomy Confirmed!\n');
 

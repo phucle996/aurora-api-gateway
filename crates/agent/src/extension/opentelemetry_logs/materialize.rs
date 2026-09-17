@@ -1,4 +1,5 @@
-use crate::spec::extensions::{ExtensionInstanceSpec, OpenTelemetryLogsSpec};
+use super::config::OtlpLogsConfig;
+use crate::spec::materialize::extensions::ExtensionInstanceSpec;
 use serde_json::{Map, Value};
 
 pub fn materialize(
@@ -10,7 +11,7 @@ pub fn materialize(
     if *opentelemetry_logs_instances > 1 {
         return Err("NodeSpec contains more than one opentelemetry-logs extension".to_string());
     }
-    let spec = serde_json::from_value::<OpenTelemetryLogsSpec>(Value::Object(config)).map_err(
+    let spec = serde_json::from_value::<OtlpLogsConfig>(Value::Object(config)).map_err(
         |error| {
             format!(
                 "decode opentelemetry-logs extension {} config: {error}",

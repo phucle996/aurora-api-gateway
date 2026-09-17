@@ -16,7 +16,10 @@ impl OtlpProtocol {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OtlpMetricsConfig {
     pub enabled: bool,
     pub endpoint: String,

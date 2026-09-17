@@ -182,24 +182,6 @@ func TestL4Handler_Validations(t *testing.T) {
 		}
 	})
 
-	// 5b. The local HTTP bridge only accepts TCP.
-	t.Run("Reject UDP L7 bridge", func(t *testing.T) {
-		body, _ := json.Marshal(dto.CreateL4ServiceRequest{
-			Name:              "invalid_l7_udp",
-			Protocol:          "udp",
-			ListenPort:        5353,
-			ForwardTargetType: "endpoint",
-			DirectEndpoint:    "127.0.0.1:80",
-		})
-		req, _ := http.NewRequest(http.MethodPost, "/api/v1/l4/services", bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
-
-		if w.Code != http.StatusBadRequest {
-			t.Errorf("expected status 400, got %d: %s", w.Code, w.Body.String())
-		}
-	})
 
 	// 5c. Priority is mandatory and a duplicate would make first-match access
 	// control ambiguous.

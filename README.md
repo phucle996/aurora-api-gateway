@@ -128,7 +128,7 @@ Aurora follows a decoupled two-plane architecture: the **Control Plane** (centra
 3. Upstream Pass  ──▶ Routing Engine (Weighted Split, Canary, Blue-Green) ──▶ Upstream Service
                              │
                              ▼
-4. Response Phase ──▶ Header Transformations, Brotli/Gzip Compression ──▶ Client Response
+4. Response Phase ──▶ Header Transformations, Gzip Compression ──▶ Client Response
                              │
                              ▼
 5. Log Phase      ──▶ NGINX Log Phase Handlers (Access Events & Metric IPC)
@@ -177,7 +177,7 @@ Aurora provides a modular, manifest-driven extension ecosystem. All capabilities
 
 - **Security**: Rate limiting, JWT authentication & claims validation, IP restriction (CIDR allow/deny), connection bounds, request body size limits, and synthetic request termination.
 - **Traffic Routing & Resilience**: Canary rollouts (header/cookie/percentage), Blue-Green cluster switching, weighted traffic splitting, bandwidth shaping, and asynchronous request mirroring.
-- **Transformations**: Dynamic CORS negotiation, URI path rewriting, request/response header manipulation, Brotli/Gzip compression, and custom upstream timeout policies.
+- **Transformations**: Dynamic CORS negotiation, URI path rewriting, request/response header manipulation, Gzip compression, and custom upstream timeout policies.
 - **Observability**: Prometheus scrapers, OpenTelemetry (OTLP) metrics & logs pushers, and stdout/stderr structured access log streaming (`std-log`).
 
 👉 **For the complete list of available extensions, manifest schemas, and configuration examples, see the [Extension Catalog](docs/extensions.md).**

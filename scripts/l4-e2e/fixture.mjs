@@ -115,19 +115,6 @@ http {
     location = /stub_status { stub_status; }
     location / { return 404 "no route"; }
   }
-
-  server {
-    listen 127.0.0.1:9082 proxy_protocol;
-    server_name _;
-    real_ip_header proxy_protocol;
-    set_real_ip_from 127.0.0.1;
-
-    location / {
-      proxy_set_header Host $host;
-      proxy_set_header X-Real-IP $remote_addr;
-      proxy_pass http://127.0.0.1:80;
-    }
-  }
 }
 
 stream {

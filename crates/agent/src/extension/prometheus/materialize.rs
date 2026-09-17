@@ -1,4 +1,5 @@
-use crate::spec::extensions::{ExtensionInstanceSpec, MetricsExtensionSpec};
+use super::config::MetricsExtensionSpec;
+use crate::spec::materialize::extensions::ExtensionInstanceSpec;
 use serde_json::{Map, Value};
 
 pub fn materialize(

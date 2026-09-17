@@ -5,7 +5,7 @@
   "name": "Timeout Policy",
   "category": "resilience_upstream",
   "description": "Sets upstream connection and I/O timeouts.",
-  "renderer": "nginx-timeout-policy",
+  "renderer": "timeout-policy",
   "builtin": true,
   "default_config": {},
   "ui_schema": {

@@ -17,10 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_prost_build::configure()
         .build_server(false)
         .compile_protos(
-            &[
-                "../../proto/sync/v1/heartbeat.proto",
-                "../../proto/sync/v1/spec.proto",
-            ],
+            &["../../proto/sync/v1/spec.proto"],
             &["../../proto"],
         )?;
     Ok(())

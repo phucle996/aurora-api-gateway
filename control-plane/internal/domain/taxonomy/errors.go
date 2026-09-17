@@ -70,7 +70,4 @@ var (
 
 	// ErrL4InvalidTimeout phát sinh khi timeout không phải là NGINX time literal an toàn.
 	ErrL4InvalidTimeout = errors.New("invalid l4 timeout, expected an nginx duration such as 5s or 1h")
-
-	// ErrL4L7PipelineRequiresTCP phát sinh khi cố gắng đưa UDP vào HTTP pipeline.
-	ErrL4L7PipelineRequiresTCP = errors.New("the l7 pipeline target requires tcp")
 )

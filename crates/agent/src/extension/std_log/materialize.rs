@@ -1,4 +1,5 @@
-use crate::spec::extensions::{ExtensionInstanceSpec, StdLogSpec};
+use super::config::StdLogSpec;
+use crate::spec::materialize::extensions::ExtensionInstanceSpec;
 use serde_json::{Map, Value};
 
 pub fn materialize(

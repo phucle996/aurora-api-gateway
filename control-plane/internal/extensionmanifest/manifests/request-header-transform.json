@@ -4,27 +4,99 @@
   "id": "request-header-transform",
   "name": "Request Header Transform",
   "category": "request_transformation",
-  "description": "Adds and removes proxied request headers.",
-  "renderer": "nginx-request-header-transform",
+  "description": "Adds, removes, or whitelists HTTP request headers before upstream proxying.",
+  "renderer": "request-header-transform",
   "builtin": true,
   "default_config": {
+    "enabled": true,
+    "mode": "denylist",
     "add_headers": {},
-    "remove_headers": []
+    "remove_headers": [],
+    "allowlist": []
   },
   "ui_schema": {
     "layout_type": "form",
-    "fields": []
+    "fields": [
+      {
+        "key": "enabled",
+        "label": "Enabled",
+        "type": "boolean",
+        "description": "Enable or disable request header transformation"
+      },
+      {
+        "key": "mode",
+        "label": "Transformation Mode",
+        "type": "select",
+        "options": [
+          {
+            "label": "Denylist (Forward all headers except removed)",
+            "value": "denylist"
+          },
+          {
+            "label": "Allowlist (Strictly allow only specified headers)",
+            "value": "allowlist"
+          }
+        ],
+        "description": "Choose between stripping specified untrusted headers or only allowing known safe headers"
+      },
+      {
+        "key": "add_headers",
+        "label": "Add Headers",
+        "type": "key-value",
+        "description": "Headers to add or overwrite when forwarding upstream"
+      },
+      {
+        "key": "remove_headers",
+        "label": "Remove Headers",
+        "type": "tags",
+        "description": "Headers to strip before forwarding upstream"
+      },
+      {
+        "key": "allowlist",
+        "label": "Allowlist Headers",
+        "type": "tags",
+        "description": "Permitted headers in allowlist mode"
+      }
+    ]
   },
   "config_schema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "mode": {
+        "type": "string",
+        "enum": [
+          "denylist",
+          "allowlist"
+        ],
+        "default": "denylist"
+      },
       "add_headers": {
         "type": "object",
         "additionalProperties": true,
         "properties": {}
       },
       "remove_headers": {
+        "type": "array",
+        "maxItems": 128,
+        "items": {
+          "type": "string",
+          "maxLength": 128
+        }
+      },
+      "denylist": {
+        "type": "array",
+        "maxItems": 128,
+        "items": {
+          "type": "string",
+          "maxLength": 128
+        }
+      },
+      "allowlist": {
         "type": "array",
         "maxItems": 128,
         "items": {

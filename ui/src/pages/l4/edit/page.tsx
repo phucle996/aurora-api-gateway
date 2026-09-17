@@ -6,7 +6,6 @@ import {
   Server,
   ArrowRight,
   ArrowRightLeft,
-  FastForward,
   Shield,
   Plus,
   Trash2,
@@ -25,8 +24,6 @@ import {
 import { l4Api, L4ACLRule } from '../../../lib/api/l4';
 import { upstreamsApi } from '../../../lib/api/upstreams';
 import type { UpstreamItem } from '../../upstreams/types';
-import type { L4TrafficAction } from '../create/page';
-
 export default function EditL4ServicePage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -37,9 +34,6 @@ export default function EditL4ServicePage() {
   const [port, setPort] = useState<number>(5432);
   const [enabled, setEnabled] = useState(true);
   const [description, setDescription] = useState('');
-
-  // 2 Primary Options: 'continue' | 'forward'
-  const [trafficAction, setTrafficAction] = useState<L4TrafficAction>('continue');
 
   // Forward details
   const [targetType, setTargetType] = useState<'upstream' | 'endpoint'>('upstream');
@@ -65,11 +59,6 @@ export default function EditL4ServicePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (protocol === 'udp' && trafficAction === 'continue') {
-      setTrafficAction('forward');
-    }
-  }, [protocol, trafficAction]);
 
   // Fetch service details and upstreams
   useEffect(() => {
@@ -102,18 +91,13 @@ export default function EditL4ServicePage() {
         const normalizedAcl = parsedAcl.sort((a, b) => b.priority - a.priority);
         setAclRules(normalizedAcl);
 
-        // Detect action strategy
-        if (svc.direct_endpoint === '127.0.0.1:80') {
-          setTrafficAction('continue');
+        // Detect target
+        if (svc.forward_target_type === 'endpoint' || (!svc.upstream_name && svc.direct_endpoint)) {
+          setTargetType('endpoint');
+          setEndpoint(svc.direct_endpoint || '');
         } else {
-          setTrafficAction('forward');
-          if (svc.forward_target_type === 'endpoint' || (!svc.upstream_name && svc.direct_endpoint)) {
-            setTargetType('endpoint');
-            setEndpoint(svc.direct_endpoint || '');
-          } else {
-            setTargetType('upstream');
-            setUpstream(svc.upstream_name || '');
-          }
+          setTargetType('upstream');
+          setUpstream(svc.upstream_name || '');
         }
       })
       .catch((err) => {
@@ -231,18 +215,10 @@ export default function EditL4ServicePage() {
       }
     }
 
-    if (trafficAction === 'continue') {
-      lines.push('    # Action: CONTINUE -> Forward to the Layer 7 HTTP bridge');
-      lines.push('    # Route match -> process; No route match -> NGINX 404 error');
-      lines.push('    proxy_protocol on;');
-      lines.push('    proxy_pass 127.0.0.1:9082;');
+    if (targetType === 'endpoint') {
+      lines.push(`    proxy_pass ${endpoint || '127.0.0.1:0'};`);
     } else {
-      // Forward to
-      if (targetType === 'endpoint') {
-        lines.push(`    proxy_pass ${endpoint || '127.0.0.1:0'};`);
-      } else {
-        lines.push(`    proxy_pass l4_${upstream || 'upstream_pool'};`);
-      }
+      lines.push(`    proxy_pass l4_${upstream || 'upstream_pool'};`);
     }
 
     if (proxyTimeout) {
@@ -254,7 +230,7 @@ export default function EditL4ServicePage() {
 
     lines.push('}');
     return lines.join('\n');
-  }, [protocol, port, trafficAction, aclRules, targetType, endpoint, upstream, proxyTimeout, connectTimeout]);
+  }, [protocol, port, aclRules, targetType, endpoint, upstream, proxyTimeout, connectTimeout]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -269,35 +245,21 @@ export default function EditL4ServicePage() {
       setErrorMsg('Listen Port must be between 1 and 65535.');
       return;
     }
-    if (trafficAction === 'continue' && protocol !== 'tcp') {
-      setErrorMsg('Continue is available only for clear-text TCP HTTP traffic.');
-      return;
-    }
-
-    let targetTypeVal: 'upstream' | 'endpoint' = 'upstream';
     let upstreamVal = '';
     let endpointVal = '';
 
-    if (trafficAction === 'forward') {
-      targetTypeVal = targetType;
-      if (targetType === 'upstream') {
-        if (!upstream.trim()) {
-          setErrorMsg('Please select an Upstream Pool.');
-          return;
-        }
-        upstreamVal = upstream.trim();
-      } else {
-        if (!endpoint.trim()) {
-          setErrorMsg('Please specify a Direct Target Address (IP:Port).');
-          return;
-        }
-        endpointVal = endpoint.trim();
+    if (targetType === 'upstream') {
+      if (!upstream.trim()) {
+        setErrorMsg('Please select an Upstream Pool.');
+        return;
       }
+      upstreamVal = upstream.trim();
     } else {
-      // Continue mode -> L4 Pre-processing, pass internally to L7
-      targetTypeVal = 'endpoint';
-      endpointVal = '127.0.0.1:80';
-      upstreamVal = '';
+      if (!endpoint.trim()) {
+        setErrorMsg('Please specify a Direct Target Address (IP:Port).');
+        return;
+      }
+      endpointVal = endpoint.trim();
     }
 
     const sortedAcl = [...aclRules].sort((a, b) => b.priority - a.priority);
@@ -308,7 +270,7 @@ export default function EditL4ServicePage() {
         name: name.trim(),
         protocol,
         listen_port: Number(port),
-        forward_target_type: targetTypeVal,
+        forward_target_type: targetType,
         upstream_name: upstreamVal,
         direct_endpoint: endpointVal,
         acl_rules_json: JSON.stringify(sortedAcl),
@@ -469,200 +431,104 @@ export default function EditL4ServicePage() {
               </div>
             </div>
 
-            {/* Section 2: Traffic Action Strategy (2 Options: Continue / Forward To) */}
+            {/* Section 2: Target Forwarding Destination */}
             <div className="p-5 bg-card border border-border rounded-xl space-y-4 shadow-xs backdrop-blur-xs">
               <div className="flex items-center justify-between pb-3 border-b border-border/70">
                 <div className="flex items-center gap-2">
                   <ArrowRightLeft className="w-4 h-4 text-primary" />
                   <h2 className="text-sm font-semibold text-foreground">
-                    2. Traffic Action Strategy
+                    2. Target Forwarding Destination
                   </h2>
                 </div>
                 <span className="text-[11px] text-muted-foreground font-medium">
-                  Select routing strategy
+                  Select destination target
                 </span>
               </div>
 
-              {/* 2 Prominent Option Cards: Continue & Forward To */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {/* Option 1: Continue (L4 Pre-processing -> L7) */}
-                <div
-                  role="button"
-                  tabIndex={protocol === 'udp' ? -1 : 0}
-                  aria-disabled={protocol === 'udp'}
-                  onClick={() => {
-                    if (protocol === 'tcp') setTrafficAction('continue');
-                  }}
-                  onKeyDown={(e) => {
-                    if (protocol === 'tcp' && (e.key === 'Enter' || e.key === ' ')) setTrafficAction('continue');
-                  }}
-                  className={`p-4 rounded-xl border transition-all text-left space-y-2 ${protocol === 'udp'
-                    ? 'cursor-not-allowed opacity-55 border-border/70 bg-muted/20'
-                    : 'cursor-pointer'
-                  } ${
-                    trafficAction === 'continue'
-                      ? 'bg-violet-500/10 border-violet-500/50 ring-2 ring-violet-500/40 shadow-xs'
-                      : 'bg-background/50 border-border/70 hover:border-violet-500/30 hover:bg-muted/30'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="p-2 rounded-lg bg-violet-500/15 text-violet-400">
-                      <FastForward className="w-4 h-4" />
-                    </div>
-                    <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-400">
-                      Tiền xử lý L4
-                    </span>
-                  </div>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTargetType('upstream')}
+                    className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                      targetType === 'upstream'
+                        ? 'bg-primary/10 text-primary border-primary/40 shadow-xs'
+                        : 'bg-background/60 text-muted-foreground border-border/60 hover:bg-muted/40'
+                    }`}
+                  >
+                    <Server className="w-3.5 h-3.5" />
+                    Upstream Origin Pool
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTargetType('endpoint')}
+                    className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                      targetType === 'endpoint'
+                        ? 'bg-primary/10 text-primary border-primary/40 shadow-xs'
+                        : 'bg-background/60 text-muted-foreground border-border/60 hover:bg-muted/40'
+                    }`}
+                  >
+                    <ArrowRight className="w-3.5 h-3.5" />
+                    Direct Endpoint (IP/FQDN)
+                  </button>
+                </div>
+
+                {targetType === 'upstream' ? (
                   <div>
-                    <h3 className="text-sm font-bold text-foreground">Continue</h3>
-                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                      TCP HTTP không mã hoá được kiểm tra ACL ở L4, giữ IP nguồn qua PROXY protocol, rồi chuyển vào Route L7. UDP không hỗ trợ pipeline này.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Option 2: Forward To */}
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setTrafficAction('forward')}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') setTrafficAction('forward');
-                  }}
-                  className={`p-4 rounded-xl border transition-all cursor-pointer text-left space-y-2 ${
-                    trafficAction === 'forward'
-                      ? 'bg-primary/10 border-primary/50 ring-2 ring-primary/40 shadow-xs'
-                      : 'bg-background/50 border-border/70 hover:border-primary/30 hover:bg-muted/30'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="p-2 rounded-lg bg-primary/15 text-primary">
-                      <ArrowRightLeft className="w-4 h-4" />
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-medium text-foreground">
+                        Target Upstream Pool:
+                      </label>
+                      <Link
+                        to="/upstreams/create"
+                        target="_blank"
+                        className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                      >
+                        Create New Upstream <ExternalLink className="w-3 h-3" />
+                      </Link>
                     </div>
-                    <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-primary/15 text-primary">
-                      Standard Proxy
-                    </span>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-foreground">Forward to</h3>
-                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                      Proxy incoming TCP/UDP connections to an upstream origin pool or direct server endpoint.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Sub-config depending on selected Action */}
-              {trafficAction === 'continue' && (
-                <div className="p-4 rounded-xl border border-violet-500/30 bg-violet-500/5 space-y-2.5 mt-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-violet-400 font-semibold text-xs">
-                      <FastForward className="w-4 h-4" />
-                      <span>Không cần cấu hình target (Tiền xử lý L4 → Chuyển tiếp lên L7)</span>
-                    </div>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-violet-500/15 text-violet-400 font-semibold">
-                      Auto L7 Pipeline
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    Ở chế độ <strong>Continue</strong>, cổng TCP nhận HTTP không mã hoá, áp dụng ACL L4 theo thứ tự Priority và giữ IP nguồn khi chuyển vào pipeline Layer 7 để kiểm tra Route:
-                  </p>
-                  <ul className="list-disc pl-4 space-y-1 text-xs text-muted-foreground">
-                    <li><strong>Khớp Route:</strong> NGINX kiểm tra chính sách WAF theo IP nguồn và chuyển tiếp vào Upstream của Route tương ứng.</li>
-                    <li><strong>Không khớp Route:</strong> NGINX tự động phản hồi mã lỗi và đóng kết nối.</li>
-                  </ul>
-                </div>
-              )}
-
-              {trafficAction === 'forward' && (
-                <div className="p-4 rounded-xl border border-border/70 bg-muted/20 space-y-3 mt-3">
-                  <label className="block text-xs font-semibold text-foreground">
-                    Forward Destination Target
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setTargetType('upstream')}
-                      className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                        targetType === 'upstream'
-                          ? 'bg-primary/10 text-primary border-primary/40 shadow-xs'
-                          : 'bg-background/60 text-muted-foreground border-border/60 hover:bg-muted/40'
-                      }`}
-                    >
-                      <Server className="w-3.5 h-3.5" />
-                      Upstream Origin Pool
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTargetType('endpoint')}
-                      className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                        targetType === 'endpoint'
-                          ? 'bg-primary/10 text-primary border-primary/40 shadow-xs'
-                          : 'bg-background/60 text-muted-foreground border-border/60 hover:bg-muted/40'
-                      }`}
-                    >
-                      <ArrowRight className="w-3.5 h-3.5" />
-                      Direct Endpoint (IP/FQDN)
-                    </button>
-                  </div>
-
-                  {targetType === 'upstream' ? (
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs font-medium text-foreground">
-                          Target Upstream Pool:
-                        </label>
+                    {availableUpstreams.length === 0 ? (
+                      <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-500 text-xs flex items-center justify-between">
+                        <span>No upstream pools configured yet.</span>
                         <Link
                           to="/upstreams/create"
-                          target="_blank"
-                          className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                          className="font-semibold underline hover:text-amber-400"
                         >
-                          Create New Upstream <ExternalLink className="w-3 h-3" />
+                          Add Upstream Pool
                         </Link>
                       </div>
-                      {availableUpstreams.length === 0 ? (
-                        <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-500 text-xs flex items-center justify-between">
-                          <span>No upstream pools configured yet.</span>
-                          <Link
-                            to="/upstreams/create"
-                            className="font-semibold underline hover:text-amber-400"
-                          >
-                            Add Upstream Pool
-                          </Link>
-                        </div>
-                      ) : (
-                        <select
-                          value={upstream}
-                          onChange={(e) => setUpstream(e.target.value)}
-                          className="w-full px-3 py-2 text-xs bg-background border border-border/80 rounded-lg text-foreground focus:outline-hidden focus:ring-2 focus:ring-primary/40 font-sans cursor-pointer"
-                        >
-                          {availableUpstreams.map((up) => (
-                            <option key={up.name} value={up.name}>
-                              {up.name} ({up.algorithm || 'round_robin'}, {up.servers?.length || 0} backends)
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                    </div>
-                  ) : (
-                    <div>
-                      <label className="block text-xs font-medium text-foreground mb-1">
-                        Direct Destination (IP:Port or FQDN:Port):
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="IP:Port or host:port"
-                        value={endpoint}
-                        onChange={(e) => setEndpoint(e.target.value)}
-                        className="w-full px-3 py-2 text-xs font-mono bg-background border border-border/80 rounded-lg text-foreground focus:outline-hidden focus:ring-2 focus:ring-primary/40 placeholder:text-muted-foreground"
-                      />
-                      <p className="text-[11px] text-muted-foreground mt-1">
-                        NGINX stream directly forwards TCP/UDP traffic to this endpoint without pool balance.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
+                    ) : (
+                      <select
+                        value={upstream}
+                        onChange={(e) => setUpstream(e.target.value)}
+                        className="w-full px-3 py-2 text-xs bg-background border border-border/80 rounded-lg text-foreground focus:outline-hidden focus:ring-2 focus:ring-primary/40 font-sans cursor-pointer"
+                      >
+                        {availableUpstreams.map((up) => (
+                          <option key={up.name} value={up.name}>
+                            {up.name} ({up.algorithm || 'round_robin'}, {up.servers?.length || 0} backends)
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-xs font-medium text-foreground mb-1">
+                      Direct Destination (IP:Port or FQDN:Port):
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="IP:Port or host:port"
+                      value={endpoint}
+                      onChange={(e) => setEndpoint(e.target.value)}
+                      className="w-full px-3 py-2 text-xs font-mono bg-background border border-border/80 rounded-lg text-foreground focus:outline-hidden focus:ring-2 focus:ring-primary/40 placeholder:text-muted-foreground"
+                    />
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      NGINX stream directly forwards TCP/UDP traffic to this endpoint without pool balance.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Section 3: Access Control List (CIDR Rules with Priority) */}
@@ -928,37 +794,13 @@ export default function EditL4ServicePage() {
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Routing Strategy:</span>
-                  <span
-                    className={`font-semibold uppercase text-[11px] px-2 py-0.5 rounded border ${
-                      trafficAction === 'forward'
-                        ? 'bg-primary/10 text-primary border-primary/20'
-                        : 'bg-violet-500/10 text-violet-400 border-violet-500/20'
-                    }`}
-                  >
-                    {trafficAction === 'forward' ? 'Forward To' : 'Continue (L4→L7)'}
+                  <span className="text-muted-foreground">Destination:</span>
+                  <span className="font-mono text-[11px] text-foreground font-medium truncate max-w-[160px]">
+                    {targetType === 'upstream'
+                      ? `Pool: ${upstream || 'None'}`
+                      : `Direct: ${endpoint || 'None'}`}
                   </span>
                 </div>
-
-                {trafficAction === 'forward' && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Destination:</span>
-                    <span className="font-mono text-[11px] text-foreground font-medium truncate max-w-[160px]">
-                      {targetType === 'upstream'
-                        ? `Pool: ${upstream || 'None'}`
-                        : `Direct: ${endpoint || 'None'}`}
-                    </span>
-                  </div>
-                )}
-
-                {trafficAction === 'continue' && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Destination:</span>
-                    <span className="font-mono text-[11px] text-violet-400 font-semibold truncate max-w-[160px]">
-                      L7 Route Engine
-                    </span>
-                  </div>
-                )}
 
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Access Rules:</span>

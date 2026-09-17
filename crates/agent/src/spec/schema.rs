@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use super::certificate::CertificateSpec;
-use super::extensions::ExtensionInstanceSpec;
-use super::l4::L4Spec;
-use super::routing::RoutingSpec;
-use super::upstream::UpstreamSpec;
+use super::materialize::extensions::ExtensionInstanceSpec;
+use super::materialize::l4::L4Spec;
+use super::materialize::route::RoutingSpec;
+use super::materialize::tls::CertificateSpec;
+use super::materialize::upstream::UpstreamSpec;
 
 /// Root Declarative Manifest representing the entire desired state of the cluster gateway.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]

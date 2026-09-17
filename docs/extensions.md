@@ -19,7 +19,6 @@ Extensions are compiled by the control plane into the node spec wire format and 
 | --- | --- | --- | --- |
 | **Rate Limit** | `builtin/rate-limit` | FFI / NGINX | Sliding window and leaky bucket request rate limiting per IP, header, or route. |
 | **JWT Authentication** | `builtin/jwt-auth` | FFI / NGINX | Validates RS256/HS256 JWT tokens, checks claims, and injects upstream headers. |
-| **Ingress Header Sanitizer** | `builtin/ingress-header-sanitizer` | NGINX | Pre-processing ingress perimeter guard that sanitizes and strips untrusted incoming headers to prevent spoofing. |
 | **IP Restriction** | `builtin/ip-restriction` | FFI / NGINX | Allowlist or denylist client IP addresses and CIDR blocks. |
 | **Connection Limit** | `builtin/connection-limit` | NGINX | Limits concurrent TCP connections per client IP or upstream service. |
 | **Request Size Limit** | `builtin/request-size-limit` | NGINX | Restricts maximum allowed HTTP client body size to prevent resource exhaustion. |
@@ -48,7 +47,6 @@ Extensions are compiled by the control plane into the node spec wire format and 
 | **Request Header Transform** | `builtin/request-header-transform` | NGINX | Add, remove, or modify HTTP request headers before upstream proxying. |
 | **Response Header Transform** | `builtin/response-header-transform` | NGINX | Add, remove, or modify response headers returned to clients. |
 | **Gzip Compression** | `builtin/compression-gzip` | NGINX | Dynamically compresses responses using standard gzip encoding. |
-| **Brotli Compression** | `builtin/compression-brotli` | NGINX | High-efficiency modern Brotli response compression. |
 | **Response Buffering** | `builtin/response-buffering` | NGINX | Configures synchronous or asynchronous upstream response buffering. |
 | **Timeout Policy** | `builtin/timeout-policy` | NGINX | Fine-grained upstream connect, read, and send timeout thresholds. |
 
@@ -86,25 +84,29 @@ Extensions can be enabled, updated, and reordered non-disruptively through the *
 
 ---
 
-## Ingress Header Sanitizer (`builtin/ingress-header-sanitizer`)
+## Request Header Transform (`builtin/request-header-transform`)
 
-The Ingress Header Sanitizer acts as the perimeter guard (Phase 0) that runs before all other extensions. It sanitizes incoming request headers to eliminate spoofing risks.
+The Request Header Transform extension acts as the perimeter ingress and proxy transformation guard. It runs at the highest priority in NGINX to sanitize untrusted headers (preventing spoofing) and enrich metadata forwarded to upstream backends.
 
 ### Modes:
-1. **`denylist` (Default)**: Explicitly strips untrusted headers sent by external clients:
+1. **`denylist` (Default)**: Strips specified client headers and optionally appends custom headers:
    ```json
    {
      "enabled": true,
      "mode": "denylist",
-     "denylist": [
+     "remove_headers": [
        "traceparent",
        "x-request-id",
        "x-user-id",
        "x-consumer-id"
-     ]
+     ],
+     "add_headers": {
+       "X-Gateway-Env": "production",
+       "X-Forwarded-By": "Aurora-API-Gateway"
+     }
    }
    ```
-2. **`allowlist`**: Disables forwarding of all client request headers except those explicitly enumerated:
+2. **`allowlist`**: Disables automatic forwarding of all client request headers via `proxy_pass_request_headers off`, strictly preserving only core transport headers and explicitly permitted keys:
    ```json
    {
      "enabled": true,
@@ -113,10 +115,13 @@ The Ingress Header Sanitizer acts as the perimeter guard (Phase 0) that runs bef
        "authorization",
        "content-type",
        "accept"
-     ]
+     ],
+     "add_headers": {
+       "X-Gateway-Env": "production"
+     }
    }
    ```
 
-### Cooperation with Tracing:
-When client requests carry spoofed `traceparent` or `X-Request-ID` headers, Ingress Header Sanitizer strips them at ingress. Downstream extensions like `builtin/correlation-id` will then generate clean, authentic IDs without inheriting untrusted client headers.
+### Cooperation with Correlation Tracing:
+When client requests carry spoofed `traceparent` or `X-Request-ID` headers, `request-header-transform` cleanly strips them first. Downstream extensions like `builtin/correlation-id` will then generate clean, authentic IDs without inheriting untrusted client headers.
 

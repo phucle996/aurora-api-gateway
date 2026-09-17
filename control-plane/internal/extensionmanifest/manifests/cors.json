@@ -5,7 +5,7 @@
   "name": "CORS",
   "category": "authorization_security",
   "description": "CORS response headers and preflight handling.",
-  "renderer": "nginx-cors",
+  "renderer": "cors",
   "builtin": true,
   "default_config": {
     "allow_origins": [

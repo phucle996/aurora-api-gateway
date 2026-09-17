@@ -246,21 +246,6 @@ impl OtlpLogsExporter {
 mod tests {
     use super::*;
 
-    impl Default for OtlpLogsConfig {
-        fn default() -> Self {
-            Self {
-                enabled: true,
-                endpoint: "http://collector:4318".to_string(),
-                protocol: "http".to_string(),
-                batch_size: 100,
-                flush_interval_ms: 2000,
-                timeout_ms: 5000,
-                service_name: "aurora".to_string(),
-                log_level: "info".to_string(),
-            }
-        }
-    }
-
     #[test]
     fn test_otlp_logs_exporter_validation() {
         assert!(OtlpLogsExporter::new(OtlpLogsConfig::default()).is_ok());

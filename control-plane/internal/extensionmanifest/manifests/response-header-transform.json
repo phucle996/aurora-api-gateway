@@ -5,7 +5,7 @@
   "name": "Response Header Transform",
   "category": "response_transformation",
   "description": "Adds and removes response headers.",
-  "renderer": "nginx-response-header-transform",
+  "renderer": "response-header-transform",
   "builtin": true,
   "default_config": {
     "add_headers": {},

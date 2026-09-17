@@ -7,16 +7,13 @@ use super::opentelemetry_metrics::{
 use super::opentelemetry_tracing::{
     OtlpTracingConfig, OtlpTracingExporter, OtlpTracingWorkerHandle, spawn_otlp_tracing_worker,
 };
-use super::prometheus::spawn_prometheus_server;
+use super::prometheus::{spawn_prometheus_server, MetricsExtensionSpec};
 use super::std_log::{
-    StdLogConfig, StdLogFormat, StdLogLevel, StdLogWorkerHandle, spawn_std_log_worker,
+    StdLogConfig, StdLogFormat, StdLogLevel, StdLogSpec, StdLogWorkerHandle, spawn_std_log_worker,
 };
 use crate::logs::LogBus;
 use crate::metrics::MetricsCollector;
-use crate::spec::extensions::{
-    ExtensionInstanceSpec, MetricsExtensionSpec, OpenTelemetryLogsSpec, OpenTelemetryMetricsSpec,
-    OpenTelemetryTracingSpec, StdLogSpec,
-};
+use crate::spec::materialize::extensions::ExtensionInstanceSpec;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
@@ -38,11 +35,11 @@ pub struct ExtensionDispatcher {
 
     // OpenTelemetry logs extension lifecycle
     pub(crate) logs_worker: Option<OtlpLogsWorkerHandle>,
-    last_otel_logs_spec: Option<OpenTelemetryLogsSpec>,
+    last_otel_logs_spec: Option<OtlpLogsConfig>,
 
     // OpenTelemetry tracing extension lifecycle
     pub(crate) otel_tracing_worker: Option<OtlpTracingWorkerHandle>,
-    last_otel_tracing_spec: Option<OpenTelemetryTracingSpec>,
+    last_otel_tracing_spec: Option<OtlpTracingConfig>,
 
     // Standard stream logs (stdout/stderr) extension lifecycle
     pub(crate) std_log_worker: Option<StdLogWorkerHandle>,
@@ -100,7 +97,7 @@ impl ExtensionDispatcher {
                                 .to_string(),
                         );
                     }
-                    let spec = serde_json::from_str::<OpenTelemetryMetricsSpec>(
+                    let spec = serde_json::from_str::<OtlpMetricsConfig>(
                         &instance.config_json,
                     )
                     .map_err(|error| {
@@ -136,7 +133,7 @@ impl ExtensionDispatcher {
                                 .to_string(),
                         );
                     }
-                    let spec = serde_json::from_str::<OpenTelemetryLogsSpec>(&instance.config_json)
+                    let spec = serde_json::from_str::<OtlpLogsConfig>(&instance.config_json)
                         .map_err(|error| {
                             format!(
                                 "decode opentelemetry-logs extension instance {} config: {error}",
@@ -170,7 +167,7 @@ impl ExtensionDispatcher {
                                 .to_string(),
                         );
                     }
-                    let spec = serde_json::from_str::<OpenTelemetryTracingSpec>(
+                    let spec = serde_json::from_str::<OtlpTracingConfig>(
                         &instance.config_json,
                     )
                     .map_err(|error| {
@@ -251,14 +248,7 @@ impl ExtensionDispatcher {
 
         // Dispatch OpenTelemetry metrics background exporter independently
         let otel_metrics_cfg = if let Some(spec) = otel {
-            Some(OtlpMetricsConfig {
-                enabled: spec.enabled,
-                endpoint: spec.endpoint,
-                protocol: spec.protocol,
-                interval_secs: spec.interval_secs,
-                timeout_ms: spec.timeout_ms,
-                service_name: spec.service_name,
-            })
+            Some(spec)
         } else {
             metrics
                 .as_ref()
@@ -356,7 +346,7 @@ impl ExtensionDispatcher {
         }
     }
 
-    async fn dispatch_logs(&mut self, otel_logs_spec: Option<&OpenTelemetryLogsSpec>) {
+    async fn dispatch_logs(&mut self, otel_logs_spec: Option<&OtlpLogsConfig>) {
         let is_active = otel_logs_spec
             .filter(|o| o.enabled && !o.endpoint.trim().is_empty())
             .is_some();
@@ -380,17 +370,7 @@ impl ExtensionDispatcher {
         }
 
         let spec = otel_logs_spec.unwrap();
-        let logs_config = OtlpLogsConfig {
-            enabled: spec.enabled,
-            endpoint: spec.endpoint.clone(),
-            protocol: spec.protocol.clone(),
-            batch_size: spec.batch_size,
-            flush_interval_ms: spec.flush_interval_ms,
-            timeout_ms: spec.timeout_ms,
-            service_name: spec.service_name.clone(),
-            log_level: spec.log_level.clone(),
-        };
-        match OtlpLogsExporter::new(logs_config) {
+        match OtlpLogsExporter::new(spec.clone()) {
             Ok(exporter) => {
                 let node_id = (*self.node_id).clone();
                 let subscription = self
@@ -413,7 +393,7 @@ impl ExtensionDispatcher {
         self.last_otel_logs_spec = otel_logs_spec.cloned();
     }
 
-    async fn dispatch_tracing(&mut self, otel_tracing_spec: Option<&OpenTelemetryTracingSpec>) {
+    async fn dispatch_tracing(&mut self, otel_tracing_spec: Option<&OtlpTracingConfig>) {
         let is_active = otel_tracing_spec
             .filter(|o| o.enabled && !o.endpoint.trim().is_empty())
             .is_some();
@@ -439,17 +419,7 @@ impl ExtensionDispatcher {
         }
 
         let spec = otel_tracing_spec.unwrap();
-        let tracing_config = OtlpTracingConfig {
-            enabled: spec.enabled,
-            endpoint: spec.endpoint.clone(),
-            protocol: spec.protocol.clone(),
-            sample_rate: spec.sample_rate,
-            batch_size: spec.batch_size,
-            flush_interval_ms: spec.flush_interval_ms,
-            timeout_ms: spec.timeout_ms,
-            service_name: spec.service_name.clone(),
-        };
-        match OtlpTracingExporter::new(tracing_config) {
+        match OtlpTracingExporter::new(spec.clone()) {
             Ok(exporter) => {
                 let node_id = (*self.node_id).clone();
                 let subscription = self
@@ -557,7 +527,7 @@ impl ExtensionDispatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::spec::extensions::ExtensionInstanceSpec;
+    use crate::spec::materialize::extensions::ExtensionInstanceSpec;
 
     #[tokio::test]
     async fn dispatcher_starts_and_stops_metrics_from_manifest_instance() {

@@ -5,7 +5,7 @@
   "name": "Gzip Compression",
   "category": "response_transformation",
   "description": "Enables gzip response compression.",
-  "renderer": "nginx-gzip",
+  "renderer": "compression-gzip",
   "builtin": true,
   "default_config": {
     "level": 4

@@ -16,7 +16,10 @@ impl OtlpProtocol {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OtlpTracingConfig {
     pub enabled: bool,
     pub endpoint: String,

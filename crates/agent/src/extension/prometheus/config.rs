@@ -2,19 +2,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
-pub struct ExtensionInstanceSpec {
-    pub instance_id: String,
-    pub key: String,
-    pub version: u32,
-    #[serde(default)]
-    pub renderer: String,
-    #[serde(default)]
-    pub manifest_digest: String,
-    pub config_json: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
 pub struct MetricsExtensionSpec {
     #[serde(default = "default_metrics_port")]
     pub port: u16,
@@ -94,45 +81,6 @@ impl Default for OtlpSpec {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct OpenTelemetryMetricsSpec {
-    pub enabled: bool,
-    pub endpoint: String,
-    pub protocol: String,
-    pub interval_secs: u64,
-    pub timeout_ms: u64,
-    pub service_name: String,
-}
-
-pub type OpenTelemetrySpec = OpenTelemetryMetricsSpec;
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct OpenTelemetryLogsSpec {
-    pub enabled: bool,
-    pub endpoint: String,
-    pub protocol: String,
-    pub batch_size: usize,
-    pub flush_interval_ms: u64,
-    pub timeout_ms: u64,
-    pub service_name: String,
-    pub log_level: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct OpenTelemetryTracingSpec {
-    pub enabled: bool,
-    pub endpoint: String,
-    pub protocol: String,
-    pub sample_rate: f64,
-    pub batch_size: usize,
-    pub flush_interval_ms: u64,
-    pub timeout_ms: u64,
-    pub service_name: String,
-}
-
 fn default_otlp_interval() -> u64 {
     15
 }
@@ -147,26 +95,4 @@ fn default_otlp_timeout() -> u64 {
 
 fn default_otlp_service_name() -> String {
     "aurora-gateway".to_string()
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct StdLogSpec {
-    pub enabled: bool,
-    #[serde(default = "default_std_log_format")]
-    pub format: String,
-    #[serde(default = "default_true")]
-    pub split_streams: bool,
-    #[serde(default = "default_std_log_level")]
-    pub log_level: String,
-    #[serde(default = "default_true")]
-    pub include_waf_details: bool,
-}
-
-fn default_std_log_format() -> String {
-    "json".to_string()
-}
-
-fn default_std_log_level() -> String {
-    "info".to_string()
 }

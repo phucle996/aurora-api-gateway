@@ -59,15 +59,15 @@ fi
 chown -R nginx:nginx /var/lib/aurora-policy
 chmod 700 /var/lib/aurora-policy
 
-# Routing servers share the same WAF enforcement and node identity as the workload server.
-cat > /etc/nginx/domain-waf.conf <<EOF
+# Routing servers share the same gateway pipeline and node identity as the workload server.
+cat > /etc/nginx/gateway-pipeline.conf <<EOF
 gateway on;
 real_ip_header proxy_protocol;
 set_real_ip_from 127.0.0.1;
 set_real_ip_from ::1;
 include /var/lib/aurora-policy/active-extensions.conf;
 EOF
-chmod 600 /etc/nginx/domain-waf.conf
+chmod 600 /etc/nginx/gateway-pipeline.conf
 mkdir -p /var/lib/aurora-routing
 chown root:root /var/lib/aurora-routing
 chmod 700 /var/lib/aurora-routing
@@ -78,9 +78,6 @@ fi
 if [ ! -f /var/lib/aurora-routing/active-l4-streams.conf ]; then
     printf '# No configured L4 streams yet\n' > /var/lib/aurora-routing/active-l4-streams.conf
 fi
-
-# Baseline for optional modules/dependencies
-/extension-modules.sh init
 
 # Validate Gateway syntax
 if ! "${GATEWAY_BIN}" -t -c /etc/nginx/nginx.conf; then

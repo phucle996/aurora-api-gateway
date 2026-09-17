@@ -37,7 +37,7 @@ func isReservedL4TCPPort(protocol string, port int) bool {
 	}
 
 	switch port {
-	case 80, 443, 9081, 9082, 9443:
+	case 80, 443, 9081:
 		return true
 	default:
 		return false
@@ -145,9 +145,6 @@ func (h *L4Handler) validateTarget(ctx context.Context, protocol, targetType, up
 		port, err := strconv.Atoi(portStr)
 		if err != nil || port < 1 || port > 65535 {
 			return taxonomy.ErrL4InvalidEndpoint
-		}
-		if protocol == "udp" && (endpoint == "127.0.0.1:80" || endpoint == "127.0.0.1:9443") {
-			return taxonomy.ErrL4L7PipelineRequiresTCP
 		}
 		return nil
 	}
