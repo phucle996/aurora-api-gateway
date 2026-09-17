@@ -3,6 +3,7 @@ use super::l4::generate_l4_streams_conf;
 use super::routing::{find_matching_certificate, generate_domain_routing_conf, matches_sni};
 use super::*;
 use crate::spec::certificate::CertificateSpec;
+use crate::spec::extensions::ExtensionInstanceSpec;
 use crate::spec::schema::Spec;
 use std::os::unix::fs::PermissionsExt;
 
@@ -35,8 +36,7 @@ async fn test_materialize_nginx_files() {
         .expect("materialize");
     assert!(res.nginx_changed);
 
-    assert!(policy_dir.join("active-policy.json").exists());
-    assert!(policy_dir.join("active-access.json").exists());
+    assert!(!policy_dir.join("active-ip-restriction.json").exists());
     assert!(policy_dir.join("active-upstreams.conf").exists());
     assert!(policy_dir.join("active-extensions-http.conf").exists());
     assert!(policy_dir.join("active-extensions.conf").exists());
@@ -118,7 +118,7 @@ fn test_extensions_generation() {
         rendered.jwt_policy.unwrap()["rules"][0]["host"],
         "api.example.test"
     );
-    assert_eq!(rendered.access_rules.len(), 0);
+    assert!(rendered.ip_restriction_policy.is_none());
 }
 
 #[tokio::test]
@@ -664,24 +664,33 @@ async fn test_materialize_nginx_writes_and_removes_request_termination_snapshot(
 }
 
 #[test]
-fn test_access_policy_renderer_generates_cidr_rules_from_instance_config() {
+fn test_ip_restriction_renderer_generates_cidr_rules_from_instance_config() {
     let instance = crate::spec::extensions::ExtensionInstanceSpec {
         instance_id: "office-network".to_string(),
         key: "builtin/ip-restriction".to_string(),
         version: 1,
-        renderer: "access-policy".to_string(),
+        renderer: "ip-restriction".to_string(),
         manifest_digest: String::new(),
         config_json: r#"{"whitelist":["198.51.100.0/24"],"blacklist":["192.0.2.10/32"],"rules":[{"id":"admin-block","cidr":"203.0.113.0/24","type":"blacklist","match_value":"/admin","action":"block","priority":7}]}"#.to_string(),
     };
 
     let rendered = render_extensions(&[instance]).unwrap();
-    assert_eq!(rendered.access_rules.len(), 3);
-    assert_eq!(rendered.access_rules[0]["action"], "allow");
-    assert_eq!(rendered.access_rules[0]["priority"], 10);
-    assert_eq!(rendered.access_rules[1]["action"], "block");
-    assert_eq!(rendered.access_rules[2]["path_prefix"], "/admin");
-    assert_eq!(rendered.access_rules[2]["priority"], 7);
-    assert_eq!(rendered.access_rules[0]["networks"][0], "198.51.100.0/24");
+    let policy = rendered
+        .ip_restriction_policy
+        .expect("ip_restriction_policy");
+    let rules = policy["rules"].as_array().expect("rules");
+    assert_eq!(rules.len(), 3);
+    assert_eq!(rules[0]["action"], "allow");
+    assert_eq!(rules[0]["priority"], 10);
+    assert_eq!(rules[1]["action"], "block");
+    assert_eq!(rules[2]["path_prefix"], "/admin");
+    assert_eq!(rules[2]["priority"], 7);
+    assert_eq!(rules[0]["networks"][0], "198.51.100.0/24");
+    assert!(
+        rendered
+            .server_conf
+            .contains("gateway_access_policy /var/lib/aurora-policy/active-ip-restriction.json;")
+    );
 }
 
 #[test]
@@ -698,17 +707,79 @@ fn test_extension_renderer_rejects_unknown_renderer() {
 }
 
 #[test]
-fn test_access_policy_renderer_rejects_ipv4_mapped_ipv6() {
+fn test_ip_restriction_renderer_rejects_ipv4_mapped_ipv6() {
     let instance = crate::spec::extensions::ExtensionInstanceSpec {
         instance_id: "ip-restriction".to_string(),
         key: "builtin/ip-restriction".to_string(),
         version: 1,
-        renderer: "access-policy".to_string(),
+        renderer: "ip-restriction".to_string(),
         manifest_digest: String::new(),
         config_json: r#"{"whitelist":["::ffff:192.0.2.1/128"],"blacklist":[],"rules":[]}"#
             .to_string(),
     };
     assert!(render_extensions(&[instance]).is_err());
+}
+
+#[tokio::test]
+async fn test_ip_restriction_extension_materializes_and_removes_snapshot() {
+    let base =
+        std::env::temp_dir().join(format!("materialize-ip-restriction-{}", std::process::id()));
+    let policy_dir = base.join("policy");
+    let routing_dir = base.join("routing");
+    let _ = tokio::fs::remove_dir_all(&base).await;
+
+    let spec_with_extension = Spec {
+        release_id: 101,
+        extensions: vec![crate::spec::extensions::ExtensionInstanceSpec {
+            instance_id: "ip-guard".to_string(),
+            key: "builtin/ip-restriction".to_string(),
+            version: 1,
+            renderer: "ip-restriction".to_string(),
+            manifest_digest: String::new(),
+            config_json: r#"{"whitelist":["10.0.0.0/8"],"blacklist":[],"rules":[]}"#.to_string(),
+        }],
+        ..Default::default()
+    };
+
+    let result = materialize_nginx(&spec_with_extension, &policy_dir, &routing_dir)
+        .await
+        .expect("materialize with ip-restriction");
+    assert!(result.nginx_changed);
+
+    let access_path = policy_dir.join("active-ip-restriction.json");
+    assert!(access_path.exists());
+    let content = tokio::fs::read_to_string(&access_path).await.unwrap();
+    assert!(content.contains("\"10.0.0.0/8\""));
+    assert!(content.contains("\"generation\": 101"));
+
+    let ext_conf = tokio::fs::read_to_string(policy_dir.join("active-extensions.conf"))
+        .await
+        .unwrap();
+    assert!(
+        ext_conf
+            .contains("gateway_access_policy /var/lib/aurora-policy/active-ip-restriction.json;")
+    );
+
+    // Second run: spec without extension removes snapshot and directive
+    let spec_without_extension = Spec {
+        release_id: 102,
+        extensions: vec![],
+        ..Default::default()
+    };
+
+    let result2 = materialize_nginx(&spec_without_extension, &policy_dir, &routing_dir)
+        .await
+        .expect("materialize without ip-restriction");
+    assert!(result2.nginx_changed);
+    assert!(
+        !access_path.exists(),
+        "active-ip-restriction.json should be removed when extension is absent"
+    );
+
+    let ext_conf2 = tokio::fs::read_to_string(policy_dir.join("active-extensions.conf"))
+        .await
+        .unwrap();
+    assert!(!ext_conf2.contains("gateway_access_policy"));
 }
 
 #[test]
@@ -1289,5 +1360,186 @@ fn test_render_extensions_correlation_id() {
         rendered2.server_conf.contains(
             "add_header X-Custom-Trace \"00-${request_id}-${aurora_span_id}-01\" always;"
         )
+    );
+}
+
+#[test]
+fn test_render_extensions_ingress_header_sanitizer_denylist() {
+    let instances = vec![ExtensionInstanceSpec {
+        instance_id: "sanitizer-1".to_string(),
+        key: "builtin/ingress-header-sanitizer".to_string(),
+        version: 1,
+        renderer: "nginx-ingress-header-sanitizer".to_string(),
+        manifest_digest: String::new(),
+        config_json: serde_json::json!({
+            "enabled": true,
+            "mode": "denylist",
+            "denylist": ["traceparent", "X-Request-ID", "X-User-Id"]
+        })
+        .to_string(),
+    }];
+
+    let rendered = render_extensions(&instances).expect("render must succeed");
+    assert!(
+        rendered
+            .server_conf
+            .contains("proxy_set_header traceparent \"\";")
+    );
+    assert!(
+        rendered
+            .server_conf
+            .contains("proxy_set_header X-Request-ID \"\";")
+    );
+    assert!(
+        rendered
+            .server_conf
+            .contains("proxy_set_header X-User-Id \"\";")
+    );
+    assert!(
+        !rendered
+            .server_conf
+            .contains("proxy_pass_request_headers off;")
+    );
+}
+
+#[test]
+fn test_render_extensions_ingress_header_sanitizer_allowlist() {
+    let instances = vec![ExtensionInstanceSpec {
+        instance_id: "sanitizer-2".to_string(),
+        key: "builtin/ingress-header-sanitizer".to_string(),
+        version: 1,
+        renderer: "nginx-ingress-header-sanitizer".to_string(),
+        manifest_digest: String::new(),
+        config_json: serde_json::json!({
+            "enabled": true,
+            "mode": "allowlist",
+            "allowlist": ["authorization", "Content-Type", "X-Custom-Key"]
+        })
+        .to_string(),
+    }];
+
+    let rendered = render_extensions(&instances).expect("render must succeed");
+    assert!(
+        rendered
+            .server_conf
+            .contains("proxy_pass_request_headers off;")
+    );
+    assert!(
+        rendered
+            .server_conf
+            .contains("proxy_set_header Host $host;")
+    );
+    assert!(
+        rendered
+            .server_conf
+            .contains("proxy_set_header Content-Type $content_type;")
+    );
+    assert!(
+        rendered
+            .server_conf
+            .contains("proxy_set_header Content-Length $content_length;")
+    );
+    assert!(
+        rendered
+            .server_conf
+            .contains("proxy_set_header authorization $http_authorization;")
+    );
+    assert!(
+        rendered
+            .server_conf
+            .contains("proxy_set_header Content-Type $http_content_type;")
+    );
+    assert!(
+        rendered
+            .server_conf
+            .contains("proxy_set_header X-Custom-Key $http_x_custom_key;")
+    );
+}
+
+#[test]
+fn test_render_extensions_ingress_header_sanitizer_disabled() {
+    let instances = vec![ExtensionInstanceSpec {
+        instance_id: "sanitizer-3".to_string(),
+        key: "builtin/ingress-header-sanitizer".to_string(),
+        version: 1,
+        renderer: "nginx-ingress-header-sanitizer".to_string(),
+        manifest_digest: String::new(),
+        config_json: serde_json::json!({
+            "enabled": false,
+            "mode": "denylist",
+            "denylist": ["traceparent", "X-Request-ID"]
+        })
+        .to_string(),
+    }];
+
+    let rendered = render_extensions(&instances).expect("render must succeed");
+    assert!(
+        !rendered
+            .server_conf
+            .contains("proxy_set_header traceparent")
+    );
+    assert!(
+        !rendered
+            .server_conf
+            .contains("proxy_set_header X-Request-ID")
+    );
+}
+
+#[test]
+fn test_render_extensions_ingress_header_sanitizer_precedence() {
+    // Put correlation-id FIRST and ingress-header-sanitizer SECOND in the input slice
+    let instances = vec![
+        ExtensionInstanceSpec {
+            instance_id: "corr-1".to_string(),
+            key: "builtin/correlation-id".to_string(),
+            version: 1,
+            renderer: "nginx-correlation-id".to_string(),
+            manifest_digest: String::new(),
+            config_json: serde_json::json!({
+                "request_id": {
+                    "enabled": true,
+                    "header_name": "X-Request-ID",
+                    "send_in_response": true,
+                    "include_in_access_log": true
+                },
+                "trace_id": {
+                    "enabled": true,
+                    "header_name": "traceparent",
+                    "send_in_response": false,
+                    "include_in_access_log": true
+                }
+            })
+            .to_string(),
+        },
+        ExtensionInstanceSpec {
+            instance_id: "sanitizer-1".to_string(),
+            key: "builtin/ingress-header-sanitizer".to_string(),
+            version: 1,
+            renderer: "nginx-ingress-header-sanitizer".to_string(),
+            manifest_digest: String::new(),
+            config_json: serde_json::json!({
+                "enabled": true,
+                "mode": "denylist",
+                "denylist": ["X-User-Id"]
+            })
+            .to_string(),
+        },
+    ];
+
+    let rendered = render_extensions(&instances).expect("render must succeed");
+
+    // Ingress sanitizer directive must appear BEFORE correlation-id directives in server_conf
+    let pos_sanitizer = rendered
+        .server_conf
+        .find("proxy_set_header X-User-Id \"\";")
+        .expect("sanitizer directive must be present");
+    let pos_correlation = rendered
+        .server_conf
+        .find("proxy_set_header X-Request-ID $request_id;")
+        .expect("correlation directive must be present");
+
+    assert!(
+        pos_sanitizer < pos_correlation,
+        "ingress sanitizer (pos {pos_sanitizer}) MUST be placed ahead of correlation-id (pos {pos_correlation})"
     );
 }

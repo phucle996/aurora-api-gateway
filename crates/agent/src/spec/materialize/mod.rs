@@ -48,45 +48,30 @@ pub async fn materialize_nginx(
     let rendered_extensions = render_extensions(&spec.extensions)
         .map_err(|error| format!("render extension instances: {error}"))?;
 
-    // 1. Security Policy
-    let policy_path = policy_dir.join("active-policy.json");
-    let policy_json = if let Some(ref raw) = spec.security.raw_json {
-        raw.clone()
-    } else if !spec.security.rules.is_empty() {
-        serde_json::to_string_pretty(&serde_json::json!({
-            "schema_version": 2,
-            "generation": spec.release_id,
-            "rules": spec.security.rules,
-        }))?
+    // 1. IP Restriction snapshot. The NGINX module owns request-time
+    // evaluation through FFI; the agent only materializes its desired state.
+    let access_path = policy_dir.join("active-ip-restriction.json");
+    if let Some(access_config) = rendered_extensions.ip_restriction_policy.as_ref() {
+        let mut access_obj = access_config
+            .as_object()
+            .ok_or_else(|| "ip-restriction config must be a JSON object".to_string())?
+            .clone();
+        access_obj.insert("schema_version".to_string(), serde_json::json!(1));
+        access_obj.insert("generation".to_string(), serde_json::json!(spec.release_id));
+        let access_json = serde_json::to_string_pretty(&serde_json::Value::Object(access_obj))?;
+        if atomic_write_if_changed(&access_path, access_json.as_bytes()).await? {
+            info!(
+                "Updated active-ip-restriction.json (release_id: {})",
+                spec.release_id
+            );
+            changed = true;
+        }
     } else {
-        let block_paths = if spec.security.block_paths.is_empty() {
-            vec!["/blocked".to_string(), "/__aurora_blocked".to_string()]
-        } else {
-            spec.security.block_paths.clone()
-        };
-        serde_json::to_string_pretty(&serde_json::json!({
-            "schema_version": 1,
-            "block_paths": block_paths,
-        }))?
-    };
-    if atomic_write_if_changed(&policy_path, policy_json.as_bytes()).await? {
-        info!(
-            "Updated active-policy.json (release_id: {})",
-            spec.release_id
-        );
-        changed = true;
-    }
-
-    // 2. Access Policy (NGINX C engine requires active-access.json)
-    let access_path = policy_dir.join("active-access.json");
-    let access_json = serde_json::to_string_pretty(&serde_json::json!({
-        "schema_version": 1,
-        "generation": spec.release_id,
-        "rules": rendered_extensions.access_rules,
-    }))?;
-    if atomic_write_if_changed(&access_path, access_json.as_bytes()).await? {
-        info!("Updated active-access.json");
-        changed = true;
+        match tokio::fs::remove_file(&access_path).await {
+            Ok(()) => changed = true,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(Box::new(error)),
+        }
     }
 
     // 3. JWT authorization snapshot. The NGINX module owns request-time

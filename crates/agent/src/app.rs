@@ -36,28 +36,7 @@ impl App {
         tokio::fs::create_dir_all(&cfg.policy_dir).await?;
         tokio::fs::create_dir_all(&cfg.routing_dir).await?;
 
-        // 2. Initialize default policy and access snapshots
-        let default_policy = cfg.policy_dir.join("active-policy.json");
-        let should_init_policy = match tokio::fs::read_to_string(&default_policy).await {
-            Ok(c) => !c.contains("\"schema_version\""),
-            Err(_) => true,
-        };
-        if should_init_policy {
-            let initial_json =
-                r#"{"schema_version":1,"block_paths":["/blocked","/__aurora_blocked"]}"#;
-            let _ = tokio::fs::write(&default_policy, initial_json).await;
-        }
-
-        let default_access = cfg.policy_dir.join("active-access.json");
-        let should_init_access = match tokio::fs::read_to_string(&default_access).await {
-            Ok(c) => !c.contains("\"schema_version\""),
-            Err(_) => true,
-        };
-        if should_init_access {
-            let initial_access = r#"{"schema_version":1,"generation":0,"rules":[]}"#;
-            let _ = tokio::fs::write(&default_access, initial_access).await;
-        }
-
+        // 2. Initialize default upstreams
         let default_upstreams = cfg.policy_dir.join("active-upstreams.conf");
         if !default_upstreams.exists() {
             let _ = tokio::fs::write(
