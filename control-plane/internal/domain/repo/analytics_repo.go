@@ -10,6 +10,3 @@ type AnalyticsRepository interface {
 	GetMetricsConfig(ctx context.Context) (*entity.MetricsIntegrationConfig, error)
 	SaveMetricsConfig(ctx context.Context, cfg entity.MetricsIntegrationConfig) error
 }
-
-// SettingsRepository giữ type alias cho AnalyticsRepository để bảo toàn khả năng tương thích.
-type SettingsRepository = AnalyticsRepository

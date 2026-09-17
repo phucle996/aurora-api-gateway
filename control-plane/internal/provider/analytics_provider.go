@@ -486,10 +486,6 @@ func (p *PrometheusMetricsProvider) GetNodeTimeline(ctx context.Context, nodeID 
 
 type DisabledMetricsProvider struct{}
 
-func NewDisabledMetricsProvider() *DisabledMetricsProvider {
-	return &DisabledMetricsProvider{}
-}
-
 func (p *DisabledMetricsProvider) Start(context.Context) error { return nil }
 func (p *DisabledMetricsProvider) Stop() error                 { return nil }
 func (p *DisabledMetricsProvider) QueryRange(context.Context, string, int64, int64, int) (*PrometheusMatrixResponse, error) {

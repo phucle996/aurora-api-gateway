@@ -35,18 +35,10 @@ func NewServer(addr string, adminToken string, handlers Handlers) *Server {
 	}
 }
 
-func (s *Server) Addr() string {
-	return s.addr
-}
-
 func (s *Server) Serve(lis net.Listener) error {
 	return s.grpcServer.Serve(lis)
 }
 
 func (s *Server) GracefulStop() {
 	s.grpcServer.GracefulStop()
-}
-
-func (s *Server) Stop() {
-	s.grpcServer.Stop()
 }

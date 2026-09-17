@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -35,7 +34,7 @@ func upstreamsFixtureWithPool(t *testing.T) (http.Handler, *infra.DBPool) {
 	t.Cleanup(func() { pools.Close() })
 
 	router := gin.New()
-	module, err := app.NewModule(pools.Writer, pools.Reader, config.Config{CompilerPath: os.Getenv("AURORA_TEST_COMPILER")})
+	module, err := app.NewModule(pools.Writer, pools.Reader, config.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}

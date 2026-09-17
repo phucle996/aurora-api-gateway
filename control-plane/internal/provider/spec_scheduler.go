@@ -160,27 +160,15 @@ func (s *SpecScheduler) Reconcile(ctx context.Context) (*entity.ClusterSpecRelea
 
 func (s *SpecScheduler) compileDocument(auth *entity.SpecAuthorityData) (*Spec, string, string, error) {
 	releaseID := int64(1)
-	if auth != nil {
-		if auth.SecurityReleaseID > 0 {
-			releaseID = auth.SecurityReleaseID
-		}
-	}
 
 	doc := Spec{
 		Version:     1,
 		ReleaseID:   releaseID,
 		GeneratedAt: "2026-01-01T00:00:00Z",
 		Extensions:  make([]ExtensionInstanceSpec, 0),
-		Security: SecuritySpec{
-			Mode: "enforce",
-		},
 	}
 
 	if auth != nil {
-		if len(auth.SecurityPayload) > 0 {
-			doc.Security.RawJSON = string(auth.SecurityPayload)
-		}
-
 		doc.UpstreamsConf = auth.UpstreamsConf
 
 		if len(auth.RoutingRecords) > 0 {
@@ -368,19 +356,12 @@ type Spec struct {
 	ReleaseID     int64                   `yaml:"release_id" json:"release_id"`
 	GeneratedAt   string                  `yaml:"generated_at" json:"generated_at"`
 	Extensions    []ExtensionInstanceSpec `yaml:"extensions,omitempty" json:"extensions,omitempty"`
-	Security      SecuritySpec            `yaml:"security" json:"security"`
 	Upstreams     []UpstreamSpec          `yaml:"upstreams,omitempty" json:"upstreams,omitempty"`
 	UpstreamsConf string                  `yaml:"upstreams_conf,omitempty" json:"upstreams_conf,omitempty"`
 	Routing       RoutingSpec             `yaml:"routing,omitempty" json:"routing,omitempty"`
 	RoutingConf   string                  `yaml:"routing_conf,omitempty" json:"routing_conf,omitempty"`
 	Certificates  []CertificateSpec       `yaml:"certificates,omitempty" json:"certificates,omitempty"`
 	L4            *L4Spec                 `yaml:"l4,omitempty" json:"l4,omitempty"`
-}
-
-type SecuritySpec struct {
-	Mode       string   `yaml:"mode" json:"mode"`
-	BlockPaths []string `yaml:"block_paths,omitempty" json:"block_paths,omitempty"`
-	RawJSON    string   `yaml:"raw_json,omitempty" json:"raw_json,omitempty"`
 }
 
 type ExtensionInstanceSpec struct {

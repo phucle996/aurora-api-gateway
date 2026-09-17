@@ -94,10 +94,8 @@ type SpecL4ServiceRecord struct {
 
 // SpecAuthorityData is the spec sync workflow's flat database authority projection.
 type SpecAuthorityData struct {
-	NodeID            string
-	SecurityReleaseID int64
-	SecurityPayload   []byte
-	UpstreamsConf     string
+	NodeID          string
+	UpstreamsConf   string
 	RoutingRecords  []SpecRoutingRecord
 	Certificates    []SpecCertificateRecord
 	Extensions      []SpecExtensionRecord

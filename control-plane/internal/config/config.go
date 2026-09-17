@@ -16,7 +16,6 @@ type Config struct {
 	GRPCAddr       string
 	SQLitePath     string
 	AdminTokenFile string
-	CompilerPath   string
 	JWTSecret      string
 	Version        string
 	BuildTime      string
@@ -44,7 +43,6 @@ func LoadConfig() Config {
 		GRPCAddr:       value("AURORA_GRPC_ADDR", "0.0.0.0:9090"),
 		SQLitePath:     value("AURORA_SQLITE_PATH", "data/aurora.db"),
 		AdminTokenFile: os.Getenv("AURORA_ADMIN_TOKEN_FILE"),
-		CompilerPath:   os.Getenv("AURORA_COMPILER_PATH"),
 		JWTSecret:      jwtSecret,
 		Version:        value("AURORA_VERSION", DefaultVersion),
 		BuildTime:      value("AURORA_BUILD_TIME", DefaultBuildTime),

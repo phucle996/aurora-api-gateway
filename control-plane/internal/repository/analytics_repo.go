@@ -19,11 +19,6 @@ func NewAnalyticsRepository(db *sql.DB) repo.AnalyticsRepository {
 	return &sqliteAnalyticsRepository{db: db}
 }
 
-// NewSettingsRepository là alias chuyển tiếp sang NewAnalyticsRepository để tương thích ngược.
-func NewSettingsRepository(db *sql.DB) repo.SettingsRepository {
-	return NewAnalyticsRepository(db)
-}
-
 // GetMetricsConfig lấy cấu hình tích hợp metrics hiện tại từ bảng system_settings.
 func (r *sqliteAnalyticsRepository) GetMetricsConfig(ctx context.Context) (*entity.MetricsIntegrationConfig, error) {
 	query := `
