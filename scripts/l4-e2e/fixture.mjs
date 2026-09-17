@@ -209,6 +209,8 @@ exec /usr/local/bin/aurora-agent
           CONTROLLER_URL: 'http://controller:8080',
           GRPC_URL: 'http://controller:9099',
           AUTH_TOKEN: this.token,
+          GATEWAY_BIN: '/opt/nginx/usr/sbin/nginx',
+          GATEWAY_CONF: '/etc/nginx/nginx.conf',
           NGINX_BIN: '/opt/nginx/usr/sbin/nginx',
           NGINX_CONF: '/etc/nginx/nginx.conf',
           POLICY_DIR: '/var/lib/aurora-policy',

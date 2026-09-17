@@ -6,10 +6,10 @@ use crate::nginx::NginxManager;
 use crate::sync;
 use anyhow::Result;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 pub struct App {
     pub cfg: Arc<Config>,
@@ -27,7 +27,7 @@ impl App {
             .as_secs() as i64;
 
         info!(
-            node_id = %cfg.node_id,
+            hostname = %cfg.hostname(),
             controller = %cfg.controller_url,
             "Initializing Aurora Dataplane Agent"
         );
@@ -46,7 +46,7 @@ impl App {
             .await;
         }
 
-        // 3. Initialize high-performance LogBus before starting NGINX
+        // 3. Initialize high-performance LogBus
         let shm_handle = LogShmHandle::open_or_create().map(Arc::new);
         let log_bus = match LogBus::bind(None, shm_handle) {
             Ok(bus) => {
@@ -62,14 +62,8 @@ impl App {
             }
         };
 
-        // 4. Initialize NGINX Manager
-        let nginx = NginxManager::new(cfg.nginx_bin.clone(), cfg.nginx_conf.clone());
-        if !cfg.no_nginx {
-            nginx.start().await.map_err(|e| {
-                error!("Failed to start NGINX child process: {}", e);
-                e
-            })?;
-        }
+        // 4. Initialize Gateway Manager (syntax test & reload only)
+        let nginx = NginxManager::new(cfg.gateway_bin.clone(), cfg.gateway_conf.clone());
 
         // 5. Initialize gRPC Client
         let grpc_endpoint = cfg.grpc_endpoint();
@@ -90,43 +84,9 @@ impl App {
 
         // Initialize Extension Dispatcher
         let dispatcher = Arc::new(Mutex::new(ExtensionDispatcher::new(
-            Arc::new(self.cfg.node_id.clone()),
+            Arc::new(self.cfg.hostname.clone()),
             self.log_bus.clone(),
         )));
-
-        // Baseline initialization from CLI flags (if any) until first spec sync
-        let metrics_enabled =
-            self.cfg.metrics_prometheus || self.cfg.metrics_otlp_endpoint.is_some();
-        let initial_extensions = if metrics_enabled {
-            vec![crate::spec::extensions::ExtensionInstanceSpec {
-                    instance_id: "bootstrap-prometheus".to_string(),
-                    key: "builtin/prometheus".to_string(),
-                    version: 1,
-                    renderer: "agent-metrics".to_string(),
-                    manifest_digest: String::new(),
-                    config_json: serde_json::json!({
-                        "port": self.cfg.metrics_port,
-                        "prometheus": {
-                            "enabled": self.cfg.metrics_prometheus,
-                            "path": "/metrics",
-                        },
-                        "otlp": self.cfg.metrics_otlp_endpoint.as_ref().map(|endpoint| serde_json::json!({
-                            "enabled": true,
-                            "endpoint": endpoint,
-                            "interval_secs": self.cfg.metrics_otlp_interval_secs,
-                        })),
-                    })
-                    .to_string(),
-                }]
-        } else {
-            Vec::new()
-        };
-        dispatcher
-            .lock()
-            .await
-            .apply_spec(&initial_extensions)
-            .await
-            .map_err(anyhow::Error::msg)?;
 
         // Spawn Unified SpecSync runner
         let spec_sync = Arc::new(sync::spec::SpecSyncRunner::new(
@@ -140,33 +100,11 @@ impl App {
             spec_sync.run(spec_shutdown).await;
         });
 
-        // Spawn Watchdog loop
-        if !self.cfg.no_nginx {
-            let n_watch = self.nginx.clone();
-            tokio::spawn(async move {
-                loop {
-                    tokio::time::sleep(Duration::from_secs(2)).await;
-                    if let Some(status) = n_watch.wait_or_check().await {
-                        error!(
-                            "NGINX process exited unexpectedly with: {:?}. Restarting...",
-                            status
-                        );
-                        if let Err(e) = n_watch.start().await {
-                            error!("Failed to restart NGINX: {}", e);
-                        }
-                    }
-                }
-            });
-        }
-
         // Wait for shutdown signal
         shutdown.cancelled().await;
 
         info!("Shutdown signal received. Stopping Aurora Dataplane Agent...");
         dispatcher.lock().await.shutdown_all().await;
-        if !self.cfg.no_nginx {
-            self.nginx.stop().await;
-        }
 
         info!("Aurora Dataplane Agent shutdown complete");
         Ok(())

@@ -1,3 +1,21 @@
+# ── Stage 1: UI Builder ──────────────────────────────────────────
+FROM node:26-alpine AS ui-builder
+WORKDIR /app/ui
+COPY ui/package*.json ./
+RUN npm ci
+COPY ui/ ./
+RUN npm run build
+
+# ── Stage 2: Go Controller Builder ───────────────────────────────
+FROM golang:1.27-bookworm AS go-builder
+WORKDIR /app
+COPY control-plane/go.mod control-plane/go.sum ./control-plane/
+RUN cd control-plane && go mod download
+COPY control-plane/ ./control-plane/
+COPY --from=ui-builder /app/control-plane/internal/console/dist ./control-plane/internal/console/dist
+RUN cd control-plane && CGO_ENABLED=0 go build -buildvcs=false -trimpath -ldflags="-s -w" -o /app/aurora-controller ./cmd
+
+# ── Stage 3: Production Runtime ──────────────────────────────────
 FROM ubuntu:24.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -8,13 +26,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY build/aurora-controller /app/aurora-controller
-COPY target/release/aurora-compile /app/aurora-compile
+COPY --from=go-builder /app/aurora-controller /app/aurora-controller
 COPY deploy/docker/entrypoint-controller.sh /entrypoint.sh
 
-RUN chmod +x /entrypoint.sh /app/aurora-controller /app/aurora-compile && mkdir -p /data
+RUN chmod +x /entrypoint.sh /app/aurora-controller && mkdir -p /data
 
-ENV AURORA_COMPILER_PATH="/app/aurora-compile"
 ENV AURORA_HTTP_ADDR="0.0.0.0:8080"
 ENV AURORA_GRPC_ADDR="0.0.0.0:9099"
 ENV AURORA_SQLITE_PATH="/data/aurora.db"

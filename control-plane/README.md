@@ -13,7 +13,6 @@ From the repository root, install UI dependencies with `make ui-install`. Export
 | `AURORA_GRPC_ADDR` | `0.0.0.0:9090`; Compose overrides to `0.0.0.0:9099` |
 | `AURORA_SQLITE_PATH` | `data/aurora.db`, relative to the working directory |
 | `AURORA_ADMIN_TOKEN_FILE` | Optional configured token-file path |
-| `AURORA_COMPILER_PATH` | Optional configured policy-compiler path |
 | `AURORA_TRUSTED_PROXIES` | Optional comma-separated proxy addresses |
 
 See [configuration loading](internal/config/config.go) for the complete contract. Environment files are not automatically loaded by that function. When launched through `make controller`, the working directory is `control-plane`.

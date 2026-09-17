@@ -1,0 +1,23 @@
+[Unit]
+Description=Aurora API Gateway Dataplane Core (Traffic Path)
+Documentation=https://github.com/phucle996/aurora-api-gateway
+After=network-online.target remote-fs.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+PIDFile=/run/aurora/nginx.pid
+ExecStartPre=/usr/bin/mkdir -p /run/aurora /var/lib/aurora /var/log/nginx /etc/nginx
+ExecStartPre=/usr/local/bin/aurora-gateway -t -q -g 'daemon on; master_process on;'
+ExecStart=/usr/local/bin/aurora-gateway -g 'daemon on; master_process on;'
+ExecReload=/usr/local/bin/aurora-gateway -s reload
+ExecStop=/bin/kill -s QUIT $MAINPID
+TimeoutStopSec=5
+KillMode=mixed
+PrivateTmp=true
+Restart=always
+RestartSec=2s
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

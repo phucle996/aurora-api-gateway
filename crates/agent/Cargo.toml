@@ -48,6 +48,7 @@ tonic-prost = "0.14"
 prost = "0.14"
 tokio-util = "0.7"
 libc = "0.2"
+uuid = { version = "1", features = ["v4"] }
 aurora-engine = { path = "../engine" }
 opentelemetry-proto = { version = "0.32", default-features = false, features = ["gen-tonic", "metrics", "logs", "trace", "with-serde"] }
 

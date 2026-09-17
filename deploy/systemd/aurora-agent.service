@@ -1,0 +1,26 @@
+[Unit]
+Description=Aurora API Gateway Dataplane Supervisor and Node Agent
+Documentation=https://github.com/phucle996/aurora-api-gateway
+After=network-online.target aurora-gateway.service
+Wants=network-online.target aurora-gateway.service
+
+[Service]
+Type=simple
+User=root
+Environment="CONTROLLER_URL=http://127.0.0.1:8080"
+Environment="GRPC_URL=http://127.0.0.1:9099"
+Environment="GATEWAY_BIN=/usr/local/bin/aurora-gateway"
+Environment="GATEWAY_CONF=/etc/nginx/nginx.conf"
+Environment="POLICY_DIR=/var/lib/aurora-policy"
+Environment="ROUTING_DIR=/var/lib/aurora-routing"
+EnvironmentFile=-/etc/aurora/agent.env
+
+ExecStartPre=/usr/bin/mkdir -p /var/lib/aurora-policy /var/lib/aurora-routing /var/lib/aurora-routing/dependencies /run/aurora
+ExecStart=/usr/local/bin/aurora-agent
+
+Restart=always
+RestartSec=3s
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

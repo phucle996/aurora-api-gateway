@@ -1,3 +1,68 @@
+# ── Stage 1: Rust Builder ────────────────────────────────────────
+FROM rust:1.98 AS rust-builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY Cargo.toml Cargo.lock ./
+COPY proto/ proto/
+COPY crates/ crates/
+COPY adapters/ adapters/
+
+RUN cargo build --release -p aurora-agent \
+    && cargo build --release -p aurora-ffi
+
+# ── Stage 2: Static Aurora Gateway Builder ──────────────────────────
+FROM debian:trixie-slim AS gateway-builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    ca-certificates \
+    libpcre2-dev \
+    libssl-dev \
+    zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY adapters/ adapters/
+COPY --from=rust-builder /app/target/release/libaurora_ffi.a /app/target/release/libaurora_ffi.a
+
+WORKDIR /build
+RUN curl -fsSL https://nginx.org/download/nginx-1.30.4.tar.gz -o nginx-1.30.4.tar.gz \
+    && tar -xzf nginx-1.30.4.tar.gz
+
+WORKDIR /build/nginx-1.30.4
+RUN ./configure \
+    --prefix=/etc/nginx \
+    --sbin-path=/usr/local/bin/aurora-gateway \
+    --conf-path=/etc/nginx/nginx.conf \
+    --pid-path=/run/aurora/nginx.pid \
+    --lock-path=/run/aurora/nginx.lock \
+    --http-log-path=/var/log/nginx/access.log \
+    --error-log-path=/var/log/nginx/error.log \
+    --http-client-body-temp-path=/var/lib/aurora/client_temp \
+    --http-proxy-temp-path=/var/lib/aurora/proxy_temp \
+    --http-fastcgi-temp-path=/var/lib/aurora/fastcgi_temp \
+    --http-uwsgi-temp-path=/var/lib/aurora/uwsgi_temp \
+    --http-scgi-temp-path=/var/lib/aurora/scgi_temp \
+    --with-compat \
+    --with-http_ssl_module \
+    --with-http_v2_module \
+    --with-http_realip_module \
+    --with-http_stub_status_module \
+    --with-stream \
+    --with-stream_ssl_module \
+    --with-stream_realip_module \
+    --add-module=/app/adapters/nginx \
+    && make -j$(nproc) \
+    && mkdir -p /opt/bin \
+    && cp objs/nginx /opt/bin/aurora-gateway
+
+# ── Stage 3: Production Runtime ──────────────────────────────────
 FROM debian:trixie-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -10,23 +75,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
     gettext-base \
     && useradd -r -s /bin/false nginx \
-    && mkdir -p /var/log/nginx /var/cache/nginx /opt/nginx /opt/modules /etc/nginx \
+    && mkdir -p /var/log/nginx /var/cache/nginx /run/aurora /var/lib/aurora /etc/nginx /opt/aurora-dependencies /opt/nginx/usr/sbin /opt/modules \
     && rm -rf /var/lib/apt/lists/*
 
-COPY build/nginx-runtime /opt/nginx
-COPY build/modules/ngx_http_gateway_module.so /opt/modules/ngx_http_gateway_module.so
+COPY --from=gateway-builder /opt/bin/aurora-gateway /usr/local/bin/aurora-gateway
+COPY --from=rust-builder /app/target/release/aurora-agent /usr/local/bin/aurora-agent
+
+# Backward compatibility symlink for any legacy tests looking for /opt/nginx/usr/sbin/nginx
+RUN ln -sf /usr/local/bin/aurora-gateway /opt/nginx/usr/sbin/nginx
+
 COPY deploy/docker/nginx-node.conf.template /etc/nginx/nginx-node.conf.template
 COPY deploy/docker/entrypoint-node.sh /entrypoint.sh
 COPY deploy/docker/extension-modules.sh /extension-modules.sh
-COPY build/brotli-package /opt/aurora-dependencies/brotli
 
-COPY target/release/aurora-agent /usr/local/bin/aurora-agent
-
-RUN if [ -f /opt/nginx/usr/local/nginx/sbin/nginx ] && [ ! -f /opt/nginx/usr/sbin/nginx ]; then \
-    mkdir -p /opt/nginx/usr/sbin && cp -f /opt/nginx/usr/local/nginx/sbin/nginx /opt/nginx/usr/sbin/nginx; \
-    fi \
-    && ln -sf /extension-modules.sh /node-modules.sh \
-    && chmod +x /usr/local/bin/aurora-agent /extension-modules.sh /node-modules.sh /entrypoint.sh /opt/nginx/usr/sbin/nginx \
+RUN ln -sf /extension-modules.sh /node-modules.sh \
+    && chmod +x /usr/local/bin/aurora-agent /usr/local/bin/aurora-gateway /extension-modules.sh /node-modules.sh /entrypoint.sh \
     && mkdir -p /usr/share/aurora-demo \
     && printf 'Aurora demo backend: allowed.\n' > /usr/share/aurora-demo/ok \
     && printf 'Aurora demo backend: this file must not be served in enforce mode.\n' > /usr/share/aurora-demo/__aurora_blocked

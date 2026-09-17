@@ -41,24 +41,3 @@ func (h *SpecSyncHandler) SyncSpec(ctx context.Context, req *pb.SyncSpecRequest)
 		SpecJson:  res.SpecJSON,
 	}, nil
 }
-
-func (h *SpecSyncHandler) ReportSpec(ctx context.Context, req *pb.ReportSpecRequest) (*pb.ReportSpecResponse, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request cannot be nil")
-	}
-
-	err := h.specService.ReportSpec(ctx, entity.SpecReportCommand{
-		NodeID:    req.NodeId,
-		ReleaseID: req.ReleaseId,
-		Hash:      req.Hash,
-		Status:    req.Status,
-		Message:   req.Message,
-	})
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to report spec: %v", err)
-	}
-
-	return &pb.ReportSpecResponse{
-		Success: true,
-	}, nil
-}

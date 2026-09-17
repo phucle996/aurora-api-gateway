@@ -1,4 +1,3 @@
-load_module /opt/modules/ngx_http_gateway_module.so;
 include /var/lib/aurora-routing/dependencies/current/modules.conf;
 env NODE_ROLE;
 env AURORA_METRICS_SCOPE;

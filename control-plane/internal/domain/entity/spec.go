@@ -1,5 +1,7 @@
 package entity
 
+// SpecSyncQuery represents the query parameters for cluster spec synchronization.
+// NodeID is an optional ephemeral instance identifier (hostname or gateway-uuid) sent by stateless replicas.
 type SpecSyncQuery struct {
 	NodeID      string
 	CurrentHash string
@@ -12,6 +14,8 @@ type SpecSyncResult struct {
 	SpecJSON  string
 }
 
+// SpecReportCommand represents the spec application status report from a dataplane gateway replica.
+// In Aurora's stateless model, reports do not mutate node tables.
 type SpecReportCommand struct {
 	NodeID    string
 	ReleaseID int64

@@ -17,31 +17,33 @@ curl -fsSL https://raw.githubusercontent.com/phucle996/aurora-api-gateway/main/i
 ### 2. Local Installation from Release Tarball
 
 ```bash
-tar xzf aurora-waf-*-linux-amd64.tar.gz
-cd aurora-waf-*-linux-amd64
+tar xzf aurora-api-gateway-*-linux-amd64.tar.gz
+cd aurora-api-gateway-*-linux-amd64
 sudo ./install.sh
 ```
 
 The installer will:
 - Scan for existing NGINX installations and show version/compatibility info
 - Auto-match the correct pre-built `.so` module to your NGINX version
-- Install binaries, WAF module, and generate systemd units
+- Install binaries, Gateway module, and generate systemd units
 - Enable and start the Control Plane service
 
 ## Contents
 
 | Path | Description |
 |------|-------------|
-| `bin/aurora-controller` | Control Plane HTTP server (Go binary) |
-| `bin/aurora-compile` | WAF rule compiler (Rust binary) |
-| `modules/ngx_http_gateway_module-*.so` | Pre-built NGINX dynamic modules (one per supported version) |
+| `bin/aurora-controller` | Control Plane HTTP/gRPC server & Web UI (Go binary) |
+| `bin/aurora-compile` | Rule & Spec compiler (Rust binary) |
+| `bin/aurora-agent` | Dataplane Node Agent (Rust binary) |
+| `bin/aurora-gateway` | Dataplane Core Gateway with in-tree C adapter & Rust FFI Engine (NGINX 1.30.4 static binary) |
+| `modules/ngx_http_gateway_module-*.so` | Pre-built NGINX dynamic modules (for external NGINX installations) |
 | `modules/supported-versions.txt` | List of supported NGINX versions |
-| `deploy/` | Agent scripts for bare-metal node setup |
-| `install.sh` | Interactive installer with NGINX detection |
+| `deploy/` | Systemd service units (`aurora-controller`, `aurora-gateway`, `aurora-agent`) |
+| `install.sh` | Interactive installer with systemd setup |
 
 ## Supported NGINX Versions
 
-This release includes pre-built WAF modules for:
+This release includes pre-built Gateway modules for:
 - NGINX 1.26.3
 - NGINX 1.27.4
 - NGINX 1.28.0

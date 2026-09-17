@@ -10,17 +10,17 @@ pub struct Config {
     #[arg(long, env = "CONTROLLER_URL")]
     pub controller_url: String,
 
-    #[arg(long, env = "NODE_ID", default_value = "")]
-    pub node_id: String,
+    #[arg(long, env = "HOSTNAME", default_value = "")]
+    pub hostname: String,
 
     #[arg(long, env = "AUTH_TOKEN")]
     pub auth_token: String,
 
-    #[arg(long, env = "NGINX_BIN")]
-    pub nginx_bin: PathBuf,
+    #[arg(long, env = "GATEWAY_BIN")]
+    pub gateway_bin: PathBuf,
 
-    #[arg(long, env = "NGINX_CONF")]
-    pub nginx_conf: PathBuf,
+    #[arg(long, env = "GATEWAY_CONF")]
+    pub gateway_conf: PathBuf,
 
     #[arg(long, env = "POLICY_DIR")]
     pub policy_dir: PathBuf,
@@ -28,58 +28,68 @@ pub struct Config {
     #[arg(long, env = "ROUTING_DIR")]
     pub routing_dir: PathBuf,
 
-    #[arg(long, env = "MODULES_DIR")]
-    pub modules_dir: PathBuf,
-
-    #[arg(long, env = "HEARTBEAT_INTERVAL", default_value_t = 5)]
-    pub heartbeat_interval_secs: u64,
-
     #[arg(long, env = "SYNC_INTERVAL", default_value_t = 3)]
     pub sync_interval_secs: u64,
-
-    #[arg(long, env = "METRICS_PORT", default_value_t = 9145)]
-    pub metrics_port: u16,
-
-    #[arg(long, env = "METRICS_PROMETHEUS", default_value_t = false)]
-    pub metrics_prometheus: bool,
-
-    #[arg(long, env = "METRICS_OTLP_ENDPOINT")]
-    pub metrics_otlp_endpoint: Option<String>,
-
-    #[arg(
-        long = "metrics-otlp-interval",
-        env = "METRICS_OTLP_INTERVAL",
-        default_value_t = 15
-    )]
-    pub metrics_otlp_interval_secs: u64,
-
-    #[arg(long, env = "NO_NGINX", default_value_t = false)]
-    pub no_nginx: bool,
 
     #[arg(long, env = "GRPC_URL")]
     pub grpc_url: Option<String>,
 }
 
+fn get_system_hostname() -> Option<String> {
+    let mut buf = [0u8; 256];
+    let res = unsafe { libc::gethostname(buf.as_mut_ptr() as *mut libc::c_char, buf.len()) };
+    if res == 0 {
+        let len = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+        std::str::from_utf8(&buf[..len]).ok().map(|s| s.to_string())
+    } else {
+        None
+    }
+}
+
 impl Config {
     pub fn load() -> Self {
         let mut config = Self::parse();
-        if config.node_id.trim().is_empty() {
-            config.node_id =
-                std::env::var("HOSTNAME").unwrap_or_else(|_| "stateless-replica".to_string());
+        if config.hostname.trim().is_empty() {
+            config.hostname = Self::resolve_hostname();
         }
         config.validate();
         config
+    }
+
+    /// Resolve gateway instance hostname:
+    /// 1. HOSTNAME env var (Kubernetes pod name / Docker container name)
+    /// 2. OS System Hostname via libc gethostname
+    /// 3. Fallback: generate gateway-<uuid>
+    pub fn resolve_hostname() -> String {
+        if let Ok(val) = std::env::var("HOSTNAME") {
+            let trimmed = val.trim();
+            if !trimmed.is_empty() && trimmed != "localhost" {
+                return trimmed.to_string();
+            }
+        }
+        if let Some(host) = get_system_hostname() {
+            let trimmed = host.trim();
+            if !trimmed.is_empty() && trimmed != "localhost" {
+                return trimmed.to_string();
+            }
+        }
+        format!("gateway-{}", uuid::Uuid::new_v4().simple())
+    }
+
+    /// Semantic accessor for the instance hostname
+    pub fn hostname(&self) -> &str {
+        &self.hostname
     }
 
     pub fn grpc_endpoint(&self) -> String {
         if let Some(ref url) = self.grpc_url
             && !url.trim().is_empty()
         {
-            return url.clone();
+            return url.trim().to_string();
         }
 
         // Fallback from controller_url
-        let base = self.controller_url.trim_end_matches('/');
+        let base = self.controller_url.trim().trim_end_matches('/');
         if let Some(idx) = base.rfind(':') {
             // Check if the part after ':' is digits (port)
             let suffix = &base[idx + 1..];
@@ -96,19 +106,24 @@ impl Config {
                 "FATAL: CONTROLLER_URL is missing or empty. Provide via --controller-url or CONTROLLER_URL env var."
             );
         }
+        if self.hostname.trim().is_empty() {
+            panic!(
+                "FATAL: HOSTNAME is missing or empty. Provide via --hostname or HOSTNAME env var."
+            );
+        }
         if self.auth_token.trim().is_empty() {
             panic!(
                 "FATAL: AUTH_TOKEN is missing or empty. Provide via --auth-token or AUTH_TOKEN env var."
             );
         }
-        if self.nginx_bin.as_os_str().is_empty() {
+        if self.gateway_bin.as_os_str().is_empty() {
             panic!(
-                "FATAL: NGINX_BIN is missing or empty. Provide via --nginx-bin or NGINX_BIN env var."
+                "FATAL: GATEWAY_BIN is missing or empty. Provide via --gateway-bin or GATEWAY_BIN env var."
             );
         }
-        if self.nginx_conf.as_os_str().is_empty() {
+        if self.gateway_conf.as_os_str().is_empty() {
             panic!(
-                "FATAL: NGINX_CONF is missing or empty. Provide via --nginx-conf or NGINX_CONF env var."
+                "FATAL: GATEWAY_CONF is missing or empty. Provide via --gateway-conf or GATEWAY_CONF env var."
             );
         }
         if self.policy_dir.as_os_str().is_empty() {
@@ -119,11 +134,6 @@ impl Config {
         if self.routing_dir.as_os_str().is_empty() {
             panic!(
                 "FATAL: ROUTING_DIR is missing or empty. Provide via --routing-dir or ROUTING_DIR env var."
-            );
-        }
-        if self.modules_dir.as_os_str().is_empty() {
-            panic!(
-                "FATAL: MODULES_DIR is missing or empty. Provide via --modules-dir or MODULES_DIR env var."
             );
         }
     }
@@ -139,70 +149,32 @@ mod tests {
             "aurora-agent",
             "--controller-url",
             "http://controller:8080",
-            "--node-id",
-            "node-01",
+            "--hostname",
+            "gateway-01",
             "--auth-token",
             "secret-token",
-            "--nginx-bin",
-            "/opt/nginx/sbin/nginx",
-            "--nginx-conf",
+            "--gateway-bin",
+            "/usr/local/bin/aurora-gateway",
+            "--gateway-conf",
             "/etc/nginx/nginx.conf",
             "--policy-dir",
             "/var/lib/aurora-policy",
             "--routing-dir",
             "/var/lib/aurora-routing",
-            "--modules-dir",
-            "/opt/modules",
         ])
         .expect("parse config with all required flags");
 
         assert_eq!(cfg.controller_url, "http://controller:8080");
-        assert_eq!(cfg.node_id, "node-01");
+        assert_eq!(cfg.hostname, "gateway-01");
         assert_eq!(cfg.auth_token, "secret-token");
-        assert_eq!(cfg.heartbeat_interval_secs, 5);
-        assert_eq!(cfg.sync_interval_secs, 3);
-        assert_eq!(cfg.metrics_port, 9145);
-        assert!(!cfg.metrics_prometheus);
-        assert!(cfg.metrics_otlp_endpoint.is_none());
-        assert_eq!(cfg.metrics_otlp_interval_secs, 15);
-        assert!(!cfg.no_nginx);
-        cfg.validate();
-    }
-
-    #[test]
-    fn test_metrics_flags() {
-        let cfg = Config::try_parse_from([
-            "aurora-agent",
-            "--controller-url",
-            "http://controller:8080",
-            "--node-id",
-            "node-01",
-            "--auth-token",
-            "secret-token",
-            "--nginx-bin",
-            "/nginx",
-            "--nginx-conf",
-            "/nginx.conf",
-            "--policy-dir",
-            "/policy",
-            "--routing-dir",
-            "/routing",
-            "--modules-dir",
-            "/modules",
-            "--metrics-prometheus",
-            "--metrics-otlp-endpoint",
-            "http://otel-collector:4317",
-            "--metrics-otlp-interval",
-            "30",
-        ])
-        .expect("parse config with metrics flags");
-
-        assert!(cfg.metrics_prometheus);
         assert_eq!(
-            cfg.metrics_otlp_endpoint.as_deref(),
-            Some("http://otel-collector:4317")
+            cfg.gateway_bin,
+            PathBuf::from("/usr/local/bin/aurora-gateway")
         );
-        assert_eq!(cfg.metrics_otlp_interval_secs, 30);
+        assert_eq!(cfg.gateway_conf, PathBuf::from("/etc/nginx/nginx.conf"));
+        assert_eq!(cfg.sync_interval_secs, 3);
+        assert!(cfg.grpc_url.is_none());
+        cfg.validate();
     }
 
     #[test]
@@ -216,20 +188,30 @@ mod tests {
     fn test_empty_controller_url_panics() {
         let cfg = Config {
             controller_url: "".to_string(),
-            node_id: "node-01".to_string(),
+            hostname: "gateway-01".to_string(),
             auth_token: "token".to_string(),
-            nginx_bin: PathBuf::from("/nginx"),
-            nginx_conf: PathBuf::from("/nginx.conf"),
+            gateway_bin: PathBuf::from("/usr/local/bin/aurora-gateway"),
+            gateway_conf: PathBuf::from("/etc/nginx/nginx.conf"),
             policy_dir: PathBuf::from("/policy"),
             routing_dir: PathBuf::from("/routing"),
-            modules_dir: PathBuf::from("/modules"),
-            heartbeat_interval_secs: 5,
             sync_interval_secs: 3,
-            metrics_port: 9145,
-            metrics_prometheus: false,
-            metrics_otlp_endpoint: None,
-            metrics_otlp_interval_secs: 15,
-            no_nginx: false,
+            grpc_url: None,
+        };
+        cfg.validate();
+    }
+
+    #[test]
+    #[should_panic(expected = "HOSTNAME is missing or empty")]
+    fn test_empty_hostname_panics() {
+        let cfg = Config {
+            controller_url: "http://127.0.0.1:8080".to_string(),
+            hostname: "".to_string(),
+            auth_token: "token".to_string(),
+            gateway_bin: PathBuf::from("/usr/local/bin/aurora-gateway"),
+            gateway_conf: PathBuf::from("/etc/nginx/nginx.conf"),
+            policy_dir: PathBuf::from("/policy"),
+            routing_dir: PathBuf::from("/routing"),
+            sync_interval_secs: 3,
             grpc_url: None,
         };
         cfg.validate();
@@ -240,20 +222,47 @@ mod tests {
     fn test_empty_auth_token_panics() {
         let cfg = Config {
             controller_url: "http://127.0.0.1:8080".to_string(),
-            node_id: "node-01".to_string(),
+            hostname: "gateway-01".to_string(),
             auth_token: "  ".to_string(),
-            nginx_bin: PathBuf::from("/nginx"),
-            nginx_conf: PathBuf::from("/nginx.conf"),
+            gateway_bin: PathBuf::from("/usr/local/bin/aurora-gateway"),
+            gateway_conf: PathBuf::from("/etc/nginx/nginx.conf"),
             policy_dir: PathBuf::from("/policy"),
             routing_dir: PathBuf::from("/routing"),
-            modules_dir: PathBuf::from("/modules"),
-            heartbeat_interval_secs: 5,
             sync_interval_secs: 3,
-            metrics_port: 9145,
-            metrics_prometheus: false,
-            metrics_otlp_endpoint: None,
-            metrics_otlp_interval_secs: 15,
-            no_nginx: false,
+            grpc_url: None,
+        };
+        cfg.validate();
+    }
+
+    #[test]
+    #[should_panic(expected = "GATEWAY_BIN is missing or empty")]
+    fn test_empty_gateway_bin_panics() {
+        let cfg = Config {
+            controller_url: "http://127.0.0.1:8080".to_string(),
+            hostname: "gateway-01".to_string(),
+            auth_token: "token".to_string(),
+            gateway_bin: PathBuf::from(""),
+            gateway_conf: PathBuf::from("/etc/nginx/nginx.conf"),
+            policy_dir: PathBuf::from("/policy"),
+            routing_dir: PathBuf::from("/routing"),
+            sync_interval_secs: 3,
+            grpc_url: None,
+        };
+        cfg.validate();
+    }
+
+    #[test]
+    #[should_panic(expected = "GATEWAY_CONF is missing or empty")]
+    fn test_empty_gateway_conf_panics() {
+        let cfg = Config {
+            controller_url: "http://127.0.0.1:8080".to_string(),
+            hostname: "gateway-01".to_string(),
+            auth_token: "token".to_string(),
+            gateway_bin: PathBuf::from("/usr/local/bin/aurora-gateway"),
+            gateway_conf: PathBuf::from(""),
+            policy_dir: PathBuf::from("/policy"),
+            routing_dir: PathBuf::from("/routing"),
+            sync_interval_secs: 3,
             grpc_url: None,
         };
         cfg.validate();
@@ -263,25 +272,52 @@ mod tests {
     fn test_grpc_endpoint_resolution() {
         let mut cfg = Config {
             controller_url: "http://127.0.0.1:8080".to_string(),
-            node_id: "node-01".to_string(),
+            hostname: "gateway-01".to_string(),
             auth_token: "token".to_string(),
-            nginx_bin: PathBuf::from("/nginx"),
-            nginx_conf: PathBuf::from("/nginx.conf"),
+            gateway_bin: PathBuf::from("/usr/local/bin/aurora-gateway"),
+            gateway_conf: PathBuf::from("/etc/nginx/nginx.conf"),
             policy_dir: PathBuf::from("/policy"),
             routing_dir: PathBuf::from("/routing"),
-            modules_dir: PathBuf::from("/modules"),
-            heartbeat_interval_secs: 5,
             sync_interval_secs: 3,
-            metrics_port: 9145,
-            metrics_prometheus: false,
-            metrics_otlp_endpoint: None,
-            metrics_otlp_interval_secs: 15,
-            no_nginx: false,
             grpc_url: None,
         };
         assert_eq!(cfg.grpc_endpoint(), "http://127.0.0.1:9090");
 
         cfg.grpc_url = Some("http://controller.aurora.local:9999".to_string());
         assert_eq!(cfg.grpc_endpoint(), "http://controller.aurora.local:9999");
+    }
+
+    #[test]
+    fn test_hostname_flag() {
+        let cfg = Config::try_parse_from([
+            "aurora-agent",
+            "--controller-url",
+            "http://controller:8080",
+            "--hostname",
+            "gateway-worker-99",
+            "--auth-token",
+            "secret-token",
+            "--gateway-bin",
+            "/usr/local/bin/aurora-gateway",
+            "--gateway-conf",
+            "/etc/nginx/nginx.conf",
+            "--policy-dir",
+            "/policy",
+            "--routing-dir",
+            "/routing",
+        ])
+        .expect("parse config with hostname flag");
+
+        assert_eq!(cfg.hostname, "gateway-worker-99");
+        assert_eq!(cfg.hostname(), "gateway-worker-99");
+    }
+
+    #[test]
+    fn test_resolve_hostname_generates_identifier() {
+        let id = Config::resolve_hostname();
+        assert!(!id.trim().is_empty());
+        if id.starts_with("gateway-") {
+            assert!(id.len() > 8);
+        }
     }
 }

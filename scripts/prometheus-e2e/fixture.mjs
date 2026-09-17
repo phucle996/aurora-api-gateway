@@ -346,16 +346,12 @@ http {
 
     this.agent = spawn(agentBin, [
       '--controller-url', `http://127.0.0.1:${this.controllerPort}`,
-      '--node-id', 'node-prom-e2e',
+      '--hostname', 'node-prom-e2e',
       '--auth-token', this.token,
-      '--nginx-bin', 'nginx',
-      '--nginx-conf', `${this.dir}/nginx.conf`,
+      '--gateway-bin', 'nginx',
+      '--gateway-conf', `${this.dir}/nginx.conf`,
       '--policy-dir', `${this.dir}/policy`,
       '--routing-dir', `${this.dir}/routing`,
-      '--modules-dir', `${this.dir}/modules`,
-      '--metrics-prometheus',
-      '--metrics-port', String(port),
-      '--no-nginx',
     ], {
       stdio: ['ignore', 'ignore', 'pipe'],
     });

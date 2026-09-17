@@ -1,4 +1,4 @@
-FROM golang:1.24-bookworm
+FROM golang:1.27-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -11,7 +11,6 @@ RUN go install github.com/air-verse/air@latest
 
 WORKDIR /app
 
-ENV AURORA_COMPILER_PATH="/app/aurora-compile"
 ENV AURORA_HTTP_ADDR="0.0.0.0:8080"
 ENV AURORA_GRPC_ADDR="0.0.0.0:9099"
 ENV AURORA_SQLITE_PATH="/data/aurora.db"

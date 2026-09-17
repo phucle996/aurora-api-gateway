@@ -11,7 +11,6 @@ var (
 )
 
 type Config struct {
-	Env            string
 	HTTPAddr       string
 	GRPCAddr       string
 	SQLitePath     string
@@ -38,7 +37,6 @@ func LoadConfig() Config {
 	}
 
 	return Config{
-		Env:            value("AURORA_ENV", "development"),
 		HTTPAddr:       value("AURORA_HTTP_ADDR", "127.0.0.1:8080"),
 		GRPCAddr:       value("AURORA_GRPC_ADDR", "0.0.0.0:9090"),
 		SQLitePath:     value("AURORA_SQLITE_PATH", "data/aurora.db"),

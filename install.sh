@@ -107,7 +107,7 @@ else
   fi
 
   RAW_VER="${TARGET_TAG#v}"
-  ARCHIVE_NAME="aurora-waf-${RAW_VER}-linux-amd64.tar.gz"
+  ARCHIVE_NAME="aurora-api-gateway-${RAW_VER}-linux-amd64.tar.gz"
   DOWNLOAD_URL="https://github.com/phucle996/aurora-api-gateway/releases/download/${TARGET_TAG}/${ARCHIVE_NAME}"
   SHA256_URL="${DOWNLOAD_URL}.sha256"
 
@@ -138,8 +138,8 @@ else
   echo "==> Extracting release package..."
   tar -xzf "${TMP_DIR}/${ARCHIVE_NAME}" -C "${TMP_DIR}"
 
-  if [ -d "${TMP_DIR}/aurora-waf-${RAW_VER}-linux-amd64" ]; then
-    PAYLOAD_DIR="${TMP_DIR}/aurora-waf-${RAW_VER}-linux-amd64"
+  if [ -d "${TMP_DIR}/aurora-api-gateway-${RAW_VER}-linux-amd64" ]; then
+    PAYLOAD_DIR="${TMP_DIR}/aurora-api-gateway-${RAW_VER}-linux-amd64"
   else
     PAYLOAD_DIR="${TMP_DIR}"
   fi
@@ -252,7 +252,7 @@ else
     done
 
     echo ""
-    echo "  [0]  Skip — do not install the WAF module into any NGINX"
+    echo "  [0]  Skip — do not install the Gateway module into any NGINX"
     echo ""
 
     choice=""
@@ -325,42 +325,50 @@ id -u aurora &>/dev/null || useradd --system --no-create-home --shell /bin/false
 
 # ── Directories ────────────────────────────────────────────────────────────────
 echo "==> Creating data directories..."
-install -d -m 750 -o aurora -g aurora /var/lib/aurora-waf
-install -d -m 750 -o aurora -g aurora /etc/aurora-waf
-mkdir -p /run/aurora-waf
-chown -R aurora:aurora /run/aurora-waf 2>/dev/null || true
+install -d -m 750 -o aurora -g aurora /var/lib/aurora/data
+install -d -m 750 -o aurora -g aurora /etc/aurora
+install -d -m 755 -o root -g root /var/lib/aurora-policy
+install -d -m 755 -o root -g root /var/lib/aurora-routing
+mkdir -p /run/aurora
+chown -R aurora:aurora /run/aurora 2>/dev/null || true
 
 # ── Security tokens & Environment ──────────────────────────────────────────────
-if [ ! -f /etc/aurora-waf/controller.env ]; then
-  echo "==> Generating production secrets in /etc/aurora-waf/controller.env..."
+if [ ! -f /etc/aurora/controller.env ]; then
+  echo "==> Generating production secrets in /etc/aurora/controller.env..."
   JWT_SECRET=$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | od -A n -v -t x1 | tr -d ' \n')
-  cat > /etc/aurora-waf/controller.env << ENV_EOF
+  cat > /etc/aurora/controller.env << ENV_EOF
 # Aurora API Gateway Controller Environment
-AURORA_ENV=production
+AURORA_HTTP_ADDR=0.0.0.0:8080
+AURORA_GRPC_ADDR=0.0.0.0:9099
+AURORA_SQLITE_PATH=/var/lib/aurora/data/aurora.db
+AURORA_ADMIN_TOKEN_FILE=/etc/aurora/admin.token
 AURORA_JWT_SECRET=${JWT_SECRET}
 ENV_EOF
-  chmod 600 /etc/aurora-waf/controller.env
-  chown aurora:aurora /etc/aurora-waf/controller.env
+  chmod 600 /etc/aurora/controller.env
+  chown aurora:aurora /etc/aurora/controller.env
 fi
 
-if [ ! -f /etc/aurora-waf/admin.token ]; then
-  echo "==> Generating admin token in /etc/aurora-waf/admin.token..."
+if [ ! -f /etc/aurora/admin.token ]; then
+  echo "==> Generating admin token in /etc/aurora/admin.token..."
   ADMIN_TOKEN=$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | od -A n -v -t x1 | tr -d ' \n')
-  echo "${ADMIN_TOKEN}" > /etc/aurora-waf/admin.token
-  chmod 600 /etc/aurora-waf/admin.token
-  chown aurora:aurora /etc/aurora-waf/admin.token
+  echo "${ADMIN_TOKEN}" > /etc/aurora/admin.token
+  chmod 600 /etc/aurora/admin.token
+  chown aurora:aurora /etc/aurora/admin.token
 fi
 
-if [ ! -f /etc/aurora-waf/node.env ]; then
-  echo "==> Generating default node environment in /etc/aurora-waf/node.env..."
-  NODE_ID="node-$(openssl rand -hex 4 2>/dev/null || head -c 4 /dev/urandom | od -A n -v -t x1 | tr -d ' \n')"
-  cat > /etc/aurora-waf/node.env << NODE_ENV_EOF
-# Aurora API Gateway Node Environment
-NODE_ID=${NODE_ID}
+if [ ! -f /etc/aurora/agent.env ]; then
+  echo "==> Generating default agent environment in /etc/aurora/agent.env..."
+  cat > /etc/aurora/agent.env << AGENT_ENV_EOF
+# Aurora API Gateway Agent Environment
 CONTROLLER_URL=http://127.0.0.1:8080
+GRPC_URL=http://127.0.0.1:9099
 AUTH_TOKEN=
-NODE_ENV_EOF
-  chmod 600 /etc/aurora-waf/node.env
+GATEWAY_BIN=/usr/local/bin/aurora-gateway
+GATEWAY_CONF=/etc/nginx/nginx.conf
+POLICY_DIR=/var/lib/aurora-policy
+ROUTING_DIR=/var/lib/aurora-routing
+AGENT_ENV_EOF
+  chmod 600 /etc/aurora/agent.env
 fi
 
 # ── Binaries ───────────────────────────────────────────────────────────────────
@@ -370,8 +378,11 @@ install -m 755 "${PAYLOAD_DIR}/bin/aurora-compile"    /usr/local/bin/aurora-comp
 if [ -f "${PAYLOAD_DIR}/bin/aurora-agent" ]; then
   install -m 755 "${PAYLOAD_DIR}/bin/aurora-agent"    /usr/local/bin/aurora-agent
 fi
+if [ -f "${PAYLOAD_DIR}/bin/aurora-gateway" ]; then
+  install -m 755 "${PAYLOAD_DIR}/bin/aurora-gateway"  /usr/local/bin/aurora-gateway
+fi
 
-# ── Dataplane Appliance Runtime (NGINX 1.30.4 + WAF Module) ────────────────────
+# ── Dataplane Appliance Runtime (NGINX 1.30.4 + Module) ───────────────────────
 if [ -d "${PAYLOAD_DIR}/nginx-runtime" ]; then
   echo "==> Installing Aurora Dataplane NGINX 1.30.4 runtime into /opt/aurora/nginx..."
   mkdir -p /opt/aurora/nginx /opt/modules /var/lib/aurora-policy /var/lib/aurora-routing
@@ -425,8 +436,8 @@ else
 fi
 
 # ── Generate Control Plane systemd unit ────────────────────────────────────────
-echo "==> Generating aurora-waf-controller.service..."
-cat > /etc/systemd/system/aurora-waf-controller.service << 'UNIT_EOF'
+echo "==> Generating aurora-controller.service..."
+cat > /etc/systemd/system/aurora-controller.service << 'UNIT_EOF'
 [Unit]
 Description=Aurora API Gateway Control Plane Service
 Documentation=https://github.com/phucle996/aurora-api-gateway
@@ -438,25 +449,24 @@ Type=simple
 User=aurora
 Group=aurora
 
-StateDirectory=aurora-waf
-ConfigurationDirectory=aurora-waf
+StateDirectory=aurora
+ConfigurationDirectory=aurora
 ConfigurationDirectoryMode=0750
-RuntimeDirectory=aurora-waf
+RuntimeDirectory=aurora
 RuntimeDirectoryMode=0750
 
-Environment="AURORA_ENV=production"
-Environment="AURORA_HTTP_ADDR=127.0.0.1:8080"
-Environment="AURORA_SQLITE_PATH=/var/lib/aurora-waf/aurora.db"
-Environment="AURORA_ADMIN_TOKEN_FILE=/etc/aurora-waf/admin.token"
-Environment="AURORA_COMPILER_PATH=/usr/local/bin/aurora-compile"
-EnvironmentFile=-/etc/aurora-waf/controller.env
+Environment="AURORA_HTTP_ADDR=0.0.0.0:8080"
+Environment="AURORA_GRPC_ADDR=0.0.0.0:9099"
+Environment="AURORA_SQLITE_PATH=/var/lib/aurora/data/aurora.db"
+Environment="AURORA_ADMIN_TOKEN_FILE=/etc/aurora/admin.token"
+EnvironmentFile=-/etc/aurora/controller.env
 
 ExecStart=/usr/local/bin/aurora-controller
 
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/var/lib/aurora-waf
-ReadOnlyPaths=/etc/aurora-waf
+ReadWritePaths=/var/lib/aurora
+ReadOnlyPaths=/etc/aurora
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectKernelTunables=yes
@@ -473,24 +483,60 @@ LimitNOFILE=65535
 WantedBy=multi-user.target
 UNIT_EOF
 
-# ── Generate Dataplane Appliance systemd unit (aurora-waf-node) ───────────────
-if [ -f /usr/local/bin/aurora-agent ]; then
-  NGINX_APPLIANCE_BIN="/opt/aurora/nginx/usr/sbin/nginx"
-  [ -x "$NGINX_APPLIANCE_BIN" ] || NGINX_APPLIANCE_BIN="${SELECTED_NGINX:-/usr/sbin/nginx}"
-
-  echo "==> Generating aurora-waf-node.service (Dataplane Appliance Supervisor)..."
-  cat > /etc/systemd/system/aurora-waf-node.service << UNIT_EOF
+# ── Generate Dataplane Gateway systemd unit (aurora-gateway) ─────────────────
+if [ -f /usr/local/bin/aurora-gateway ]; then
+  echo "==> Generating aurora-gateway.service..."
+  cat > /etc/systemd/system/aurora-gateway.service << 'UNIT_EOF'
 [Unit]
-Description=Aurora API Gateway Dataplane Appliance Node
+Description=Aurora API Gateway Dataplane Core (Traffic Path)
 Documentation=https://github.com/phucle996/aurora-api-gateway
-After=network-online.target
+After=network-online.target remote-fs.target
 Wants=network-online.target
+
+[Service]
+Type=forking
+PIDFile=/run/aurora/nginx.pid
+ExecStartPre=/usr/bin/mkdir -p /run/aurora /var/lib/aurora /var/log/nginx /etc/nginx
+ExecStartPre=/usr/local/bin/aurora-gateway -t -q -g 'daemon on; master_process on;'
+ExecStart=/usr/local/bin/aurora-gateway -g 'daemon on; master_process on;'
+ExecReload=/usr/local/bin/aurora-gateway -s reload
+ExecStop=/bin/kill -s QUIT $MAINPID
+TimeoutStopSec=5
+KillMode=mixed
+PrivateTmp=true
+Restart=always
+RestartSec=2s
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+UNIT_EOF
+fi
+
+# ── Generate Dataplane Agent systemd unit (aurora-agent) ──────────────────────
+if [ -f /usr/local/bin/aurora-agent ]; then
+  echo "==> Generating aurora-agent.service..."
+  cat > /etc/systemd/system/aurora-agent.service << 'UNIT_EOF'
+[Unit]
+Description=Aurora API Gateway Dataplane Supervisor and Node Agent
+Documentation=https://github.com/phucle996/aurora-api-gateway
+After=network-online.target aurora-gateway.service
+Wants=network-online.target aurora-gateway.service
 
 [Service]
 Type=simple
 User=root
-EnvironmentFile=-/etc/aurora-waf/node.env
-ExecStart=/usr/local/bin/aurora-agent --nginx-bin ${NGINX_APPLIANCE_BIN} --nginx-conf /etc/aurora-waf/nginx.conf
+Environment="CONTROLLER_URL=http://127.0.0.1:8080"
+Environment="GRPC_URL=http://127.0.0.1:9099"
+Environment="GATEWAY_BIN=/usr/local/bin/aurora-gateway"
+Environment="GATEWAY_CONF=/etc/nginx/nginx.conf"
+Environment="POLICY_DIR=/var/lib/aurora-policy"
+Environment="ROUTING_DIR=/var/lib/aurora-routing"
+EnvironmentFile=-/etc/aurora/agent.env
+
+ExecStartPre=/usr/bin/mkdir -p /var/lib/aurora-policy /var/lib/aurora-routing /var/lib/aurora-routing/dependencies /run/aurora
+ExecStart=/usr/local/bin/aurora-agent
+
 Restart=always
 RestartSec=3s
 LimitNOFILE=65535
@@ -499,84 +545,13 @@ LimitNOFILE=65535
 WantedBy=multi-user.target
 UNIT_EOF
 fi
-cat > /etc/systemd/system/aurora-waf-nginx.service << UNIT_EOF
-[Unit]
-Description=Aurora API Gateway NGINX Data Plane Node
-Documentation=https://github.com/phucle996/aurora-api-gateway
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Environment="AURORA_METRICS_SCOPE=host"
-Type=forking
-PIDFile=/run/aurora-waf/nginx.pid
-
-StateDirectory=aurora-waf
-ConfigurationDirectory=aurora-waf
-ConfigurationDirectoryMode=0755
-RuntimeDirectory=aurora-waf
-RuntimeDirectoryMode=0755
-
-Environment="POLICY_DEST=${POLICY_DEST}"
-Environment="CONTROL_PLANE_URL=${CONTROL_PLANE_URL}"
-Environment="NODE_ID=${NODE_ID}"
-Environment="CERTS_DIR=${CERTS_DIR}"
-Environment="AUTH_TOKEN=${AUTH_TOKEN}"
-Environment="NGINX_CONF=${UNIT_NGINX_CONF}"
-EnvironmentFile=-/etc/aurora-waf/node.env
-
-ExecStartPre=/usr/bin/bash -c '\\
-    set -euo pipefail; \\
-    mkdir -p \$(dirname "\$POLICY_DEST") /run/aurora-waf; \\
-    if [ ! -f "\$POLICY_DEST" ]; then \\
-        echo "[Aurora API Gateway] Initializing baseline policy..."; \\
-        printf "{\\n  \\"schema_version\\": 1,\\n  \\"block_paths\\": [\\n    \\"/blocked\\",\\n    \\"/__aurora_blocked\\"\\n  ]\\n}\\n" > "\$POLICY_DEST"; \\
-        chmod 600 "\$POLICY_DEST"; \\
-    fi; \\
-    if [ -f "\${CERTS_DIR}/node.crt" ] && [ -f "\${CERTS_DIR}/node.key" ] && [ -f "\${CERTS_DIR}/ca.crt" ]; then \\
-        TMP_FILE="\${POLICY_DEST}.tmp"; \\
-        AUTH_HEADER=(); \\
-        if [ -n "\${AUTH_TOKEN:-}" ]; then \\
-            AUTH_HEADER=(-H "Authorization: Bearer \${AUTH_TOKEN}"); \\
-        fi; \\
-        HTTP_CODE=\$(curl --silent --show-error --write-out "%%{http_code}" \\
-            --cacert "\${CERTS_DIR}/ca.crt" \\
-            --cert "\${CERTS_DIR}/node.crt" \\
-            --key "\${CERTS_DIR}/node.key" \\
-            "\${AUTH_HEADER[@]}" \\
-            --connect-timeout 3 \\
-            --max-time 10 \\
-            --output "\$TMP_FILE" \\
-            "\${CONTROL_PLANE_URL}/api/v1/policy-sync/\${NODE_ID}" || echo "000"); \\
-        if [ "\$HTTP_CODE" -eq 200 ] && [ -s "\$TMP_FILE" ]; then \\
-            mv -f "\$TMP_FILE" "\$POLICY_DEST"; \\
-            chmod 600 "\$POLICY_DEST"; \\
-            echo "[Aurora API Gateway] Policy synced from controller."; \\
-        else \\
-            rm -f "\$TMP_FILE"; \\
-            echo "[Aurora API Gateway] Cannot sync policy (HTTP \$HTTP_CODE), using existing policy."; \\
-        fi; \\
-    fi'
-
-ExecStartPre=${UNIT_NGINX_BIN} -t -q -c \${NGINX_CONF}
-ExecStart=${UNIT_NGINX_BIN} -c \${NGINX_CONF}
-ExecReload=/bin/kill -s HUP \$MAINPID
-ExecStop=/bin/kill -s QUIT \$MAINPID
-KillMode=mixed
-TimeoutStopSec=15s
-Restart=on-failure
-RestartSec=3s
-
-[Install]
-WantedBy=multi-user.target
-UNIT_EOF
 
 # ── Activate ───────────────────────────────────────────────────────────────────
 if systemctl is-system-running &>/dev/null || [ -d /run/systemd/system ]; then
   systemctl daemon-reload
 
-  echo "==> Enabling and starting aurora-waf-controller..."
-  systemctl enable --now aurora-waf-controller
+  echo "==> Enabling and starting aurora-controller..."
+  systemctl enable --now aurora-controller
 
   echo ""
   echo "========================================"
@@ -595,10 +570,10 @@ if [ -n "$SELECTED_NGINX" ]; then
   echo "  NGINX detected: ${SELECTED_NGINX} (v${SELECTED_VERSION})"
   echo "  Module installed: $(basename "$SELECTED_MODULE") -> ${NGINX_MODULES_PATH}"
   echo ""
-  echo "  To start the Data Plane:"
+  echo "  To start the Dataplane Agent:"
   echo "    1. Ensure 'load_module ${NGINX_MODULES_PATH}/ngx_http_gateway_module.so;' is at the top of nginx.conf"
-  echo "    2. Configure /etc/aurora-waf/node.env"
-  echo "    3. sudo systemctl enable --now aurora-waf-nginx"
+  echo "    2. Review /etc/aurora/agent.env"
+  echo "    3. sudo systemctl enable --now aurora-agent"
 else
   echo "  Pre-built modules copied to /usr/lib/nginx/modules/:"
   for f in /usr/lib/nginx/modules/ngx_http_gateway_module-*.so; do
@@ -610,6 +585,6 @@ else
 fi
 echo ""
 echo "  Control Plane UI: http://127.0.0.1:8080"
-echo "  Admin Token File: /etc/aurora-waf/admin.token"
-echo "  Environment file: /etc/aurora-waf/controller.env"
+echo "  Admin Token File: /etc/aurora/admin.token"
+echo "  Environment file: /etc/aurora/controller.env"
 echo ""

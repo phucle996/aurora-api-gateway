@@ -234,7 +234,7 @@ exec /usr/local/bin/aurora-agent
         cpus: this.options.cpus, mem_limit: this.options.memory,
         environment: {
           CONTROLLER_URL: 'http://controller:8080', GRPC_URL: 'http://controller:9099', NODE_ID: id,
-          AUTH_TOKEN: this.token, NGINX_BIN: '/opt/nginx/usr/sbin/nginx', NGINX_CONF: '/etc/nginx/nginx.conf',
+          AUTH_TOKEN: this.token, GATEWAY_BIN: '/opt/nginx/usr/sbin/nginx', GATEWAY_CONF: '/etc/nginx/nginx.conf', NGINX_BIN: '/opt/nginx/usr/sbin/nginx', NGINX_CONF: '/etc/nginx/nginx.conf',
           POLICY_DIR: '/var/lib/aurora-policy', ROUTING_DIR: '/var/lib/aurora-routing', MODULES_DIR: '/opt/modules',
           SYNC_INTERVAL: '1', HEARTBEAT_INTERVAL: '1', METRICS_PROMETHEUS: 'true', NGINX_STUB_STATUS_URL: 'http://127.0.0.1/stub_status'
         },

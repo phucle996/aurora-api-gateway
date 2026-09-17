@@ -2,7 +2,8 @@
 set -e
 
 export CONTROLLER_URL="${CONTROLLER_URL:-http://controller:8080}"
-NGINX_RAW_VER=$(/opt/nginx/usr/sbin/nginx -v 2>&1 | sed -n 's/.*nginx\/\([0-9.]*\).*/\1/p')
+GATEWAY_BIN="${GATEWAY_BIN:-${NGINX_BIN:-/usr/local/bin/aurora-gateway}}"
+NGINX_RAW_VER=$("${GATEWAY_BIN}" -v 2>&1 | sed -n 's/.*nginx\/\([0-9.]*\).*/\1/p')
 export NODE_VERSION="${NODE_VERSION:-${NGINX_RAW_VER:-1.30.4}}"
 if [ -z "${AUTH_TOKEN:-}" ]; then
   echo "FATAL: AUTH_TOKEN must be explicitly provided via environment variable!" >&2
@@ -81,26 +82,31 @@ fi
 # Baseline for optional modules/dependencies
 /extension-modules.sh init
 
-# Validate NGINX syntax
-if ! /opt/nginx/usr/sbin/nginx -t -c /etc/nginx/nginx.conf; then
+# Validate Gateway syntax
+if ! "${GATEWAY_BIN}" -t -c /etc/nginx/nginx.conf; then
     echo "Warning: Stale NGINX configuration failed syntax check. Resetting active extensions to baseline..."
     printf '%s\n' '# Aurora API Gateway initial active extensions' > /var/lib/aurora-policy/active-extensions.conf
     printf '%s\n' '# Aurora API Gateway initial active HTTP-level extensions' > /var/lib/aurora-policy/active-extensions-http.conf
-    /opt/nginx/usr/sbin/nginx -t -c /etc/nginx/nginx.conf
+    "${GATEWAY_BIN}" -t -c /etc/nginx/nginx.conf
 fi
 
-echo "[Aurora Dataplane] Starting Aurora Dataplane Agent & NGINX supervisor..."
+echo "[Aurora Dataplane] Starting Aurora Dataplane Node Agent (out-of-band sync daemon)..."
 EXEC_ARGS=(
   --controller-url "${CONTROLLER_URL}"
   --auth-token "${AUTH_TOKEN}"
-  --nginx-bin "${NGINX_BIN:-/opt/nginx/usr/sbin/nginx}"
-  --nginx-conf "${NGINX_CONF:-/etc/nginx/nginx.conf}"
+  --gateway-bin "${GATEWAY_BIN}"
+  --gateway-conf "${GATEWAY_CONF:-${NGINX_CONF:-/etc/nginx/nginx.conf}}"
   --policy-dir "${POLICY_DIR:-/var/lib/aurora-policy}"
   --routing-dir "${ROUTING_DIR:-/var/lib/aurora-routing}"
-  --modules-dir "${MODULES_DIR:-/opt/modules}"
 )
 if [ -n "${GRPC_URL:-}" ]; then
   EXEC_ARGS+=(--grpc-url "${GRPC_URL}")
 fi
 
-exec /usr/local/bin/aurora-agent "${EXEC_ARGS[@]}"
+/usr/local/bin/aurora-agent "${EXEC_ARGS[@]}" &
+AGENT_PID=$!
+
+trap 'echo "[Aurora Dataplane] Stopping Agent ($AGENT_PID)..."; kill -TERM "$AGENT_PID" 2>/dev/null || true' SIGTERM SIGINT
+
+echo "[Aurora Dataplane] Starting Aurora Gateway Core (Traffic Path) as PID 1..."
+exec "${GATEWAY_BIN}" -g "daemon off;" -c "${GATEWAY_CONF:-${NGINX_CONF:-/etc/nginx/nginx.conf}}"

@@ -74,9 +74,9 @@ impl SpecSyncRunner {
             .await
             .map_err(|err| format!("failed to materialize NGINX configs from NodeSpec: {err}"))?;
 
-        if result.nginx_changed && !self.cfg.no_nginx {
+        if result.nginx_changed {
             self.nginx
-                .test_config(&self.cfg.nginx_conf)
+                .test_config(&self.cfg.gateway_conf)
                 .await
                 .map_err(|err| format!("NGINX config test failed after spec update: {err}"))?;
             self.nginx
@@ -139,7 +139,7 @@ impl SpecSyncRunner {
         let local_hash = self.current_hash.lock().await.clone();
 
         let handler = self.grpc.spec_handler();
-        match handler.sync_spec(&self.cfg.node_id, &local_hash).await {
+        match handler.sync_spec(&self.cfg.hostname, &local_hash).await {
             Ok(res) => {
                 if res.in_sync {
                     debug!(hash = %local_hash, "NodeSpec is in sync via gRPC");
@@ -148,27 +148,10 @@ impl SpecSyncRunner {
 
                 match self.apply_spec_content(&res.spec_json, &res.hash).await {
                     Ok(release_id) => {
-                        let _ = handler
-                            .report_spec(
-                                &self.cfg.node_id,
-                                release_id,
-                                &res.hash,
-                                "in_sync",
-                                "NodeSpec applied cleanly",
-                            )
-                            .await;
+                        debug!(release_id = release_id, hash = %res.hash, "NodeSpec applied cleanly");
                     }
                     Err(err) => {
                         error!(error = %err, "Failed to apply NodeSpec from gRPC");
-                        let _ = handler
-                            .report_spec(
-                                &self.cfg.node_id,
-                                res.release_id,
-                                &res.hash,
-                                "out_of_sync",
-                                &err,
-                            )
-                            .await;
                     }
                 }
             }
@@ -213,10 +196,8 @@ mod tests {
         let base = std::env::temp_dir().join(format!("aurora-agent-spec-sync-{unique}"));
         let policy_dir = base.join("policy");
         let routing_dir = base.join("routing");
-        let modules_dir = base.join("modules");
         fs::create_dir_all(&policy_dir).expect("create policy directory");
         fs::create_dir_all(&routing_dir).expect("create routing directory");
-        fs::create_dir_all(&modules_dir).expect("create modules directory");
 
         let nginx_bin = base.join("nginx-fails");
         fs::write(&nginx_bin, "#!/bin/sh\nexit 1\n").expect("write fake nginx");
@@ -228,25 +209,18 @@ mod tests {
 
         let cfg = Config {
             controller_url: "http://127.0.0.1:8080".to_string(),
-            node_id: "node-test".to_string(),
+            hostname: "node-test".to_string(),
             auth_token: "test-token".to_string(),
-            nginx_bin: nginx_bin.clone(),
-            nginx_conf: base.join("nginx.conf"),
+            gateway_bin: nginx_bin.clone(),
+            gateway_conf: base.join("nginx.conf"),
             policy_dir,
             routing_dir,
-            modules_dir,
-            heartbeat_interval_secs: 5,
             sync_interval_secs: 3,
-            metrics_port: 9145,
-            metrics_prometheus: false,
-            metrics_otlp_endpoint: None,
-            metrics_otlp_interval_secs: 15,
-            no_nginx: false,
             grpc_url: None,
         };
-        let nginx = NginxManager::new(nginx_bin, cfg.nginx_conf.clone());
+        let nginx = NginxManager::new(nginx_bin, cfg.gateway_conf.clone());
         let dispatcher = Arc::new(Mutex::new(ExtensionDispatcher::new(
-            Arc::new(cfg.node_id.clone()),
+            Arc::new(cfg.hostname.clone()),
             None,
         )));
         let grpc = GrpcClient::new("http://127.0.0.1:9090", "test-token")
