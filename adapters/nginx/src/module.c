@@ -7,7 +7,6 @@ static char *ngx_http_gateway_merge_conf(ngx_conf_t *cf, void *parent,
 static ngx_int_t ngx_http_gateway_init_process(ngx_cycle_t *cycle);
 static void ngx_http_gateway_exit_process(ngx_cycle_t *cycle);
 
-
 static ngx_command_t ngx_http_gateway_commands[] = {
     /* Gateway Core Directives */
     {ngx_string("gateway"),
@@ -15,12 +14,19 @@ static ngx_command_t ngx_http_gateway_commands[] = {
      ngx_conf_set_flag_slot, NGX_HTTP_LOC_CONF_OFFSET,
      offsetof(ngx_http_gateway_conf_t, enabled), NULL},
 
-    /* Extension: Access Control Policy */
+    /* Extension: IP Restriction Policy */
+    {ngx_string("gateway_ip_restriction_policy"),
+     NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF |
+         NGX_CONF_TAKE1,
+     ngx_conf_set_str_slot, NGX_HTTP_LOC_CONF_OFFSET,
+     offsetof(ngx_http_gateway_conf_t, ip_restriction_policy), NULL},
+
+    /* Legacy alias: Access Control Policy */
     {ngx_string("gateway_access_policy"),
      NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF |
          NGX_CONF_TAKE1,
      ngx_conf_set_str_slot, NGX_HTTP_LOC_CONF_OFFSET,
-     offsetof(ngx_http_gateway_conf_t, access_policy), NULL},
+     offsetof(ngx_http_gateway_conf_t, ip_restriction_policy), NULL},
 
     /* Extension: JWT Auth Policy */
     {ngx_string("gateway_jwt_policy"),
@@ -111,7 +117,6 @@ static ngx_command_t ngx_http_gateway_commands[] = {
      ngx_conf_set_str_slot, NGX_HTTP_LOC_CONF_OFFSET,
      offsetof(ngx_http_gateway_conf_t, access_policy), NULL},
 
-
     ngx_null_command};
 
 static ngx_http_module_t ngx_http_gateway_context = {
@@ -156,7 +161,7 @@ static char *ngx_http_gateway_merge_conf(ngx_conf_t *cf, void *parent,
   ngx_conf_merge_value(conf->enabled, prev->enabled, 0);
 
   /* Merge từng extension độc lập */
-  if (ngx_http_gateway_merge_access(cf, prev, conf) != NGX_CONF_OK) {
+  if (ngx_http_gateway_merge_ip_restriction(cf, prev, conf) != NGX_CONF_OK) {
     return NGX_CONF_ERROR;
   }
   if (ngx_http_gateway_merge_jwt(cf, prev, conf) != NGX_CONF_OK) {
@@ -200,7 +205,7 @@ static ngx_int_t ngx_http_gateway_init(ngx_conf_t *cf) {
   ngx_http_handler_pt *handler;
 
   /* Kiểm tra phiên bản ABI giữa C adapter và Rust FFI boundary */
-  if (aurora_waf_abi_version() != 4) {
+  if (aurora_gateway_abi_version() != 4) {
     return NGX_ERROR;
   }
   ngx_str_t telemetry_name = ngx_string("aurora_telemetry_v1");
@@ -239,8 +244,8 @@ static ngx_int_t ngx_http_gateway_init_process(ngx_cycle_t *cycle) {
     return NGX_OK;
   }
   if (sizeof(ngx_atomic_t) != sizeof(uint64_t) ||
-      aurora_waf_bind_telemetry(gateway_telemetry_zone->data, 64,
-                                (void *)ngx_stat_active) != 0) {
+      aurora_gateway_bind_telemetry(gateway_telemetry_zone->data, 64,
+                                    (void *)ngx_stat_active) != 0) {
     return NGX_ERROR;
   }
   return NGX_OK;
@@ -248,5 +253,5 @@ static ngx_int_t ngx_http_gateway_init_process(ngx_cycle_t *cycle) {
 
 static void ngx_http_gateway_exit_process(ngx_cycle_t *cycle) {
   (void)cycle;
-  aurora_waf_stop_telemetry();
+  aurora_gateway_stop_telemetry();
 }

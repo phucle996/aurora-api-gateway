@@ -1,17 +1,15 @@
 import React from 'react';
-import { RefreshCw, Radio, Hash, Layers } from 'lucide-react';
+import { RefreshCw, Hash, Layers } from 'lucide-react';
 import type { ClusterSpecInfo } from '../../../lib/api/spec';
 
 interface DashboardHeaderProps {
   clusterSpec?: ClusterSpecInfo | null;
-  streamState?: 'Live' | 'Polling' | 'Disconnected';
   onRefresh?: () => void;
   isRefreshing?: boolean;
 }
 
 export function DashboardHeader({
   clusterSpec,
-  streamState = 'Live',
   onRefresh,
   isRefreshing = false,
 }: DashboardHeaderProps) {
@@ -29,14 +27,10 @@ export function DashboardHeader({
           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-xs text-[11px] font-mono font-medium border bg-muted/60 text-muted-foreground border-border">
             <span
               className={`w-1.5 h-1.5 rounded-full ${
-                streamState === 'Live'
-                  ? 'bg-emerald-500 animate-pulse'
-                  : streamState === 'Polling'
-                  ? 'bg-amber-500'
-                  : 'bg-destructive'
+                isRefreshing ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'
               }`}
             />
-            {streamState === 'Live' ? 'Telemetry Live' : streamState}
+            {isRefreshing ? 'Syncing...' : 'Auto-refresh (15s)'}
           </span>
         </div>
         <p className="text-xs text-muted-foreground mt-1 font-sans">

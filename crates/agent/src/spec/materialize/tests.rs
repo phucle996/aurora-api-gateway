@@ -684,7 +684,7 @@ fn test_ip_restriction_renderer_generates_cidr_rules_from_instance_config() {
     assert!(
         rendered
             .server_conf
-            .contains("gateway_access_policy /var/lib/aurora-policy/active-ip-restriction.json;")
+            .contains("gateway_ip_restriction_policy /var/lib/aurora-policy/active-ip-restriction.json;")
     );
 }
 
@@ -752,7 +752,7 @@ async fn test_ip_restriction_extension_materializes_and_removes_snapshot() {
         .unwrap();
     assert!(
         ext_conf
-            .contains("gateway_access_policy /var/lib/aurora-policy/active-ip-restriction.json;")
+            .contains("gateway_ip_restriction_policy /var/lib/aurora-policy/active-ip-restriction.json;")
     );
 
     // Second run: spec without extension removes snapshot and directive
@@ -774,7 +774,7 @@ async fn test_ip_restriction_extension_materializes_and_removes_snapshot() {
     let ext_conf2 = tokio::fs::read_to_string(policy_dir.join("active-extensions.conf"))
         .await
         .unwrap();
-    assert!(!ext_conf2.contains("gateway_access_policy"));
+    assert!(!ext_conf2.contains("gateway_ip_restriction_policy"));
 }
 
 #[test]

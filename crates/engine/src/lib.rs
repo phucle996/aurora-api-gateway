@@ -4,13 +4,12 @@ pub mod decision;
 pub mod extensions;
 pub mod radix;
 pub mod redis_pool;
-pub mod telemetry;
+pub mod shm;
 
 pub use decision::*;
 pub use radix::PathRadixTree;
-pub use telemetry::{GatewayMetricsSnapshot, GatewaySharedMetrics};
+pub use shm::{GatewayMetricsSnapshot, GatewaySharedMetrics};
 
-pub use extensions::access;
 pub use extensions::blue_green;
 pub use extensions::canary_release;
 pub use extensions::connection_limit;
@@ -23,12 +22,11 @@ pub use extensions::request_termination;
 pub use extensions::traffic_shaper;
 pub use extensions::traffic_split;
 
-// Top-level re-exports for clean ergonomics and backward compatibility:
+// Top-level re-exports for clean ergonomics:
 pub use extensions::blue_green::BlueGreenEngine;
 pub use extensions::canary_release::CanaryReleaseEngine;
 pub use extensions::connection_limit::ConnectionLimitEngine;
 pub use extensions::ip_restriction::IpRestrictionEngine;
-pub use extensions::ip_restriction::IpRestrictionEngine as AccessEngine;
 pub use extensions::jwt::JwtEngine;
 pub use extensions::rate_limit::RateLimitEngine;
 pub use extensions::request_mirror::RequestMirrorEngine;
@@ -36,3 +34,8 @@ pub use extensions::request_size_limit::RequestSizeLimitEngine;
 pub use extensions::request_termination::RequestTerminationEngine;
 pub use extensions::traffic_shaper::TrafficShaperEngine;
 pub use extensions::traffic_split::TrafficSplitEngine;
+
+#[deprecated(note = "Use ip_restriction instead of access")]
+pub use extensions::ip_restriction as access;
+#[deprecated(note = "Use IpRestrictionEngine instead of AccessEngine")]
+pub use extensions::ip_restriction::IpRestrictionEngine as AccessEngine;

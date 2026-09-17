@@ -21,8 +21,8 @@ ngx_int_t ngx_http_gateway_handler(ngx_http_request_t *r) {
     host = server->server_name;
   }
 
-  /* Stage 1: Access Control (IP Whitelist/Blacklist/CIDR) */
-  rc = ngx_http_gateway_eval_access(r, conf, host);
+  /* Stage 1: IP Restriction (IP Allowlist/Blocklist/CIDR) */
+  rc = ngx_http_gateway_eval_ip_restriction(r, conf, host);
   if (rc != NGX_DECLINED) {
     return rc;
   }

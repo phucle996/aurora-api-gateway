@@ -81,23 +81,23 @@ pub fn format_prometheus(node_id: &str, m: &NodeMetrics) -> String {
     out.push_str("# TYPE gateway_http_requests_total counter\n");
     out.push_str(&format!(
         "gateway_http_requests_total{{node_id=\"{node_id}\",status=\"2xx\"}} {}\n",
-        g.http_status_2xx
+        g.http.status_2xx
     ));
     out.push_str(&format!(
         "gateway_http_requests_total{{node_id=\"{node_id}\",status=\"3xx\"}} {}\n",
-        g.http_status_3xx
+        g.http.status_3xx
     ));
     out.push_str(&format!(
         "gateway_http_requests_total{{node_id=\"{node_id}\",status=\"4xx\"}} {}\n",
-        g.http_status_4xx
+        g.http.status_4xx
     ));
     out.push_str(&format!(
         "gateway_http_requests_total{{node_id=\"{node_id}\",status=\"5xx\"}} {}\n",
-        g.http_status_5xx
+        g.http.status_5xx
     ));
     out.push_str(&format!(
         "gateway_http_requests_total{{node_id=\"{node_id}\",status=\"other\"}} {}\n\n",
-        g.http_status_other
+        g.http.status_other
     ));
 
     // 5. Gateway HTTP Request Latency Histogram
@@ -105,43 +105,43 @@ pub fn format_prometheus(node_id: &str, m: &NodeMetrics) -> String {
     out.push_str("# TYPE gateway_http_request_duration_seconds histogram\n");
     out.push_str(&format!(
         "gateway_http_request_duration_seconds_bucket{{node_id=\"{node_id}\",le=\"0.001\"}} {}\n",
-        g.http_duration_bucket_1ms
+        g.http.duration_bucket_1ms
     ));
     out.push_str(&format!(
         "gateway_http_request_duration_seconds_bucket{{node_id=\"{node_id}\",le=\"0.005\"}} {}\n",
-        g.http_duration_bucket_5ms
+        g.http.duration_bucket_5ms
     ));
     out.push_str(&format!(
         "gateway_http_request_duration_seconds_bucket{{node_id=\"{node_id}\",le=\"0.010\"}} {}\n",
-        g.http_duration_bucket_10ms
+        g.http.duration_bucket_10ms
     ));
     out.push_str(&format!(
         "gateway_http_request_duration_seconds_bucket{{node_id=\"{node_id}\",le=\"0.050\"}} {}\n",
-        g.http_duration_bucket_50ms
+        g.http.duration_bucket_50ms
     ));
     out.push_str(&format!(
         "gateway_http_request_duration_seconds_bucket{{node_id=\"{node_id}\",le=\"0.100\"}} {}\n",
-        g.http_duration_bucket_100ms
+        g.http.duration_bucket_100ms
     ));
     out.push_str(&format!(
         "gateway_http_request_duration_seconds_bucket{{node_id=\"{node_id}\",le=\"0.500\"}} {}\n",
-        g.http_duration_bucket_500ms
+        g.http.duration_bucket_500ms
     ));
     out.push_str(&format!(
         "gateway_http_request_duration_seconds_bucket{{node_id=\"{node_id}\",le=\"1.000\"}} {}\n",
-        g.http_duration_bucket_1000ms
+        g.http.duration_bucket_1000ms
     ));
     out.push_str(&format!(
         "gateway_http_request_duration_seconds_bucket{{node_id=\"{node_id}\",le=\"+Inf\"}} {}\n",
-        g.http_duration_bucket_inf
+        g.http.duration_bucket_inf
     ));
     out.push_str(&format!(
         "gateway_http_request_duration_seconds_sum{{node_id=\"{node_id}\"}} {:.3}\n",
-        g.http_duration_sum_ms as f64 / 1000.0
+        g.http.duration_sum_ms as f64 / 1000.0
     ));
     out.push_str(&format!(
         "gateway_http_request_duration_seconds_count{{node_id=\"{node_id}\"}} {}\n\n",
-        g.http_requests_total
+        g.http.requests_total
     ));
 
     // 6. Core WAF Decisions
@@ -149,15 +149,15 @@ pub fn format_prometheus(node_id: &str, m: &NodeMetrics) -> String {
     out.push_str("# TYPE gateway_waf_evaluations_total counter\n");
     out.push_str(&format!(
         "gateway_waf_evaluations_total{{node_id=\"{node_id}\",action=\"allow\"}} {}\n",
-        g.waf_allow
+        g.waf.allow
     ));
     out.push_str(&format!(
         "gateway_waf_evaluations_total{{node_id=\"{node_id}\",action=\"block\"}} {}\n",
-        g.waf_block
+        g.waf.block
     ));
     out.push_str(&format!(
         "gateway_waf_evaluations_total{{node_id=\"{node_id}\",action=\"audit\"}} {}\n\n",
-        g.waf_audit
+        g.waf.audit
     ));
 
     // 7. Rate Limiting Decisions
@@ -165,15 +165,15 @@ pub fn format_prometheus(node_id: &str, m: &NodeMetrics) -> String {
     out.push_str("# TYPE gateway_ratelimit_requests_total counter\n");
     out.push_str(&format!(
         "gateway_ratelimit_requests_total{{node_id=\"{node_id}\",action=\"allowed\"}} {}\n",
-        g.ratelimit_allowed
+        g.ratelimit.allowed
     ));
     out.push_str(&format!(
         "gateway_ratelimit_requests_total{{node_id=\"{node_id}\",action=\"throttled\"}} {}\n",
-        g.ratelimit_throttled
+        g.ratelimit.throttled
     ));
     out.push_str(&format!(
         "gateway_ratelimit_requests_total{{node_id=\"{node_id}\",action=\"rejected\"}} {}\n\n",
-        g.ratelimit_rejected
+        g.ratelimit.rejected
     ));
 
     // 8. JWT Authentication Decisions
@@ -181,31 +181,31 @@ pub fn format_prometheus(node_id: &str, m: &NodeMetrics) -> String {
     out.push_str("# TYPE gateway_jwt_validations_total counter\n");
     out.push_str(&format!(
         "gateway_jwt_validations_total{{node_id=\"{node_id}\",status=\"valid\"}} {}\n",
-        g.jwt_valid
+        g.jwt.valid
     ));
     out.push_str(&format!(
         "gateway_jwt_validations_total{{node_id=\"{node_id}\",status=\"invalid\"}} {}\n",
-        g.jwt_invalid
+        g.jwt.invalid
     ));
     out.push_str(&format!(
         "gateway_jwt_validations_total{{node_id=\"{node_id}\",status=\"expired\"}} {}\n",
-        g.jwt_expired
+        g.jwt.expired
     ));
     out.push_str(&format!(
         "gateway_jwt_validations_total{{node_id=\"{node_id}\",status=\"missing\"}} {}\n\n",
-        g.jwt_missing
+        g.jwt.missing
     ));
 
-    // 9. Access Control Decisions
-    out.push_str("# HELP gateway_access_evaluations_total Access control decisions\n");
-    out.push_str("# TYPE gateway_access_evaluations_total counter\n");
+    // 9. IP Restriction Decisions
+    out.push_str("# HELP gateway_ip_restriction_evaluations_total IP restriction decisions\n");
+    out.push_str("# TYPE gateway_ip_restriction_evaluations_total counter\n");
     out.push_str(&format!(
-        "gateway_access_evaluations_total{{node_id=\"{node_id}\",action=\"allow\"}} {}\n",
-        g.access_allow
+        "gateway_ip_restriction_evaluations_total{{node_id=\"{node_id}\",action=\"allow\"}} {}\n",
+        g.ip_restriction.allow
     ));
     out.push_str(&format!(
-        "gateway_access_evaluations_total{{node_id=\"{node_id}\",action=\"block\"}} {}\n\n",
-        g.access_block
+        "gateway_ip_restriction_evaluations_total{{node_id=\"{node_id}\",action=\"block\"}} {}\n\n",
+        g.ip_restriction.block
     ));
 
     // 10. Routing Extensions
@@ -213,22 +213,22 @@ pub fn format_prometheus(node_id: &str, m: &NodeMetrics) -> String {
     out.push_str("# TYPE gateway_canary_requests_total counter\n");
     out.push_str(&format!(
         "gateway_canary_requests_total{{node_id=\"{node_id}\",slot=\"baseline\"}} {}\n",
-        g.canary_baseline
+        g.canary.baseline
     ));
     out.push_str(&format!(
         "gateway_canary_requests_total{{node_id=\"{node_id}\",slot=\"canary\"}} {}\n\n",
-        g.canary_canary
+        g.canary.canary
     ));
 
     out.push_str("# HELP gateway_traffic_split_requests_total Traffic split routing decisions\n");
     out.push_str("# TYPE gateway_traffic_split_requests_total counter\n");
     out.push_str(&format!(
         "gateway_traffic_split_requests_total{{node_id=\"{node_id}\",branch=\"primary\"}} {}\n",
-        g.traffic_split_primary
+        g.traffic_split.primary
     ));
     out.push_str(&format!(
         "gateway_traffic_split_requests_total{{node_id=\"{node_id}\",branch=\"secondary\"}} {}\n\n",
-        g.traffic_split_secondary
+        g.traffic_split.secondary
     ));
 
     out.push_str(
@@ -237,14 +237,14 @@ pub fn format_prometheus(node_id: &str, m: &NodeMetrics) -> String {
     out.push_str("# TYPE gateway_conn_limit_rejected_total counter\n");
     out.push_str(&format!(
         "gateway_conn_limit_rejected_total{{node_id=\"{node_id}\"}} {}\n\n",
-        g.conn_limit_rejected
+        g.conn_limit.rejected
     ));
 
     out.push_str("# HELP gateway_request_termination_total Terminated requests\n");
     out.push_str("# TYPE gateway_request_termination_total counter\n");
     out.push_str(&format!(
         "gateway_request_termination_total{{node_id=\"{node_id}\"}} {}\n\n",
-        g.termination_triggered
+        g.termination.triggered
     ));
 
     out
@@ -253,7 +253,7 @@ pub fn format_prometheus(node_id: &str, m: &NodeMetrics) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aurora_engine::telemetry::GatewayMetricsSnapshot;
+    use aurora_engine::shm::GatewayMetricsSnapshot;
 
     #[test]
     fn test_format_prometheus_no_aurora_prefix() {
@@ -291,16 +291,16 @@ mod tests {
     #[test]
     fn test_format_prometheus_with_gateway_metrics() {
         let mut m = NodeMetrics::default();
-        m.gateway.http_requests_total = 100;
-        m.gateway.http_status_2xx = 95;
-        m.gateway.http_status_4xx = 5;
-        m.gateway.http_duration_bucket_5ms = 80;
-        m.gateway.http_duration_bucket_inf = 100;
-        m.gateway.http_duration_sum_ms = 450;
-        m.gateway.ratelimit_rejected = 3;
-        m.gateway.jwt_valid = 90;
-        m.gateway.jwt_invalid = 2;
-        m.gateway.canary_canary = 20;
+        m.gateway.http.requests_total = 100;
+        m.gateway.http.status_2xx = 95;
+        m.gateway.http.status_4xx = 5;
+        m.gateway.http.duration_bucket_5ms = 80;
+        m.gateway.http.duration_bucket_inf = 100;
+        m.gateway.http.duration_sum_ms = 450;
+        m.gateway.ratelimit.rejected = 3;
+        m.gateway.jwt.valid = 90;
+        m.gateway.jwt.invalid = 2;
+        m.gateway.canary.canary = 20;
 
         let formatted = format_prometheus("node-01", &m);
         assert!(

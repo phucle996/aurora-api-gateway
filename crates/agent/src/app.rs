@@ -67,8 +67,12 @@ impl App {
 
         // 5. Initialize gRPC Client
         let grpc_endpoint = cfg.grpc_endpoint();
-        info!(grpc_endpoint = %grpc_endpoint, "Connecting to Control Plane via gRPC");
-        let grpc_client = GrpcClient::new(&grpc_endpoint, &cfg.auth_token)?;
+        info!(
+            grpc_endpoint = %grpc_endpoint,
+            grpc_tls_mode = ?cfg.grpc_tls_mode,
+            "Connecting to Control Plane via gRPC"
+        );
+        let grpc_client = GrpcClient::new(&cfg)?;
 
         Ok(Self {
             cfg,

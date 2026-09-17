@@ -1,6 +1,8 @@
 //! Aurora FFI In-process Extensions.
 
-pub mod access;
+pub mod ip_restriction;
+pub use ip_restriction as access;
+
 #[path = "blue-green/mod.rs"]
 pub mod blue_green;
 #[path = "canary-release/mod.rs"]

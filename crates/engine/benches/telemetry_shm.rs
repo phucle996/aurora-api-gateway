@@ -1,7 +1,7 @@
 //! Run with `cargo bench -p aurora-engine --bench telemetry_shm`.
 //! Measures lockless Shared Memory (SHM) recording throughput, allocation count, and multi-thread contention.
 
-use aurora_engine::telemetry::GatewaySharedMetrics;
+use aurora_engine::shm::GatewaySharedMetrics;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::hint::black_box;
 use std::sync::Arc;

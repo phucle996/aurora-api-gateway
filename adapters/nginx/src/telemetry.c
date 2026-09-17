@@ -180,16 +180,13 @@ ngx_int_t ngx_http_gateway_metrics_handler(ngx_http_request_t *r) {
     return rc;
   }
 
-  /* Cấp phát buffer 4096 bytes trong request pool */
-  metrics_buf = ngx_pcalloc(r->pool, 4096);
+  const char *msg = "# Aurora Gateway metrics are exported via aurora-agent (port 9100)\n";
+  written = ngx_strlen(msg);
+  metrics_buf = ngx_pnalloc(r->pool, written + 1);
   if (metrics_buf == NULL) {
     return NGX_HTTP_INTERNAL_SERVER_ERROR;
   }
-
-  if (aurora_waf_format_prometheus_metrics(NULL, metrics_buf, 4096, &written) !=
-      0) {
-    return NGX_HTTP_INTERNAL_SERVER_ERROR;
-  }
+  ngx_memcpy(metrics_buf, msg, written);
 
   r->headers_out.status = NGX_HTTP_OK;
   r->headers_out.content_length_n = written;

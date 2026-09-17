@@ -1,5 +1,14 @@
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use std::path::PathBuf;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
+#[value(rename_all = "lowercase")]
+pub enum GrpcTlsMode {
+    #[default]
+    Plaintext,
+    Tls,
+    Mtls,
+}
 
 #[derive(Parser, Debug, Clone)]
 #[command(
@@ -33,6 +42,42 @@ pub struct Config {
 
     #[arg(long, env = "GRPC_URL")]
     pub grpc_url: Option<String>,
+
+    #[arg(long, env = "GRPC_TLS_MODE", default_value = "plaintext")]
+    pub grpc_tls_mode: GrpcTlsMode,
+
+    #[arg(long, env = "GRPC_CA_CERT")]
+    pub grpc_ca_cert: Option<PathBuf>,
+
+    #[arg(long, env = "GRPC_CLIENT_CERT")]
+    pub grpc_client_cert: Option<PathBuf>,
+
+    #[arg(long, env = "GRPC_CLIENT_KEY")]
+    pub grpc_client_key: Option<PathBuf>,
+
+    #[arg(long, env = "GRPC_TLS_DOMAIN")]
+    pub grpc_tls_domain: Option<String>,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            controller_url: String::new(),
+            hostname: String::new(),
+            auth_token: String::new(),
+            gateway_bin: PathBuf::new(),
+            gateway_conf: PathBuf::new(),
+            policy_dir: PathBuf::new(),
+            routing_dir: PathBuf::new(),
+            sync_interval_secs: 3,
+            grpc_url: None,
+            grpc_tls_mode: GrpcTlsMode::Plaintext,
+            grpc_ca_cert: None,
+            grpc_client_cert: None,
+            grpc_client_key: None,
+            grpc_tls_domain: None,
+        }
+    }
 }
 
 fn get_system_hostname() -> Option<String> {
@@ -82,22 +127,35 @@ impl Config {
     }
 
     pub fn grpc_endpoint(&self) -> String {
-        if let Some(ref url) = self.grpc_url
+        let mut ep = if let Some(ref url) = self.grpc_url
             && !url.trim().is_empty()
         {
-            return url.trim().to_string();
-        }
+            url.trim().to_string()
+        } else {
+            // Fallback from controller_url
+            let base = self.controller_url.trim().trim_end_matches('/');
+            if let Some(idx) = base.rfind(':') {
+                // Check if the part after ':' is digits (port)
+                let suffix = &base[idx + 1..];
+                if suffix.chars().all(|c| c.is_ascii_digit()) {
+                    format!("{}:9090", &base[..idx])
+                } else {
+                    format!("{}:9090", base)
+                }
+            } else {
+                format!("{}:9090", base)
+            }
+        };
 
-        // Fallback from controller_url
-        let base = self.controller_url.trim().trim_end_matches('/');
-        if let Some(idx) = base.rfind(':') {
-            // Check if the part after ':' is digits (port)
-            let suffix = &base[idx + 1..];
-            if suffix.chars().all(|c| c.is_ascii_digit()) {
-                return format!("{}:9090", &base[..idx]);
+        if self.grpc_tls_mode != GrpcTlsMode::Plaintext {
+            if let Some(rest) = ep.strip_prefix("http://") {
+                ep = format!("https://{rest}");
+            } else if !ep.starts_with("https://") {
+                ep = format!("https://{ep}");
             }
         }
-        format!("{}:9090", base)
+
+        ep
     }
 
     pub fn validate(&self) {
@@ -135,6 +193,44 @@ impl Config {
             panic!(
                 "FATAL: ROUTING_DIR is missing or empty. Provide via --routing-dir or ROUTING_DIR env var."
             );
+        }
+
+        match self.grpc_tls_mode {
+            GrpcTlsMode::Plaintext => {}
+            GrpcTlsMode::Tls => {
+                if let Some(ref ca) = self.grpc_ca_cert {
+                    if !ca.exists() {
+                        panic!("FATAL: GRPC_CA_CERT file does not exist: {}", ca.display());
+                    }
+                }
+            }
+            GrpcTlsMode::Mtls => {
+                let cert = self.grpc_client_cert.as_ref().unwrap_or_else(|| {
+                    panic!("FATAL: GRPC_CLIENT_CERT is required when GRPC_TLS_MODE is mtls");
+                });
+                if !cert.exists() {
+                    panic!(
+                        "FATAL: GRPC_CLIENT_CERT file does not exist: {}",
+                        cert.display()
+                    );
+                }
+
+                let key = self.grpc_client_key.as_ref().unwrap_or_else(|| {
+                    panic!("FATAL: GRPC_CLIENT_KEY is required when GRPC_TLS_MODE is mtls");
+                });
+                if !key.exists() {
+                    panic!(
+                        "FATAL: GRPC_CLIENT_KEY file does not exist: {}",
+                        key.display()
+                    );
+                }
+
+                if let Some(ref ca) = self.grpc_ca_cert {
+                    if !ca.exists() {
+                        panic!("FATAL: GRPC_CA_CERT file does not exist: {}", ca.display());
+                    }
+                }
+            }
         }
     }
 }
@@ -194,8 +290,7 @@ mod tests {
             gateway_conf: PathBuf::from("/etc/nginx/nginx.conf"),
             policy_dir: PathBuf::from("/policy"),
             routing_dir: PathBuf::from("/routing"),
-            sync_interval_secs: 3,
-            grpc_url: None,
+            ..Default::default()
         };
         cfg.validate();
     }
@@ -211,8 +306,7 @@ mod tests {
             gateway_conf: PathBuf::from("/etc/nginx/nginx.conf"),
             policy_dir: PathBuf::from("/policy"),
             routing_dir: PathBuf::from("/routing"),
-            sync_interval_secs: 3,
-            grpc_url: None,
+            ..Default::default()
         };
         cfg.validate();
     }
@@ -228,8 +322,7 @@ mod tests {
             gateway_conf: PathBuf::from("/etc/nginx/nginx.conf"),
             policy_dir: PathBuf::from("/policy"),
             routing_dir: PathBuf::from("/routing"),
-            sync_interval_secs: 3,
-            grpc_url: None,
+            ..Default::default()
         };
         cfg.validate();
     }
@@ -245,8 +338,7 @@ mod tests {
             gateway_conf: PathBuf::from("/etc/nginx/nginx.conf"),
             policy_dir: PathBuf::from("/policy"),
             routing_dir: PathBuf::from("/routing"),
-            sync_interval_secs: 3,
-            grpc_url: None,
+            ..Default::default()
         };
         cfg.validate();
     }
@@ -262,8 +354,7 @@ mod tests {
             gateway_conf: PathBuf::from(""),
             policy_dir: PathBuf::from("/policy"),
             routing_dir: PathBuf::from("/routing"),
-            sync_interval_secs: 3,
-            grpc_url: None,
+            ..Default::default()
         };
         cfg.validate();
     }
@@ -278,13 +369,19 @@ mod tests {
             gateway_conf: PathBuf::from("/etc/nginx/nginx.conf"),
             policy_dir: PathBuf::from("/policy"),
             routing_dir: PathBuf::from("/routing"),
-            sync_interval_secs: 3,
-            grpc_url: None,
+            ..Default::default()
         };
         assert_eq!(cfg.grpc_endpoint(), "http://127.0.0.1:9090");
 
         cfg.grpc_url = Some("http://controller.aurora.local:9999".to_string());
         assert_eq!(cfg.grpc_endpoint(), "http://controller.aurora.local:9999");
+
+        // When TLS mode is active, scheme should be https://
+        cfg.grpc_tls_mode = GrpcTlsMode::Tls;
+        assert_eq!(cfg.grpc_endpoint(), "https://controller.aurora.local:9999");
+
+        cfg.grpc_url = None;
+        assert_eq!(cfg.grpc_endpoint(), "https://127.0.0.1:9090");
     }
 
     #[test]
@@ -310,6 +407,98 @@ mod tests {
 
         assert_eq!(cfg.hostname, "gateway-worker-99");
         assert_eq!(cfg.hostname(), "gateway-worker-99");
+        assert_eq!(cfg.grpc_tls_mode, GrpcTlsMode::Plaintext);
+    }
+
+    #[test]
+    fn test_grpc_tls_mode_cli_parsing() {
+        let cfg = Config::try_parse_from([
+            "aurora-agent",
+            "--controller-url",
+            "https://controller:8080",
+            "--hostname",
+            "gateway-worker-99",
+            "--auth-token",
+            "secret-token",
+            "--gateway-bin",
+            "/usr/local/bin/aurora-gateway",
+            "--gateway-conf",
+            "/etc/nginx/nginx.conf",
+            "--policy-dir",
+            "/policy",
+            "--routing-dir",
+            "/routing",
+            "--grpc-tls-mode",
+            "mtls",
+            "--grpc-tls-domain",
+            "controller.internal",
+        ])
+        .expect("parse config with mtls");
+
+        assert_eq!(cfg.grpc_tls_mode, GrpcTlsMode::Mtls);
+        assert_eq!(cfg.grpc_tls_domain.as_deref(), Some("controller.internal"));
+    }
+
+    #[test]
+    #[should_panic(expected = "GRPC_CA_CERT file does not exist")]
+    fn test_validate_tls_nonexistent_ca_panics() {
+        let cfg = Config {
+            controller_url: "https://127.0.0.1:8080".to_string(),
+            hostname: "gateway-01".to_string(),
+            auth_token: "token".to_string(),
+            gateway_bin: PathBuf::from("/usr/local/bin/aurora-gateway"),
+            gateway_conf: PathBuf::from("/etc/nginx/nginx.conf"),
+            policy_dir: PathBuf::from("/policy"),
+            routing_dir: PathBuf::from("/routing"),
+            grpc_tls_mode: GrpcTlsMode::Tls,
+            grpc_ca_cert: Some(PathBuf::from("/non/existent/ca.crt")),
+            ..Default::default()
+        };
+        cfg.validate();
+    }
+
+    #[test]
+    #[should_panic(expected = "GRPC_CLIENT_CERT is required when GRPC_TLS_MODE is mtls")]
+    fn test_validate_mtls_missing_client_cert_panics() {
+        let cfg = Config {
+            controller_url: "https://127.0.0.1:8080".to_string(),
+            hostname: "gateway-01".to_string(),
+            auth_token: "token".to_string(),
+            gateway_bin: PathBuf::from("/usr/local/bin/aurora-gateway"),
+            gateway_conf: PathBuf::from("/etc/nginx/nginx.conf"),
+            policy_dir: PathBuf::from("/policy"),
+            routing_dir: PathBuf::from("/routing"),
+            grpc_tls_mode: GrpcTlsMode::Mtls,
+            ..Default::default()
+        };
+        cfg.validate();
+    }
+
+    #[test]
+    fn test_validate_mtls_with_valid_files_succeeds() {
+        let dir = std::env::temp_dir().join(format!("test-agent-tls-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let cert_file = dir.join("client.crt");
+        let key_file = dir.join("client.key");
+        std::fs::write(&cert_file, b"cert").unwrap();
+        std::fs::write(&key_file, b"key").unwrap();
+
+        let cfg = Config {
+            controller_url: "https://127.0.0.1:8080".to_string(),
+            hostname: "gateway-01".to_string(),
+            auth_token: "token".to_string(),
+            gateway_bin: PathBuf::from("/usr/local/bin/aurora-gateway"),
+            gateway_conf: PathBuf::from("/etc/nginx/nginx.conf"),
+            policy_dir: PathBuf::from("/policy"),
+            routing_dir: PathBuf::from("/routing"),
+            grpc_tls_mode: GrpcTlsMode::Mtls,
+            grpc_client_cert: Some(cert_file),
+            grpc_client_key: Some(key_file),
+            ..Default::default()
+        };
+        cfg.validate();
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

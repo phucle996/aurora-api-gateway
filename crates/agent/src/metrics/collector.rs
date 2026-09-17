@@ -1,4 +1,4 @@
-use aurora_engine::telemetry::{
+use aurora_engine::shm::{
     GatewayMetricsSnapshot, GatewaySharedMetrics, SHM_DEFAULT_PATH, SHM_SIZE_BYTES, TELEMETRY_MAGIC,
 };
 use std::fs;
@@ -130,11 +130,11 @@ impl MetricsCollector {
         metrics.gateway = self.read_gateway_metrics();
 
         // Read NGINX connection metrics directly from Shared Memory (zero network overhead, lockless)
-        metrics.active_connections = metrics.gateway.connections_active;
-        metrics.connections_reading = metrics.gateway.connections_reading;
-        metrics.connections_writing = metrics.gateway.connections_writing;
-        metrics.connections_waiting = metrics.gateway.connections_waiting;
-        metrics.requests_total = metrics.gateway.http_requests_total;
+        metrics.active_connections = metrics.gateway.connections.active;
+        metrics.connections_reading = metrics.gateway.connections.reading;
+        metrics.connections_writing = metrics.gateway.connections.writing;
+        metrics.connections_waiting = metrics.gateway.connections.waiting;
+        metrics.requests_total = metrics.gateway.http.requests_total;
 
         metrics
     }

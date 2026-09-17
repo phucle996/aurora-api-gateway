@@ -119,14 +119,14 @@ impl OtlpMetricsExporter {
         let explicit_bounds = vec![1.0, 5.0, 10.0, 50.0, 100.0, 500.0, 1000.0];
         // OpenTelemetry HistogramDataPoint requires discrete, non-cumulative counts for each bucket.
         // SHM maintains Prometheus-style cumulative buckets; convert by taking differences.
-        let b1 = metrics.gateway.http_duration_bucket_1ms;
-        let b5 = metrics.gateway.http_duration_bucket_5ms;
-        let b10 = metrics.gateway.http_duration_bucket_10ms;
-        let b50 = metrics.gateway.http_duration_bucket_50ms;
-        let b100 = metrics.gateway.http_duration_bucket_100ms;
-        let b500 = metrics.gateway.http_duration_bucket_500ms;
-        let b1000 = metrics.gateway.http_duration_bucket_1000ms;
-        let b_inf = metrics.gateway.http_duration_bucket_inf;
+        let b1 = metrics.gateway.http.duration_bucket_1ms;
+        let b5 = metrics.gateway.http.duration_bucket_5ms;
+        let b10 = metrics.gateway.http.duration_bucket_10ms;
+        let b50 = metrics.gateway.http.duration_bucket_50ms;
+        let b100 = metrics.gateway.http.duration_bucket_100ms;
+        let b500 = metrics.gateway.http.duration_bucket_500ms;
+        let b1000 = metrics.gateway.http.duration_bucket_1000ms;
+        let b_inf = metrics.gateway.http.duration_bucket_inf;
 
         let bucket_counts = vec![
             b1,
@@ -195,7 +195,7 @@ impl OtlpMetricsExporter {
                         start_time_unix_nano: 0,
                         time_unix_nano: now_nanos,
                         value: Some(number_data_point::Value::AsInt(
-                            metrics.gateway.waf_block as i64,
+                            metrics.gateway.waf.block as i64,
                         )),
                         exemplars: Vec::new(),
                         flags: 0,
@@ -251,7 +251,7 @@ impl OtlpMetricsExporter {
                         start_time_unix_nano: 0,
                         time_unix_nano: now_nanos,
                         count: hist_count,
-                        sum: Some(metrics.gateway.http_duration_sum_ms as f64),
+                        sum: Some(metrics.gateway.http.duration_sum_ms as f64),
                         bucket_counts,
                         explicit_bounds,
                         exemplars: Vec::new(),
@@ -481,18 +481,24 @@ mod tests {
         let m = NodeMetrics {
             requests_total: 1000,
             active_connections: 42,
-            gateway: aurora_engine::telemetry::GatewayMetricsSnapshot {
-                http_requests_total: 1000,
-                http_duration_sum_ms: 12500,
-                http_duration_bucket_1ms: 100,
-                http_duration_bucket_5ms: 350,
-                http_duration_bucket_10ms: 600,
-                http_duration_bucket_50ms: 850,
-                http_duration_bucket_100ms: 950,
-                http_duration_bucket_500ms: 990,
-                http_duration_bucket_1000ms: 999,
-                http_duration_bucket_inf: 1000,
-                waf_block: 7,
+            gateway: aurora_engine::shm::GatewayMetricsSnapshot {
+                http: aurora_engine::shm::HttpMetricsSnapshot {
+                    requests_total: 1000,
+                    duration_sum_ms: 12500,
+                    duration_bucket_1ms: 100,
+                    duration_bucket_5ms: 350,
+                    duration_bucket_10ms: 600,
+                    duration_bucket_50ms: 850,
+                    duration_bucket_100ms: 950,
+                    duration_bucket_500ms: 990,
+                    duration_bucket_1000ms: 999,
+                    duration_bucket_inf: 1000,
+                    ..Default::default()
+                },
+                waf: aurora_engine::shm::WafMetricsSnapshot {
+                    block: 7,
+                    ..Default::default()
+                },
                 ..Default::default()
             },
             ..Default::default()

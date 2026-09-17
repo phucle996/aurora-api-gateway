@@ -1,60 +1,74 @@
-//! Aurora WAF FFI - Lớp cầu nối giao tiếp C ABI (C Foreign Function Interface).
+//! Aurora Gateway FFI - Lớp cầu nối giao tiếp C ABI (C Foreign Function Interface).
 //!
 //! Vai trò kiến trúc:
 //! - Xuất các hàm Rust theo chuẩn C ABI (`extern "C"` với `#[no_mangle]`) để module NGINX viết bằng C
 //!   có thể trực tiếp nhúng và gọi hàm của Engine mà không cần thông qua mạng hoặc socket.
-//! - Thiết kế ABI v3: Sử dụng bộ đệm vay mượn (borrowed input buffers), dữ liệu trả về kiểu giá trị (value-only struct),
+//! - Thiết kế ABI v4: Sử dụng bộ đệm vay mượn (borrowed input buffers), dữ liệu trả về kiểu giá trị (value-only struct),
 //!   và con trỏ đối tượng Engine bất biến (owned immutable engine handles).
+//! - Substrate SHM phân chia rõ ràng: `shm::metrics` và `shm::logs`.
 //! - Bọc toàn bộ các lời gọi bằng `catch_unwind` để đảm bảo nếu Rust xảy ra panic thì
 //!   tuyệt đối không bị rò rỉ ra ngoài C làm sập tiến trình NGINX.
 
 pub mod extensions;
-pub mod telemetry;
+pub mod shm;
 
 pub use aurora_engine::Decision;
-pub use extensions::access;
-pub use extensions::canary_release;
-pub use extensions::canary_release::*;
-pub use extensions::connection_limit;
-pub use extensions::jwt;
-pub use extensions::rate_limit;
-pub use extensions::request_size_limit;
-pub use extensions::traffic_shaper;
-pub use extensions::traffic_split;
-pub use extensions::traffic_split::*;
+pub use extensions::ip_restriction;
+#[deprecated(note = "Use ip_restriction instead")]
+pub use extensions::ip_restriction as access;
+
 /// Trả về số phiên bản ABI hiện tại của Aurora Gateway (hiện tại là 4).
 /// Module NGINX sẽ gọi hàm này lúc khởi động để kiểm tra tính tương thích nhị phân.
 #[unsafe(no_mangle)]
-pub extern "C" fn aurora_waf_abi_version() -> u32 {
+pub extern "C" fn aurora_gateway_abi_version() -> u32 {
     4
 }
 
-use std::panic::{AssertUnwindSafe, catch_unwind};
+#[deprecated(note = "Use aurora_gateway_abi_version instead")]
+#[unsafe(no_mangle)]
+pub extern "C" fn aurora_waf_abi_version() -> u32 {
+    aurora_gateway_abi_version()
+}
 
-/// Mã trạng thái trả về cho caller C:
 pub(crate) const OK: u32 = 0;
 pub(crate) const INVALID: u32 = 1;
 
-/// Deprecated no-op: Retained for C ABI symbol backward-compatibility.
+/// Stop telemetry running state.
+#[unsafe(no_mangle)]
+pub extern "C" fn aurora_gateway_stop_telemetry() {
+    shm::stop_shm();
+}
+
+#[deprecated(note = "Use aurora_gateway_stop_telemetry instead")]
 #[unsafe(no_mangle)]
 pub extern "C" fn aurora_waf_stop_telemetry() {
-    telemetry::stop_telemetry();
+    aurora_gateway_stop_telemetry();
 }
 
 /// Bind adapter-owned shared telemetry counters before starting worker threads.
 /// # Safety
-/// See telemetry::bind: both aligned allocations must outlive the worker.
+/// Both shared and active allocations must outlive the worker.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn aurora_gateway_bind_telemetry(
+    shared: *mut std::ffi::c_void,
+    len: usize,
+    active: *mut std::ffi::c_void,
+) -> u32 {
+    if unsafe { shm::bind(shared.cast(), len, active.cast()) } {
+        OK
+    } else {
+        INVALID
+    }
+}
+
+#[deprecated(note = "Use aurora_gateway_bind_telemetry instead")]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn aurora_waf_bind_telemetry(
     shared: *mut std::ffi::c_void,
     len: usize,
     active: *mut std::ffi::c_void,
 ) -> u32 {
-    if unsafe { telemetry::bind(shared.cast(), len, active.cast()) } {
-        OK
-    } else {
-        1
-    }
+    unsafe { aurora_gateway_bind_telemetry(shared, len, active) }
 }
 
 /// Initialize cross-process shared memory file for telemetry with Agent.
@@ -63,158 +77,41 @@ pub unsafe extern "C" fn aurora_waf_bind_telemetry(
 /// If `path` is non-null, it must point to a valid null-terminated C string.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn aurora_telemetry_init_shm(path: *const std::ffi::c_char) -> u32 {
-    if unsafe { telemetry::init_shm(path) } {
+    if unsafe { shm::init_shm(path) } {
         OK
     } else {
         INVALID
     }
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_request(status: u32, duration_ms: u64) {
-    telemetry::record_request(status, duration_ms);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_waf(action: u32) {
-    telemetry::record_waf(action);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_access(action: u32) {
-    telemetry::record_access(action);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_ratelimit(action: u32) {
-    telemetry::record_ratelimit(action);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_jwt(status: u32) {
-    telemetry::record_jwt(status);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_conn_limit(blocked: u32) {
-    telemetry::record_conn_limit(blocked != 0);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_traffic_shaper(delayed: u32) {
-    telemetry::record_traffic_shaper(delayed != 0);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_request_size(rejected: u32) {
-    telemetry::record_request_size(rejected != 0);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_termination() {
-    telemetry::record_termination();
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_traffic_split(secondary: u32) {
-    telemetry::record_traffic_split(secondary != 0);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_canary(is_canary: u32) {
-    telemetry::record_canary(is_canary != 0);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_blue_green(is_green: u32) {
-    telemetry::record_blue_green(is_green != 0);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_mirror() {
-    telemetry::record_mirror();
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_connections(
-    active: u64,
-    reading: u64,
-    writing: u64,
-    waiting: u64,
-) {
-    telemetry::record_connections(active, reading, writing, waiting);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_is_log_active() -> u32 {
-    if telemetry::is_log_active() { 1 } else { 0 }
-}
-
-/// Xuất chuỗi định dạng văn bản Prometheus / OpenMetrics phục vụ endpoint /metrics của NGINX.
-///
-/// # Safety
-/// - `node_id`: Chuỗi C string tên node (hoặc null).
-/// - `out_buf`: Vùng nhớ đệm nhận dữ liệu chuỗi.
-/// - `max_len`: Kích thước tối đa của `out_buf`.
-/// - `written_len`: Con trỏ nhận số byte thực tế đã ghi.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn aurora_waf_format_prometheus_metrics(
-    node_id: *const std::ffi::c_char,
-    out_buf: *mut u8,
-    max_len: usize,
-    written_len: *mut usize,
-) -> u32 {
-    if out_buf.is_null() || written_len.is_null() || max_len == 0 {
-        return INVALID;
-    }
-
-    let _ = catch_unwind(AssertUnwindSafe(|| {
-        let nid = if !node_id.is_null() {
-            unsafe { std::ffi::CStr::from_ptr(node_id).to_str().unwrap_or("") }
-        } else {
-            ""
-        };
-
-        let metrics_text = telemetry::format_prometheus_metrics(nid);
-        let bytes = metrics_text.as_bytes();
-        let copy_len = bytes.len().min(max_len);
-
-        unsafe {
-            std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_buf, copy_len);
-            *written_len = copy_len;
-        }
-    }));
-
-    OK
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::access::{
-        AccessInput, aurora_access_create, aurora_access_destroy, aurora_access_evaluate,
-        aurora_access_generation,
+    use crate::extensions::ip_restriction::{
+        IpRestrictionInput, aurora_ip_restriction_create, aurora_ip_restriction_destroy,
+        aurora_ip_restriction_evaluate, aurora_ip_restriction_generation,
     };
 
     #[test]
-    fn test_access_ffi_lifecycle() {
+    fn test_ip_restriction_ffi_lifecycle() {
         let snapshot_json = br#"{"schema_version":1,"generation":42,"rules":[{"id":101,"priority":1,"action":"block","networks":["192.168.1.0/24"],"host":"*","path_prefix":"/api","method":"*","schedule":"always","expires_at":0,"log":true,"reputation":false,"alert":false}]}"#;
 
         let mut engine = std::ptr::null_mut();
         let ret = unsafe {
-            aurora_access_create(snapshot_json.as_ptr(), snapshot_json.len(), &mut engine)
+            aurora_ip_restriction_create(snapshot_json.as_ptr(), snapshot_json.len(), &mut engine)
         };
         assert_eq!(ret, 0);
         assert!(!engine.is_null());
 
-        let generation = unsafe { aurora_access_generation(engine) };
+        let generation = unsafe { aurora_ip_restriction_generation(engine) };
         assert_eq!(generation, 42);
 
         let ip = b"192.168.1.50";
         let host = b"example.com";
         let path = b"/api/v1/resource";
         let method = b"GET";
-        let input = AccessInput {
+        let input = IpRestrictionInput {
             ip: ip.as_ptr(),
             ip_len: ip.len(),
             host: host.as_ptr(),
@@ -226,12 +123,12 @@ mod tests {
             now: 1000,
         };
         let mut decision = Decision::default();
-        let eval_status = unsafe { aurora_access_evaluate(engine, &input, &mut decision) };
+        let eval_status = unsafe { aurora_ip_restriction_evaluate(engine, &input, &mut decision) };
         assert_eq!(eval_status, 0);
         assert_eq!(decision.action, 1); // blocked
         assert_eq!(decision.rule_id, 101);
         assert_eq!(decision.generation, 42);
 
-        unsafe { aurora_access_destroy(engine) };
+        unsafe { aurora_ip_restriction_destroy(engine) };
     }
 }

@@ -136,14 +136,19 @@ func NewApp(ctx context.Context, cfg config.Config) (*App, error) {
 		}
 	}()
 
-	grpcSrv := grpcserver.NewServer(cfg.GRPCAddr, token, grpcserver.Handlers{
+	grpcSrv, err := grpcserver.NewServer(cfg.GRPC, token, grpcserver.Handlers{
 		Spec: module.GRPCSpecSyncHandler,
 	})
-	grpcLis, err := net.Listen("tcp", cfg.GRPCAddr)
 	if err != nil {
 		_ = module.AnalyticsService.Close()
 		_ = pools.Close()
-		return nil, fmt.Errorf("listen gRPC %s: %w", cfg.GRPCAddr, err)
+		return nil, fmt.Errorf("init gRPC server: %w", err)
+	}
+	grpcLis, err := net.Listen("tcp", cfg.GRPC.Addr)
+	if err != nil {
+		_ = module.AnalyticsService.Close()
+		_ = pools.Close()
+		return nil, fmt.Errorf("listen gRPC %s: %w", cfg.GRPC.Addr, err)
 	}
 
 	return &App{

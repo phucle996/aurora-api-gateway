@@ -11,8 +11,10 @@
  */
 typedef struct {
   ngx_flag_t enabled; /* Bật/tắt Gateway (on/off) */
-  ngx_str_t access_policy;
-  AuroraAccessEngine *access_engine;
+  ngx_str_t ip_restriction_policy;
+  AuroraIpRestrictionEngine *ip_restriction_engine;
+#define access_policy ip_restriction_policy
+#define access_engine ip_restriction_engine
   ngx_str_t jwt_policy;
   AuroraJwtEngine *jwt_engine;
   ngx_str_t rate_limit_policy;
@@ -53,13 +55,16 @@ extern ngx_shm_zone_t *gateway_telemetry_zone;
 /* Pipeline Handler */
 ngx_int_t ngx_http_gateway_handler(ngx_http_request_t *r);
 
-/* Extension: Access Policy */
-char *ngx_http_gateway_merge_access(ngx_conf_t *cf,
-                                    ngx_http_gateway_conf_t *prev,
-                                    ngx_http_gateway_conf_t *conf);
-ngx_int_t ngx_http_gateway_eval_access(ngx_http_request_t *r,
-                                       ngx_http_gateway_conf_t *conf,
-                                       ngx_str_t host);
+/* Extension: IP Restriction (formerly Access Policy) */
+char *ngx_http_gateway_merge_ip_restriction(ngx_conf_t *cf,
+                                            ngx_http_gateway_conf_t *prev,
+                                            ngx_http_gateway_conf_t *conf);
+ngx_int_t ngx_http_gateway_eval_ip_restriction(ngx_http_request_t *r,
+                                               ngx_http_gateway_conf_t *conf,
+                                               ngx_str_t host);
+
+#define ngx_http_gateway_merge_access ngx_http_gateway_merge_ip_restriction
+#define ngx_http_gateway_eval_access ngx_http_gateway_eval_ip_restriction
 
 /* Extension: JWT Authentication */
 char *ngx_http_gateway_merge_jwt(ngx_conf_t *cf, ngx_http_gateway_conf_t *prev,

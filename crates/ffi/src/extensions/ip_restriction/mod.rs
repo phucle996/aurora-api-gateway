@@ -1,6 +1,6 @@
 use aurora_engine::{
     Decision,
-    access::{AccessEngine, AccessRequest},
+    ip_restriction::{IpRestrictionEngine, IpRestrictionRequest},
 };
 use std::{
     panic::{AssertUnwindSafe, catch_unwind},
@@ -8,7 +8,7 @@ use std::{
 };
 
 #[repr(C)]
-pub struct AccessInput {
+pub struct IpRestrictionInput {
     pub ip: *const u8,
     pub ip_len: usize,
     pub host: *const u8,
@@ -20,13 +20,15 @@ pub struct AccessInput {
     pub now: u64,
 }
 
+pub type AccessInput = IpRestrictionInput;
+
 /// # Safety
 /// Input bytes must be readable and out must be writable for the call.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn aurora_access_create(
+pub unsafe extern "C" fn aurora_ip_restriction_create(
     data: *const u8,
     len: usize,
-    out: *mut *mut AccessEngine,
+    out: *mut *mut IpRestrictionEngine,
 ) -> u32 {
     if out.is_null() {
         return 1;
@@ -38,7 +40,7 @@ pub unsafe extern "C" fn aurora_access_create(
         return 1;
     }
     match catch_unwind(AssertUnwindSafe(|| {
-        AccessEngine::from_snapshot(unsafe { slice::from_raw_parts(data, len) })
+        IpRestrictionEngine::from_snapshot(unsafe { slice::from_raw_parts(data, len) })
     })) {
         Ok(Ok(e)) => {
             unsafe {
@@ -51,10 +53,20 @@ pub unsafe extern "C" fn aurora_access_create(
     }
 }
 
+#[deprecated(note = "Use aurora_ip_restriction_create instead")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn aurora_access_create(
+    data: *const u8,
+    len: usize,
+    out: *mut *mut IpRestrictionEngine,
+) -> u32 {
+    unsafe { aurora_ip_restriction_create(data, len, out) }
+}
+
 /// # Safety
 /// The handle must be live, or null. Destroy it exactly once.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn aurora_access_destroy(engine: *mut AccessEngine) {
+pub unsafe extern "C" fn aurora_ip_restriction_destroy(engine: *mut IpRestrictionEngine) {
     if !engine.is_null() {
         unsafe {
             drop(Box::from_raw(engine));
@@ -62,10 +74,16 @@ pub unsafe extern "C" fn aurora_access_destroy(engine: *mut AccessEngine) {
     }
 }
 
+#[deprecated(note = "Use aurora_ip_restriction_destroy instead")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn aurora_access_destroy(engine: *mut IpRestrictionEngine) {
+    unsafe { aurora_ip_restriction_destroy(engine) }
+}
+
 /// # Safety
 /// The handle must be live, or null.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn aurora_access_generation(engine: *const AccessEngine) -> u64 {
+pub unsafe extern "C" fn aurora_ip_restriction_generation(engine: *const IpRestrictionEngine) -> u64 {
     if !engine.is_null() {
         unsafe { (&*engine).generation() }
     } else {
@@ -73,12 +91,18 @@ pub unsafe extern "C" fn aurora_access_generation(engine: *const AccessEngine) -
     }
 }
 
+#[deprecated(note = "Use aurora_ip_restriction_generation instead")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn aurora_access_generation(engine: *const IpRestrictionEngine) -> u64 {
+    unsafe { aurora_ip_restriction_generation(engine) }
+}
+
 /// # Safety
 /// All non-null pointers and their declared byte ranges must be valid for this call.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn aurora_access_evaluate(
-    engine: *const AccessEngine,
-    input: *const AccessInput,
+pub unsafe extern "C" fn aurora_ip_restriction_evaluate(
+    engine: *const IpRestrictionEngine,
+    input: *const IpRestrictionInput,
     out: *mut Decision,
 ) -> u32 {
     if out.is_null() {
@@ -106,7 +130,7 @@ pub unsafe extern "C" fn aurora_access_evaluate(
     }
     match catch_unwind(AssertUnwindSafe(|| {
         let req = unsafe {
-            AccessRequest {
+            IpRestrictionRequest {
                 ip: slice::from_raw_parts(q.ip, q.ip_len),
                 host: slice::from_raw_parts(q.host, q.host_len),
                 path: slice::from_raw_parts(q.path, q.path_len),
@@ -126,4 +150,28 @@ pub unsafe extern "C" fn aurora_access_evaluate(
         Ok(Err(_)) => 1,
         Err(_) => 2,
     }
+}
+
+#[deprecated(note = "Use aurora_ip_restriction_evaluate instead")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn aurora_access_evaluate(
+    engine: *const IpRestrictionEngine,
+    input: *const IpRestrictionInput,
+    out: *mut Decision,
+) -> u32 {
+    unsafe { aurora_ip_restriction_evaluate(engine, input, out) }
+}
+
+/// Extension-local telemetry recording into SHM.
+#[unsafe(no_mangle)]
+pub extern "C" fn aurora_ip_restriction_record(action: u32) {
+    if let Some(m) = crate::shm::gateway_metrics() {
+        m.record_ip_restriction(action);
+    }
+}
+
+#[deprecated(note = "Use aurora_ip_restriction_record instead")]
+#[unsafe(no_mangle)]
+pub extern "C" fn aurora_access_record(action: u32) {
+    aurora_ip_restriction_record(action);
 }

@@ -4,7 +4,7 @@ ngx_module_name=ngx_http_gateway_module
 ngx_module_srcs="$ngx_addon_dir/src/module.c \
                  $ngx_addon_dir/src/pipeline.c \
                  $ngx_addon_dir/src/telemetry.c \
-                 $ngx_addon_dir/src/extensions/access.c \
+                 $ngx_addon_dir/src/extensions/ip_restriction.c \
                  $ngx_addon_dir/src/extensions/jwt.c \
                  $ngx_addon_dir/src/extensions/rate_limit.c \
                  $ngx_addon_dir/src/extensions/conn_limit.c \

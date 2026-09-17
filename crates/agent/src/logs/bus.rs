@@ -1,5 +1,5 @@
 use super::entry::GatewayLogEntry;
-use aurora_engine::telemetry::{GatewaySharedMetrics, SHM_DEFAULT_PATH, SHM_SIZE_BYTES};
+use aurora_engine::shm::{GatewaySharedMetrics, SHM_DEFAULT_PATH, SHM_SIZE_BYTES};
 use std::fs::OpenOptions;
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::fs::PermissionsExt;

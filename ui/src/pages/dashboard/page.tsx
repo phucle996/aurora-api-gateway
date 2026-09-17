@@ -8,12 +8,10 @@ import { DashboardStatusBanner } from './sections/DashboardStatusBanner';
 
 import { systemApi, type SystemInfo } from '../../lib/api/system';
 import { specApi, type ClusterSpecInfo } from '../../lib/api/spec';
-import { API_BASE_URL, getAuthToken } from '../../lib/fetcher';
 
 export default function DashboardPage() {
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [clusterSpec, setClusterSpec] = useState<ClusterSpecInfo | null>(null);
-  const [streamState, setStreamState] = useState<'Live' | 'Polling' | 'Disconnected'>('Polling');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const requestID = useRef(0);
@@ -40,7 +38,7 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // Periodic polling fallback (every 15 seconds)
+  // Periodic polling (every 15 seconds)
   useEffect(() => {
     void loadData(false);
     const interval = setInterval(() => {
@@ -49,42 +47,11 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [loadData]);
 
-  // Real-time SSE Stream
-  useEffect(() => {
-    const token = getAuthToken();
-    const es = new EventSource(
-      `${API_BASE_URL}/api/v1/events/stream${
-        token ? `?token=${encodeURIComponent(token)}` : ''
-      }`,
-      { withCredentials: true }
-    );
-
-    es.onopen = () => {
-      setStreamState('Live');
-    };
-
-    es.onerror = () => {
-      setStreamState('Polling');
-    };
-
-    es.addEventListener('spec_update', () => {
-      void loadData(false);
-    });
-    es.addEventListener('node_sync', () => {
-      void loadData(false);
-    });
-
-    return () => {
-      es.close();
-    };
-  }, [loadData]);
-
   return (
     <div className="p-6 w-full space-y-5">
       {/* 1. Header with Target Spec Release, SHA-256 Digest & Live Telemetry status */}
       <DashboardHeader
         clusterSpec={clusterSpec}
-        streamState={streamState}
         onRefresh={() => void loadData(true)}
         isRefreshing={isRefreshing}
       />
