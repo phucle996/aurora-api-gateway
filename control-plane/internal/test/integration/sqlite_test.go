@@ -66,8 +66,8 @@ func TestSQLiteRestartAndConnectionSettings(t *testing.T) {
 		t.Fatalf("expected 0 legacy tables, got count = %d, err = %v", legacyTableCount, err)
 	}
 	var extensionInstanceCount int
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM extension_instances").Scan(&extensionInstanceCount); err != nil || extensionInstanceCount != 25 {
-		t.Fatalf("expected 25 packaged extension instances, got count = %d, err = %v", extensionInstanceCount, err)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM extension_instances").Scan(&extensionInstanceCount); err != nil || extensionInstanceCount != 26 {
+		t.Fatalf("expected 26 packaged extension instances, got count = %d, err = %v", extensionInstanceCount, err)
 	}
 
 	// Force replacement connections to verify per-connection settings survive churn.

@@ -130,6 +130,17 @@ export const EXTENSION_DEFAULT_CONFIGS: Record<string, Record<string, any>> = {
     replacement: '[REDACTED]',
     inspect_content_types: ['application/json', 'text/plain', 'text/html']
   },
+  'ingress-header-sanitizer': {
+    enabled: true,
+    mode: 'denylist',
+    denylist: [
+      'traceparent',
+      'x-request-id',
+      'x-user-id',
+      'x-consumer-id'
+    ],
+    allowlist: []
+  },
   'custom-waf-rules': {
     enabled: true,
     default_action: 'pass',

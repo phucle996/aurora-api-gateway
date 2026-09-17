@@ -7,8 +7,8 @@ func TestCatalogDefaultsMatchTheirRuntimeSchemas(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load catalog: %v", err)
 	}
-	if len(manifests) != 25 {
-		t.Fatalf("expected 25 packaged manifests, got %d", len(manifests))
+	if len(manifests) != 26 {
+		t.Fatalf("expected 26 packaged manifests, got %d", len(manifests))
 	}
 	digest, err := Digest()
 	if err != nil || len(digest) != 64 {
@@ -289,6 +289,41 @@ func TestCorrelationIDManifestValidation(t *testing.T) {
 	emptyHeader := `{"request_id":{"enabled":true,"header_name":"","send_in_response":true,"include_in_access_log":true},"trace_id":{"enabled":true,"header_name":"traceparent","send_in_response":false,"include_in_access_log":true}}`
 	if _, err := ValidateConfig(manifest, emptyHeader); err == nil {
 		t.Fatal("expected empty header_name to be rejected")
+	}
+}
+
+func TestIngressHeaderSanitizerManifestValidation(t *testing.T) {
+	manifest, ok := Find("builtin/ingress-header-sanitizer", 1)
+	if !ok {
+		t.Fatal("Ingress Header Sanitizer manifest not installed")
+	}
+
+	validDenylist := `{"enabled":true,"mode":"denylist","denylist":["traceparent","x-request-id","x-user-id"],"allowlist":[]}`
+	if _, err := ValidateConfig(manifest, validDenylist); err != nil {
+		t.Fatalf("expected valid denylist config: %v", err)
+	}
+
+	validAllowlist := `{"enabled":true,"mode":"allowlist","denylist":[],"allowlist":["authorization","content-type","accept"]}`
+	if _, err := ValidateConfig(manifest, validAllowlist); err != nil {
+		t.Fatalf("expected valid allowlist config: %v", err)
+	}
+
+	// Missing mode
+	missingMode := `{"enabled":true,"denylist":["traceparent"]}`
+	if _, err := ValidateConfig(manifest, missingMode); err == nil {
+		t.Fatal("expected missing mode to be rejected")
+	}
+
+	// Invalid mode enum
+	invalidMode := `{"enabled":true,"mode":"custom_mode"}`
+	if _, err := ValidateConfig(manifest, invalidMode); err == nil {
+		t.Fatal("expected invalid mode to be rejected")
+	}
+
+	// Invalid header format (e.g. contains spaces or invalid chars)
+	invalidHeaderName := `{"enabled":true,"mode":"denylist","denylist":["invalid header!"]}`
+	if _, err := ValidateConfig(manifest, invalidHeaderName); err == nil {
+		t.Fatal("expected invalid header name with spaces/punctuation to be rejected")
 	}
 }
 

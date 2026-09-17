@@ -1,0 +1,102 @@
+{
+  "key": "builtin/ingress-header-sanitizer",
+  "version": 1,
+  "id": "ingress-header-sanitizer",
+  "name": "Ingress Header Sanitizer",
+  "category": "security",
+  "description": "Sanitizes and controls incoming request headers at the gateway ingress to prevent header spoofing.",
+  "renderer": "nginx-ingress-header-sanitizer",
+  "builtin": true,
+  "default_config": {
+    "enabled": true,
+    "mode": "denylist",
+    "denylist": [
+      "traceparent",
+      "x-request-id",
+      "x-user-id",
+      "x-consumer-id"
+    ],
+    "allowlist": []
+  },
+  "ui_schema": {
+    "layout_type": "form",
+    "fields": [
+      {
+        "key": "enabled",
+        "label": "Enabled",
+        "type": "boolean",
+        "description": "Enable or disable ingress header sanitization"
+      },
+      {
+        "key": "mode",
+        "label": "Sanitization Mode",
+        "type": "select",
+        "options": [
+          {
+            "label": "Denylist (Strip specified headers)",
+            "value": "denylist"
+          },
+          {
+            "label": "Allowlist (Allow only specified headers)",
+            "value": "allowlist"
+          }
+        ],
+        "description": "Choose between stripping specified untrusted headers or only allowing known safe headers"
+      },
+      {
+        "key": "denylist",
+        "label": "Denylist Headers",
+        "type": "tags",
+        "description": "List of HTTP header names to strip when received from clients"
+      },
+      {
+        "key": "allowlist",
+        "label": "Allowlist Headers",
+        "type": "tags",
+        "description": "List of HTTP header names permitted from clients (all others will be stripped in allowlist mode)"
+      }
+    ]
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "enabled",
+      "mode"
+    ],
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "mode": {
+        "type": "string",
+        "enum": [
+          "denylist",
+          "allowlist"
+        ],
+        "default": "denylist"
+      },
+      "denylist": {
+        "type": "array",
+        "maxItems": 128,
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9\\-_]+$"
+        }
+      },
+      "allowlist": {
+        "type": "array",
+        "maxItems": 128,
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9\\-_]+$"
+        }
+      }
+    }
+  }
+}

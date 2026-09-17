@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -283,6 +284,15 @@ func validateValue(schema map[string]any, value any, path string) error {
 		}
 		if maximum, ok := schema["maxLength"].(float64); ok && len(stringValue) > int(maximum) {
 			return fmt.Errorf("%s exceeds %d characters", path, int(maximum))
+		}
+		if patternStr, ok := schema["pattern"].(string); ok {
+			re, err := regexp.Compile(patternStr)
+			if err != nil {
+				return fmt.Errorf("schema pattern %q for %s is invalid", patternStr, path)
+			}
+			if !re.MatchString(stringValue) {
+				return fmt.Errorf("%s does not match pattern %s", path, patternStr)
+			}
 		}
 	case "boolean":
 		if _, ok := value.(bool); !ok {

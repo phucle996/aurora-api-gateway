@@ -19,7 +19,8 @@ Extensions are compiled by the control plane into the node spec wire format and 
 | --- | --- | --- | --- |
 | **Rate Limit** | `builtin/rate-limit` | FFI / NGINX | Sliding window and leaky bucket request rate limiting per IP, header, or route. |
 | **JWT Authentication** | `builtin/jwt-auth` | FFI / NGINX | Validates RS256/HS256 JWT tokens, checks claims, and injects upstream headers. |
-| **IP Restriction** | `builtin/ip-restriction` | NGINX | Allowlist or denylist client IP addresses and CIDR blocks. |
+| **Ingress Header Sanitizer** | `builtin/ingress-header-sanitizer` | NGINX | Pre-processing ingress perimeter guard that sanitizes and strips untrusted incoming headers to prevent spoofing. |
+| **IP Restriction** | `builtin/ip-restriction` | FFI / NGINX | Allowlist or denylist client IP addresses and CIDR blocks. |
 | **Connection Limit** | `builtin/connection-limit` | NGINX | Limits concurrent TCP connections per client IP or upstream service. |
 | **Request Size Limit** | `builtin/request-size-limit` | NGINX | Restricts maximum allowed HTTP client body size to prevent resource exhaustion. |
 | **Request Termination** | `builtin/request-termination` | NGINX | Synthesizes early responses (e.g., custom maintenance pages or mock APIs) with configurable status codes. |
@@ -82,3 +83,40 @@ An extension instance in the wire spec has the following schema:
 ```
 
 Extensions can be enabled, updated, and reordered non-disruptively through the **Aurora Management Console** or via the Control Plane REST API.
+
+---
+
+## Ingress Header Sanitizer (`builtin/ingress-header-sanitizer`)
+
+The Ingress Header Sanitizer acts as the perimeter guard (Phase 0) that runs before all other extensions. It sanitizes incoming request headers to eliminate spoofing risks.
+
+### Modes:
+1. **`denylist` (Default)**: Explicitly strips untrusted headers sent by external clients:
+   ```json
+   {
+     "enabled": true,
+     "mode": "denylist",
+     "denylist": [
+       "traceparent",
+       "x-request-id",
+       "x-user-id",
+       "x-consumer-id"
+     ]
+   }
+   ```
+2. **`allowlist`**: Disables forwarding of all client request headers except those explicitly enumerated:
+   ```json
+   {
+     "enabled": true,
+     "mode": "allowlist",
+     "allowlist": [
+       "authorization",
+       "content-type",
+       "accept"
+     ]
+   }
+   ```
+
+### Cooperation with Tracing:
+When client requests carry spoofed `traceparent` or `X-Request-ID` headers, Ingress Header Sanitizer strips them at ingress. Downstream extensions like `builtin/correlation-id` will then generate clean, authentic IDs without inheriting untrusted client headers.
+

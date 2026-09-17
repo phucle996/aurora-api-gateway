@@ -5,7 +5,7 @@
   "name": "IP CIDR Whitelist & Blacklist",
   "category": "authorization_security",
   "description": "High-speed radix tree client IP filtering.",
-  "renderer": "access-policy",
+  "renderer": "ip-restriction",
   "builtin": true,
   "default_config": {
     "whitelist": [],
