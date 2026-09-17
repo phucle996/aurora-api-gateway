@@ -1,62 +1,77 @@
 [
   {
-    "directory": "/home/phucle/Desktop/aurora-waf",
-    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -I/home/phucle/Desktop/aurora-waf/adapters/nginx/include -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/core -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/os/unix -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/objs -I/home/phucle/Desktop/aurora-waf/build/nginx-deps/root/usr/include -c /home/phucle/Desktop/aurora-waf/adapters/nginx/src/extensions/access.c",
-    "file": "/home/phucle/Desktop/aurora-waf/adapters/nginx/src/extensions/access.c"
+    "directory": ".",
+    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -Iadapters/nginx/include -Ibuild/nginx-source/nginx-1.30.4/src/core -Ibuild/nginx-source/nginx-1.30.4/src/event -Ibuild/nginx-source/nginx-1.30.4/src/event/modules -Ibuild/nginx-source/nginx-1.30.4/src/os/unix -Ibuild/nginx-source/nginx-1.30.4/src/http -Ibuild/nginx-source/nginx-1.30.4/src/http/modules -Ibuild/nginx-source/nginx-1.30.4/objs -Ibuild/nginx-deps/root/usr/include -c adapters/nginx/src/module.c",
+    "file": "adapters/nginx/src/module.c"
   },
   {
-    "directory": "/home/phucle/Desktop/aurora-waf",
-    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -I/home/phucle/Desktop/aurora-waf/adapters/nginx/include -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/core -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/os/unix -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/objs -I/home/phucle/Desktop/aurora-waf/build/nginx-deps/root/usr/include -c /home/phucle/Desktop/aurora-waf/adapters/nginx/src/extensions/canary_release.c",
-    "file": "/home/phucle/Desktop/aurora-waf/adapters/nginx/src/extensions/canary_release.c"
+    "directory": ".",
+    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -Iadapters/nginx/include -Ibuild/nginx-source/nginx-1.30.4/src/core -Ibuild/nginx-source/nginx-1.30.4/src/event -Ibuild/nginx-source/nginx-1.30.4/src/event/modules -Ibuild/nginx-source/nginx-1.30.4/src/os/unix -Ibuild/nginx-source/nginx-1.30.4/src/http -Ibuild/nginx-source/nginx-1.30.4/src/http/modules -Ibuild/nginx-source/nginx-1.30.4/objs -Ibuild/nginx-deps/root/usr/include -c adapters/nginx/src/pipeline.c",
+    "file": "adapters/nginx/src/pipeline.c"
   },
   {
-    "directory": "/home/phucle/Desktop/aurora-waf",
-    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -I/home/phucle/Desktop/aurora-waf/adapters/nginx/include -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/core -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/os/unix -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/objs -I/home/phucle/Desktop/aurora-waf/build/nginx-deps/root/usr/include -c /home/phucle/Desktop/aurora-waf/adapters/nginx/src/extensions/conn_limit.c",
-    "file": "/home/phucle/Desktop/aurora-waf/adapters/nginx/src/extensions/conn_limit.c"
+    "directory": ".",
+    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -Iadapters/nginx/include -Ibuild/nginx-source/nginx-1.30.4/src/core -Ibuild/nginx-source/nginx-1.30.4/src/event -Ibuild/nginx-source/nginx-1.30.4/src/event/modules -Ibuild/nginx-source/nginx-1.30.4/src/os/unix -Ibuild/nginx-source/nginx-1.30.4/src/http -Ibuild/nginx-source/nginx-1.30.4/src/http/modules -Ibuild/nginx-source/nginx-1.30.4/objs -Ibuild/nginx-deps/root/usr/include -c adapters/nginx/src/telemetry.c",
+    "file": "adapters/nginx/src/telemetry.c"
   },
   {
-    "directory": "/home/phucle/Desktop/aurora-waf",
-    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -I/home/phucle/Desktop/aurora-waf/adapters/nginx/include -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/core -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/os/unix -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/objs -I/home/phucle/Desktop/aurora-waf/build/nginx-deps/root/usr/include -c /home/phucle/Desktop/aurora-waf/adapters/nginx/src/extensions/jwt.c",
-    "file": "/home/phucle/Desktop/aurora-waf/adapters/nginx/src/extensions/jwt.c"
+    "directory": ".",
+    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -Iadapters/nginx/include -Ibuild/nginx-source/nginx-1.30.4/src/core -Ibuild/nginx-source/nginx-1.30.4/src/event -Ibuild/nginx-source/nginx-1.30.4/src/event/modules -Ibuild/nginx-source/nginx-1.30.4/src/os/unix -Ibuild/nginx-source/nginx-1.30.4/src/http -Ibuild/nginx-source/nginx-1.30.4/src/http/modules -Ibuild/nginx-source/nginx-1.30.4/objs -Ibuild/nginx-deps/root/usr/include -c adapters/nginx/src/extensions/access.c",
+    "file": "adapters/nginx/src/extensions/access.c"
   },
   {
-    "directory": "/home/phucle/Desktop/aurora-waf",
-    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -I/home/phucle/Desktop/aurora-waf/adapters/nginx/include -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/core -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/os/unix -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/objs -I/home/phucle/Desktop/aurora-waf/build/nginx-deps/root/usr/include -c /home/phucle/Desktop/aurora-waf/adapters/nginx/src/extensions/rate_limit.c",
-    "file": "/home/phucle/Desktop/aurora-waf/adapters/nginx/src/extensions/rate_limit.c"
+    "directory": ".",
+    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -Iadapters/nginx/include -Ibuild/nginx-source/nginx-1.30.4/src/core -Ibuild/nginx-source/nginx-1.30.4/src/event -Ibuild/nginx-source/nginx-1.30.4/src/event/modules -Ibuild/nginx-source/nginx-1.30.4/src/os/unix -Ibuild/nginx-source/nginx-1.30.4/src/http -Ibuild/nginx-source/nginx-1.30.4/src/http/modules -Ibuild/nginx-source/nginx-1.30.4/objs -Ibuild/nginx-deps/root/usr/include -c adapters/nginx/src/extensions/blue_green.c",
+    "file": "adapters/nginx/src/extensions/blue_green.c"
   },
   {
-    "directory": "/home/phucle/Desktop/aurora-waf",
-    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -I/home/phucle/Desktop/aurora-waf/adapters/nginx/include -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/core -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/os/unix -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/objs -I/home/phucle/Desktop/aurora-waf/build/nginx-deps/root/usr/include -c /home/phucle/Desktop/aurora-waf/adapters/nginx/src/extensions/request_size_limit.c",
-    "file": "/home/phucle/Desktop/aurora-waf/adapters/nginx/src/extensions/request_size_limit.c"
+    "directory": ".",
+    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -Iadapters/nginx/include -Ibuild/nginx-source/nginx-1.30.4/src/core -Ibuild/nginx-source/nginx-1.30.4/src/event -Ibuild/nginx-source/nginx-1.30.4/src/event/modules -Ibuild/nginx-source/nginx-1.30.4/src/os/unix -Ibuild/nginx-source/nginx-1.30.4/src/http -Ibuild/nginx-source/nginx-1.30.4/src/http/modules -Ibuild/nginx-source/nginx-1.30.4/objs -Ibuild/nginx-deps/root/usr/include -c adapters/nginx/src/extensions/canary_release.c",
+    "file": "adapters/nginx/src/extensions/canary_release.c"
   },
   {
-    "directory": "/home/phucle/Desktop/aurora-waf",
-    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -I/home/phucle/Desktop/aurora-waf/adapters/nginx/include -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/core -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/os/unix -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/objs -I/home/phucle/Desktop/aurora-waf/build/nginx-deps/root/usr/include -c /home/phucle/Desktop/aurora-waf/adapters/nginx/src/extensions/traffic_shaper.c",
-    "file": "/home/phucle/Desktop/aurora-waf/adapters/nginx/src/extensions/traffic_shaper.c"
+    "directory": ".",
+    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -Iadapters/nginx/include -Ibuild/nginx-source/nginx-1.30.4/src/core -Ibuild/nginx-source/nginx-1.30.4/src/event -Ibuild/nginx-source/nginx-1.30.4/src/event/modules -Ibuild/nginx-source/nginx-1.30.4/src/os/unix -Ibuild/nginx-source/nginx-1.30.4/src/http -Ibuild/nginx-source/nginx-1.30.4/src/http/modules -Ibuild/nginx-source/nginx-1.30.4/objs -Ibuild/nginx-deps/root/usr/include -c adapters/nginx/src/extensions/conn_limit.c",
+    "file": "adapters/nginx/src/extensions/conn_limit.c"
   },
   {
-    "directory": "/home/phucle/Desktop/aurora-waf",
-    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -I/home/phucle/Desktop/aurora-waf/adapters/nginx/include -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/core -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/os/unix -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/objs -I/home/phucle/Desktop/aurora-waf/build/nginx-deps/root/usr/include -c /home/phucle/Desktop/aurora-waf/adapters/nginx/src/extensions/traffic_split.c",
-    "file": "/home/phucle/Desktop/aurora-waf/adapters/nginx/src/extensions/traffic_split.c"
+    "directory": ".",
+    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -Iadapters/nginx/include -Ibuild/nginx-source/nginx-1.30.4/src/core -Ibuild/nginx-source/nginx-1.30.4/src/event -Ibuild/nginx-source/nginx-1.30.4/src/event/modules -Ibuild/nginx-source/nginx-1.30.4/src/os/unix -Ibuild/nginx-source/nginx-1.30.4/src/http -Ibuild/nginx-source/nginx-1.30.4/src/http/modules -Ibuild/nginx-source/nginx-1.30.4/objs -Ibuild/nginx-deps/root/usr/include -c adapters/nginx/src/extensions/jwt.c",
+    "file": "adapters/nginx/src/extensions/jwt.c"
   },
   {
-    "directory": "/home/phucle/Desktop/aurora-waf",
-    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -I/home/phucle/Desktop/aurora-waf/adapters/nginx/include -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/core -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/os/unix -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/objs -I/home/phucle/Desktop/aurora-waf/build/nginx-deps/root/usr/include -c /home/phucle/Desktop/aurora-waf/adapters/nginx/src/module.c",
-    "file": "/home/phucle/Desktop/aurora-waf/adapters/nginx/src/module.c"
+    "directory": ".",
+    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -Iadapters/nginx/include -Ibuild/nginx-source/nginx-1.30.4/src/core -Ibuild/nginx-source/nginx-1.30.4/src/event -Ibuild/nginx-source/nginx-1.30.4/src/event/modules -Ibuild/nginx-source/nginx-1.30.4/src/os/unix -Ibuild/nginx-source/nginx-1.30.4/src/http -Ibuild/nginx-source/nginx-1.30.4/src/http/modules -Ibuild/nginx-source/nginx-1.30.4/objs -Ibuild/nginx-deps/root/usr/include -c adapters/nginx/src/extensions/rate_limit.c",
+    "file": "adapters/nginx/src/extensions/rate_limit.c"
   },
   {
-    "directory": "/home/phucle/Desktop/aurora-waf",
-    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -I/home/phucle/Desktop/aurora-waf/adapters/nginx/include -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/core -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/os/unix -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/objs -I/home/phucle/Desktop/aurora-waf/build/nginx-deps/root/usr/include -c /home/phucle/Desktop/aurora-waf/adapters/nginx/src/pipeline.c",
-    "file": "/home/phucle/Desktop/aurora-waf/adapters/nginx/src/pipeline.c"
+    "directory": ".",
+    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -Iadapters/nginx/include -Ibuild/nginx-source/nginx-1.30.4/src/core -Ibuild/nginx-source/nginx-1.30.4/src/event -Ibuild/nginx-source/nginx-1.30.4/src/event/modules -Ibuild/nginx-source/nginx-1.30.4/src/os/unix -Ibuild/nginx-source/nginx-1.30.4/src/http -Ibuild/nginx-source/nginx-1.30.4/src/http/modules -Ibuild/nginx-source/nginx-1.30.4/objs -Ibuild/nginx-deps/root/usr/include -c adapters/nginx/src/extensions/request_mirror.c",
+    "file": "adapters/nginx/src/extensions/request_mirror.c"
   },
   {
-    "directory": "/home/phucle/Desktop/aurora-waf",
-    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -I/home/phucle/Desktop/aurora-waf/adapters/nginx/include -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/core -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/os/unix -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/objs -I/home/phucle/Desktop/aurora-waf/build/nginx-deps/root/usr/include -c /home/phucle/Desktop/aurora-waf/adapters/nginx/src/telemetry.c",
-    "file": "/home/phucle/Desktop/aurora-waf/adapters/nginx/src/telemetry.c"
+    "directory": ".",
+    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -Iadapters/nginx/include -Ibuild/nginx-source/nginx-1.30.4/src/core -Ibuild/nginx-source/nginx-1.30.4/src/event -Ibuild/nginx-source/nginx-1.30.4/src/event/modules -Ibuild/nginx-source/nginx-1.30.4/src/os/unix -Ibuild/nginx-source/nginx-1.30.4/src/http -Ibuild/nginx-source/nginx-1.30.4/src/http/modules -Ibuild/nginx-source/nginx-1.30.4/objs -Ibuild/nginx-deps/root/usr/include -c adapters/nginx/src/extensions/request_size_limit.c",
+    "file": "adapters/nginx/src/extensions/request_size_limit.c"
   },
   {
-    "directory": "/home/phucle/Desktop/aurora-waf",
-    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -I/home/phucle/Desktop/aurora-waf/adapters/nginx/include -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/core -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/event/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/os/unix -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/src/http/modules -I/home/phucle/Desktop/aurora-waf/build/nginx-source/nginx-1.30.4/objs -I/home/phucle/Desktop/aurora-waf/build/nginx-deps/root/usr/include -c /home/phucle/Desktop/aurora-waf/adapters/nginx/tests/ffi_smoke.c",
-    "file": "/home/phucle/Desktop/aurora-waf/adapters/nginx/tests/ffi_smoke.c"
+    "directory": ".",
+    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -Iadapters/nginx/include -Ibuild/nginx-source/nginx-1.30.4/src/core -Ibuild/nginx-source/nginx-1.30.4/src/event -Ibuild/nginx-source/nginx-1.30.4/src/event/modules -Ibuild/nginx-source/nginx-1.30.4/src/os/unix -Ibuild/nginx-source/nginx-1.30.4/src/http -Ibuild/nginx-source/nginx-1.30.4/src/http/modules -Ibuild/nginx-source/nginx-1.30.4/objs -Ibuild/nginx-deps/root/usr/include -c adapters/nginx/src/extensions/request_termination.c",
+    "file": "adapters/nginx/src/extensions/request_termination.c"
+  },
+  {
+    "directory": ".",
+    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -Iadapters/nginx/include -Ibuild/nginx-source/nginx-1.30.4/src/core -Ibuild/nginx-source/nginx-1.30.4/src/event -Ibuild/nginx-source/nginx-1.30.4/src/event/modules -Ibuild/nginx-source/nginx-1.30.4/src/os/unix -Ibuild/nginx-source/nginx-1.30.4/src/http -Ibuild/nginx-source/nginx-1.30.4/src/http/modules -Ibuild/nginx-source/nginx-1.30.4/objs -Ibuild/nginx-deps/root/usr/include -c adapters/nginx/src/extensions/traffic_shaper.c",
+    "file": "adapters/nginx/src/extensions/traffic_shaper.c"
+  },
+  {
+    "directory": ".",
+    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -Iadapters/nginx/include -Ibuild/nginx-source/nginx-1.30.4/src/core -Ibuild/nginx-source/nginx-1.30.4/src/event -Ibuild/nginx-source/nginx-1.30.4/src/event/modules -Ibuild/nginx-source/nginx-1.30.4/src/os/unix -Ibuild/nginx-source/nginx-1.30.4/src/http -Ibuild/nginx-source/nginx-1.30.4/src/http/modules -Ibuild/nginx-source/nginx-1.30.4/objs -Ibuild/nginx-deps/root/usr/include -c adapters/nginx/src/extensions/traffic_split.c",
+    "file": "adapters/nginx/src/extensions/traffic_split.c"
+  },
+  {
+    "directory": ".",
+    "command": "gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H -Iadapters/nginx/include -Ibuild/nginx-source/nginx-1.30.4/src/core -Ibuild/nginx-source/nginx-1.30.4/src/event -Ibuild/nginx-source/nginx-1.30.4/src/event/modules -Ibuild/nginx-source/nginx-1.30.4/src/os/unix -Ibuild/nginx-source/nginx-1.30.4/src/http -Ibuild/nginx-source/nginx-1.30.4/src/http/modules -Ibuild/nginx-source/nginx-1.30.4/objs -Ibuild/nginx-deps/root/usr/include -c adapters/nginx/tests/ffi_smoke.c",
+    "file": "adapters/nginx/tests/ffi_smoke.c"
   }
 ]
