@@ -25,6 +25,7 @@ ngx_int_t ngx_http_gateway_telemetry_zone_init(ngx_shm_zone_t *zone,
 static ngx_int_t ngx_http_gateway_generation(ngx_http_request_t *r,
                                              ngx_http_variable_value_t *v,
                                              uintptr_t data) {
+  (void)data;
   ngx_http_gateway_conf_t *conf =
       ngx_http_get_module_loc_conf(r, ngx_http_gateway_module);
   u_char *p;
@@ -38,10 +39,7 @@ static ngx_int_t ngx_http_gateway_generation(ngx_http_request_t *r,
     return NGX_ERROR;
   }
   v->len =
-      ngx_sprintf(p, "%uL",
-                  (data == 1 ? aurora_access_generation(conf->access_engine)
-                             : 0ULL)) -
-      p;
+      ngx_sprintf(p, "%uL", aurora_access_generation(conf->access_engine)) - p;
   v->data = p;
   v->valid = 1;
   v->no_cacheable = 1;
@@ -66,35 +64,10 @@ static ngx_int_t ngx_http_gateway_variable_log_active(
   return NGX_OK;
 }
 
-static ngx_int_t ngx_http_gateway_variable_waf_action(
-    ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data) {
-  (void)r;
-  (void)data;
-  v->len = 0;
-  v->data = (u_char *)"";
-  v->valid = 1;
-  v->no_cacheable = 1;
-  v->not_found = 0;
-  return NGX_OK;
-}
-
 /* Optional observability variables, not an all-workers activation
  * acknowledgement. */
 ngx_int_t ngx_http_gateway_variables(ngx_conf_t *cf) {
-  ngx_str_t name = ngx_string("gateway_waf_generation");
-  ngx_http_variable_t *v =
-      ngx_http_add_variable(cf, &name, NGX_HTTP_VAR_NOCACHEABLE);
-  if (v == NULL) {
-    return NGX_ERROR;
-  }
-  v->get_handler = ngx_http_gateway_generation;
-
-  ngx_str_t legacy_name = ngx_string("aurora_waf_generation");
-  v = ngx_http_add_variable(cf, &legacy_name, NGX_HTTP_VAR_NOCACHEABLE);
-  if (v == NULL) {
-    return NGX_ERROR;
-  }
-  v->get_handler = ngx_http_gateway_generation;
+  ngx_http_variable_t *v;
 
   ngx_str_t access_name = ngx_string("gateway_access_generation");
   v = ngx_http_add_variable(cf, &access_name, NGX_HTTP_VAR_NOCACHEABLE);
@@ -102,7 +75,6 @@ ngx_int_t ngx_http_gateway_variables(ngx_conf_t *cf) {
     return NGX_ERROR;
   }
   v->get_handler = ngx_http_gateway_generation;
-  v->data = 1;
 
   ngx_str_t legacy_access_name = ngx_string("aurora_access_generation");
   v = ngx_http_add_variable(cf, &legacy_access_name, NGX_HTTP_VAR_NOCACHEABLE);
@@ -110,7 +82,6 @@ ngx_int_t ngx_http_gateway_variables(ngx_conf_t *cf) {
     return NGX_ERROR;
   }
   v->get_handler = ngx_http_gateway_generation;
-  v->data = 1;
 
   ngx_str_t up_name = ngx_string("gateway_upstream");
   v = ngx_http_add_variable(cf, &up_name, NGX_HTTP_VAR_NOCACHEABLE);
@@ -168,13 +139,6 @@ ngx_int_t ngx_http_gateway_variables(ngx_conf_t *cf) {
     return NGX_ERROR;
   }
   v->get_handler = ngx_http_gateway_variable_log_active;
-
-  ngx_str_t waf_action_name = ngx_string("gateway_waf_action");
-  v = ngx_http_add_variable(cf, &waf_action_name, NGX_HTTP_VAR_NOCACHEABLE);
-  if (v == NULL) {
-    return NGX_ERROR;
-  }
-  v->get_handler = ngx_http_gateway_variable_waf_action;
 
   return NGX_OK;
 }

@@ -24,6 +24,6 @@ Input is normalized URI; errors return HTTP 503; rate limiting returns HTTP 429 
 
 ## Access logs and exporter integration
 
-The [Docker node template](../../deploy/docker/nginx-node.conf.template) uses JSON syslog over `/dev/shm/aurora_access.sock`, gated by `$gateway_log_active`. The agent's log consumers control that flag through shared memory. `$gateway_waf_action` supplies the block marker used by std-log and OTLP severity filtering.
+The [Docker node template](../../deploy/docker/nginx-node.conf.template) uses JSON syslog over `/dev/shm/aurora_access.sock`, gated by `$gateway_log_active`. The agent's log consumers control that flag through shared memory.
 
 A custom NGINX configuration must explicitly include the equivalent log directives; enabling an agent exporter alone does not change arbitrary NGINX templates. Request duration from `$request_time` is in seconds. See [observability](../../docs/observability.md) for consumer lifecycles and delivery limits.

@@ -127,10 +127,6 @@ ngx_int_t ngx_http_gateway_eval_access(ngx_http_request_t *r,
   if (status != 0 || decision.action > 1) {
     return NGX_HTTP_SERVICE_UNAVAILABLE;
   }
-  if (decision.log_matches) {
-    aurora_access_record_match(decision.generation, decision.rule_id, input.ip,
-                               input.ip_len);
-  }
   if (decision.action == 1) {
     aurora_telemetry_record_access(1);
     return NGX_HTTP_FORBIDDEN;

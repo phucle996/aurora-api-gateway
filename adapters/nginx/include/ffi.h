@@ -40,9 +40,6 @@ uint64_t aurora_access_generation(const AuroraAccessEngine *engine);
 uint32_t aurora_access_evaluate(const AuroraAccessEngine *engine,
                                 const AuroraAccessInput *input,
                                 AuroraDecision *out);
-uint32_t aurora_access_record_match(uint64_t generation, uint64_t rule_id,
-                                    const uint8_t *ip, size_t ip_len);
-uint32_t aurora_access_swap_engine(const uint8_t *data, size_t len);
 
 
 
@@ -364,17 +361,6 @@ uint32_t aurora_request_termination_evaluate(
     const AuroraIncomingHeader *headers, size_t headers_count,
     AuroraTerminationDecision *out_decision);
 
-/* Control Plane Runtime & Telemetry */
-uint32_t aurora_waf_start_runtime(const char *controller_url,
-                                  const char *node_id, const char *token,
-                                  uint32_t interval_seconds,
-                                  int64_t active_release_id,
-                                  const char *policy_path,
-                                  const char *access_path, uint32_t is_leader);
-uint32_t aurora_waf_start_telemetry(const char *controller_url,
-                                    const char *node_id, const char *token,
-                                    uint32_t interval_seconds,
-                                    int64_t active_release_id);
 void aurora_waf_stop_telemetry(void);
 uint32_t aurora_waf_bind_telemetry(void *shared, size_t len, void *active);
 uint32_t aurora_waf_format_prometheus_metrics(const char *node_id,
