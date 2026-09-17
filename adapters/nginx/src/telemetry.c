@@ -40,7 +40,7 @@ static ngx_int_t ngx_http_gateway_generation(ngx_http_request_t *r,
   v->len =
       ngx_sprintf(p, "%uL",
                   (data == 1 ? aurora_access_generation(conf->access_engine)
-                             : aurora_waf_generation(conf->engine))) -
+                             : 0ULL)) -
       p;
   v->data = p;
   v->valid = 1;
@@ -68,16 +68,10 @@ static ngx_int_t ngx_http_gateway_variable_log_active(
 
 static ngx_int_t ngx_http_gateway_variable_waf_action(
     ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data) {
+  (void)r;
   (void)data;
-  ngx_http_gateway_ctx_t *ctx =
-      ngx_http_get_module_ctx(r, ngx_http_gateway_module);
-  if (ctx != NULL && ctx->is_waf_blocked) {
-    v->len = 5;
-    v->data = (u_char *)"block";
-  } else {
-    v->len = 0;
-    v->data = (u_char *)"";
-  }
+  v->len = 0;
+  v->data = (u_char *)"";
   v->valid = 1;
   v->no_cacheable = 1;
   v->not_found = 0;

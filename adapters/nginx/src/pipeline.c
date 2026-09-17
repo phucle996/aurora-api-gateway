@@ -2,8 +2,7 @@
 
 /*
  * Handler chính của Gateway xử lý request trong HTTP Access Phase.
- * Điều phối tuần tự qua các stage: Access Control -> Core WAF -> JWT Auth ->
- * Rate Limiting.
+ * Điều phối tuần tự qua các stage: Access Control -> JWT Auth -> Rate Limiting.
  */
 ngx_int_t ngx_http_gateway_handler(ngx_http_request_t *r) {
   ngx_http_gateway_conf_t *conf =
@@ -28,11 +27,6 @@ ngx_int_t ngx_http_gateway_handler(ngx_http_request_t *r) {
     return rc;
   }
 
-  /* Stage 2: Core WAF (Path inspection / attack rules) */
-  rc = ngx_http_gateway_eval_waf(r, conf, host);
-  if (rc != NGX_DECLINED) {
-    return rc;
-  }
 
   /* Stage 3: In-process JWT Authentication */
   rc = ngx_http_gateway_eval_jwt(r, conf, host);

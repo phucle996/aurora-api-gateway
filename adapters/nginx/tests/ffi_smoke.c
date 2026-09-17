@@ -10,35 +10,37 @@
 #include <time.h>
 
 int main(void) {
-    const char *policy = "{\"schema_version\":1,\"block_paths\":[\"/blocked\"]}";
-    uint32_t action;
-    AuroraEngine *engine = NULL;
     AuroraDecision decision;
     _Static_assert(sizeof(AuroraDecision) == 32, "ABI decision layout changed");
     assert(aurora_waf_abi_version() == 4);
-    assert(aurora_waf_create(NULL, 0, &engine) == 1 && engine == NULL);
-    assert(aurora_waf_create((const uint8_t *)policy, strlen(policy), NULL) == 1);
-    assert(aurora_waf_create((const uint8_t *)policy, 65537, &engine) == 1);
-    for (int i = 0; i < 1000; i++) {
-        assert(aurora_waf_create((const uint8_t *)policy, strlen(policy), &engine) == 0);
-        assert(aurora_waf_evaluate_v3(engine, (const uint8_t *)"/blocked", 8, &decision) == 0);
-        assert(decision.action == 1 && decision.rule_id == 1 && decision.generation == 0 && decision.reserved == 0);
-        assert(aurora_waf_evaluate_v3(engine, (const uint8_t *)"/ok", 3, NULL) == 1);
-        assert(aurora_waf_evaluate_v3(NULL, (const uint8_t *)"/ok", 3, &decision) == 1 && decision.action == 1);
-        assert(aurora_waf_evaluate(engine, (const uint8_t *)"/blocked", 8, &action) == 0 && action == 1);
-        assert(aurora_waf_evaluate(engine, (const uint8_t *)"/ok", 3, &action) == 0 && action == 0);
-        assert(aurora_waf_evaluate(engine, NULL, 0, &action) == 1 && action == 1);
-        assert(aurora_waf_evaluate(NULL, (const uint8_t *)"/ok", 3, &action) == 1 && action == 1);
-        assert(aurora_waf_evaluate(engine, (const uint8_t *)"/ok", 8193, &action) == 1);
-        aurora_waf_destroy(engine);
-    }
-    aurora_waf_destroy(NULL);
-    policy = "{\"schema_version\":2,\"generation\":9,\"rules\":[{\"id\":1,\"path\":\"/x\",\"action\":\"log\",\"score\":3,\"priority\":0},{\"id\":2,\"path\":\"/x\",\"action\":\"block\",\"score\":5,\"priority\":1}]}";
-    assert(aurora_waf_create((const uint8_t *)policy, strlen(policy), &engine) == 0);
-    assert(aurora_waf_generation(engine) == 9);
-    assert(aurora_waf_evaluate_v3(engine, (const uint8_t *)"/x", 2, &decision) == 0);
-    assert(decision.generation == 9 && decision.rule_id == 2 && decision.action == 1 && decision.score == 8 && decision.log_matches == 1);
-    aurora_waf_destroy(engine);
+
+    const char *access_policy = "{\"schema_version\":1,\"generation\":9,\"rules\":[{\"id\":101,\"priority\":1,\"action\":\"block\",\"networks\":[\"192.168.1.0/24\"],\"host\":\"*\",\"path_prefix\":\"/admin\",\"method\":\"*\",\"schedule\":\"always\",\"expires_at\":0,\"log\":true,\"reputation\":false,\"alert\":false}]}";
+    AuroraAccessEngine *access_engine = NULL;
+    assert(aurora_access_create(NULL, 0, &access_engine) == 1 && access_engine == NULL);
+    assert(aurora_access_create((const uint8_t *)access_policy, strlen(access_policy), &access_engine) == 0);
+    assert(aurora_access_generation(access_engine) == 9);
+
+    const uint8_t ip[] = "192.168.1.50";
+    const uint8_t host[] = "example.com";
+    const uint8_t path[] = "/admin/users";
+    const uint8_t method[] = "GET";
+    AuroraAccessInput input = {
+        .ip = ip,
+        .ip_len = strlen((const char *)ip),
+        .host = host,
+        .host_len = strlen((const char *)host),
+        .path = path,
+        .path_len = strlen((const char *)path),
+        .method = method,
+        .method_len = strlen((const char *)method),
+        .now = 1000,
+    };
+    assert(aurora_access_evaluate(access_engine, &input, &decision) == 0);
+    assert(decision.action == 1 && decision.rule_id == 101 && decision.generation == 9);
+
+    aurora_access_destroy(access_engine);
+    aurora_access_destroy(NULL);
+
     // Same shared-memory contract as the NGINX slab zone, with real processes.
     _Atomic uint64_t *shared = mmap(NULL, 4096, PROT_READ | PROT_WRITE,
                                     MAP_SHARED | MAP_ANONYMOUS, -1, 0);
@@ -47,15 +49,14 @@ int main(void) {
     assert(aurora_waf_bind_telemetry(shared, 63, shared + 8) == 1);
     assert(aurora_waf_bind_telemetry((char *)shared + 1, 64, shared + 8) == 1);
     assert(aurora_waf_bind_telemetry(shared, 64, shared + 8) == 0);
-    policy = "{\"schema_version\":1,\"block_paths\":[\"/blocked\"]}";
-    assert(aurora_waf_create((const uint8_t *)policy, strlen(policy), &engine) == 0);
+
     for (int worker = 0; worker < 4; worker++) {
         pid_t pid = fork();
         assert(pid >= 0);
         if (pid == 0) {
             for (int i = 0; i < 100000; i++) {
-                assert(aurora_waf_evaluate(engine, (const uint8_t *)"/ok", 3, &action) == 0 && action == 0);
-                assert(aurora_waf_evaluate(engine, (const uint8_t *)"/blocked", 8, &action) == 0 && action == 1);
+                aurora_telemetry_record_waf(0);
+                aurora_telemetry_record_waf(1);
             }
             _exit(0);
         }
@@ -70,7 +71,6 @@ int main(void) {
     // A replacement worker binding the existing zone must not reset counters.
     assert(aurora_waf_bind_telemetry(shared, 64, shared + 8) == 0);
     assert(atomic_load(shared) == 800000);
-    aurora_waf_destroy(engine);
     uint8_t metrics[4096];
     size_t written = 0;
     assert(aurora_waf_format_prometheus_metrics("node", metrics, sizeof(metrics) - 1, &written) == 0);

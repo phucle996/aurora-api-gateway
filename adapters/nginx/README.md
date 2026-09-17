@@ -16,9 +16,8 @@ Artifact: `build/modules/ngx_http_gateway_module.so`, loaded via `load_module`.
   - `src/extensions/access.c` (`gateway_access_policy`)
   - `src/extensions/jwt.c` (`gateway_jwt_policy`)
   - `src/extensions/rate_limit.c` (`gateway_rate_limit_policy`)
-  - `src/extensions/waf.c` (`gateway_waf_policy`, `gateway_waf_mode`)
 
-Directives: `gateway on|off`, `gateway_waf_policy`, `gateway_waf_mode`, `gateway_access_policy`, `gateway_jwt_policy`, `gateway_rate_limit_policy`, `gateway_metrics`.
+Directives: `gateway on|off`, `gateway_access_policy`, `gateway_jwt_policy`, `gateway_rate_limit_policy`, `gateway_metrics`.
 Input is normalized URI; errors return HTTP 503; rate limiting returns HTTP 429 with `Retry-After`. `satisfy any` is rejected when enabled.
 
 

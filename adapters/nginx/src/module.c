@@ -7,8 +7,6 @@ static char *ngx_http_gateway_merge_conf(ngx_conf_t *cf, void *parent,
 static ngx_int_t ngx_http_gateway_init_process(ngx_cycle_t *cycle);
 static void ngx_http_gateway_exit_process(ngx_cycle_t *cycle);
 
-static ngx_conf_enum_t ngx_http_gateway_modes[] = {
-    {ngx_string("enforce"), 0}, {ngx_string("audit"), 1}, {ngx_null_string, 0}};
 
 static char *ngx_http_gateway_noop_slot(ngx_conf_t *cf, ngx_command_t *cmd,
                                         void *conf) {
@@ -102,20 +100,6 @@ static ngx_command_t ngx_http_gateway_commands[] = {
      ngx_conf_set_str_slot, NGX_HTTP_LOC_CONF_OFFSET,
      offsetof(ngx_http_gateway_conf_t, request_termination_policy), NULL},
 
-    /* Extension: Core WAF Policy */
-    {ngx_string("gateway_waf_policy"),
-     NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF |
-         NGX_CONF_TAKE1,
-     ngx_conf_set_str_slot, NGX_HTTP_LOC_CONF_OFFSET,
-     offsetof(ngx_http_gateway_conf_t, policy), NULL},
-
-    /* Extension: Core WAF Mode */
-    {ngx_string("gateway_waf_mode"),
-     NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF |
-         NGX_CONF_TAKE1,
-     ngx_conf_set_enum_slot, NGX_HTTP_LOC_CONF_OFFSET,
-     offsetof(ngx_http_gateway_conf_t, mode), ngx_http_gateway_modes},
-
     /* Metrics Directive */
     {ngx_string("gateway_metrics"), NGX_HTTP_LOC_CONF | NGX_CONF_NOARGS,
      ngx_http_gateway_metrics_directive, 0, 0, NULL},
@@ -129,23 +113,11 @@ static ngx_command_t ngx_http_gateway_commands[] = {
      ngx_conf_set_flag_slot, NGX_HTTP_LOC_CONF_OFFSET,
      offsetof(ngx_http_gateway_conf_t, enabled), NULL},
 
-    {ngx_string("aurora_waf_policy"),
-     NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF |
-         NGX_CONF_TAKE1,
-     ngx_conf_set_str_slot, NGX_HTTP_LOC_CONF_OFFSET,
-     offsetof(ngx_http_gateway_conf_t, policy), NULL},
-
     {ngx_string("aurora_access_policy"),
      NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF |
          NGX_CONF_TAKE1,
      ngx_conf_set_str_slot, NGX_HTTP_LOC_CONF_OFFSET,
      offsetof(ngx_http_gateway_conf_t, access_policy), NULL},
-
-    {ngx_string("aurora_waf_mode"),
-     NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF |
-         NGX_CONF_TAKE1,
-     ngx_conf_set_enum_slot, NGX_HTTP_LOC_CONF_OFFSET,
-     offsetof(ngx_http_gateway_conf_t, mode), ngx_http_gateway_modes},
 
     /* Legacy no-op directives (agent manages daemon/node orchestration now) */
     {ngx_string("aurora_waf_controller"),
@@ -221,7 +193,6 @@ static void *ngx_http_gateway_create_conf(ngx_conf_t *cf) {
     return NULL;
   }
   conf->enabled = NGX_CONF_UNSET;
-  conf->mode = NGX_CONF_UNSET_UINT;
   return conf;
 }
 
@@ -231,8 +202,6 @@ static char *ngx_http_gateway_merge_conf(ngx_conf_t *cf, void *parent,
 
   /* Kế thừa giá trị mặc định từ parent nếu child chưa thiết lập */
   ngx_conf_merge_value(conf->enabled, prev->enabled, 0);
-  ngx_conf_merge_uint_value(conf->mode, prev->mode, 0);
-  ngx_conf_merge_str_value(conf->policy, prev->policy, "");
 
   /* Merge từng extension độc lập */
   if (ngx_http_gateway_merge_access(cf, prev, conf) != NGX_CONF_OK) {
@@ -268,9 +237,6 @@ static char *ngx_http_gateway_merge_conf(ngx_conf_t *cf, void *parent,
   }
   if (ngx_http_gateway_merge_request_termination(cf, prev, conf) !=
       NGX_CONF_OK) {
-    return NGX_CONF_ERROR;
-  }
-  if (ngx_http_gateway_merge_waf(cf, prev, conf) != NGX_CONF_OK) {
     return NGX_CONF_ERROR;
   }
 
