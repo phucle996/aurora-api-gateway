@@ -50,7 +50,7 @@ tokio-util = "0.7"
 libc = "0.2"
 uuid = { version = "1", features = ["v4"] }
 aurora-engine = { path = "../engine" }
-opentelemetry-proto = { version = "0.32", default-features = false, features = ["gen-tonic", "metrics", "logs", "trace", "with-serde"] }
+opentelemetry-proto = { version = "0.33", default-features = false, features = ["gen-tonic", "metrics", "logs", "trace", "with-serde"] }
 x509-parser = "0.18"
 
 [build-dependencies]
