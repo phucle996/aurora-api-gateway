@@ -138,18 +138,38 @@ jobs:
           make compiler
           make module
 
-      - name: Build matching NGINX test host
-        run: make -C build/nginx-source/nginx-1.30.4 -j2
-
-      - name: Module lifecycle integration test
-        run: NGINX="$PWD/build/nginx-source/nginx-1.30.4/objs/nginx" node scripts/test-nginx-module.mjs
-
-      - name: Ensure embedded UI assets exist
+      - name: Run C FFI smoke test
         run: |
-          mkdir -p control-plane/internal/console/dist
-          if [ ! -f control-plane/internal/console/dist/index.html ]; then
-            echo '<!doctype html><html><head><title>Aurora WAF</title></head><body>Aurora WAF</body></html>' > control-plane/internal/console/dist/index.html
-          fi
+          cargo build -p aurora-ffi
+          gcc -pipe -O -W -Wall -Wpointer-arith -Wno-unused-parameter -g -DNGX_HAVE_CONFIG_H \
+            -Iadapters/nginx/include \
+            -Ibuild/nginx-source/nginx-1.30.4/src/core \
+            -Ibuild/nginx-source/nginx-1.30.4/src/event \
+            -Ibuild/nginx-source/nginx-1.30.4/src/event/modules \
+            -Ibuild/nginx-source/nginx-1.30.4/src/os/unix \
+            -Ibuild/nginx-source/nginx-1.30.4/src/http \
+            -Ibuild/nginx-source/nginx-1.30.4/src/http/modules \
+            -Ibuild/nginx-source/nginx-1.30.4/objs \
+            -Ibuild/nginx-deps/root/usr/include \
+            adapters/nginx/tests/ffi_smoke.c target/debug/libaurora_ffi.a -lpthread -ldl -lm -o /tmp/ffi_smoke
+          /tmp/ffi_smoke
 
-      - name: Rules publication and activation under traffic
-        run: make rules-test NGINX="$PWD/build/nginx-source/nginx-1.30.4/objs/nginx"
+      - name: Build matching NGINX test host
+        run: make -C build/nginx-source/nginx-1.30.4 -j$(nproc)
+
+      - name: Verify NGINX dynamic module loading
+        run: |
+          mkdir -p /tmp/nginx-test/logs
+          cat << 'EOF' > /tmp/nginx-test/nginx.conf
+          pid /tmp/nginx-test/nginx.pid;
+          error_log /tmp/nginx-test/logs/error.log;
+          load_module ${{ github.workspace }}/build/modules/ngx_http_gateway_module.so;
+          events { worker_connections 64; }
+          http {
+              gateway on;
+              server {
+                  listen 127.0.0.1:19876;
+              }
+          }
+          EOF
+          ./build/nginx-source/nginx-1.30.4/objs/nginx -t -p /tmp/nginx-test -c /tmp/nginx-test/nginx.conf

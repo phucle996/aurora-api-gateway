@@ -1,4 +1,4 @@
-.PHONY: all build ui controller agent gateway install uninstall clean
+.PHONY: all build ui controller agent gateway module compiler install uninstall clean
 
 all: build
 
@@ -26,6 +26,14 @@ agent:
 # 4. Build static aurora-gateway (NGINX 1.30.4 + in-tree module + Rust FFI Engine)
 gateway:
 	bash scripts/build-nginx-gateway.sh
+
+# 5. Build dynamic module
+module:
+	bash scripts/build-nginx-module.sh
+
+# 6. Build compiler binary
+compiler:
+	cargo build --locked -p aurora-engine --bin aurora-compile --release
 
 # 5. Install systemd services and binaries from A to Z
 install: build
