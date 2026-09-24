@@ -46,7 +46,7 @@ jobs:
           cache-dependency-path: ui/package-lock.json
 
       - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpcre2-dev
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpcre2-dev protobuf-compiler
 
       # ── Rust binaries ──────────────────────────────────────────────────────
       - name: Build aurora-compile (Rust compiler binary)
