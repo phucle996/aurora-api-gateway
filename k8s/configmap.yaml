@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aurora-config
+  namespace: aurora-system
+data:
+  AURORA_HTTP_ADDR: "0.0.0.0:8080"
+  AURORA_GRPC_ADDR: "0.0.0.0:9099"
+  AURORA_SQLITE_PATH: "/data/aurora.db"
+  CONTROLLER_URL: "http://aurora-control-plane.aurora-system.svc.cluster.local:8080"
+  HEARTBEAT_INTERVAL: "5"

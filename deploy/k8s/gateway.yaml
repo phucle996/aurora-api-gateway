@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aurora-gateway
+  namespace: aurora-system
+  labels:
+    app.kubernetes.io/name: aurora-api-gateway
+    app.kubernetes.io/component: gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aurora-api-gateway
+        app.kubernetes.io/component: gateway
+    spec:
+      containers:
+        - name: gateway
+          image: ghcr.io/phucle996/gateway:v0.1.0
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: aurora-config
+            - secretRef:
+                name: aurora-secrets
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+            - name: https
+              containerPort: 443
+              protocol: TCP
+            - name: metrics
+              containerPort: 9145
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 9145
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 9145
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: policy
+              mountPath: /var/lib/aurora-policy
+            - name: routing
+              mountPath: /var/lib/aurora-routing
+      volumes:
+        - name: policy
+          emptyDir: {}
+        - name: routing
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aurora-gateway
+  namespace: aurora-system
+  labels:
+    app.kubernetes.io/name: aurora-api-gateway
+    app.kubernetes.io/component: gateway
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/component: gateway
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      nodePort: 30080
+      protocol: TCP
+    - name: https
+      port: 443
+      targetPort: 443
+      nodePort: 30443
+      protocol: TCP
+    - name: metrics
+      port: 9145
+      targetPort: 9145
+      nodePort: 30914
+      protocol: TCP

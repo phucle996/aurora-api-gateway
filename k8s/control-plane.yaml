@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aurora-control-plane
+  namespace: aurora-system
+  labels:
+    app.kubernetes.io/name: aurora-api-gateway
+    app.kubernetes.io/component: control-plane
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: control-plane
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aurora-api-gateway
+        app.kubernetes.io/component: control-plane
+    spec:
+      containers:
+        - name: control-plane
+          image: ghcr.io/phucle996/control-plane:v0.1.0
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: aurora-config
+            - secretRef:
+                name: aurora-secrets
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: grpc
+              containerPort: 9099
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aurora-control-plane
+  namespace: aurora-system
+  labels:
+    app.kubernetes.io/name: aurora-api-gateway
+    app.kubernetes.io/component: control-plane
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/component: control-plane
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+    - name: grpc
+      port: 9099
+      targetPort: 9099
+      protocol: TCP
