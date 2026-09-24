@@ -144,20 +144,100 @@ pub fn format_prometheus(node_id: &str, m: &NodeMetrics) -> String {
         g.http.requests_total
     ));
 
-    // 6. Core WAF Decisions
-    out.push_str("# HELP gateway_waf_evaluations_total Core WAF evaluations\n");
-    out.push_str("# TYPE gateway_waf_evaluations_total counter\n");
+    // 6. L7 Traffic Volume
+    out.push_str("# HELP gateway_request_bytes_in_total Total request bytes received\n");
+    out.push_str("# TYPE gateway_request_bytes_in_total counter\n");
     out.push_str(&format!(
-        "gateway_waf_evaluations_total{{node_id=\"{node_id}\",action=\"allow\"}} {}\n",
-        g.waf.allow
+        "gateway_request_bytes_in_total{{node_id=\"{node_id}\"}} {}\n\n",
+        g.l7_traffic.request_bytes_in
+    ));
+
+    out.push_str("# HELP gateway_response_bytes_out_total Total response bytes sent\n");
+    out.push_str("# TYPE gateway_response_bytes_out_total counter\n");
+    out.push_str(&format!(
+        "gateway_response_bytes_out_total{{node_id=\"{node_id}\"}} {}\n\n",
+        g.l7_traffic.response_bytes_out
+    ));
+
+    out.push_str("# HELP gateway_requests_ssl_total Total requests over SSL/TLS\n");
+    out.push_str("# TYPE gateway_requests_ssl_total counter\n");
+    out.push_str(&format!(
+        "gateway_requests_ssl_total{{node_id=\"{node_id}\"}} {}\n\n",
+        g.l7_traffic.requests_ssl
+    ));
+
+    out.push_str(
+        "# HELP gateway_requests_matched_total Requests matched by at least one extension\n",
+    );
+    out.push_str("# TYPE gateway_requests_matched_total counter\n");
+    out.push_str(&format!(
+        "gateway_requests_matched_total{{node_id=\"{node_id}\"}} {}\n\n",
+        g.l7_traffic.requests_matched
+    ));
+
+    // 7. L4 SSL/TLS
+    out.push_str("# HELP gateway_ssl_handshakes_total SSL/TLS handshake outcomes\n");
+    out.push_str("# TYPE gateway_ssl_handshakes_total counter\n");
+    out.push_str(&format!(
+        "gateway_ssl_handshakes_total{{node_id=\"{node_id}\",result=\"ok\"}} {}\n",
+        g.ssl
+            .handshakes_total
+            .saturating_sub(g.ssl.handshakes_failed)
     ));
     out.push_str(&format!(
-        "gateway_waf_evaluations_total{{node_id=\"{node_id}\",action=\"block\"}} {}\n",
-        g.waf.block
+        "gateway_ssl_handshakes_total{{node_id=\"{node_id}\",result=\"failed\"}} {}\n\n",
+        g.ssl.handshakes_failed
+    ));
+
+    out.push_str("# HELP gateway_ssl_sessions_reused_total SSL/TLS sessions reused\n");
+    out.push_str("# TYPE gateway_ssl_sessions_reused_total counter\n");
+    out.push_str(&format!(
+        "gateway_ssl_sessions_reused_total{{node_id=\"{node_id}\"}} {}\n\n",
+        g.ssl.sessions_reused
+    ));
+
+    // 8. Upstream
+    out.push_str("# HELP gateway_upstream_requests_total Total upstream requests\n");
+    out.push_str("# TYPE gateway_upstream_requests_total counter\n");
+    out.push_str(&format!(
+        "gateway_upstream_requests_total{{node_id=\"{node_id}\"}} {}\n\n",
+        g.upstream.requests_total
+    ));
+
+    out.push_str("# HELP gateway_upstream_responses_total Upstream responses by status class\n");
+    out.push_str("# TYPE gateway_upstream_responses_total counter\n");
+    out.push_str(&format!(
+        "gateway_upstream_responses_total{{node_id=\"{node_id}\",status=\"2xx\"}} {}\n",
+        g.upstream.responses_2xx
     ));
     out.push_str(&format!(
-        "gateway_waf_evaluations_total{{node_id=\"{node_id}\",action=\"audit\"}} {}\n\n",
-        g.waf.audit
+        "gateway_upstream_responses_total{{node_id=\"{node_id}\",status=\"5xx\"}} {}\n\n",
+        g.upstream.responses_5xx
+    ));
+
+    out.push_str(
+        "# HELP gateway_upstream_response_time_seconds_sum Sum of upstream response times\n",
+    );
+    out.push_str("# TYPE gateway_upstream_response_time_seconds_sum counter\n");
+    out.push_str(&format!(
+        "gateway_upstream_response_time_seconds_sum{{node_id=\"{node_id}\"}} {:.3}\n\n",
+        g.upstream.response_time_sum_ms as f64 / 1000.0
+    ));
+
+    out.push_str(
+        "# HELP gateway_upstream_connect_time_seconds_sum Sum of upstream connect times\n",
+    );
+    out.push_str("# TYPE gateway_upstream_connect_time_seconds_sum counter\n");
+    out.push_str(&format!(
+        "gateway_upstream_connect_time_seconds_sum{{node_id=\"{node_id}\"}} {:.3}\n\n",
+        g.upstream.connect_time_sum_ms as f64 / 1000.0
+    ));
+
+    out.push_str("# HELP gateway_upstream_failures_total Upstream connection failures\n");
+    out.push_str("# TYPE gateway_upstream_failures_total counter\n");
+    out.push_str(&format!(
+        "gateway_upstream_failures_total{{node_id=\"{node_id}\"}} {}\n\n",
+        g.upstream.failures
     ));
 
     // 7. Rate Limiting Decisions

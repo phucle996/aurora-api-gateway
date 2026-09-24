@@ -126,7 +126,7 @@ ngx_int_t ngx_http_gateway_eval_rate_limit(ngx_http_request_t *r,
   }
 
   if (decision.action == 3) {
-    aurora_telemetry_record_ratelimit(1);
+    extension_rate_limit_record_metrics(1);
     /* Audit mode: Warn and tag request without blocking */
     ngx_table_elt_t *h = ngx_list_push(&r->headers_out.headers);
     if (h) {
@@ -139,7 +139,7 @@ ngx_int_t ngx_http_gateway_eval_rate_limit(ngx_http_request_t *r,
     ngx_log_error(NGX_LOG_NOTICE, &log, 0,
                   "Gateway rate limit audit: would limit path %V", &r->uri);
   } else if (!decision.allowed) {
-    aurora_telemetry_record_ratelimit(2);
+    extension_rate_limit_record_metrics(2);
     ngx_uint_t h_idx;
     ngx_uint_t retry_after_set = 0;
 
@@ -249,6 +249,6 @@ ngx_int_t ngx_http_gateway_eval_rate_limit(ngx_http_request_t *r,
                                       : NGX_HTTP_TOO_MANY_REQUESTS;
   }
 
-  aurora_telemetry_record_ratelimit(0);
+  extension_rate_limit_record_metrics(0);
   return NGX_DECLINED;
 }

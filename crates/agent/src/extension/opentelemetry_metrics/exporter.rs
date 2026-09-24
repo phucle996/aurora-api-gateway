@@ -181,10 +181,10 @@ impl OtlpMetricsExporter {
                     }],
                 })),
             },
-            // 3. gateway_waf_blocks_total (Cumulative Sum)
+            // 3. gateway_upstream_requests_total (Cumulative Sum)
             Metric {
-                name: "gateway_waf_blocks_total".to_string(),
-                description: "Total number of requests blocked by WAF".to_string(),
+                name: "gateway_upstream_requests_total".to_string(),
+                description: "Total number of upstream requests".to_string(),
                 unit: "1".to_string(),
                 metadata: Vec::new(),
                 data: Some(Data::Sum(Sum {
@@ -195,7 +195,28 @@ impl OtlpMetricsExporter {
                         start_time_unix_nano: 0,
                         time_unix_nano: now_nanos,
                         value: Some(number_data_point::Value::AsInt(
-                            metrics.gateway.waf.block as i64,
+                            metrics.gateway.upstream.requests_total as i64,
+                        )),
+                        exemplars: Vec::new(),
+                        flags: 0,
+                    }],
+                })),
+            },
+            // 3b. gateway_upstream_failures_total (Cumulative Sum)
+            Metric {
+                name: "gateway_upstream_failures_total".to_string(),
+                description: "Total number of upstream failures".to_string(),
+                unit: "1".to_string(),
+                metadata: Vec::new(),
+                data: Some(Data::Sum(Sum {
+                    aggregation_temporality: AggregationTemporality::Cumulative as i32,
+                    is_monotonic: true,
+                    data_points: vec![NumberDataPoint {
+                        attributes: Vec::new(),
+                        start_time_unix_nano: 0,
+                        time_unix_nano: now_nanos,
+                        value: Some(number_data_point::Value::AsInt(
+                            metrics.gateway.upstream.failures as i64,
                         )),
                         exemplars: Vec::new(),
                         flags: 0,
@@ -495,8 +516,8 @@ mod tests {
                     duration_bucket_inf: 1000,
                     ..Default::default()
                 },
-                waf: aurora_engine::shm::WafMetricsSnapshot {
-                    block: 7,
+                upstream: aurora_engine::shm::UpstreamMetricsSnapshot {
+                    failures: 7,
                     ..Default::default()
                 },
                 ..Default::default()
@@ -516,12 +537,13 @@ mod tests {
         );
 
         let sm = &rm.scope_metrics[0];
-        assert_eq!(sm.metrics.len(), 6);
+        assert_eq!(sm.metrics.len(), 7);
 
         let names: Vec<&str> = sm.metrics.iter().map(|m| m.name.as_str()).collect();
         assert!(names.contains(&"http_requests_total"));
         assert!(names.contains(&"http_connections_active"));
-        assert!(names.contains(&"gateway_waf_blocks_total"));
+        assert!(names.contains(&"gateway_upstream_requests_total"));
+        assert!(names.contains(&"gateway_upstream_failures_total"));
         assert!(names.contains(&"system_cpu_utilization_ratio"));
         assert!(names.contains(&"system_memory_used_bytes"));
         assert!(names.contains(&"http_request_duration_ms"));

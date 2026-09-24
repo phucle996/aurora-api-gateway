@@ -158,7 +158,7 @@ ngx_int_t ngx_http_gateway_eval_canary_release(ngx_http_request_t *r,
 
     ctx->is_canary = decision.is_canary;
     ctx->evaluated = 1;
-    aurora_telemetry_record_canary(decision.is_canary);
+    extension_canary_record_metrics(decision.is_canary);
 
     /* Forward upstream headers */
     for (uint32_t i = 0; i < decision.headers_count && i < 16; i++) {

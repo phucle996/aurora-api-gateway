@@ -93,7 +93,8 @@ ngx_int_t ngx_http_gateway_eval_request_mirror(ngx_http_request_t *r,
     return NGX_DECLINED;
   }
 
-  /* Subrequests should inherit main request mirror decision without re-evaluating */
+  /* Subrequests should inherit main request mirror decision without
+   * re-evaluating */
   if (r != r->main) {
     return NGX_DECLINED;
   }
@@ -152,7 +153,7 @@ ngx_int_t ngx_http_gateway_eval_request_mirror(ngx_http_request_t *r,
     ctx->evaluated = 1;
 
     if (decision.is_mirrored && decision.mirror_upstream_len > 0) {
-      aurora_telemetry_record_mirror();
+      extension_mirror_record_metrics();
       u_char *mirror = ngx_pnalloc(r->pool, decision.mirror_upstream_len);
       if (mirror != NULL) {
         ngx_memcpy(mirror, decision.mirror_upstream,

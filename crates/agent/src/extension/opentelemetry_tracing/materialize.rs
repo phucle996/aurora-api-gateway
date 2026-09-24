@@ -11,14 +11,13 @@ pub fn materialize(
     if *opentelemetry_tracing_instances > 1 {
         return Err("NodeSpec contains more than one opentelemetry-tracing extension".to_string());
     }
-    let spec = serde_json::from_value::<OtlpTracingConfig>(Value::Object(config)).map_err(
-        |error| {
+    let spec =
+        serde_json::from_value::<OtlpTracingConfig>(Value::Object(config)).map_err(|error| {
             format!(
                 "decode opentelemetry-tracing extension {} config: {error}",
                 instance.instance_id
             )
-        },
-    )?;
+        })?;
 
     if spec.endpoint.trim().is_empty() {
         return Err("opentelemetry-tracing config: endpoint cannot be empty".to_string());

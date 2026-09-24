@@ -1,6 +1,6 @@
 //! Shared Memory Metrics Objects & Layout
 //!
-//! Lockless, zero-allocation data plane metrics recording across core HTTP and all extensions.
+//! Lockless, zero-allocation data plane metrics recording across L7, L4, upstream, and all extensions.
 //! Composed of independent C-compatible metric objects inside a 4096-byte page.
 
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -9,7 +9,7 @@ use super::logs::{LogBusMetrics, LogBusMetricsSnapshot};
 use super::{TELEMETRY_MAGIC, TELEMETRY_VERSION};
 
 // ============================================================================
-// Extension Metric Objects (C-compatible #[repr(C)], lockless atomic counters)
+// L7 Metric Objects (HTTP Layer)
 // ============================================================================
 
 /// Core HTTP Metrics Object (Requests, Status classes, Duration buckets)
@@ -113,41 +113,193 @@ impl HttpMetrics {
     }
 }
 
-/// Core Pipeline / WAF Evaluation Metrics Object
+/// L7 Traffic Volume Metrics (bytes in/out, SSL request count, matched request count)
 #[repr(C)]
 #[derive(Debug, Default)]
-pub struct WafMetrics {
-    pub allow: AtomicU64,
-    pub block: AtomicU64,
-    pub audit: AtomicU64,
+pub struct L7TrafficMetrics {
+    pub request_bytes_in: AtomicU64,
+    pub response_bytes_out: AtomicU64,
+    pub requests_ssl: AtomicU64,
+    pub requests_matched: AtomicU64,
 }
 
-impl WafMetrics {
+impl L7TrafficMetrics {
     pub const fn new() -> Self {
         Self {
-            allow: AtomicU64::new(0),
-            block: AtomicU64::new(0),
-            audit: AtomicU64::new(0),
+            request_bytes_in: AtomicU64::new(0),
+            response_bytes_out: AtomicU64::new(0),
+            requests_ssl: AtomicU64::new(0),
+            requests_matched: AtomicU64::new(0),
         }
     }
 
     #[inline(always)]
-    pub fn record(&self, action: u32) {
-        match action {
-            0 => self.allow.fetch_add(1, Ordering::Relaxed),
-            1 => self.block.fetch_add(1, Ordering::Relaxed),
-            _ => self.audit.fetch_add(1, Ordering::Relaxed),
-        };
+    pub fn record(&self, bytes_in: u64, bytes_out: u64, is_ssl: bool, is_matched: bool) {
+        self.request_bytes_in.fetch_add(bytes_in, Ordering::Relaxed);
+        self.response_bytes_out
+            .fetch_add(bytes_out, Ordering::Relaxed);
+        if is_ssl {
+            self.requests_ssl.fetch_add(1, Ordering::Relaxed);
+        }
+        if is_matched {
+            self.requests_matched.fetch_add(1, Ordering::Relaxed);
+        }
     }
 
-    pub fn snapshot(&self) -> WafMetricsSnapshot {
-        WafMetricsSnapshot {
-            allow: self.allow.load(Ordering::Relaxed),
-            block: self.block.load(Ordering::Relaxed),
-            audit: self.audit.load(Ordering::Relaxed),
+    pub fn snapshot(&self) -> L7TrafficMetricsSnapshot {
+        L7TrafficMetricsSnapshot {
+            request_bytes_in: self.request_bytes_in.load(Ordering::Relaxed),
+            response_bytes_out: self.response_bytes_out.load(Ordering::Relaxed),
+            requests_ssl: self.requests_ssl.load(Ordering::Relaxed),
+            requests_matched: self.requests_matched.load(Ordering::Relaxed),
         }
     }
 }
+
+// ============================================================================
+// L4 Metric Objects (Connection / TLS Layer)
+// ============================================================================
+
+/// NGINX Worker Connection Metrics Object
+#[repr(C)]
+#[derive(Debug, Default)]
+pub struct ConnectionMetrics {
+    pub active: AtomicU64,
+    pub reading: AtomicU64,
+    pub writing: AtomicU64,
+    pub waiting: AtomicU64,
+}
+
+impl ConnectionMetrics {
+    pub const fn new() -> Self {
+        Self {
+            active: AtomicU64::new(0),
+            reading: AtomicU64::new(0),
+            writing: AtomicU64::new(0),
+            waiting: AtomicU64::new(0),
+        }
+    }
+
+    #[inline(always)]
+    pub fn record(&self, active: u64, reading: u64, writing: u64, waiting: u64) {
+        self.active.store(active, Ordering::Relaxed);
+        self.reading.store(reading, Ordering::Relaxed);
+        self.writing.store(writing, Ordering::Relaxed);
+        self.waiting.store(waiting, Ordering::Relaxed);
+    }
+
+    pub fn snapshot(&self) -> ConnectionMetricsSnapshot {
+        ConnectionMetricsSnapshot {
+            active: self.active.load(Ordering::Relaxed),
+            reading: self.reading.load(Ordering::Relaxed),
+            writing: self.writing.load(Ordering::Relaxed),
+            waiting: self.waiting.load(Ordering::Relaxed),
+        }
+    }
+}
+
+/// SSL/TLS Connection Metrics Object
+#[repr(C)]
+#[derive(Debug, Default)]
+pub struct SslMetrics {
+    pub handshakes_total: AtomicU64,
+    pub handshakes_failed: AtomicU64,
+    pub sessions_reused: AtomicU64,
+}
+
+impl SslMetrics {
+    pub const fn new() -> Self {
+        Self {
+            handshakes_total: AtomicU64::new(0),
+            handshakes_failed: AtomicU64::new(0),
+            sessions_reused: AtomicU64::new(0),
+        }
+    }
+
+    #[inline(always)]
+    pub fn record(&self, handshake_ok: bool, reused: bool) {
+        self.handshakes_total.fetch_add(1, Ordering::Relaxed);
+        if !handshake_ok {
+            self.handshakes_failed.fetch_add(1, Ordering::Relaxed);
+        }
+        if reused {
+            self.sessions_reused.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    pub fn snapshot(&self) -> SslMetricsSnapshot {
+        SslMetricsSnapshot {
+            handshakes_total: self.handshakes_total.load(Ordering::Relaxed),
+            handshakes_failed: self.handshakes_failed.load(Ordering::Relaxed),
+            sessions_reused: self.sessions_reused.load(Ordering::Relaxed),
+        }
+    }
+}
+
+// ============================================================================
+// Upstream Metric Objects
+// ============================================================================
+
+/// Upstream backend response metrics
+#[repr(C)]
+#[derive(Debug, Default)]
+pub struct UpstreamMetrics {
+    pub requests_total: AtomicU64,
+    pub responses_2xx: AtomicU64,
+    pub responses_5xx: AtomicU64,
+    pub response_time_sum_ms: AtomicU64,
+    pub connect_time_sum_ms: AtomicU64,
+    pub failures: AtomicU64,
+}
+
+impl UpstreamMetrics {
+    pub const fn new() -> Self {
+        Self {
+            requests_total: AtomicU64::new(0),
+            responses_2xx: AtomicU64::new(0),
+            responses_5xx: AtomicU64::new(0),
+            response_time_sum_ms: AtomicU64::new(0),
+            connect_time_sum_ms: AtomicU64::new(0),
+            failures: AtomicU64::new(0),
+        }
+    }
+
+    #[inline(always)]
+    pub fn record(&self, status: u32, response_ms: u64, connect_ms: u64, failed: bool) {
+        self.requests_total.fetch_add(1, Ordering::Relaxed);
+        match status {
+            200..=299 => {
+                self.responses_2xx.fetch_add(1, Ordering::Relaxed);
+            }
+            500..=599 => {
+                self.responses_5xx.fetch_add(1, Ordering::Relaxed);
+            }
+            _ => {}
+        }
+        self.response_time_sum_ms
+            .fetch_add(response_ms, Ordering::Relaxed);
+        self.connect_time_sum_ms
+            .fetch_add(connect_ms, Ordering::Relaxed);
+        if failed {
+            self.failures.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    pub fn snapshot(&self) -> UpstreamMetricsSnapshot {
+        UpstreamMetricsSnapshot {
+            requests_total: self.requests_total.load(Ordering::Relaxed),
+            responses_2xx: self.responses_2xx.load(Ordering::Relaxed),
+            responses_5xx: self.responses_5xx.load(Ordering::Relaxed),
+            response_time_sum_ms: self.response_time_sum_ms.load(Ordering::Relaxed),
+            connect_time_sum_ms: self.connect_time_sum_ms.load(Ordering::Relaxed),
+            failures: self.failures.load(Ordering::Relaxed),
+        }
+    }
+}
+
+// ============================================================================
+// Extension Metric Objects (C-compatible #[repr(C)], lockless atomic counters)
+// ============================================================================
 
 /// IP Restriction Extension Metrics Object
 #[repr(C)]
@@ -495,50 +647,18 @@ impl MirrorMetrics {
     }
 }
 
-/// NGINX Worker Connection Metrics Object
-#[repr(C)]
-#[derive(Debug, Default)]
-pub struct ConnectionMetrics {
-    pub active: AtomicU64,
-    pub reading: AtomicU64,
-    pub writing: AtomicU64,
-    pub waiting: AtomicU64,
-}
-
-impl ConnectionMetrics {
-    pub const fn new() -> Self {
-        Self {
-            active: AtomicU64::new(0),
-            reading: AtomicU64::new(0),
-            writing: AtomicU64::new(0),
-            waiting: AtomicU64::new(0),
-        }
-    }
-
-    #[inline(always)]
-    pub fn record(&self, active: u64, reading: u64, writing: u64, waiting: u64) {
-        self.active.store(active, Ordering::Relaxed);
-        self.reading.store(reading, Ordering::Relaxed);
-        self.writing.store(writing, Ordering::Relaxed);
-        self.waiting.store(waiting, Ordering::Relaxed);
-    }
-
-    pub fn snapshot(&self) -> ConnectionMetricsSnapshot {
-        ConnectionMetricsSnapshot {
-            active: self.active.load(Ordering::Relaxed),
-            reading: self.reading.load(Ordering::Relaxed),
-            writing: self.writing.load(Ordering::Relaxed),
-            waiting: self.waiting.load(Ordering::Relaxed),
-        }
-    }
-}
-
 // ============================================================================
 // Master Shared Memory Struct (4096 bytes page-aligned)
 // ============================================================================
 
 /// Padded lockless shared memory struct shared between NGINX workers and Aurora Agent.
-/// Composed of independent extension metric objects.
+///
+/// Layout is organized by network layer:
+/// - L7 (HTTP): Request status, latency histogram, traffic volume
+/// - L4 (Connection/TLS): Connection gauges, SSL handshake counters
+/// - Upstream: Backend response status, latency sums, failures
+/// - Extensions: Per-extension evaluation counters
+/// - Infra: Log bus gating
 ///
 /// Size is strictly aligned and padded to 4096 bytes (1 memory page).
 #[repr(C)]
@@ -547,11 +667,18 @@ pub struct GatewaySharedMetrics {
     pub version: u32,
     pub generation: AtomicU64,
 
-    // Core HTTP Object (120 bytes)
-    pub http: HttpMetrics,
+    // L7 Metrics (152 bytes)
+    pub http: HttpMetrics,            // 120 bytes
+    pub l7_traffic: L7TrafficMetrics, // 32 bytes
 
-    // Extension Metric Objects
-    pub waf: WafMetrics,                      // 24 bytes
+    // L4 Metrics (56 bytes)
+    pub connections: ConnectionMetrics, // 32 bytes
+    pub ssl: SslMetrics,                // 24 bytes
+
+    // Upstream Metrics (48 bytes)
+    pub upstream: UpstreamMetrics, // 48 bytes
+
+    // Extension Metric Objects (144 bytes)
     pub ip_restriction: IpRestrictionMetrics, // 16 bytes
     pub ratelimit: RateLimitMetrics,          // 24 bytes
     pub jwt: JwtMetrics,                      // 32 bytes
@@ -564,12 +691,11 @@ pub struct GatewaySharedMetrics {
     pub blue_green: BlueGreenMetrics,         // 16 bytes
     pub mirror: MirrorMetrics,                // 8 bytes
 
-    // Connections & Logs
-    pub connections: ConnectionMetrics, // 32 bytes
-    pub log_bus: LogBusMetrics,         // 8 bytes
+    // Infra (8 bytes)
+    pub log_bus: LogBusMetrics, // 8 bytes
 
-    // Padding up to exactly 4096 bytes (16 header + 344 metrics = 360 bytes; 3736 padding)
-    _reserved: [u8; 4096 - 360],
+    // Padding: 16 + 152 + 56 + 48 + 144 + 8 + 16 = 440 data bytes; 3656 padding
+    _reserved: [u8; 4096 - 440],
 }
 
 impl Default for GatewaySharedMetrics {
@@ -585,7 +711,10 @@ impl GatewaySharedMetrics {
             version: TELEMETRY_VERSION,
             generation: AtomicU64::new(0),
             http: HttpMetrics::new(),
-            waf: WafMetrics::new(),
+            l7_traffic: L7TrafficMetrics::new(),
+            connections: ConnectionMetrics::new(),
+            ssl: SslMetrics::new(),
+            upstream: UpstreamMetrics::new(),
             ip_restriction: IpRestrictionMetrics::new(),
             ratelimit: RateLimitMetrics::new(),
             jwt: JwtMetrics::new(),
@@ -597,9 +726,8 @@ impl GatewaySharedMetrics {
             canary: CanaryMetrics::new(),
             blue_green: BlueGreenMetrics::new(),
             mirror: MirrorMetrics::new(),
-            connections: ConnectionMetrics::new(),
             log_bus: LogBusMetrics::new(),
-            _reserved: [0u8; 4096 - 360],
+            _reserved: [0u8; 4096 - 440],
         }
     }
 
@@ -611,6 +739,8 @@ impl GatewaySharedMetrics {
         }
     }
 
+    // L7 Recording
+
     /// Record completed HTTP request status code and duration in milliseconds.
     #[inline(always)]
     pub fn record_http_request(&self, status: u32, duration_ms: u64) {
@@ -618,18 +748,36 @@ impl GatewaySharedMetrics {
     }
 
     #[inline(always)]
-    pub fn record_waf(&self, action: u32) {
-        self.waf.record(action);
+    pub fn record_traffic(&self, bytes_in: u64, bytes_out: u64, is_ssl: bool, is_matched: bool) {
+        self.l7_traffic
+            .record(bytes_in, bytes_out, is_ssl, is_matched);
     }
+
+    // L4 Recording
+
+    #[inline(always)]
+    pub fn record_connections(&self, active: u64, reading: u64, writing: u64, waiting: u64) {
+        self.connections.record(active, reading, writing, waiting);
+    }
+
+    #[inline(always)]
+    pub fn record_ssl(&self, handshake_ok: bool, reused: bool) {
+        self.ssl.record(handshake_ok, reused);
+    }
+
+    // Upstream Recording
+
+    #[inline(always)]
+    pub fn record_upstream(&self, status: u32, response_ms: u64, connect_ms: u64, failed: bool) {
+        self.upstream
+            .record(status, response_ms, connect_ms, failed);
+    }
+
+    // Extension Recording
 
     #[inline(always)]
     pub fn record_ip_restriction(&self, action: u32) {
         self.ip_restriction.record(action);
-    }
-
-    #[inline(always)]
-    pub fn record_access(&self, action: u32) {
-        self.record_ip_restriction(action);
     }
 
     #[inline(always)]
@@ -682,10 +830,7 @@ impl GatewaySharedMetrics {
         self.mirror.record();
     }
 
-    #[inline(always)]
-    pub fn record_connections(&self, active: u64, reading: u64, writing: u64, waiting: u64) {
-        self.connections.record(active, reading, writing, waiting);
-    }
+    // Infra
 
     #[inline(always)]
     pub fn register_log_consumer(&self) -> u64 {
@@ -716,7 +861,10 @@ impl GatewaySharedMetrics {
     pub fn snapshot(&self) -> GatewayMetricsSnapshot {
         GatewayMetricsSnapshot {
             http: self.http.snapshot(),
-            waf: self.waf.snapshot(),
+            l7_traffic: self.l7_traffic.snapshot(),
+            connections: self.connections.snapshot(),
+            ssl: self.ssl.snapshot(),
+            upstream: self.upstream.snapshot(),
             ip_restriction: self.ip_restriction.snapshot(),
             ratelimit: self.ratelimit.snapshot(),
             jwt: self.jwt.snapshot(),
@@ -728,7 +876,6 @@ impl GatewaySharedMetrics {
             canary: self.canary.snapshot(),
             blue_green: self.blue_green.snapshot(),
             mirror: self.mirror.snapshot(),
-            connections: self.connections.snapshot(),
             log_bus: self.log_bus.snapshot(),
         }
     }
@@ -759,10 +906,36 @@ pub struct HttpMetricsSnapshot {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct WafMetricsSnapshot {
-    pub allow: u64,
-    pub block: u64,
-    pub audit: u64,
+pub struct L7TrafficMetricsSnapshot {
+    pub request_bytes_in: u64,
+    pub response_bytes_out: u64,
+    pub requests_ssl: u64,
+    pub requests_matched: u64,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ConnectionMetricsSnapshot {
+    pub active: u64,
+    pub reading: u64,
+    pub writing: u64,
+    pub waiting: u64,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SslMetricsSnapshot {
+    pub handshakes_total: u64,
+    pub handshakes_failed: u64,
+    pub sessions_reused: u64,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct UpstreamMetricsSnapshot {
+    pub requests_total: u64,
+    pub responses_2xx: u64,
+    pub responses_5xx: u64,
+    pub response_time_sum_ms: u64,
+    pub connect_time_sum_ms: u64,
+    pub failures: u64,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -831,20 +1004,15 @@ pub struct MirrorMetricsSnapshot {
     pub sampled: u64,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct ConnectionMetricsSnapshot {
-    pub active: u64,
-    pub reading: u64,
-    pub writing: u64,
-    pub waiting: u64,
-}
-
 /// Plain value snapshot of all gateway metrics, safe for serialization or rendering.
-/// Structured by extension metric object.
+/// Organized by network layer: L7 → L4 → Upstream → Extensions → Infra.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct GatewayMetricsSnapshot {
     pub http: HttpMetricsSnapshot,
-    pub waf: WafMetricsSnapshot,
+    pub l7_traffic: L7TrafficMetricsSnapshot,
+    pub connections: ConnectionMetricsSnapshot,
+    pub ssl: SslMetricsSnapshot,
+    pub upstream: UpstreamMetricsSnapshot,
     pub ip_restriction: IpRestrictionMetricsSnapshot,
     pub ratelimit: RateLimitMetricsSnapshot,
     pub jwt: JwtMetricsSnapshot,
@@ -856,7 +1024,6 @@ pub struct GatewayMetricsSnapshot {
     pub canary: CanaryMetricsSnapshot,
     pub blue_green: BlueGreenMetricsSnapshot,
     pub mirror: MirrorMetricsSnapshot,
-    pub connections: ConnectionMetricsSnapshot,
     pub log_bus: LogBusMetricsSnapshot,
 }
 
@@ -886,11 +1053,20 @@ mod tests {
         metrics.record_http_request(404, 15);
         metrics.record_http_request(500, 1500);
 
-        metrics.record_waf(1);
+        metrics.record_traffic(1024, 4096, true, true);
+        metrics.record_traffic(512, 2048, false, false);
+
+        metrics.record_connections(42, 3, 7, 32);
+        metrics.record_ssl(true, false);
+        metrics.record_ssl(true, true);
+        metrics.record_ssl(false, false);
+
+        metrics.record_upstream(200, 50, 5, false);
+        metrics.record_upstream(502, 0, 0, true);
+
         metrics.record_ip_restriction(1);
         metrics.record_ratelimit(2);
         metrics.record_jwt(0);
-        metrics.record_connections(42, 3, 7, 32);
 
         assert!(!metrics.is_log_active());
         assert_eq!(metrics.register_log_consumer(), 1);
@@ -900,26 +1076,49 @@ mod tests {
         assert!(metrics.is_log_active());
 
         let snap = metrics.snapshot();
+
+        // L7 HTTP
         assert_eq!(snap.http.requests_total, 3);
         assert_eq!(snap.http.status_2xx, 1);
         assert_eq!(snap.http.status_4xx, 1);
         assert_eq!(snap.http.status_5xx, 1);
-
         assert_eq!(snap.http.duration_bucket_1ms, 0);
         assert_eq!(snap.http.duration_bucket_5ms, 1);
         assert_eq!(snap.http.duration_bucket_50ms, 2);
         assert_eq!(snap.http.duration_bucket_inf, 3);
         assert_eq!(snap.http.duration_sum_ms, 1518);
 
-        assert_eq!(snap.waf.block, 1);
-        assert_eq!(snap.ip_restriction.block, 1);
-        assert_eq!(snap.ratelimit.rejected, 1);
-        assert_eq!(snap.jwt.valid, 1);
+        // L7 Traffic
+        assert_eq!(snap.l7_traffic.request_bytes_in, 1536);
+        assert_eq!(snap.l7_traffic.response_bytes_out, 6144);
+        assert_eq!(snap.l7_traffic.requests_ssl, 1);
+        assert_eq!(snap.l7_traffic.requests_matched, 1);
 
+        // L4 Connections
         assert_eq!(snap.connections.active, 42);
         assert_eq!(snap.connections.reading, 3);
         assert_eq!(snap.connections.writing, 7);
         assert_eq!(snap.connections.waiting, 32);
+
+        // L4 SSL
+        assert_eq!(snap.ssl.handshakes_total, 3);
+        assert_eq!(snap.ssl.handshakes_failed, 1);
+        assert_eq!(snap.ssl.sessions_reused, 1);
+
+        // Upstream
+        assert_eq!(snap.upstream.requests_total, 2);
+        assert_eq!(snap.upstream.responses_2xx, 1);
+        assert_eq!(snap.upstream.responses_5xx, 1);
+        assert_eq!(snap.upstream.response_time_sum_ms, 50);
+        assert_eq!(snap.upstream.connect_time_sum_ms, 5);
+        assert_eq!(snap.upstream.failures, 1);
+
+        // Extensions
+        assert_eq!(snap.ip_restriction.block, 1);
+        assert_eq!(snap.ratelimit.rejected, 1);
+        assert_eq!(snap.jwt.valid, 1);
+
+        // Infra
         assert_eq!(snap.log_bus.active_consumers, 1);
 
         assert_eq!(metrics.unregister_log_consumer(), 0);

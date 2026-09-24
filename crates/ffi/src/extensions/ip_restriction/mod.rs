@@ -53,16 +53,6 @@ pub unsafe extern "C" fn aurora_ip_restriction_create(
     }
 }
 
-#[deprecated(note = "Use aurora_ip_restriction_create instead")]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn aurora_access_create(
-    data: *const u8,
-    len: usize,
-    out: *mut *mut IpRestrictionEngine,
-) -> u32 {
-    unsafe { aurora_ip_restriction_create(data, len, out) }
-}
-
 /// # Safety
 /// The handle must be live, or null. Destroy it exactly once.
 #[unsafe(no_mangle)]
@@ -74,27 +64,17 @@ pub unsafe extern "C" fn aurora_ip_restriction_destroy(engine: *mut IpRestrictio
     }
 }
 
-#[deprecated(note = "Use aurora_ip_restriction_destroy instead")]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn aurora_access_destroy(engine: *mut IpRestrictionEngine) {
-    unsafe { aurora_ip_restriction_destroy(engine) }
-}
-
 /// # Safety
 /// The handle must be live, or null.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn aurora_ip_restriction_generation(engine: *const IpRestrictionEngine) -> u64 {
+pub unsafe extern "C" fn aurora_ip_restriction_generation(
+    engine: *const IpRestrictionEngine,
+) -> u64 {
     if !engine.is_null() {
         unsafe { (&*engine).generation() }
     } else {
         0
     }
-}
-
-#[deprecated(note = "Use aurora_ip_restriction_generation instead")]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn aurora_access_generation(engine: *const IpRestrictionEngine) -> u64 {
-    unsafe { aurora_ip_restriction_generation(engine) }
 }
 
 /// # Safety
@@ -150,28 +130,4 @@ pub unsafe extern "C" fn aurora_ip_restriction_evaluate(
         Ok(Err(_)) => 1,
         Err(_) => 2,
     }
-}
-
-#[deprecated(note = "Use aurora_ip_restriction_evaluate instead")]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn aurora_access_evaluate(
-    engine: *const IpRestrictionEngine,
-    input: *const IpRestrictionInput,
-    out: *mut Decision,
-) -> u32 {
-    unsafe { aurora_ip_restriction_evaluate(engine, input, out) }
-}
-
-/// Extension-local telemetry recording into SHM.
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_ip_restriction_record(action: u32) {
-    if let Some(m) = crate::shm::gateway_metrics() {
-        m.record_ip_restriction(action);
-    }
-}
-
-#[deprecated(note = "Use aurora_ip_restriction_record instead")]
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_access_record(action: u32) {
-    aurora_ip_restriction_record(action);
 }

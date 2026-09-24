@@ -19,8 +19,6 @@ use std::os::unix::io::AsRawFd;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
 
 pub static SHM_RUNNING: AtomicBool = AtomicBool::new(false);
-static SHARED: AtomicPtr<AtomicU64> = AtomicPtr::new(std::ptr::null_mut());
-static ACTIVE: AtomicPtr<AtomicU64> = AtomicPtr::new(std::ptr::null_mut());
 static GATEWAY_METRICS: AtomicPtr<GatewaySharedMetrics> = AtomicPtr::new(std::ptr::null_mut());
 
 /// Retrieve global GatewaySharedMetrics reference if bound.
@@ -31,15 +29,6 @@ pub fn gateway_metrics() -> Option<&'static GatewaySharedMetrics> {
         None
     } else {
         Some(unsafe { &*ptr })
-    }
-}
-
-pub fn shared_slot(index: usize) -> Option<&'static AtomicU64> {
-    let ptr = SHARED.load(Ordering::Acquire);
-    if ptr.is_null() || index >= 8 {
-        None
-    } else {
-        Some(unsafe { &*ptr.add(index) })
     }
 }
 
@@ -93,7 +82,6 @@ pub unsafe fn init_shm(path: *const std::ffi::c_char) -> bool {
                 (*metrics_ptr).ensure_header();
             }
             GATEWAY_METRICS.store(metrics_ptr, Ordering::Release);
-            SHARED.store(mmap_ptr as *mut AtomicU64, Ordering::Release);
             return true;
         }
     }
@@ -122,17 +110,21 @@ pub unsafe fn bind(shared: *mut AtomicU64, len: usize, active: *mut AtomicU64) -
         GATEWAY_METRICS.store(metrics_ptr, Ordering::Release);
     }
 
-    SHARED.store(shared, Ordering::Release);
-    ACTIVE.store(active, Ordering::Release);
     true
 }
 
 // C ABI Bindings
+/// Initialize shared memory telemetry from a path.
+/// # Safety
+/// `path` must be null or point to a valid null-terminated C string.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn aurora_gateway_init_shm(path: *const std::ffi::c_char) -> u32 {
     if unsafe { init_shm(path) } { 0 } else { 1 }
 }
 
+/// Bind shared memory telemetry buffers.
+/// # Safety
+/// `shared` and `active` must be valid memory regions of sufficient lifetime.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn aurora_gateway_bind_shm(
     shared: *mut std::ffi::c_void,

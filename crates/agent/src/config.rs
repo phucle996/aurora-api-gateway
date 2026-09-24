@@ -199,9 +199,11 @@ impl Config {
             GrpcTlsMode::Plaintext => {}
             GrpcTlsMode::Tls => {
                 if let Some(ref ca) = self.grpc_ca_cert {
-                    if !ca.exists() {
-                        panic!("FATAL: GRPC_CA_CERT file does not exist: {}", ca.display());
-                    }
+                    assert!(
+                        ca.exists(),
+                        "FATAL: GRPC_CA_CERT file does not exist: {}",
+                        ca.display()
+                    );
                 }
             }
             GrpcTlsMode::Mtls => {
@@ -226,9 +228,11 @@ impl Config {
                 }
 
                 if let Some(ref ca) = self.grpc_ca_cert {
-                    if !ca.exists() {
-                        panic!("FATAL: GRPC_CA_CERT file does not exist: {}", ca.display());
-                    }
+                    assert!(
+                        ca.exists(),
+                        "FATAL: GRPC_CA_CERT file does not exist: {}",
+                        ca.display()
+                    );
                 }
             }
         }

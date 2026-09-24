@@ -34,8 +34,3 @@ pub use extensions::request_size_limit::RequestSizeLimitEngine;
 pub use extensions::request_termination::RequestTerminationEngine;
 pub use extensions::traffic_shaper::TrafficShaperEngine;
 pub use extensions::traffic_split::TrafficSplitEngine;
-
-#[deprecated(note = "Use ip_restriction instead of access")]
-pub use extensions::ip_restriction as access;
-#[deprecated(note = "Use IpRestrictionEngine instead of AccessEngine")]
-pub use extensions::ip_restriction::IpRestrictionEngine as AccessEngine;

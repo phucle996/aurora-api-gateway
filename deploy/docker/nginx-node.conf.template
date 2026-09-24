@@ -50,7 +50,7 @@ http {
 
         gateway on;
 
-        add_header X-Aurora-Generation $gateway_access_generation always;
+        add_header X-Aurora-Generation $gateway_ip_restriction_generation always;
         include /var/lib/aurora-policy/active-extensions.conf;
 
         default_type text/plain;
@@ -76,8 +76,8 @@ http {
     server {
         listen 127.0.0.1:9081;
         gateway on;
-        location = /generation { return 200 "$gateway_access_generation"; }
-        location = /access-generation { return 200 "$gateway_access_generation"; }
+        location = /generation { return 200 "$gateway_ip_restriction_generation"; }
+        location = /access-generation { return 200 "$gateway_ip_restriction_generation"; }
     }
 }
 

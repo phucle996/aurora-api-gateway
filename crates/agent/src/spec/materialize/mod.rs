@@ -9,8 +9,8 @@ mod tests;
 
 pub use extensions::render_extensions;
 pub use l4::generate_l4_streams_conf;
-pub use route::generate_domain_routing_conf;
 pub use route as routing;
+pub use route::generate_domain_routing_conf;
 pub use tls::materialize_tls;
 pub use upstream::generate_upstreams_conf;
 

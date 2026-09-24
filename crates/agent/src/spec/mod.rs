@@ -7,7 +7,7 @@ pub use materialize::l4::{L4AclRuleSpec, L4ServerSpec, L4ServiceSpec, L4Spec, L4
 pub use materialize::route::{DomainRoutingSpec, LocationRoutingSpec, OriginTLSSpec, RoutingSpec};
 pub use materialize::tls::CertificateSpec;
 pub use materialize::upstream::{UpstreamServerSpec, UpstreamSpec};
-pub use schema::{compute_sha256, Spec};
+pub use schema::{Spec, compute_sha256};
 
 // Module namespaces pointing directly to their materialize owner
 pub mod certificate {

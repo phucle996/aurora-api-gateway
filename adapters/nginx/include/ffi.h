@@ -9,7 +9,6 @@ extern "C" {
 #endif
 
 uint32_t aurora_gateway_abi_version(void);
-uint32_t aurora_waf_abi_version(void);
 
 typedef struct {
   uint64_t generation;
@@ -37,26 +36,11 @@ typedef struct {
 uint32_t aurora_ip_restriction_create(const uint8_t *data, size_t len,
                                       AuroraIpRestrictionEngine **out);
 void aurora_ip_restriction_destroy(AuroraIpRestrictionEngine *engine);
-uint64_t aurora_ip_restriction_generation(const AuroraIpRestrictionEngine *engine);
+uint64_t
+aurora_ip_restriction_generation(const AuroraIpRestrictionEngine *engine);
 uint32_t aurora_ip_restriction_evaluate(const AuroraIpRestrictionEngine *engine,
                                         const AuroraIpRestrictionInput *input,
                                         AuroraDecision *out);
-void aurora_ip_restriction_record(uint32_t action);
-
-/* Backward compatibility aliases */
-typedef AuroraIpRestrictionEngine AuroraAccessEngine;
-typedef AuroraIpRestrictionInput AuroraAccessInput;
-uint32_t aurora_access_create(const uint8_t *data, size_t len,
-                              AuroraAccessEngine **out);
-void aurora_access_destroy(AuroraAccessEngine *engine);
-uint64_t aurora_access_generation(const AuroraAccessEngine *engine);
-uint32_t aurora_access_evaluate(const AuroraAccessEngine *engine,
-                                const AuroraAccessInput *input,
-                                AuroraDecision *out);
-void aurora_access_record(uint32_t action);
-
-
-
 
 /* Extension: JWT Authentication */
 #define AURORA_JWT_MAX_FORWARD_HEADERS 16
@@ -381,14 +365,10 @@ void aurora_gateway_stop_shm(void);
 uint32_t aurora_gateway_bind_shm(void *shared, size_t len, void *active);
 uint32_t aurora_gateway_init_shm(const char *path);
 
-/* Backward compatibility lifecycle aliases */
 void aurora_gateway_stop_telemetry(void);
 uint32_t aurora_gateway_bind_telemetry(void *shared, size_t len, void *active);
-void aurora_waf_stop_telemetry(void);
-uint32_t aurora_waf_bind_telemetry(void *shared, size_t len, void *active);
-uint32_t aurora_telemetry_init_shm(const char *path);
 
-/* SHM Extension Metric Objects (Zero-copy, lockless atomic layout) */
+/* SHM L7 Metric Objects (Zero-copy, lockless atomic layout) */
 typedef struct {
   uint64_t requests_total;
   uint64_t status_2xx;
@@ -408,17 +388,41 @@ typedef struct {
 } aurora_gateway_http_metrics_t;
 
 typedef struct {
-  uint64_t allow;
-  uint64_t block;
-  uint64_t audit;
-} aurora_gateway_waf_metrics_t;
+  uint64_t request_bytes_in;
+  uint64_t response_bytes_out;
+  uint64_t requests_ssl;
+  uint64_t requests_matched;
+} aurora_gateway_l7_traffic_metrics_t;
 
+/* SHM L4 Metric Objects */
+typedef struct {
+  uint64_t active;
+  uint64_t reading;
+  uint64_t writing;
+  uint64_t waiting;
+} aurora_gateway_connection_metrics_t;
+
+typedef struct {
+  uint64_t handshakes_total;
+  uint64_t handshakes_failed;
+  uint64_t sessions_reused;
+} aurora_gateway_ssl_metrics_t;
+
+/* SHM Upstream Metric Objects */
+typedef struct {
+  uint64_t requests_total;
+  uint64_t responses_2xx;
+  uint64_t responses_5xx;
+  uint64_t response_time_sum_ms;
+  uint64_t connect_time_sum_ms;
+  uint64_t failures;
+} aurora_gateway_upstream_metrics_t;
+
+/* SHM Extension Metric Objects */
 typedef struct {
   uint64_t allow;
   uint64_t block;
 } aurora_gateway_ip_restriction_metrics_t;
-
-typedef aurora_gateway_ip_restriction_metrics_t aurora_gateway_access_metrics_t;
 
 typedef struct {
   uint64_t allowed;
@@ -468,27 +472,31 @@ typedef struct {
   uint64_t sampled;
 } aurora_gateway_mirror_metrics_t;
 
-typedef struct {
-  uint64_t active;
-  uint64_t reading;
-  uint64_t writing;
-  uint64_t waiting;
-} aurora_gateway_connection_metrics_t;
-
+/* SHM Infra Metric Objects */
 typedef struct {
   uint64_t active_consumers;
 } aurora_gateway_log_bus_metrics_t;
 
+/* Master SHM Layout (4096 bytes, must match Rust GatewaySharedMetrics exactly)
+ */
 typedef struct {
   uint32_t magic;
   uint32_t version;
   uint64_t generation;
+
+  /* L7 */
   aurora_gateway_http_metrics_t http;
-  aurora_gateway_waf_metrics_t waf;
-  union {
-    aurora_gateway_ip_restriction_metrics_t ip_restriction;
-    aurora_gateway_access_metrics_t access;
-  };
+  aurora_gateway_l7_traffic_metrics_t l7_traffic;
+
+  /* L4 */
+  aurora_gateway_connection_metrics_t connections;
+  aurora_gateway_ssl_metrics_t ssl;
+
+  /* Upstream */
+  aurora_gateway_upstream_metrics_t upstream;
+
+  /* Extensions */
+  aurora_gateway_ip_restriction_metrics_t ip_restriction;
   aurora_gateway_ratelimit_metrics_t ratelimit;
   aurora_gateway_jwt_metrics_t jwt;
   aurora_gateway_conn_limit_metrics_t conn_limit;
@@ -499,50 +507,43 @@ typedef struct {
   aurora_gateway_canary_metrics_t canary;
   aurora_gateway_blue_green_metrics_t blue_green;
   aurora_gateway_mirror_metrics_t mirror;
-  aurora_gateway_connection_metrics_t connections;
+
+  /* Infra */
   aurora_gateway_log_bus_metrics_t log_bus;
-  uint8_t _reserved[4096 - 360];
+
+  uint8_t _reserved[4096 - 440];
 } aurora_gateway_shared_metrics_t;
 
-/* Modern Lockless SHM Metrics Recording */
+/* L7 Gateway SHM Metrics Recording */
 void aurora_gateway_record_request(uint32_t status, uint64_t duration_ms);
+void aurora_gateway_record_traffic(uint64_t bytes_in, uint64_t bytes_out,
+                                   uint32_t is_ssl, uint32_t is_matched);
+
+/* L4 Gateway SHM Metrics Recording */
 void aurora_gateway_record_connections(uint64_t active, uint64_t reading,
                                        uint64_t writing, uint64_t waiting);
-void aurora_gateway_record_pipeline(uint32_t action);
-void aurora_gateway_record_ip_restriction(uint32_t action);
-void aurora_gateway_record_ratelimit(uint32_t action);
-void aurora_gateway_record_jwt(uint32_t status);
-void aurora_gateway_record_conn_limit(uint32_t blocked);
-void aurora_gateway_record_traffic_shaper(uint32_t delayed);
-void aurora_gateway_record_request_size(uint32_t rejected);
-void aurora_gateway_record_termination(void);
-void aurora_gateway_record_traffic_split(uint32_t secondary);
-void aurora_gateway_record_canary(uint32_t is_canary);
-void aurora_gateway_record_blue_green(uint32_t is_green);
-void aurora_gateway_record_mirror(void);
+void aurora_gateway_record_ssl(uint32_t handshake_ok, uint32_t reused);
+
+/* Upstream SHM Metrics Recording */
+void aurora_gateway_record_upstream(uint32_t status, uint64_t response_ms,
+                                    uint64_t connect_ms, uint32_t failed);
+
+/* Extension Metrics Recording */
+void extension_ip_restriction_record_metrics(uint32_t action);
+void extension_rate_limit_record_metrics(uint32_t action);
+void extension_jwt_record_metrics(uint32_t status);
+void extension_conn_limit_record_metrics(uint32_t blocked);
+void extension_traffic_shaper_record_metrics(uint32_t delayed);
+void extension_request_size_record_metrics(uint32_t rejected);
+void extension_termination_record_metrics(void);
+void extension_traffic_split_record_metrics(uint32_t secondary);
+void extension_canary_record_metrics(uint32_t is_canary);
+void extension_blue_green_record_metrics(uint32_t is_green);
+void extension_mirror_record_metrics(void);
 
 /* SHM Logs Bus Gating */
 uint32_t aurora_gateway_is_log_active(void);
 uint64_t aurora_gateway_active_log_consumers(void);
-
-/* Backward compatibility recording aliases */
-void aurora_telemetry_record_request(uint32_t status, uint64_t duration_ms);
-void aurora_telemetry_record_waf(uint32_t action);
-void aurora_telemetry_record_access(uint32_t action);
-void aurora_telemetry_record_ip_restriction(uint32_t action);
-void aurora_telemetry_record_ratelimit(uint32_t action);
-void aurora_telemetry_record_jwt(uint32_t status);
-void aurora_telemetry_record_conn_limit(uint32_t blocked);
-void aurora_telemetry_record_traffic_shaper(uint32_t delayed);
-void aurora_telemetry_record_request_size(uint32_t rejected);
-void aurora_telemetry_record_termination(void);
-void aurora_telemetry_record_traffic_split(uint32_t secondary);
-void aurora_telemetry_record_canary(uint32_t is_canary);
-void aurora_telemetry_record_blue_green(uint32_t is_green);
-void aurora_telemetry_record_mirror(void);
-void aurora_telemetry_record_connections(uint64_t active, uint64_t reading,
-                                         uint64_t writing, uint64_t waiting);
-uint32_t aurora_telemetry_is_log_active(void);
 
 #ifdef __cplusplus
 }

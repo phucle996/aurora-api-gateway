@@ -14,20 +14,12 @@ pub mod shm;
 
 pub use aurora_engine::Decision;
 pub use extensions::ip_restriction;
-#[deprecated(note = "Use ip_restriction instead")]
-pub use extensions::ip_restriction as access;
 
 /// Trả về số phiên bản ABI hiện tại của Aurora Gateway (hiện tại là 4).
 /// Module NGINX sẽ gọi hàm này lúc khởi động để kiểm tra tính tương thích nhị phân.
 #[unsafe(no_mangle)]
 pub extern "C" fn aurora_gateway_abi_version() -> u32 {
     4
-}
-
-#[deprecated(note = "Use aurora_gateway_abi_version instead")]
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_waf_abi_version() -> u32 {
-    aurora_gateway_abi_version()
 }
 
 pub(crate) const OK: u32 = 0;
@@ -37,12 +29,6 @@ pub(crate) const INVALID: u32 = 1;
 #[unsafe(no_mangle)]
 pub extern "C" fn aurora_gateway_stop_telemetry() {
     shm::stop_shm();
-}
-
-#[deprecated(note = "Use aurora_gateway_stop_telemetry instead")]
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_waf_stop_telemetry() {
-    aurora_gateway_stop_telemetry();
 }
 
 /// Bind adapter-owned shared telemetry counters before starting worker threads.
@@ -60,30 +46,6 @@ pub unsafe extern "C" fn aurora_gateway_bind_telemetry(
         INVALID
     }
 }
-
-#[deprecated(note = "Use aurora_gateway_bind_telemetry instead")]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn aurora_waf_bind_telemetry(
-    shared: *mut std::ffi::c_void,
-    len: usize,
-    active: *mut std::ffi::c_void,
-) -> u32 {
-    unsafe { aurora_gateway_bind_telemetry(shared, len, active) }
-}
-
-/// Initialize cross-process shared memory file for telemetry with Agent.
-///
-/// # Safety
-/// If `path` is non-null, it must point to a valid null-terminated C string.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn aurora_telemetry_init_shm(path: *const std::ffi::c_char) -> u32 {
-    if unsafe { shm::init_shm(path) } {
-        OK
-    } else {
-        INVALID
-    }
-}
-
 
 #[cfg(test)]
 mod tests {

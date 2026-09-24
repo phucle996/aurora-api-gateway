@@ -11,7 +11,7 @@ pub use logs::*;
 pub use metrics::*;
 
 pub const TELEMETRY_MAGIC: u32 = 0x4155524F; // "AURO"
-pub const TELEMETRY_VERSION: u32 = 1;
+pub const TELEMETRY_VERSION: u32 = 2;
 pub const SHM_DEFAULT_PATH: &str = "/dev/shm/aurora_gateway_telemetry.bin";
 pub const SHM_SIZE_BYTES: usize = 4096;
 

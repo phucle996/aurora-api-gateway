@@ -9,9 +9,7 @@
 //! Generated directives are written to `/var/lib/aurora-policy/active-extensions.conf` and injected
 //! into the `server { ... }` block, taking effect with zero downtime via `aurora-gateway -s reload`.
 
-use crate::spec::materialize::extensions::common::{
-    boolean, nginx_quoted, strings, unsigned_or,
-};
+use crate::spec::materialize::extensions::common::{boolean, nginx_quoted, strings, unsigned_or};
 use serde_json::{Map, Value};
 
 pub fn materialize(

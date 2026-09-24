@@ -18,8 +18,8 @@ char *ngx_http_gateway_merge_blue_green(ngx_conf_t *cf,
   u_char *bytes;
   uint32_t status;
 
-  ngx_conf_merge_str_value(conf->blue_green_policy,
-                           prev->blue_green_policy, "");
+  ngx_conf_merge_str_value(conf->blue_green_policy, prev->blue_green_policy,
+                           "");
   if (conf->blue_green_policy.len == 0) {
     return NGX_CONF_OK;
   }
@@ -29,8 +29,7 @@ char *ngx_http_gateway_merge_blue_green(ngx_conf_t *cf,
     conf->blue_green_engine = prev->blue_green_engine;
     return NGX_CONF_OK;
   }
-  if (ngx_conf_full_name(cf->cycle, &conf->blue_green_policy, 0) !=
-      NGX_OK) {
+  if (ngx_conf_full_name(cf->cycle, &conf->blue_green_policy, 0) != NGX_OK) {
     return NGX_CONF_ERROR;
   }
 
@@ -111,14 +110,13 @@ ngx_int_t ngx_http_gateway_eval_blue_green(ngx_http_request_t *r,
   ngx_memzero(&decision, sizeof(decision));
 
   uint32_t status = aurora_blue_green_evaluate(
-      conf->blue_green_engine, host.data, host.len, r->uri.data, r->uri.len,
-      r, ngx_http_gateway_header_lookup, &decision);
+      conf->blue_green_engine, host.data, host.len, r->uri.data, r->uri.len, r,
+      ngx_http_gateway_header_lookup, &decision);
 
   if (status != 0) {
     ngx_log_t log = *r->connection->log;
     log.handler = NULL;
-    ngx_log_error(NGX_LOG_ERR, &log, 0,
-                  "Gateway blue-green eval failure: %ui",
+    ngx_log_error(NGX_LOG_ERR, &log, 0, "Gateway blue-green eval failure: %ui",
                   (ngx_uint_t)status);
     return NGX_DECLINED;
   }
@@ -157,7 +155,7 @@ ngx_int_t ngx_http_gateway_eval_blue_green(ngx_http_request_t *r,
                                          (u_char *)"green", 5) == 0)
                             ? 1
                             : 0;
-    aurora_telemetry_record_blue_green(is_green);
+    extension_blue_green_record_metrics(is_green);
 
     /* Forward upstream headers */
     for (uint32_t i = 0; i < decision.headers_count && i < 16; i++) {
@@ -191,11 +189,11 @@ ngx_int_t ngx_http_gateway_eval_blue_green(ngx_http_request_t *r,
 
     ngx_log_t log = *r->connection->log;
     log.handler = NULL;
-    ngx_log_error(NGX_LOG_INFO, &log, 0,
-                  "Gateway blue-green: rule %*s -> upstream %V (slot=%V, override=%ui)",
-                  (int)decision.rule_id_len, decision.rule_id,
-                  &ctx->chosen_upstream, &ctx->deploy_slot,
-                  (ngx_uint_t)decision.is_header_override);
+    ngx_log_error(
+        NGX_LOG_INFO, &log, 0,
+        "Gateway blue-green: rule %*s -> upstream %V (slot=%V, override=%ui)",
+        (int)decision.rule_id_len, decision.rule_id, &ctx->chosen_upstream,
+        &ctx->deploy_slot, (ngx_uint_t)decision.is_header_override);
   }
 
   return NGX_DECLINED;

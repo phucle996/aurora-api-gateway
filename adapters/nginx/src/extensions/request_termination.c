@@ -7,9 +7,10 @@ static void ngx_http_gateway_request_termination_cleanup(void *data) {
   aurora_request_termination_destroy((AuroraRequestTerminationEngine *)data);
 }
 
-char *ngx_http_gateway_merge_request_termination(
-    ngx_conf_t *cf, ngx_http_gateway_conf_t *prev,
-    ngx_http_gateway_conf_t *conf) {
+char *
+ngx_http_gateway_merge_request_termination(ngx_conf_t *cf,
+                                           ngx_http_gateway_conf_t *prev,
+                                           ngx_http_gateway_conf_t *conf) {
   ngx_pool_cleanup_t *cleanup;
   struct stat st;
   int fd;
@@ -104,7 +105,8 @@ ngx_int_t ngx_http_gateway_eval_request_termination(
     return NGX_DECLINED;
   }
 
-  /* Trích xuất header đến mà không cấp phát bộ nhớ động (0.00 warm heap alloc) */
+  /* Trích xuất header đến mà không cấp phát bộ nhớ động (0.00 warm heap alloc)
+   */
   AuroraIncomingHeader in_headers[64];
   size_t headers_count = 0;
 
@@ -138,7 +140,8 @@ ngx_int_t ngx_http_gateway_eval_request_termination(
       r->uri.len, r->method_name.data, r->method_name.len, in_headers,
       headers_count, &decision);
 
-  /* Đánh dấu context để phục vụ telemetry variable $gateway_termination_status */
+  /* Đánh dấu context để phục vụ telemetry variable $gateway_termination_status
+   */
   ngx_http_gateway_ctx_t *ctx =
       ngx_http_get_module_ctx(r, ngx_http_gateway_module);
   if (ctx == NULL) {
@@ -156,13 +159,13 @@ ngx_int_t ngx_http_gateway_eval_request_termination(
     return NGX_DECLINED;
   }
 
-  aurora_telemetry_record_termination();
+  extension_termination_record_metrics();
 
   /* Thiết lập HTTP Status Code */
-  r->headers_out.status = (decision.status_code >= 200 &&
-                           decision.status_code <= 599)
-                              ? (ngx_uint_t)decision.status_code
-                              : NGX_HTTP_SERVICE_UNAVAILABLE;
+  r->headers_out.status =
+      (decision.status_code >= 200 && decision.status_code <= 599)
+          ? (ngx_uint_t)decision.status_code
+          : NGX_HTTP_SERVICE_UNAVAILABLE;
   r->headers_out.content_length_n = decision.body_len;
 
   /* Thiết lập Content-Type mặc định nếu có */

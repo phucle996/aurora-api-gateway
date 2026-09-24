@@ -681,11 +681,9 @@ fn test_ip_restriction_renderer_generates_cidr_rules_from_instance_config() {
     assert_eq!(rules[2]["path_prefix"], "/admin");
     assert_eq!(rules[2]["priority"], 7);
     assert_eq!(rules[0]["networks"][0], "198.51.100.0/24");
-    assert!(
-        rendered
-            .server_conf
-            .contains("gateway_ip_restriction_policy /var/lib/aurora-policy/active-ip-restriction.json;")
-    );
+    assert!(rendered.server_conf.contains(
+        "gateway_ip_restriction_policy /var/lib/aurora-policy/active-ip-restriction.json;"
+    ));
 }
 
 #[test]
@@ -750,10 +748,9 @@ async fn test_ip_restriction_extension_materializes_and_removes_snapshot() {
     let ext_conf = tokio::fs::read_to_string(policy_dir.join("active-extensions.conf"))
         .await
         .unwrap();
-    assert!(
-        ext_conf
-            .contains("gateway_ip_restriction_policy /var/lib/aurora-policy/active-ip-restriction.json;")
-    );
+    assert!(ext_conf.contains(
+        "gateway_ip_restriction_policy /var/lib/aurora-policy/active-ip-restriction.json;"
+    ));
 
     // Second run: spec without extension removes snapshot and directive
     let spec_without_extension = Spec {
@@ -837,58 +834,56 @@ fn test_generate_domain_routing_conf_features() {
             verify_depth: 3,
         }],
         routing: crate::spec::routing::RoutingSpec {
-            domains: vec![
-                crate::spec::routing::DomainRoutingSpec {
-                    host: "api.aurora.local".to_string(),
-                    locations: vec![
-                        crate::spec::routing::LocationRoutingSpec {
-                            path: "/".to_string(),
-                            upstream: "root_upstream".to_string(),
-                            priority: 0,
-                            strip_path: false,
-                            websocket: false,
-                            plugins_json: None,
-                            origin_tls: None,
-                        },
-                        crate::spec::routing::LocationRoutingSpec {
-                            path: "/api/v1".to_string(),
-                            upstream: "api_upstream_old".to_string(),
-                            priority: 1,
-                            strip_path: false,
-                            websocket: false,
-                            plugins_json: None,
-                            origin_tls: None,
-                        },
-                        // Higher priority route for same path /api/v1 -> overrides
-                        crate::spec::routing::LocationRoutingSpec {
-                            path: "/api/v1".to_string(),
-                            upstream: "api_upstream_new".to_string(),
-                            priority: 10,
-                            strip_path: true,
-                            websocket: false,
-                            plugins_json: None,
-                            origin_tls: Some(crate::spec::routing::OriginTLSSpec {
-                                enabled: true,
-                                verify_cert: true,
-                                sni_host: "origin.aurora.local".to_string(),
-                                ca_cert: "ORIGIN_CA".to_string(),
-                                mtls: true,
-                                client_cert: "ORIGIN_CLIENT_CERT".to_string(),
-                                client_key: "ORIGIN_CLIENT_KEY".to_string(),
-                            }),
-                        },
-                        crate::spec::routing::LocationRoutingSpec {
-                            path: "/ws".to_string(),
-                            upstream: "ws_upstream".to_string(),
-                            priority: 5,
-                            strip_path: false,
-                            websocket: true,
-                            plugins_json: None,
-                            origin_tls: None,
-                        },
-                    ],
-                },
-            ],
+            domains: vec![crate::spec::routing::DomainRoutingSpec {
+                host: "api.aurora.local".to_string(),
+                locations: vec![
+                    crate::spec::routing::LocationRoutingSpec {
+                        path: "/".to_string(),
+                        upstream: "root_upstream".to_string(),
+                        priority: 0,
+                        strip_path: false,
+                        websocket: false,
+                        plugins_json: None,
+                        origin_tls: None,
+                    },
+                    crate::spec::routing::LocationRoutingSpec {
+                        path: "/api/v1".to_string(),
+                        upstream: "api_upstream_old".to_string(),
+                        priority: 1,
+                        strip_path: false,
+                        websocket: false,
+                        plugins_json: None,
+                        origin_tls: None,
+                    },
+                    // Higher priority route for same path /api/v1 -> overrides
+                    crate::spec::routing::LocationRoutingSpec {
+                        path: "/api/v1".to_string(),
+                        upstream: "api_upstream_new".to_string(),
+                        priority: 10,
+                        strip_path: true,
+                        websocket: false,
+                        plugins_json: None,
+                        origin_tls: Some(crate::spec::routing::OriginTLSSpec {
+                            enabled: true,
+                            verify_cert: true,
+                            sni_host: "origin.aurora.local".to_string(),
+                            ca_cert: "ORIGIN_CA".to_string(),
+                            mtls: true,
+                            client_cert: "ORIGIN_CLIENT_CERT".to_string(),
+                            client_key: "ORIGIN_CLIENT_KEY".to_string(),
+                        }),
+                    },
+                    crate::spec::routing::LocationRoutingSpec {
+                        path: "/ws".to_string(),
+                        upstream: "ws_upstream".to_string(),
+                        priority: 5,
+                        strip_path: false,
+                        websocket: true,
+                        plugins_json: None,
+                        origin_tls: None,
+                    },
+                ],
+            }],
         },
         ..Default::default()
     };
@@ -1032,7 +1027,8 @@ async fn test_materialize_nginx_with_certificates() {
 
 #[tokio::test]
 async fn test_materialize_nginx_cleans_up_stale_certificates_and_origin_tls() {
-    let base_tmp = std::env::temp_dir().join(format!("aurora-cert-cleanup-test-{}", std::process::id()));
+    let base_tmp =
+        std::env::temp_dir().join(format!("aurora-cert-cleanup-test-{}", std::process::id()));
     let policy_dir = base_tmp.join("policy");
     let routing_dir = base_tmp.join("routing");
     let _ = tokio::fs::remove_dir_all(&base_tmp).await;
@@ -1129,12 +1125,27 @@ async fn test_materialize_nginx_cleans_up_stale_certificates_and_origin_tls() {
     assert!(res2.nginx_changed);
 
     // Old files must be pruned
-    assert!(!old_cert_file.exists(), "stale old_cert.crt should be removed");
-    assert!(!old_key_file.exists(), "stale old_cert.key should be removed");
-    assert!(!old_ca_file.exists(), "stale old_cert_ca.crt should be removed");
+    assert!(
+        !old_cert_file.exists(),
+        "stale old_cert.crt should be removed"
+    );
+    assert!(
+        !old_key_file.exists(),
+        "stale old_cert.key should be removed"
+    );
+    assert!(
+        !old_ca_file.exists(),
+        "stale old_cert_ca.crt should be removed"
+    );
     assert!(!old_origin_ca.exists(), "stale origin CA should be removed");
-    assert!(!old_origin_cert.exists(), "stale origin client cert should be removed");
-    assert!(!old_origin_key.exists(), "stale origin client key should be removed");
+    assert!(
+        !old_origin_cert.exists(),
+        "stale origin client cert should be removed"
+    );
+    assert!(
+        !old_origin_key.exists(),
+        "stale origin client key should be removed"
+    );
 
     // New cert files must exist
     let new_cert_file = routing_dir.join("certs/new_cert.crt");
@@ -1144,7 +1155,6 @@ async fn test_materialize_nginx_cleans_up_stale_certificates_and_origin_tls() {
 
     let _ = tokio::fs::remove_dir_all(&base_tmp).await;
 }
-
 
 #[test]
 fn test_l4_streams_generation() {

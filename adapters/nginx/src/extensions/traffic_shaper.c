@@ -115,7 +115,7 @@ ngx_int_t ngx_http_gateway_eval_traffic_shaper(ngx_http_request_t *r,
   }
 
   if (decision.matched && decision.rate_bytes_per_sec > 0) {
-    aurora_telemetry_record_traffic_shaper(1);
+    extension_traffic_shaper_record_metrics(1);
     r->limit_rate = (size_t)decision.rate_bytes_per_sec;
     r->limit_rate_set = 1;
     r->limit_rate_after = (size_t)decision.burst_bytes;

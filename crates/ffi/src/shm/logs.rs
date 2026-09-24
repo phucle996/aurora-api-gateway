@@ -8,21 +8,20 @@ use super::gateway_metrics;
 /// Returns 1 if active, 0 otherwise.
 #[unsafe(no_mangle)]
 pub extern "C" fn aurora_gateway_is_log_active() -> u32 {
-    if gateway_metrics().map(|m| m.is_log_active()).unwrap_or(false) {
+    if gateway_metrics()
+        .map(|m| m.is_log_active())
+        .unwrap_or(false)
+    {
         1
     } else {
         0
     }
 }
 
-#[deprecated(note = "Use aurora_gateway_is_log_active instead")]
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_is_log_active() -> u32 {
-    aurora_gateway_is_log_active()
-}
-
 /// Returns the current active log consumers count.
 #[unsafe(no_mangle)]
 pub extern "C" fn aurora_gateway_active_log_consumers() -> u64 {
-    gateway_metrics().map(|m| m.active_log_consumers_count()).unwrap_or(0)
+    gateway_metrics()
+        .map(|m| m.active_log_consumers_count())
+        .unwrap_or(0)
 }

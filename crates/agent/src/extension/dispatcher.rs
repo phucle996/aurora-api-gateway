@@ -7,7 +7,7 @@ use super::opentelemetry_metrics::{
 use super::opentelemetry_tracing::{
     OtlpTracingConfig, OtlpTracingExporter, OtlpTracingWorkerHandle, spawn_otlp_tracing_worker,
 };
-use super::prometheus::{spawn_prometheus_server, MetricsExtensionSpec};
+use super::prometheus::{MetricsExtensionSpec, spawn_prometheus_server};
 use super::std_log::{
     StdLogConfig, StdLogFormat, StdLogLevel, StdLogSpec, StdLogWorkerHandle, spawn_std_log_worker,
 };

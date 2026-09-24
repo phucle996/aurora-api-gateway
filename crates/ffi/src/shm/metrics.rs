@@ -1,11 +1,11 @@
 //! Shared Memory Core Metrics Recording (C ABI Layer)
 //!
-//! Sub-nanosecond lockless recording for HTTP status, request latencies, and extension metrics.
+//! Sub-nanosecond lockless recording for HTTP, L7 traffic, L4/SSL, upstream, and extension metrics.
 
 use super::gateway_metrics;
 
 // ----------------------------------------------------------------------------
-// HTTP & Connection Metrics
+// L7 Metrics: HTTP & Traffic Volume
 // ----------------------------------------------------------------------------
 
 #[unsafe(no_mangle)]
@@ -15,11 +15,21 @@ pub extern "C" fn aurora_gateway_record_request(status: u32, duration_ms: u64) {
     }
 }
 
-#[deprecated(note = "Use aurora_gateway_record_request instead")]
 #[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_request(status: u32, duration_ms: u64) {
-    aurora_gateway_record_request(status, duration_ms);
+pub extern "C" fn aurora_gateway_record_traffic(
+    bytes_in: u64,
+    bytes_out: u64,
+    is_ssl: u32,
+    is_matched: u32,
+) {
+    if let Some(m) = gateway_metrics() {
+        m.record_traffic(bytes_in, bytes_out, is_ssl != 0, is_matched != 0);
+    }
 }
+
+// ----------------------------------------------------------------------------
+// L4 Metrics: Connections & SSL/TLS
+// ----------------------------------------------------------------------------
 
 #[unsafe(no_mangle)]
 pub extern "C" fn aurora_gateway_record_connections(
@@ -33,15 +43,27 @@ pub extern "C" fn aurora_gateway_record_connections(
     }
 }
 
-#[deprecated(note = "Use aurora_gateway_record_connections instead")]
 #[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_connections(
-    active: u64,
-    reading: u64,
-    writing: u64,
-    waiting: u64,
+pub extern "C" fn aurora_gateway_record_ssl(handshake_ok: u32, reused: u32) {
+    if let Some(m) = gateway_metrics() {
+        m.record_ssl(handshake_ok != 0, reused != 0);
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Upstream Metrics
+// ----------------------------------------------------------------------------
+
+#[unsafe(no_mangle)]
+pub extern "C" fn aurora_gateway_record_upstream(
+    status: u32,
+    response_ms: u64,
+    connect_ms: u64,
+    failed: u32,
 ) {
-    aurora_gateway_record_connections(active, reading, writing, waiting);
+    if let Some(m) = gateway_metrics() {
+        m.record_upstream(status, response_ms, connect_ms, failed != 0);
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -49,168 +71,78 @@ pub extern "C" fn aurora_telemetry_record_connections(
 // ----------------------------------------------------------------------------
 
 #[unsafe(no_mangle)]
-pub extern "C" fn aurora_gateway_record_pipeline(action: u32) {
-    if let Some(total) = super::shared_slot(0) {
-        total.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        if let Some(counter) = super::shared_slot(if action == 1 { 2 } else { 1 }) {
-            counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        }
-    }
-    if let Some(m) = gateway_metrics() {
-        m.record_waf(action);
-    }
-}
-
-#[deprecated(note = "Use aurora_gateway_record_pipeline instead")]
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_waf(action: u32) {
-    aurora_gateway_record_pipeline(action);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_gateway_record_ip_restriction(action: u32) {
+pub extern "C" fn extension_ip_restriction_record_metrics(action: u32) {
     if let Some(m) = gateway_metrics() {
         m.record_ip_restriction(action);
     }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_ip_restriction(action: u32) {
-    aurora_gateway_record_ip_restriction(action);
-}
-
-#[deprecated(note = "Use aurora_gateway_record_ip_restriction instead")]
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_access(action: u32) {
-    aurora_gateway_record_ip_restriction(action);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_gateway_record_ratelimit(action: u32) {
+pub extern "C" fn extension_rate_limit_record_metrics(action: u32) {
     if let Some(m) = gateway_metrics() {
         m.record_ratelimit(action);
     }
 }
 
-#[deprecated(note = "Use aurora_gateway_record_ratelimit instead")]
 #[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_ratelimit(action: u32) {
-    aurora_gateway_record_ratelimit(action);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_gateway_record_jwt(status: u32) {
+pub extern "C" fn extension_jwt_record_metrics(status: u32) {
     if let Some(m) = gateway_metrics() {
         m.record_jwt(status);
     }
 }
 
-#[deprecated(note = "Use aurora_gateway_record_jwt instead")]
 #[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_jwt(status: u32) {
-    aurora_gateway_record_jwt(status);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_gateway_record_conn_limit(blocked: u32) {
+pub extern "C" fn extension_conn_limit_record_metrics(blocked: u32) {
     if let Some(m) = gateway_metrics() {
         m.record_conn_limit(blocked != 0);
     }
 }
 
-#[deprecated(note = "Use aurora_gateway_record_conn_limit instead")]
 #[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_conn_limit(blocked: u32) {
-    aurora_gateway_record_conn_limit(blocked);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_gateway_record_traffic_shaper(delayed: u32) {
+pub extern "C" fn extension_traffic_shaper_record_metrics(delayed: u32) {
     if let Some(m) = gateway_metrics() {
         m.record_traffic_shaper(delayed != 0);
     }
 }
 
-#[deprecated(note = "Use aurora_gateway_record_traffic_shaper instead")]
 #[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_traffic_shaper(delayed: u32) {
-    aurora_gateway_record_traffic_shaper(delayed);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_gateway_record_request_size(rejected: u32) {
+pub extern "C" fn extension_request_size_record_metrics(rejected: u32) {
     if let Some(m) = gateway_metrics() {
         m.record_request_size(rejected != 0);
     }
 }
 
-#[deprecated(note = "Use aurora_gateway_record_request_size instead")]
 #[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_request_size(rejected: u32) {
-    aurora_gateway_record_request_size(rejected);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_gateway_record_termination() {
+pub extern "C" fn extension_termination_record_metrics() {
     if let Some(m) = gateway_metrics() {
         m.record_termination();
     }
 }
 
-#[deprecated(note = "Use aurora_gateway_record_termination instead")]
 #[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_termination() {
-    aurora_gateway_record_termination();
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_gateway_record_traffic_split(secondary: u32) {
+pub extern "C" fn extension_traffic_split_record_metrics(secondary: u32) {
     if let Some(m) = gateway_metrics() {
         m.record_traffic_split(secondary != 0);
     }
 }
 
-#[deprecated(note = "Use aurora_gateway_record_traffic_split instead")]
 #[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_traffic_split(secondary: u32) {
-    aurora_gateway_record_traffic_split(secondary);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_gateway_record_canary(is_canary: u32) {
+pub extern "C" fn extension_canary_record_metrics(is_canary: u32) {
     if let Some(m) = gateway_metrics() {
         m.record_canary(is_canary != 0);
     }
 }
 
-#[deprecated(note = "Use aurora_gateway_record_canary instead")]
 #[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_canary(is_canary: u32) {
-    aurora_gateway_record_canary(is_canary);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_gateway_record_blue_green(is_green: u32) {
+pub extern "C" fn extension_blue_green_record_metrics(is_green: u32) {
     if let Some(m) = gateway_metrics() {
         m.record_blue_green(is_green != 0);
     }
 }
 
-#[deprecated(note = "Use aurora_gateway_record_blue_green instead")]
 #[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_blue_green(is_green: u32) {
-    aurora_gateway_record_blue_green(is_green);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_gateway_record_mirror() {
+pub extern "C" fn extension_mirror_record_metrics() {
     if let Some(m) = gateway_metrics() {
         m.record_mirror();
     }
-}
-
-#[deprecated(note = "Use aurora_gateway_record_mirror instead")]
-#[unsafe(no_mangle)]
-pub extern "C" fn aurora_telemetry_record_mirror() {
-    aurora_gateway_record_mirror();
 }

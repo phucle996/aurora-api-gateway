@@ -128,10 +128,10 @@ ngx_int_t ngx_http_gateway_eval_ip_restriction(ngx_http_request_t *r,
     return NGX_HTTP_SERVICE_UNAVAILABLE;
   }
   if (decision.action == 1) {
-    aurora_gateway_record_ip_restriction(1);
+    extension_ip_restriction_record_metrics(1);
     return NGX_HTTP_FORBIDDEN;
   }
 
-  aurora_gateway_record_ip_restriction(0);
+  extension_ip_restriction_record_metrics(0);
   return NGX_DECLINED;
 }

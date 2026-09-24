@@ -134,11 +134,16 @@ fn main() {
     // 2. Single-threaded Extension Metric Invocations
     {
         let (median_ns, allocs) = benchmark_batch(200_000, 7, || {
-            metrics.record_waf(black_box(1));
+            metrics.record_upstream(
+                black_box(200),
+                black_box(50),
+                black_box(5),
+                black_box(false),
+            );
         });
-        println!("record_waf_block,warm,1,{median_ns:.2},{allocs:.3}");
+        println!("record_upstream_ok,warm,1,{median_ns:.2},{allocs:.3}");
         if require_zero {
-            assert_eq!(allocs, 0.0, "record_waf must perform 0 allocations");
+            assert_eq!(allocs, 0.0, "record_upstream must perform 0 allocations");
         }
     }
 

@@ -111,12 +111,6 @@ static ngx_command_t ngx_http_gateway_commands[] = {
      ngx_conf_set_flag_slot, NGX_HTTP_LOC_CONF_OFFSET,
      offsetof(ngx_http_gateway_conf_t, enabled), NULL},
 
-    {ngx_string("aurora_access_policy"),
-     NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF |
-         NGX_CONF_TAKE1,
-     ngx_conf_set_str_slot, NGX_HTTP_LOC_CONF_OFFSET,
-     offsetof(ngx_http_gateway_conf_t, access_policy), NULL},
-
     ngx_null_command};
 
 static ngx_http_module_t ngx_http_gateway_context = {
@@ -238,7 +232,7 @@ static ngx_int_t ngx_http_gateway_init_process(ngx_cycle_t *cycle) {
   (void)cycle;
 
   /* Khởi tạo vùng nhớ chia sẻ liên tiến trình (SHM) phục vụ Agent Exporter */
-  aurora_telemetry_init_shm(NULL);
+  aurora_gateway_init_shm(NULL);
 
   if (gateway_telemetry_zone == NULL || gateway_telemetry_zone->data == NULL) {
     return NGX_OK;

@@ -223,8 +223,7 @@ mod tests {
             Arc::new(cfg.hostname.clone()),
             None,
         )));
-        let grpc = GrpcClient::new(&cfg)
-            .expect("create lazy grpc client");
+        let grpc = GrpcClient::new(&cfg).expect("create lazy grpc client");
         let runner = SpecSyncRunner::new(cfg, nginx, dispatcher, grpc);
 
         let body = r#"{"version": 1, "release_id": 7}"#;

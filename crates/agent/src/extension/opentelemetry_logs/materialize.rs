@@ -11,14 +11,13 @@ pub fn materialize(
     if *opentelemetry_logs_instances > 1 {
         return Err("NodeSpec contains more than one opentelemetry-logs extension".to_string());
     }
-    let spec = serde_json::from_value::<OtlpLogsConfig>(Value::Object(config)).map_err(
-        |error| {
+    let spec =
+        serde_json::from_value::<OtlpLogsConfig>(Value::Object(config)).map_err(|error| {
             format!(
                 "decode opentelemetry-logs extension {} config: {error}",
                 instance.instance_id
             )
-        },
-    )?;
+        })?;
 
     if spec.endpoint.trim().is_empty() {
         return Err("opentelemetry-logs config: endpoint cannot be empty".to_string());

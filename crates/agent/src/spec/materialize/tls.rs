@@ -54,20 +54,18 @@ pub fn extract_sans_from_pem(cert_pem: &str) -> Vec<String> {
         return Vec::new();
     }
     let mut sans = Vec::new();
-    for pem in Pem::iter_from_buffer(cert_pem.as_bytes()) {
-        if let Ok(pem) = pem {
-            if let Ok(cert) = pem.parse_x509() {
-                for ext in cert.extensions() {
-                    if let ParsedExtension::SubjectAlternativeName(san) = ext.parsed_extension() {
-                        for name in &san.general_names {
-                            if let GeneralName::DNSName(dns) = name {
-                                sans.push(dns.to_ascii_lowercase());
-                            }
+    for pem in Pem::iter_from_buffer(cert_pem.as_bytes()).flatten() {
+        if let Ok(cert) = pem.parse_x509() {
+            for ext in cert.extensions() {
+                if let ParsedExtension::SubjectAlternativeName(san) = ext.parsed_extension() {
+                    for name in &san.general_names {
+                        if let GeneralName::DNSName(dns) = name {
+                            sans.push(dns.to_ascii_lowercase());
                         }
                     }
                 }
-                break; // Only the leaf certificate contains the domain SANs
             }
+            break; // Only the leaf certificate contains the domain SANs
         }
     }
     sans.sort();

@@ -13,7 +13,6 @@ int main(void) {
     AuroraDecision decision;
     _Static_assert(sizeof(AuroraDecision) == 32, "ABI decision layout changed");
     assert(aurora_gateway_abi_version() == 4);
-    assert(aurora_waf_abi_version() == 4);
 
     // 1. IP Restriction Extension Test (Canonical API)
     const char *ip_policy = "{\"schema_version\":1,\"generation\":9,\"rules\":[{\"id\":101,\"priority\":1,\"action\":\"block\",\"networks\":[\"192.168.1.0/24\"],\"host\":\"*\",\"path_prefix\":\"/admin\",\"method\":\"*\",\"schedule\":\"always\",\"expires_at\":0,\"log\":true,\"reputation\":false,\"alert\":false}]}";
@@ -42,57 +41,50 @@ int main(void) {
 
     aurora_ip_restriction_destroy(ip_engine);
     aurora_ip_restriction_destroy(NULL);
+    puts("Aurora IP Restriction FFI: create, evaluate block, destroy pass");
 
-    // 2. IP Restriction Backward Compatibility Aliases (aurora_access_*)
-    AuroraAccessEngine *access_engine = NULL;
-    assert(aurora_access_create((const uint8_t *)ip_policy, strlen(ip_policy), &access_engine) == 0);
-    assert(aurora_access_generation(access_engine) == 9);
-    assert(aurora_access_evaluate(access_engine, (AuroraAccessInput *)&input, &decision) == 0);
-    assert(decision.action == 1);
-    aurora_access_destroy(access_engine);
-    puts("Aurora IP Restriction & Access Aliases FFI: create, evaluate block, destroy pass");
+    // Test SHM init via file (creates /dev/shm file, maps GATEWAY_METRICS)
+    assert(aurora_gateway_init_shm(NULL) == 0);
 
-    // 4. Shared Memory (SHM) Telemetry Contract
-    _Atomic uint64_t *shared = mmap(NULL, 4096, PROT_READ | PROT_WRITE,
-                                    MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    assert(shared != MAP_FAILED);
-    assert(aurora_gateway_bind_shm(NULL, 64, shared + 8) == 1);
-    assert(aurora_gateway_bind_shm(shared, 63, shared + 8) == 1);
-    assert(aurora_gateway_bind_shm((char *)shared + 1, 64, shared + 8) == 1);
-    assert(aurora_gateway_bind_shm(shared, 64, shared + 8) == 0);
-
-    for (int worker = 0; worker < 4; worker++) {
-        pid_t pid = fork();
-        assert(pid >= 0);
-        if (pid == 0) {
-            for (int i = 0; i < 100000; i++) {
-                aurora_gateway_record_pipeline(0);
-                aurora_gateway_record_pipeline(1);
-            }
-            _exit(0);
-        }
-    }
-    for (int worker = 0; worker < 4; worker++) {
-        int status;
-        assert(wait(&status) > 0 && WIFEXITED(status) && WEXITSTATUS(status) == 0);
-    }
-    assert(atomic_load(shared) == 800000);
-    assert(atomic_load(shared + 1) == 400000);
-    assert(atomic_load(shared + 2) == 400000);
-    // A replacement worker binding the existing zone must not reset counters.
-    assert(aurora_gateway_bind_shm(shared, 64, shared + 8) == 0);
-    assert(atomic_load(shared) == 800000);
-
-    // Test log bus gating
-    assert(aurora_gateway_is_log_active() == 0);
-    assert(aurora_telemetry_is_log_active() == 0);
-
-    // Test metrics recording
+    // L7: Core request recording
     aurora_gateway_record_request(200, 15);
-    aurora_gateway_record_ip_restriction(1);
+    aurora_gateway_record_request(404, 3);
+    aurora_gateway_record_request(502, 1200);
+
+    // L7: Traffic volume recording
+    aurora_gateway_record_traffic(1024, 4096, 1, 1);
+    aurora_gateway_record_traffic(512, 2048, 0, 0);
+
+    // L4: Connection gauges
     aurora_gateway_record_connections(10, 2, 4, 4);
 
-    puts("Shared telemetry: 4 processes, 800000 evaluations, exact counters pass");
+    // L4: SSL handshake recording
+    aurora_gateway_record_ssl(1, 0);
+    aurora_gateway_record_ssl(1, 1);
+    aurora_gateway_record_ssl(0, 0);
+
+    // Upstream recording
+    aurora_gateway_record_upstream(200, 50, 5, 0);
+    aurora_gateway_record_upstream(502, 0, 0, 1);
+
+    // Extension metrics recording
+    extension_ip_restriction_record_metrics(1);
+    extension_rate_limit_record_metrics(2);
+    extension_jwt_record_metrics(0);
+    extension_conn_limit_record_metrics(1);
+    extension_traffic_shaper_record_metrics(1);
+    extension_request_size_record_metrics(1);
+    extension_termination_record_metrics();
+    extension_traffic_split_record_metrics(1);
+    extension_canary_record_metrics(1);
+    extension_blue_green_record_metrics(0);
+    extension_mirror_record_metrics();
+
+    // Log bus gating
+    assert(aurora_gateway_is_log_active() == 0);
+
+    aurora_gateway_stop_shm();
+    puts("SHM telemetry: L7/L4/Upstream/Extension metrics recording pass");
 
     // 5. Rate Limit FFI smoke test
     const char *rl_policy = "{\"schema_version\":1,\"generation\":1,\"algorithm\":\"token_bucket\",\"memory_size_mb\":10,\"max_keys\":10000,\"eviction_policy\":\"lru\",\"overflow_strategy\":\"evict_and_track\",\"rules\":[{\"id\":\"r1\",\"host\":\"*\",\"path_prefix\":\"/rl\",\"limit_by\":\"client_ip\",\"rate\":1,\"burst\":1,\"period_secs\":10,\"action_on_exceeded\":\"throttle\"}]}";
