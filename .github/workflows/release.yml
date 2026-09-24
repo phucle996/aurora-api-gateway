@@ -12,7 +12,6 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/aurora-waf
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
@@ -56,8 +55,8 @@ jobs:
       - name: Build aurora-agent (Rust node agent)
         run: cargo build --locked --release -p aurora-agent
 
-      # ── NGINX 1.30.4 runtime and WAF dynamic module ────────────────────────
-      - name: Build NGINX 1.30.4 WAF module
+      # ── NGINX 1.30.4 runtime and Gateway dynamic module ────────────────────
+      - name: Build NGINX 1.30.4 Gateway module
         run: bash scripts/build-nginx-module.sh 1.30.4
 
       - name: Build NGINX 1.30.4 runtime
@@ -85,7 +84,6 @@ jobs:
           go build -buildvcs=false -trimpath \
             -ldflags="-s -w -X 'main.version=${{ github.ref_name }}' -X 'main.buildTime=${BUILD_TIME}' -X 'aurora-waf.local/control-plane/internal/config.DefaultVersion=${{ github.ref_name }}' -X 'aurora-waf.local/control-plane/internal/config.DefaultBuildTime=${BUILD_TIME}'" \
             -o ../build/aurora-controller ./cmd
-
 
       # ── Trivy source code scan ────────────────────────────────────────────
       - name: Trivy filesystem vulnerability scan
@@ -126,7 +124,7 @@ jobs:
       - name: Package Linux systemd release tarball
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          DIST="aurora-waf-${VERSION}-linux-amd64"
+          DIST="aurora-api-gateway-${VERSION}-linux-amd64"
           mkdir -p "dist/${DIST}/bin" "dist/${DIST}/modules" "dist/${DIST}/deploy" "dist/${DIST}/nginx-runtime"
 
           # Binaries
@@ -134,9 +132,10 @@ jobs:
           cp target/release/aurora-compile       "dist/${DIST}/bin/"
           cp target/release/aurora-agent         "dist/${DIST}/bin/"
 
-          # NGINX 1.30.4 runtime and WAF dynamic module
+          # NGINX 1.30.4 runtime and Gateway dynamic module
           cp -rf build/nginx-runtime/*           "dist/${DIST}/nginx-runtime/"
-          cp build/modules/ngx_http_aurora_waf_module.so "dist/${DIST}/modules/"
+          cp -f build/modules/ngx_http_gateway_module*.so "dist/${DIST}/modules/"
+          cp scripts/nginx-versions.txt          "dist/${DIST}/modules/supported-versions.txt"
 
           # Node deploy templates
           cp deploy/docker/nginx-node.conf.template "dist/${DIST}/deploy/"
@@ -145,89 +144,43 @@ jobs:
           install -m 755 install.sh "dist/${DIST}/install.sh"
           cp deploy/systemd/RELEASE_README.md "dist/${DIST}/README.md"
 
-          tar -czf "dist/aurora-waf-${VERSION}-linux-amd64.tar.gz" -C dist "${DIST}"
-          (cd dist && sha256sum "aurora-waf-${VERSION}-linux-amd64.tar.gz" > "aurora-waf-${VERSION}-linux-amd64.tar.gz.sha256")
+          tar -czf "dist/aurora-api-gateway-${VERSION}-linux-amd64.tar.gz" -C dist "${DIST}"
+          (cd dist && sha256sum "aurora-api-gateway-${VERSION}-linux-amd64.tar.gz" > "aurora-api-gateway-${VERSION}-linux-amd64.tar.gz.sha256")
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v7
         with:
           name: release-artifacts
-          path: dist/aurora-waf-*.tar.gz*
+          path: dist/aurora-api-gateway-*.tar.gz*
           retention-days: 1
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Push Docker images to GHCR.
+  # Push Docker images to GHCR (Control Plane & Gateway).
   # ─────────────────────────────────────────────────────────────────────────────
   docker:
-    name: Docker Images → GHCR
+    name: Docker Images → GHCR (${{ matrix.name }})
     needs: build
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - image: controller
+          - name: control-plane
+            image_names: |
+              ghcr.io/${{ github.repository_owner }}/control-plane
+              ghcr.io/${{ github.repository_owner }}/aurora-control-plane
             dockerfile: deploy/docker/Dockerfile.controller
-          - image: node
+          - name: gateway
+            image_names: |
+              ghcr.io/${{ github.repository_owner }}/gateway
+              ghcr.io/${{ github.repository_owner }}/aurora-gateway
             dockerfile: deploy/docker/Dockerfile.node
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.98.1"
-
-      - name: Cargo cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Setup Go
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: control-plane/go.mod
-          cache-dependency-path: control-plane/go.sum
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: ui/package-lock.json
-
-      - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpcre2-dev
-
-      - name: Build all required artifacts
-        run: |
-          # Rust compiler & node agent
-          cargo build --locked --release -p aurora-engine --bin aurora-compile
-          cargo build --locked --release -p aurora-agent
-
-          # NGINX module
-          make module
-
-          # NGINX runtime (for node image)
-          cd build/nginx-source/nginx-1.30.4
-          make -j$(nproc)
-          make DESTDIR="$GITHUB_WORKSPACE/build/nginx-runtime" install
-          mkdir -p "$GITHUB_WORKSPACE/build/nginx-runtime/usr/sbin"
-          cp -f "$GITHUB_WORKSPACE/build/nginx-runtime/usr/local/nginx/sbin/nginx" "$GITHUB_WORKSPACE/build/nginx-runtime/usr/sbin/nginx"
-          cd "$GITHUB_WORKSPACE"
-
-          # UI + Controller binary
-          cd ui && npm ci && npm run build && cd ..
-          cd control-plane
-          BUILD_TIME=$(date -u +'%Y-%m-%d %H:%M:%S')
-          CGO_ENABLED=0 go build -buildvcs=false -trimpath \
-            -ldflags="-s -w -X 'main.version=${{ github.ref_name }}' -X 'main.buildTime=${BUILD_TIME}' -X 'aurora-waf.local/control-plane/internal/config.DefaultVersion=${{ github.ref_name }}' -X 'aurora-waf.local/control-plane/internal/config.DefaultBuildTime=${BUILD_TIME}'" \
-            -o ../build/aurora-controller ./cmd && cd ..
-
-
-          # Brotli package (only needed for node image)
-          if [ "${{ matrix.image }}" = "node" ] && [ -f deploy/docker/Dockerfile.brotli ]; then
-            bash scripts/build-brotli-module.sh
-          fi
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
         uses: docker/login-action@v4
@@ -240,12 +193,12 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.IMAGE_PREFIX }}-${{ matrix.image }}
+          images: ${{ matrix.image_names }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v7
@@ -255,23 +208,28 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       # ── Trivy vulnerability scan ─────────────────────────────────────────
       - name: Trivy vulnerability scan
         uses: aquasecurity/trivy-action@v0.36.0
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         with:
-          image-ref: ${{ env.IMAGE_PREFIX }}-${{ matrix.image }}:${{ steps.meta.outputs.version }}
+          image-ref: ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:${{ steps.meta.outputs.version }}
           format: sarif
-          output: trivy-${{ matrix.image }}.sarif
+          output: trivy-${{ matrix.name }}.sarif
           severity: CRITICAL,HIGH
           exit-code: "0"
 
       - name: Upload Trivy SARIF to GitHub Security
-        if: always() && hashFiles(format('trivy-{0}.sarif', matrix.image)) != ''
+        if: always() && hashFiles(format('trivy-{0}.sarif', matrix.name)) != ''
         uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: trivy-${{ matrix.image }}.sarif
-          category: trivy-${{ matrix.image }}
+          sarif_file: trivy-${{ matrix.name }}.sarif
+          category: trivy-${{ matrix.name }}
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Create GitHub Release with the Linux tarball.
@@ -292,32 +250,34 @@ jobs:
         with:
           generate_release_notes: true
           files: |
-            dist/aurora-waf-*.tar.gz
-            dist/aurora-waf-*.tar.gz.sha256
+            dist/aurora-api-gateway-*.tar.gz
+            dist/aurora-api-gateway-*.tar.gz.sha256
           body: |
             ## Docker Images (GHCR)
 
             ```bash
             # Control Plane
-            docker pull ghcr.io/${{ github.repository_owner }}/aurora-waf-controller:${{ github.ref_name }}
+            docker pull ghcr.io/${{ github.repository_owner }}/control-plane:${{ github.ref_name }}
+            docker pull ghcr.io/${{ github.repository_owner }}/aurora-control-plane:${{ github.ref_name }}
 
-            # WAF Node (NGINX + Module)
-            docker pull ghcr.io/${{ github.repository_owner }}/aurora-waf-node:${{ github.ref_name }}
+            # Gateway (NGINX + Dataplane Agent)
+            docker pull ghcr.io/${{ github.repository_owner }}/gateway:${{ github.ref_name }}
+            docker pull ghcr.io/${{ github.repository_owner }}/aurora-gateway:${{ github.ref_name }}
             ```
 
             ## Linux Systemd (Bare-metal)
-            
+
             ```bash
             # One-line quick installer (installs latest release)
             curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | sudo bash
-            
+
             # Or install this specific release
             curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | sudo bash -s -- -v ${{ github.ref_name }}
-            
+
             # Or install from downloaded tarball
-            tar xzf aurora-waf-*-linux-amd64.tar.gz
-            cd aurora-waf-*-linux-amd64
+            tar xzf aurora-api-gateway-*-linux-amd64.tar.gz
+            cd aurora-api-gateway-*-linux-amd64
             sudo ./install.sh
             ```
-            
+
             See the included `README.md` in the tarball for full instructions.
