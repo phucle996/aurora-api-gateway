@@ -166,14 +166,10 @@ jobs:
       matrix:
         include:
           - name: control-plane
-            image_names: |
-              ghcr.io/${{ github.repository_owner }}/control-plane
-              ghcr.io/${{ github.repository_owner }}/aurora-control-plane
+            image: ghcr.io/${{ github.repository_owner }}/control-plane
             dockerfile: deploy/docker/Dockerfile.controller
           - name: gateway
-            image_names: |
-              ghcr.io/${{ github.repository_owner }}/gateway
-              ghcr.io/${{ github.repository_owner }}/aurora-gateway
+            image: ghcr.io/${{ github.repository_owner }}/gateway
             dockerfile: deploy/docker/Dockerfile.node
     steps:
       - name: Checkout repository
@@ -193,7 +189,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ matrix.image_names }}
+          images: ${{ matrix.image }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -258,11 +254,9 @@ jobs:
             ```bash
             # Control Plane
             docker pull ghcr.io/${{ github.repository_owner }}/control-plane:${{ github.ref_name }}
-            docker pull ghcr.io/${{ github.repository_owner }}/aurora-control-plane:${{ github.ref_name }}
 
             # Gateway (NGINX + Dataplane Agent)
             docker pull ghcr.io/${{ github.repository_owner }}/gateway:${{ github.ref_name }}
-            docker pull ghcr.io/${{ github.repository_owner }}/aurora-gateway:${{ github.ref_name }}
             ```
 
             ## Linux Systemd (Bare-metal)
