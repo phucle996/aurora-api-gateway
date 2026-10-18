@@ -1,0 +1,40 @@
+--- a/auto/options
++++ b/auto/options
+@@ -76,6 +76,8 @@
+ HTTP_USERID=YES
+ HTTP_SLICE=NO
+ HTTP_AUTOINDEX=YES
++HTTP_STATIC=YES
++HTTP_INDEX=YES
+ HTTP_RANDOM_INDEX=NO
+ HTTP_STATUS=NO
+ HTTP_GEO=YES
+@@ -268,6 +270,8 @@
+         --without-http_access_module)    HTTP_ACCESS=NO             ;;
+         --without-http_auth_basic_module) HTTP_AUTH_BASIC=NO        ;;
+         --without-http_mirror_module)    HTTP_MIRROR=NO             ;;
++        --without-http_static_module)        HTTP_STATIC=NO             ;;
++        --without-http_index_module)         HTTP_INDEX=NO              ;;
+         --without-http_autoindex_module) HTTP_AUTOINDEX=NO          ;;
+         --without-http_status_module)    HTTP_STATUS=NO             ;;
+         --without-http_geo_module)       HTTP_GEO=NO                ;;
+--- a/auto/modules
++++ b/auto/modules
+@@ -464,7 +464,7 @@
+         . auto/module
+     fi
+ 
+-    if :; then
++    if [ $HTTP_STATIC = YES ]; then
+         ngx_module_name=ngx_http_static_module
+         ngx_module_incs=
+         ngx_module_deps=
+@@ -512,7 +512,7 @@
+         . auto/module
+     fi
+ 
+-    if :; then
++    if [ $HTTP_INDEX = YES ]; then
+         ngx_module_name=ngx_http_index_module
+         ngx_module_incs=
+         ngx_module_deps=

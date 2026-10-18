@@ -545,6 +545,32 @@ void extension_mirror_record_metrics(void);
 uint32_t aurora_gateway_is_log_active(void);
 uint64_t aurora_gateway_active_log_consumers(void);
 
+/* ========================================================================== */
+/* Policy Shared Memory (SHM) Substrate & Dynamic Hot-Swap                    */
+/* ========================================================================== */
+
+#define AURORA_EXT_IP_RESTRICTION 0
+#define AURORA_EXT_JWT 1
+#define AURORA_EXT_RATE_LIMIT 2
+#define AURORA_EXT_CONN_LIMIT 3
+#define AURORA_EXT_TRAFFIC_SHAPER 4
+#define AURORA_EXT_REQUEST_SIZE_LIMIT 5
+#define AURORA_EXT_TRAFFIC_SPLIT 6
+#define AURORA_EXT_CANARY_RELEASE 7
+#define AURORA_EXT_BLUE_GREEN 8
+#define AURORA_EXT_REQUEST_MIRROR 9
+#define AURORA_EXT_REQUEST_TERMINATION 10
+#define AURORA_EXT_COUNT 11
+
+uint32_t aurora_gateway_init_policy_shm(const char *path);
+uint64_t aurora_gateway_policy_generation(void);
+const uint8_t *aurora_gateway_policy_slot_get(uint32_t slot_id, uint64_t *out_gen,
+                                              size_t *out_len);
+uint32_t aurora_gateway_policy_writer_update(uint32_t slot_id, uint64_t generation,
+                                             const uint8_t *data, size_t len);
+uint32_t aurora_gateway_policy_writer_clear(uint32_t slot_id, uint64_t generation);
+void aurora_gateway_stop_policy_shm(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -7,6 +7,29 @@ use crate::spec::extensions::ExtensionInstanceSpec;
 use crate::spec::schema::Spec;
 use std::os::unix::fs::PermissionsExt;
 
+fn read_shm_slot_string(policy_dir: &std::path::Path, slot_id: u32) -> (u64, String) {
+    let path = policy_dir.join("aurora_gateway_policy.bin");
+    let file = std::fs::File::open(&path)
+        .unwrap_or_else(|e| panic!("failed to open test policy shm at {:?}: {}", path, e));
+    let mmap = unsafe {
+        libc::mmap(
+            std::ptr::null_mut(),
+            aurora_engine::shm::POLICY_SHM_TOTAL_BYTES,
+            libc::PROT_READ,
+            libc::MAP_SHARED,
+            std::os::unix::io::AsRawFd::as_raw_fd(&file),
+            0,
+        )
+    };
+    let header = unsafe { &*(mmap as *const aurora_engine::shm::PolicyShmHeader) };
+    let (slot_gen, data) = header.read_slot(slot_id).unwrap();
+    let s = std::str::from_utf8(data).unwrap().to_string();
+    unsafe {
+        libc::munmap(mmap, aurora_engine::shm::POLICY_SHM_TOTAL_BYTES);
+    }
+    (slot_gen, s)
+}
+
 #[tokio::test]
 async fn test_materialize_nginx_files() {
     let base_tmp = std::env::temp_dir().join(format!("aurora-spec-test-{}", std::process::id()));
@@ -97,10 +120,7 @@ fn test_extensions_generation() {
     assert!(rendered.rate_limit_policy.is_some());
 
     let server_conf = rendered.server_conf;
-    assert!(
-        server_conf
-            .contains("gateway_rate_limit_policy /var/lib/aurora-policy/active-rate-limit.json;")
-    );
+    assert!(!server_conf.contains("gateway_rate_limit_policy"));
     assert!(
         server_conf.contains("add_header Access-Control-Allow-Origin \"$http_origin\" always;")
     );
@@ -108,7 +128,7 @@ fn test_extensions_generation() {
     assert!(server_conf.contains("add_header Retry-After 120 always;"));
     assert!(server_conf.contains("if ($http_x_bypass)"));
     assert!(server_conf.contains("return 503 \"{\\\"error\\\":\\\"Under upgrade\\\"}\";"));
-    assert!(server_conf.contains("gateway_jwt_policy /var/lib/aurora-policy/active-jwt.json;"));
+    assert!(!server_conf.contains("gateway_jwt_policy"));
     assert_eq!(
         rendered.jwt_policy.unwrap()["rules"][0]["host"],
         "api.example.test"
@@ -136,13 +156,14 @@ async fn test_jwt_extension_materializes_and_removes_ffi_snapshot() {
         ..Default::default()
     };
 
-    materialize_nginx(&spec, &policy_dir, &routing_dir)
+    let res = materialize_nginx(&spec, &policy_dir, &routing_dir)
         .await
         .expect("materialize JWT snapshot");
-    let jwt = tokio::fs::read_to_string(policy_dir.join("active-jwt.json"))
-        .await
-        .expect("read JWT snapshot");
-    assert!(jwt.contains("\"generation\": 91"));
+    assert!(!policy_dir.join("active-jwt.json").exists());
+    assert!(res.policy_changed);
+    let (slot_gen, jwt) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_JWT);
+    assert_eq!(slot_gen, 91);
+    assert!(jwt.contains("\"generation\":91"));
     assert!(jwt.contains("api.example.test"));
 
     let disabled = Spec {
@@ -152,8 +173,11 @@ async fn test_jwt_extension_materializes_and_removes_ffi_snapshot() {
     let result = materialize_nginx(&disabled, &policy_dir, &routing_dir)
         .await
         .expect("remove JWT snapshot");
-    assert!(result.nginx_changed);
+    assert!(!result.nginx_changed);
     assert!(!policy_dir.join("active-jwt.json").exists());
+    let (gen_disabled, jwt_disabled) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_JWT);
+    assert_eq!(gen_disabled, 92);
+    assert!(jwt_disabled.is_empty());
     let _ = tokio::fs::remove_dir_all(base).await;
 }
 
@@ -179,13 +203,14 @@ async fn test_rate_limit_extension_materializes_and_removes_ffi_snapshot() {
         ..Default::default()
     };
 
-    materialize_nginx(&spec, &policy_dir, &routing_dir)
+    let res = materialize_nginx(&spec, &policy_dir, &routing_dir)
         .await
         .expect("materialize rate-limit snapshot");
-    let rl = tokio::fs::read_to_string(policy_dir.join("active-rate-limit.json"))
-        .await
-        .expect("read rate-limit snapshot");
-    assert!(rl.contains("\"generation\": 88"));
+    assert!(!policy_dir.join("active-rate-limit.json").exists());
+    assert!(res.policy_changed);
+    let (slot_gen, rl) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_RATE_LIMIT);
+    assert_eq!(slot_gen, 88);
+    assert!(rl.contains("\"generation\":88"));
     assert!(rl.contains("\"token_bucket\""));
     assert!(rl.contains("\"/api\""));
 
@@ -196,8 +221,11 @@ async fn test_rate_limit_extension_materializes_and_removes_ffi_snapshot() {
     let result = materialize_nginx(&disabled, &policy_dir, &routing_dir)
         .await
         .expect("remove rate-limit snapshot");
-    assert!(result.nginx_changed);
+    assert!(!result.nginx_changed);
     assert!(!policy_dir.join("active-rate-limit.json").exists());
+    let (gen_disabled, rl_disabled) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_RATE_LIMIT);
+    assert_eq!(gen_disabled, 89);
+    assert!(rl_disabled.is_empty());
     let _ = tokio::fs::remove_dir_all(base).await;
 }
 
@@ -223,14 +251,15 @@ async fn test_connection_limit_extension_materializes_and_removes_ffi_snapshot()
         ..Default::default()
     };
 
-    materialize_nginx(&spec, &policy_dir, &routing_dir)
+    let res = materialize_nginx(&spec, &policy_dir, &routing_dir)
         .await
         .expect("materialize connection-limit snapshot");
-    let cl = tokio::fs::read_to_string(policy_dir.join("active-connection-limit.json"))
-        .await
-        .expect("read connection-limit snapshot");
-    assert!(cl.contains("\"generation\": 99"));
-    assert!(cl.contains("\"max_connections\": 5"));
+    assert!(!policy_dir.join("active-connection-limit.json").exists());
+    assert!(res.policy_changed);
+    let (slot_gen, cl) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_CONN_LIMIT);
+    assert_eq!(slot_gen, 99);
+    assert!(cl.contains("\"generation\":99"));
+    assert!(cl.contains("\"max_connections\":5"));
     assert!(cl.contains("\"/stream\""));
 
     let disabled = Spec {
@@ -240,8 +269,11 @@ async fn test_connection_limit_extension_materializes_and_removes_ffi_snapshot()
     let result = materialize_nginx(&disabled, &policy_dir, &routing_dir)
         .await
         .expect("remove connection-limit snapshot");
-    assert!(result.nginx_changed);
+    assert!(!result.nginx_changed);
     assert!(!policy_dir.join("active-connection-limit.json").exists());
+    let (gen_disabled, cl_disabled) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_CONN_LIMIT);
+    assert_eq!(gen_disabled, 100);
+    assert!(cl_disabled.is_empty());
     let _ = tokio::fs::remove_dir_all(base).await;
 }
 
@@ -270,15 +302,16 @@ async fn test_traffic_shaper_extension_materializes_and_removes_snapshot() {
         ..Default::default()
     };
 
-    materialize_nginx(&spec, &policy_dir, &routing_dir)
+    let res = materialize_nginx(&spec, &policy_dir, &routing_dir)
         .await
         .expect("materialize traffic-shaper snapshot");
-    let ts = tokio::fs::read_to_string(policy_dir.join("active-traffic-shaper.json"))
-        .await
-        .expect("read traffic-shaper snapshot");
-    assert!(ts.contains("\"generation\": 88"));
-    assert!(ts.contains("\"rate_kb_per_sec\": 1024"));
-    assert!(ts.contains("\"burst_kb\": 2048"));
+    assert!(!policy_dir.join("active-traffic-shaper.json").exists());
+    assert!(res.policy_changed);
+    let (slot_gen, ts) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_TRAFFIC_SHAPER);
+    assert_eq!(slot_gen, 88);
+    assert!(ts.contains("\"generation\":88"));
+    assert!(ts.contains("\"rate_kb_per_sec\":1024"));
+    assert!(ts.contains("\"burst_kb\":2048"));
     assert!(ts.contains("\"/download\""));
 
     let disabled = Spec {
@@ -288,8 +321,11 @@ async fn test_traffic_shaper_extension_materializes_and_removes_snapshot() {
     let result = materialize_nginx(&disabled, &policy_dir, &routing_dir)
         .await
         .expect("remove traffic-shaper snapshot");
-    assert!(result.nginx_changed);
+    assert!(!result.nginx_changed);
     assert!(!policy_dir.join("active-traffic-shaper.json").exists());
+    let (gen_disabled, ts_disabled) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_TRAFFIC_SHAPER);
+    assert_eq!(gen_disabled, 89);
+    assert!(ts_disabled.is_empty());
     let _ = tokio::fs::remove_dir_all(base).await;
 }
 
@@ -337,16 +373,16 @@ async fn test_materialize_nginx_request_size_limit_snapshot_lifecycle() {
         ..Default::default()
     };
 
-    materialize_nginx(&spec, &policy_dir, &routing_dir)
+    let res = materialize_nginx(&spec, &policy_dir, &routing_dir)
         .await
         .expect("materialize request-size-limit snapshot");
-    let rsl = tokio::fs::read_to_string(policy_dir.join("active-request-size-limit.json"))
-        .await
-        .expect("read request-size-limit snapshot");
-    assert!(rsl.contains("\"generation\": 99"));
-    assert!(rsl.contains("\"max_request_bytes\": 52428800"));
-    assert!(rsl.contains("\"origin\": \"api.example.com\""));
-    assert!(rsl.contains("\"match_value\": \"^(admin|vip)$\""));
+    assert!(!policy_dir.join("active-request-size-limit.json").exists());
+    assert!(res.policy_changed);
+    let (slot_gen, rsl) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_REQUEST_SIZE_LIMIT);
+    assert_eq!(slot_gen, 99);
+    assert!(rsl.contains("\"generation\":99"));
+    assert!(rsl.contains("\"max_request_bytes\":52428800"));
+    assert!(rsl.contains("\"origin\":\"api.example.com\""));
     assert!(rsl.contains("\"/upload\""));
 
     let disabled = Spec {
@@ -356,8 +392,11 @@ async fn test_materialize_nginx_request_size_limit_snapshot_lifecycle() {
     let result = materialize_nginx(&disabled, &policy_dir, &routing_dir)
         .await
         .expect("remove request-size-limit snapshot");
-    assert!(result.nginx_changed);
+    assert!(!result.nginx_changed);
     assert!(!policy_dir.join("active-request-size-limit.json").exists());
+    let (gen_disabled, rsl_disabled) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_REQUEST_SIZE_LIMIT);
+    assert_eq!(gen_disabled, 100);
+    assert!(rsl_disabled.is_empty());
     let _ = tokio::fs::remove_dir_all(base).await;
 }
 
@@ -402,17 +441,18 @@ async fn test_materialize_nginx_traffic_split_snapshot_lifecycle() {
         ..Default::default()
     };
 
-    materialize_nginx(&spec, &policy_dir, &routing_dir)
+    let res = materialize_nginx(&spec, &policy_dir, &routing_dir)
         .await
         .expect("materialize traffic-split snapshot");
-    let ts = tokio::fs::read_to_string(policy_dir.join("active-traffic-split.json"))
-        .await
-        .expect("read traffic-split snapshot");
-    assert!(ts.contains("\"generation\": 101"));
+    assert!(!policy_dir.join("active-traffic-split.json").exists());
+    assert!(res.policy_changed);
+    let (slot_gen, ts) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_TRAFFIC_SPLIT);
+    assert_eq!(slot_gen, 101);
+    assert!(ts.contains("\"generation\":101"));
     assert!(ts.contains("\"checkout_v1\""));
-    assert!(ts.contains("\"weight\": 70"));
+    assert!(ts.contains("\"weight\":70"));
     assert!(ts.contains("\"checkout_v2\""));
-    assert!(ts.contains("\"weight\": 30"));
+    assert!(ts.contains("\"weight\":30"));
 
     let disabled = Spec {
         release_id: 102,
@@ -421,7 +461,11 @@ async fn test_materialize_nginx_traffic_split_snapshot_lifecycle() {
     let result = materialize_nginx(&disabled, &policy_dir, &routing_dir)
         .await
         .expect("remove traffic-split snapshot");
-    assert!(result.nginx_changed);
+    assert!(!result.nginx_changed);
+    assert!(!policy_dir.join("active-traffic-split.json").exists());
+    let (gen_disabled, ts_disabled) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_TRAFFIC_SPLIT);
+    assert_eq!(gen_disabled, 102);
+    assert!(ts_disabled.is_empty());
     let _ = tokio::fs::remove_dir_all(base).await;
 }
 
@@ -472,16 +516,17 @@ async fn test_materialize_nginx_writes_and_removes_canary_release_snapshot() {
         ..Default::default()
     };
 
-    materialize_nginx(&spec, &policy_dir, &routing_dir)
+    let res = materialize_nginx(&spec, &policy_dir, &routing_dir)
         .await
         .expect("materialize canary-release snapshot");
-    let cr = tokio::fs::read_to_string(policy_dir.join("active-canary-release.json"))
-        .await
-        .expect("read canary-release snapshot");
-    assert!(cr.contains("\"generation\": 201"));
+    assert!(!policy_dir.join("active-canary-release.json").exists());
+    assert!(res.policy_changed);
+    let (slot_gen, cr) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_CANARY_RELEASE);
+    assert_eq!(slot_gen, 201);
+    assert!(cr.contains("\"generation\":201"));
     assert!(cr.contains("\"backend_v1\""));
     assert!(cr.contains("\"backend_v2\""));
-    assert!(cr.contains("\"weight_percentage\": 25"));
+    assert!(cr.contains("\"weight_percentage\":25"));
 
     let disabled = Spec {
         release_id: 202,
@@ -490,8 +535,11 @@ async fn test_materialize_nginx_writes_and_removes_canary_release_snapshot() {
     let result = materialize_nginx(&disabled, &policy_dir, &routing_dir)
         .await
         .expect("remove canary-release snapshot");
-    assert!(result.nginx_changed);
+    assert!(!result.nginx_changed);
     assert!(!policy_dir.join("active-canary-release.json").exists());
+    let (gen_disabled, cr_disabled) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_CANARY_RELEASE);
+    assert_eq!(gen_disabled, 202);
+    assert!(cr_disabled.is_empty());
     let _ = tokio::fs::remove_dir_all(base).await;
 }
 
@@ -527,16 +575,17 @@ async fn test_materialize_nginx_writes_and_removes_blue_green_snapshot() {
         ..Default::default()
     };
 
-    materialize_nginx(&spec, &policy_dir, &routing_dir)
+    let res = materialize_nginx(&spec, &policy_dir, &routing_dir)
         .await
         .expect("materialize blue-green snapshot");
-    let bg = tokio::fs::read_to_string(policy_dir.join("active-blue-green.json"))
-        .await
-        .expect("read blue-green snapshot");
-    assert!(bg.contains("\"generation\": 301"));
+    assert!(!policy_dir.join("active-blue-green.json").exists());
+    assert!(res.policy_changed);
+    let (slot_gen, bg) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_BLUE_GREEN);
+    assert_eq!(slot_gen, 301);
+    assert!(bg.contains("\"generation\":301"));
     assert!(bg.contains("\"app_blue\""));
     assert!(bg.contains("\"app_green\""));
-    assert!(bg.contains("\"active_slot\": \"green\""));
+    assert!(bg.contains("\"active_slot\":\"green\""));
 
     let disabled = Spec {
         release_id: 302,
@@ -545,8 +594,11 @@ async fn test_materialize_nginx_writes_and_removes_blue_green_snapshot() {
     let result = materialize_nginx(&disabled, &policy_dir, &routing_dir)
         .await
         .expect("remove blue-green snapshot");
-    assert!(result.nginx_changed);
+    assert!(!result.nginx_changed);
     assert!(!policy_dir.join("active-blue-green.json").exists());
+    let (gen_disabled, bg_disabled) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_BLUE_GREEN);
+    assert_eq!(gen_disabled, 302);
+    assert!(bg_disabled.is_empty());
     let _ = tokio::fs::remove_dir_all(base).await;
 }
 
@@ -582,16 +634,17 @@ async fn test_materialize_nginx_writes_and_removes_request_mirror_snapshot() {
         ..Default::default()
     };
 
-    materialize_nginx(&spec, &policy_dir, &routing_dir)
+    let res = materialize_nginx(&spec, &policy_dir, &routing_dir)
         .await
         .expect("materialize request-mirror snapshot");
-    let rm = tokio::fs::read_to_string(policy_dir.join("active-request-mirror.json"))
-        .await
-        .expect("read request-mirror snapshot");
-    assert!(rm.contains("\"generation\": 401"));
+    assert!(!policy_dir.join("active-request-mirror.json").exists());
+    assert!(res.policy_changed);
+    let (slot_gen, rm) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_REQUEST_MIRROR);
+    assert_eq!(slot_gen, 401);
+    assert!(rm.contains("\"generation\":401"));
     assert!(rm.contains("\"app_primary\""));
     assert!(rm.contains("\"app_shadow\""));
-    assert!(rm.contains("\"sample_percentage\": 100"));
+    assert!(rm.contains("\"sample_percentage\":100"));
 
     let disabled = Spec {
         release_id: 402,
@@ -600,8 +653,11 @@ async fn test_materialize_nginx_writes_and_removes_request_mirror_snapshot() {
     let result = materialize_nginx(&disabled, &policy_dir, &routing_dir)
         .await
         .expect("remove request-mirror snapshot");
-    assert!(result.nginx_changed);
+    assert!(!result.nginx_changed);
     assert!(!policy_dir.join("active-request-mirror.json").exists());
+    let (gen_disabled, rm_disabled) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_REQUEST_MIRROR);
+    assert_eq!(gen_disabled, 402);
+    assert!(rm_disabled.is_empty());
     let _ = tokio::fs::remove_dir_all(base).await;
 }
 
@@ -636,14 +692,15 @@ async fn test_materialize_nginx_writes_and_removes_request_termination_snapshot(
         ..Default::default()
     };
 
-    materialize_nginx(&spec, &policy_dir, &routing_dir)
+    let res = materialize_nginx(&spec, &policy_dir, &routing_dir)
         .await
         .expect("materialize request-termination snapshot");
-    let rt = tokio::fs::read_to_string(policy_dir.join("active-request-termination.json"))
-        .await
-        .expect("read request-termination snapshot");
-    assert!(rt.contains("\"generation\": 501"));
-    assert!(rt.contains("\"status_code\": 503"));
+    assert!(!policy_dir.join("active-request-termination.json").exists());
+    assert!(res.policy_changed);
+    let (slot_gen, rt) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_REQUEST_TERMINATION);
+    assert_eq!(slot_gen, 501);
+    assert!(rt.contains("\"generation\":501"));
+    assert!(rt.contains("\"status_code\":503"));
     assert!(rt.contains("Under Maintenance"));
 
     let disabled = Spec {
@@ -653,8 +710,11 @@ async fn test_materialize_nginx_writes_and_removes_request_termination_snapshot(
     let result = materialize_nginx(&disabled, &policy_dir, &routing_dir)
         .await
         .expect("remove request-termination snapshot");
-    assert!(result.nginx_changed);
+    assert!(!result.nginx_changed);
     assert!(!policy_dir.join("active-request-termination.json").exists());
+    let (gen_disabled, rt_disabled) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_REQUEST_TERMINATION);
+    assert_eq!(gen_disabled, 502);
+    assert!(rt_disabled.is_empty());
     let _ = tokio::fs::remove_dir_all(base).await;
 }
 
@@ -681,9 +741,7 @@ fn test_ip_restriction_renderer_generates_cidr_rules_from_instance_config() {
     assert_eq!(rules[2]["path_prefix"], "/admin");
     assert_eq!(rules[2]["priority"], 7);
     assert_eq!(rules[0]["networks"][0], "198.51.100.0/24");
-    assert!(rendered.server_conf.contains(
-        "gateway_ip_restriction_policy /var/lib/aurora-policy/active-ip-restriction.json;"
-    ));
+    assert!(!rendered.server_conf.contains("gateway_ip_restriction_policy"));
 }
 
 #[test]
@@ -737,20 +795,19 @@ async fn test_ip_restriction_extension_materializes_and_removes_snapshot() {
     let result = materialize_nginx(&spec_with_extension, &policy_dir, &routing_dir)
         .await
         .expect("materialize with ip-restriction");
-    assert!(result.nginx_changed);
+    assert!(result.policy_changed);
 
     let access_path = policy_dir.join("active-ip-restriction.json");
-    assert!(access_path.exists());
-    let content = tokio::fs::read_to_string(&access_path).await.unwrap();
-    assert!(content.contains("\"10.0.0.0/8\""));
-    assert!(content.contains("\"generation\": 101"));
+    assert!(!access_path.exists());
+    let (slot_gen, ip_data) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_IP_RESTRICTION);
+    assert_eq!(slot_gen, 101);
+    assert!(ip_data.contains("\"10.0.0.0/8\""));
+    assert!(ip_data.contains("\"generation\":101"));
 
     let ext_conf = tokio::fs::read_to_string(policy_dir.join("active-extensions.conf"))
         .await
         .unwrap();
-    assert!(ext_conf.contains(
-        "gateway_ip_restriction_policy /var/lib/aurora-policy/active-ip-restriction.json;"
-    ));
+    assert!(!ext_conf.contains("gateway_ip_restriction_policy"));
 
     // Second run: spec without extension removes snapshot and directive
     let spec_without_extension = Spec {
@@ -762,16 +819,20 @@ async fn test_ip_restriction_extension_materializes_and_removes_snapshot() {
     let result2 = materialize_nginx(&spec_without_extension, &policy_dir, &routing_dir)
         .await
         .expect("materialize without ip-restriction");
-    assert!(result2.nginx_changed);
+    assert!(!result2.nginx_changed);
     assert!(
         !access_path.exists(),
         "active-ip-restriction.json should be removed when extension is absent"
     );
+    let (gen2, ip_data2) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_IP_RESTRICTION);
+    assert_eq!(gen2, 102);
+    assert!(ip_data2.is_empty());
 
     let ext_conf2 = tokio::fs::read_to_string(policy_dir.join("active-extensions.conf"))
         .await
         .unwrap();
     assert!(!ext_conf2.contains("gateway_ip_restriction_policy"));
+    let _ = tokio::fs::remove_dir_all(base).await;
 }
 
 #[test]

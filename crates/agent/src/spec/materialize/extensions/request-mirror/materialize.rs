@@ -16,9 +16,6 @@ pub fn materialize(
     validate_request_mirror_config(instance, &config)?;
 
     *request_mirror_policy = Some(Value::Object(config));
-    server.push_str(
-        "gateway_request_mirror_policy /var/lib/aurora-policy/active-request-mirror.json;\n",
-    );
-    *has_server = true;
+    let _ = (server, has_server);
     Ok(())
 }

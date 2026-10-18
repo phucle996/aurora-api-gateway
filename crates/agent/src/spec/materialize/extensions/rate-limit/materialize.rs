@@ -16,7 +16,6 @@ pub fn materialize(
     validate_rate_limit_config(instance, &config)?;
 
     *rate_limit_policy = Some(Value::Object(config));
-    server.push_str("gateway_rate_limit_policy /var/lib/aurora-policy/active-rate-limit.json;\n");
-    *has_server = true;
+    let _ = (server, has_server);
     Ok(())
 }

@@ -90,11 +90,20 @@ char *ngx_http_gateway_merge_rate_limit(ngx_conf_t *cf,
   return NGX_CONF_OK;
 }
 
+/**
+ * Request Hot-Path Evaluator for Rate Limiting.
+ * Straight-line execution without branch generation check or IPC dilution.
+ * Reads static engine if configured, or falls back to dynamic SHM active engine.
+ */
 ngx_int_t ngx_http_gateway_eval_rate_limit(ngx_http_request_t *r,
                                            ngx_http_gateway_conf_t *conf,
                                            ngx_str_t host) {
-  if (!conf->rate_limit_engine) {
-    return NGX_DECLINED;
+  AuroraRateLimitEngine *engine = conf->rate_limit_engine;
+  if (!engine) {
+    engine = (AuroraRateLimitEngine *)gateway_active_engines[AURORA_EXT_RATE_LIMIT];
+    if (!engine) {
+      return NGX_DECLINED;
+    }
   }
 
   ngx_str_t client_ip = r->connection->addr_text;
@@ -105,7 +114,7 @@ ngx_int_t ngx_http_gateway_eval_rate_limit(ngx_http_request_t *r,
   ngx_memzero(&decision, sizeof(decision));
 
   uint32_t status = aurora_rate_limit_evaluate(
-      conf->rate_limit_engine, host.data, host.len, r->uri.data, r->uri.len,
+      engine, host.data, host.len, r->uri.data, r->uri.len,
       client_ip.data, client_ip.len, r, ngx_http_gateway_header_lookup,
       &decision);
   if (status == 1) {

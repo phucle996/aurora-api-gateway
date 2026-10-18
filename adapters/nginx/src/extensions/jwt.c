@@ -89,11 +89,20 @@ char *ngx_http_gateway_merge_jwt(ngx_conf_t *cf, ngx_http_gateway_conf_t *prev,
   return NGX_CONF_OK;
 }
 
+/**
+ * Request Hot-Path Evaluator for JWT Authentication.
+ * Straight-line execution without branch generation check or IPC dilution.
+ * Reads static engine if configured, or falls back to dynamic SHM active engine.
+ */
 ngx_int_t ngx_http_gateway_eval_jwt(ngx_http_request_t *r,
                                     ngx_http_gateway_conf_t *conf,
                                     ngx_str_t host) {
-  if (!conf->jwt_engine) {
-    return NGX_DECLINED;
+  AuroraJwtEngine *engine = conf->jwt_engine;
+  if (!engine) {
+    engine = (AuroraJwtEngine *)gateway_active_engines[AURORA_EXT_JWT];
+    if (!engine) {
+      return NGX_DECLINED;
+    }
   }
 
   ngx_table_elt_t *authorization = r->headers_in.authorization;
@@ -105,7 +114,7 @@ ngx_int_t ngx_http_gateway_eval_jwt(ngx_http_request_t *r,
   ngx_memzero(&decision, sizeof(decision));
 
   uint32_t status = aurora_jwt_evaluate(
-      conf->jwt_engine, host.data, host.len, r->uri.data, r->uri.len,
+      engine, host.data, host.len, r->uri.data, r->uri.len,
       authorization_data, authorization_len, &decision);
   if (status == 1 || (status == 0 && decision.allowed == 0)) {
     extension_jwt_record_metrics(1);

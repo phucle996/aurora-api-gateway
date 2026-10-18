@@ -80,11 +80,7 @@ pub fn materialize(
         "rules": rules,
     }));
 
-    server.push_str(
-        "gateway_ip_restriction_policy /var/lib/aurora-policy/active-ip-restriction.json;\n",
-    );
-    *has_server = true;
-
+    let _ = (server, has_server);
     Ok(())
 }
 

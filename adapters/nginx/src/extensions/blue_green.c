@@ -85,11 +85,24 @@ char *ngx_http_gateway_merge_blue_green(ngx_conf_t *cf,
   return NGX_CONF_OK;
 }
 
+/**
+ * Request Hot-Path Evaluator for Blue-Green Deployment.
+ * Straight-line execution without branch generation check or IPC dilution.
+ * Reads static engine if configured, or falls back to dynamic SHM active engine.
+ */
 ngx_int_t ngx_http_gateway_eval_blue_green(ngx_http_request_t *r,
                                            ngx_http_gateway_conf_t *conf,
                                            ngx_str_t host) {
-  if (!conf || !conf->blue_green_engine) {
+  if (!conf) {
     return NGX_DECLINED;
+  }
+
+  AuroraBlueGreenEngine *engine = conf->blue_green_engine;
+  if (!engine) {
+    engine = (AuroraBlueGreenEngine *)gateway_active_engines[AURORA_EXT_BLUE_GREEN];
+    if (!engine) {
+      return NGX_DECLINED;
+    }
   }
 
   ngx_http_gateway_ctx_t *ctx =
@@ -110,7 +123,7 @@ ngx_int_t ngx_http_gateway_eval_blue_green(ngx_http_request_t *r,
   ngx_memzero(&decision, sizeof(decision));
 
   uint32_t status = aurora_blue_green_evaluate(
-      conf->blue_green_engine, host.data, host.len, r->uri.data, r->uri.len, r,
+      engine, host.data, host.len, r->uri.data, r->uri.len, r,
       ngx_http_gateway_header_lookup, &decision);
 
   if (status != 0) {

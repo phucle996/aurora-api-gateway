@@ -30,7 +30,14 @@ static ngx_int_t ngx_http_gateway_generation(ngx_http_request_t *r,
       ngx_http_get_module_loc_conf(r, ngx_http_gateway_module);
   u_char *p;
 
-  if (!conf || !conf->ip_restriction_engine) {
+  AuroraIpRestrictionEngine *engine = NULL;
+  if (conf && conf->ip_restriction_engine) {
+    engine = conf->ip_restriction_engine;
+  } else {
+    engine = (AuroraIpRestrictionEngine *)gateway_active_engines[AURORA_EXT_IP_RESTRICTION];
+  }
+
+  if (!engine) {
     v->not_found = 1;
     return NGX_OK;
   }
@@ -40,7 +47,7 @@ static ngx_int_t ngx_http_gateway_generation(ngx_http_request_t *r,
     return NGX_ERROR;
   }
   v->len =
-      ngx_sprintf(p, "%uL", aurora_ip_restriction_generation(conf->ip_restriction_engine)) - p;
+      ngx_sprintf(p, "%uL", aurora_ip_restriction_generation(engine)) - p;
   v->data = p;
   v->valid = 1;
   v->no_cacheable = 1;

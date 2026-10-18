@@ -16,7 +16,6 @@ pub fn materialize(
     validate_jwt_config(instance, &config)?;
 
     *jwt_policy = Some(Value::Object(config));
-    server.push_str("gateway_jwt_policy /var/lib/aurora-policy/active-jwt.json;\n");
-    *has_server = true;
+    let _ = (server, has_server);
     Ok(())
 }

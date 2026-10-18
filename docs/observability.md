@@ -66,6 +66,4 @@ docker compose logs --tail=100 node
 docker compose logs --tail=100 otel-collector
 ```
 
-The [std-log E2E playbook](../scripts/std-log-e2e/index.mjs) exercises UI, schema rejection, shared-memory consumer state, output formats and configuration churn. It requires the running `aurora-controller`/`aurora-node` containers and browser tooling. It currently contains a machine-specific artifact path; adapt that path and inspect its prerequisites before running it. It mutates extension configuration and generates traffic, so use a disposable development stack.
-
 Passing unit tests does not establish collector TLS interoperability or complete delivery under production load. Validate those boundaries separately for the deployment.

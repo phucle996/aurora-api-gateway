@@ -52,6 +52,12 @@ typedef struct {
 extern ngx_module_t ngx_http_gateway_module;
 extern ngx_shm_zone_t *gateway_telemetry_zone;
 
+/* Dynamic In-Memory Engine Registry (Zero-reload, straight-line hot path) */
+extern void *gateway_active_engines[AURORA_EXT_COUNT];
+extern uint64_t gateway_active_generations[AURORA_EXT_COUNT];
+void *ngx_http_gateway_get_engine(uint32_t ext_id);
+void ngx_http_gateway_policy_sync_handler(ngx_event_t *ev);
+
 /* Pipeline Handler */
 ngx_int_t ngx_http_gateway_handler(ngx_http_request_t *r);
 

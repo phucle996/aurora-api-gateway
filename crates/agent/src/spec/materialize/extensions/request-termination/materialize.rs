@@ -16,7 +16,6 @@ pub fn materialize(
     validate_request_termination_config(instance, &config)?;
 
     *request_termination_policy = Some(Value::Object(config));
-    server.push_str("gateway_request_termination_policy /var/lib/aurora-policy/active-request-termination.json;\n");
-    *has_server = true;
+    let _ = (server, has_server);
     Ok(())
 }

@@ -98,7 +98,39 @@ int main(void) {
     assert(aurora_rate_limit_evaluate(rl_engine, (const uint8_t *)"test.local", 10, (const uint8_t *)"/rl/test", 8, (const uint8_t *)"10.0.0.1", 8, NULL, NULL, &rl_dec) == 0);
     assert(rl_dec.allowed == 0 && rl_dec.action == 1 && rl_dec.status_code == 429);
     aurora_rate_limit_destroy(rl_engine);
-    puts("Aurora Rate Limit FFI: create, evaluate 1st allow, 2nd throttle, destroy pass");
+    // 6. Policy SHM Substrate & In-Memory Hot-Swap Smoke Test
+    assert(aurora_gateway_init_policy_shm(NULL) == 0);
+    uint64_t init_policy_gen = aurora_gateway_policy_generation();
+    assert(aurora_gateway_policy_writer_update(AURORA_EXT_IP_RESTRICTION, 10,
+                                               (const uint8_t *)ip_policy,
+                                               strlen(ip_policy)) == 0);
+    assert(aurora_gateway_policy_generation() == init_policy_gen + 1);
+
+    uint64_t read_gen = 0;
+    size_t read_len = 0;
+    const uint8_t *shm_data = aurora_gateway_policy_slot_get(
+        AURORA_EXT_IP_RESTRICTION, &read_gen, &read_len);
+    assert(shm_data != NULL);
+    assert(read_gen == 10);
+    assert(read_len == strlen(ip_policy));
+    assert(memcmp(shm_data, ip_policy, read_len) == 0);
+
+    // Verify engine creation and evaluation directly from SHM slot bytes
+    AuroraIpRestrictionEngine *shm_ip_engine = NULL;
+    assert(aurora_ip_restriction_create(shm_data, read_len, &shm_ip_engine) == 0);
+    assert(aurora_ip_restriction_generation(shm_ip_engine) == 9);
+    assert(aurora_ip_restriction_evaluate(shm_ip_engine, &input, &decision) == 0);
+    assert(decision.action == 1 && decision.rule_id == 101 && decision.generation == 9);
+    aurora_ip_restriction_destroy(shm_ip_engine);
+
+    // Clear slot
+    assert(aurora_gateway_policy_writer_clear(AURORA_EXT_IP_RESTRICTION, 11) == 0);
+    assert(aurora_gateway_policy_generation() == init_policy_gen + 2);
+    shm_data = aurora_gateway_policy_slot_get(AURORA_EXT_IP_RESTRICTION, &read_gen, &read_len);
+    assert(shm_data == NULL && read_len == 0 && read_gen == 11);
+
+    aurora_gateway_stop_policy_shm();
+    puts("Policy SHM: in-memory hot-swap, generation tracking, zero-copy slot pass");
 
     puts("C -> Rust ABI v4: lifecycle, limits, allow/block, invalid inputs pass");
     return 0;

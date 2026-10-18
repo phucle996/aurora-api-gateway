@@ -16,9 +16,6 @@ pub fn materialize(
     validate_canary_release_config(instance, &config)?;
 
     *canary_release_policy = Some(Value::Object(config));
-    server.push_str(
-        "gateway_canary_release_policy /var/lib/aurora-policy/active-canary-release.json;\n",
-    );
-    *has_server = true;
+    let _ = (server, has_server);
     Ok(())
 }

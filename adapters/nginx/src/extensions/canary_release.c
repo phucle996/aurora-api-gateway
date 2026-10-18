@@ -87,11 +87,24 @@ char *ngx_http_gateway_merge_canary_release(ngx_conf_t *cf,
   return NGX_CONF_OK;
 }
 
+/**
+ * Request Hot-Path Evaluator for Canary Release.
+ * Straight-line execution without branch generation check or IPC dilution.
+ * Reads static engine if configured, or falls back to dynamic SHM active engine.
+ */
 ngx_int_t ngx_http_gateway_eval_canary_release(ngx_http_request_t *r,
                                                ngx_http_gateway_conf_t *conf,
                                                ngx_str_t host) {
-  if (!conf || !conf->canary_release_engine) {
+  if (!conf) {
     return NGX_DECLINED;
+  }
+
+  AuroraCanaryReleaseEngine *engine = conf->canary_release_engine;
+  if (!engine) {
+    engine = (AuroraCanaryReleaseEngine *)gateway_active_engines[AURORA_EXT_CANARY_RELEASE];
+    if (!engine) {
+      return NGX_DECLINED;
+    }
   }
 
   ngx_http_gateway_ctx_t *ctx =
@@ -125,7 +138,7 @@ ngx_int_t ngx_http_gateway_eval_canary_release(ngx_http_request_t *r,
   ngx_memzero(&decision, sizeof(decision));
 
   uint32_t status = aurora_canary_release_evaluate(
-      conf->canary_release_engine, host.data, host.len, r->uri.data, r->uri.len,
+      engine, host.data, host.len, r->uri.data, r->uri.len,
       uri.data, uri.len, query.data, query.len, client_ip.data, client_ip.len,
       random_seed, r, ngx_http_gateway_header_lookup, &decision);
 

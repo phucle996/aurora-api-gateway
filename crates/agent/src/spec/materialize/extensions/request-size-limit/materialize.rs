@@ -16,9 +16,6 @@ pub fn materialize(
     validate_request_size_limit_config(instance, &config)?;
 
     *request_size_limit_policy = Some(Value::Object(config));
-    server.push_str(
-        "gateway_request_size_limit_policy /var/lib/aurora-policy/active-request-size-limit.json;\n",
-    );
-    *has_server = true;
+    let _ = (server, has_server);
     Ok(())
 }

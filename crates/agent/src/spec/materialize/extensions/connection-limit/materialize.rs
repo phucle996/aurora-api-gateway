@@ -16,9 +16,6 @@ pub fn materialize(
     validate_connection_limit_config(instance, &config)?;
 
     *conn_limit_policy = Some(Value::Object(config));
-    server.push_str(
-        "gateway_conn_limit_policy /var/lib/aurora-policy/active-connection-limit.json;\n",
-    );
-    *has_server = true;
+    let _ = (server, has_server);
     Ok(())
 }

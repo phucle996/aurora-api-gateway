@@ -16,7 +16,6 @@ pub fn materialize(
     validate_blue_green_config(instance, &config)?;
 
     *blue_green_policy = Some(Value::Object(config));
-    server.push_str("gateway_blue_green_policy /var/lib/aurora-policy/active-blue-green.json;\n");
-    *has_server = true;
+    let _ = (server, has_server);
     Ok(())
 }

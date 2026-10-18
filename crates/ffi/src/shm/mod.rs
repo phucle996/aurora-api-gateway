@@ -7,9 +7,11 @@
 
 pub mod logs;
 pub mod metrics;
+pub mod policy;
 
 pub use logs::*;
 pub use metrics::*;
+pub use policy::*;
 
 use aurora_engine::shm::{GatewaySharedMetrics, SHM_DEFAULT_PATH, SHM_SIZE_BYTES};
 use std::ffi::CStr;

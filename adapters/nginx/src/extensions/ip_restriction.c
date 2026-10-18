@@ -103,11 +103,20 @@ char *ngx_http_gateway_merge_ip_restriction(ngx_conf_t *cf,
   return NGX_CONF_OK;
 }
 
+/**
+ * Request Hot-Path Evaluator for IP Restriction.
+ * Straight-line execution without branch generation check or IPC dilution.
+ * Reads static engine if configured, or falls back to dynamic SHM active engine.
+ */
 ngx_int_t ngx_http_gateway_eval_ip_restriction(ngx_http_request_t *r,
                                                ngx_http_gateway_conf_t *conf,
                                                ngx_str_t host) {
-  if (!conf->ip_restriction_engine) {
-    return NGX_DECLINED;
+  AuroraIpRestrictionEngine *engine = conf->ip_restriction_engine;
+  if (!engine) {
+    engine = (AuroraIpRestrictionEngine *)gateway_active_engines[AURORA_EXT_IP_RESTRICTION];
+    if (!engine) {
+      return NGX_DECLINED;
+    }
   }
 
   AuroraIpRestrictionInput input;
@@ -123,7 +132,7 @@ ngx_int_t ngx_http_gateway_eval_ip_restriction(ngx_http_request_t *r,
 
   AuroraDecision decision;
   uint32_t status =
-      aurora_ip_restriction_evaluate(conf->ip_restriction_engine, &input, &decision);
+      aurora_ip_restriction_evaluate(engine, &input, &decision);
   if (status != 0 || decision.action > 1) {
     return NGX_HTTP_SERVICE_UNAVAILABLE;
   }

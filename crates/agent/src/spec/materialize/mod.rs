@@ -20,6 +20,118 @@ use tracing::info;
 
 pub struct MaterializeResult {
     pub nginx_changed: bool,
+    pub policy_changed: bool,
+}
+
+use aurora_engine::shm::{
+    AURORA_EXT_BLUE_GREEN, AURORA_EXT_CANARY_RELEASE, AURORA_EXT_CONN_LIMIT,
+    AURORA_EXT_IP_RESTRICTION, AURORA_EXT_JWT, AURORA_EXT_RATE_LIMIT, AURORA_EXT_REQUEST_MIRROR,
+    AURORA_EXT_REQUEST_SIZE_LIMIT, AURORA_EXT_REQUEST_TERMINATION, AURORA_EXT_TRAFFIC_SHAPER,
+    AURORA_EXT_TRAFFIC_SPLIT, POLICY_SHM_DEFAULT_PATH, POLICY_SHM_TOTAL_BYTES, PolicyShmHeader,
+};
+use std::os::unix::fs::OpenOptionsExt;
+
+/// Synchronizes dynamic policy snapshots directly to Shared Memory (SHM).
+/// Guarantees zero disk writes and zero reload for dynamic policy hot-swap.
+pub fn sync_policy_to_shm(
+    release_id: u64,
+    rendered: &extensions::RenderedExtensions,
+    shm_path: Option<&str>,
+) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    let target = shm_path.unwrap_or(POLICY_SHM_DEFAULT_PATH);
+    if let Some(parent) = std::path::Path::new(target).parent()
+        && !parent.exists()
+    {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .mode(0o666)
+        .open(target)?;
+
+    file.set_len(POLICY_SHM_TOTAL_BYTES as u64)?;
+    let fd = std::os::unix::io::AsRawFd::as_raw_fd(&file);
+
+    // SAFETY: We mmap exactly POLICY_SHM_TOTAL_BYTES with MAP_SHARED for cross-process
+    // lockless synchronization between Agent and NGINX worker processes.
+    let ptr = unsafe {
+        libc::mmap(
+            std::ptr::null_mut(),
+            POLICY_SHM_TOTAL_BYTES,
+            libc::PROT_READ | libc::PROT_WRITE,
+            libc::MAP_SHARED,
+            fd,
+            0,
+        )
+    };
+
+    if ptr == libc::MAP_FAILED || ptr.is_null() {
+        return Err(format!("failed to mmap policy shm at {target}").into());
+    }
+
+    // SAFETY: The mmap region is backed by a file truncated to POLICY_SHM_TOTAL_BYTES,
+    // which matches the exact size and alignment of PolicyShmHeader.
+    let header = unsafe { &mut *(ptr as *mut PolicyShmHeader) };
+    header.ensure_header();
+
+    let slots: [(u32, Option<&serde_json::Value>); 11] = [
+        (AURORA_EXT_IP_RESTRICTION, rendered.ip_restriction_policy.as_ref()),
+        (AURORA_EXT_JWT, rendered.jwt_policy.as_ref()),
+        (AURORA_EXT_RATE_LIMIT, rendered.rate_limit_policy.as_ref()),
+        (AURORA_EXT_CONN_LIMIT, rendered.conn_limit_policy.as_ref()),
+        (AURORA_EXT_TRAFFIC_SHAPER, rendered.traffic_shaper_policy.as_ref()),
+        (AURORA_EXT_REQUEST_SIZE_LIMIT, rendered.request_size_limit_policy.as_ref()),
+        (AURORA_EXT_TRAFFIC_SPLIT, rendered.traffic_split_policy.as_ref()),
+        (AURORA_EXT_CANARY_RELEASE, rendered.canary_release_policy.as_ref()),
+        (AURORA_EXT_BLUE_GREEN, rendered.blue_green_policy.as_ref()),
+        (AURORA_EXT_REQUEST_MIRROR, rendered.request_mirror_policy.as_ref()),
+        (AURORA_EXT_REQUEST_TERMINATION, rendered.request_termination_policy.as_ref()),
+    ];
+
+    let mut any_changed = false;
+
+    for (slot_id, config) in slots {
+        if let Some(config) = config {
+            let mut obj = config
+                .as_object()
+                .ok_or_else(|| format!("slot {slot_id} config must be a JSON object"))?
+                .clone();
+            obj.insert("schema_version".to_string(), serde_json::json!(1));
+            obj.insert("generation".to_string(), serde_json::json!(release_id));
+            let json_bytes = serde_json::to_vec(&serde_json::Value::Object(obj))?;
+
+            // Avoid rewriting identical payload to save memory bus bandwidth
+            if let Some((slot_gen, data)) = header.read_slot(slot_id)
+                && slot_gen == release_id
+                && data == json_bytes.as_slice()
+            {
+                continue;
+            }
+
+            header.update_slot(slot_id, release_id, Some(&json_bytes));
+            any_changed = true;
+        } else {
+            // Extension is disabled or unconfigured in this release
+            if let Some((_, data)) = header.read_slot(slot_id)
+                && data.is_empty()
+            {
+                continue;
+            }
+            header.update_slot(slot_id, release_id, None);
+            any_changed = true;
+        }
+    }
+
+    // SAFETY: ptr is the valid pointer returned by mmap above, unmapping exact length.
+    unsafe {
+        libc::munmap(ptr, POLICY_SHM_TOTAL_BYTES);
+    }
+
+    Ok(any_changed)
 }
 
 /// Atomically write bytes to destination path using a .tmp file.
@@ -42,37 +154,6 @@ pub async fn atomic_write_if_changed(dest: &Path, content: &[u8]) -> std::io::Re
     Ok(true)
 }
 
-/// Materialize an extension policy snapshot JSON. The NGINX module owns request-time
-/// evaluation through FFI; the agent only materializes its desired state.
-async fn materialize_policy_snapshot(
-    policy_dir: &Path,
-    filename: &str,
-    release_id: u64,
-    config: Option<&serde_json::Value>,
-) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-    let path = policy_dir.join(filename);
-    if let Some(config) = config {
-        let mut obj = config
-            .as_object()
-            .ok_or_else(|| format!("{filename} config must be a JSON object"))?
-            .clone();
-        obj.insert("schema_version".to_string(), serde_json::json!(1));
-        obj.insert("generation".to_string(), serde_json::json!(release_id));
-        let json = serde_json::to_string_pretty(&serde_json::Value::Object(obj))?;
-        if atomic_write_if_changed(&path, json.as_bytes()).await? {
-            info!("Updated {filename} (release_id: {release_id})");
-            return Ok(true);
-        }
-    } else {
-        match tokio::fs::remove_file(&path).await {
-            Ok(()) => return Ok(true),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(Box::new(error)),
-        }
-    }
-    Ok(false)
-}
-
 /// Materialize declarative Spec to concrete NGINX filesystem configuration files.
 pub async fn materialize_nginx(
     spec: &Spec,
@@ -83,116 +164,49 @@ pub async fn materialize_nginx(
     let rendered_extensions = render_extensions(&spec.extensions)
         .map_err(|error| format!("render extension instances: {error}"))?;
 
-    // 1. Extension policy snapshots (evaluated by Rust Engine FFI)
-    if materialize_policy_snapshot(
-        policy_dir,
+    // 1. Dynamic extension policies (synchronized directly to Shared Memory for zero-reload hot-swap)
+    let shm_target = if let Ok(path) = std::env::var("AURORA_POLICY_SHM_PATH") {
+        Some(path)
+    } else if policy_dir.starts_with(std::env::temp_dir())
+        || policy_dir.to_string_lossy().contains("materialize-")
+        || policy_dir.to_string_lossy().contains("aurora-agent-test-")
+    {
+        Some(
+            policy_dir
+                .join("aurora_gateway_policy.bin")
+                .to_string_lossy()
+                .to_string(),
+        )
+    } else {
+        None
+    };
+    let policy_changed = sync_policy_to_shm(
+        spec.release_id,
+        &rendered_extensions,
+        shm_target.as_deref(),
+    )?;
+    if policy_changed {
+        info!("Updated dynamic policy SHM (release_id: {})", spec.release_id);
+    }
+
+    // Clean up any legacy active-*.json files from policy_dir if present
+    for legacy_name in &[
         "active-ip-restriction.json",
-        spec.release_id,
-        rendered_extensions.ip_restriction_policy.as_ref(),
-    )
-    .await?
-    {
-        changed = true;
-    }
-    if materialize_policy_snapshot(
-        policy_dir,
         "active-jwt.json",
-        spec.release_id,
-        rendered_extensions.jwt_policy.as_ref(),
-    )
-    .await?
-    {
-        changed = true;
-    }
-    if materialize_policy_snapshot(
-        policy_dir,
         "active-rate-limit.json",
-        spec.release_id,
-        rendered_extensions.rate_limit_policy.as_ref(),
-    )
-    .await?
-    {
-        changed = true;
-    }
-    if materialize_policy_snapshot(
-        policy_dir,
         "active-connection-limit.json",
-        spec.release_id,
-        rendered_extensions.conn_limit_policy.as_ref(),
-    )
-    .await?
-    {
-        changed = true;
-    }
-    if materialize_policy_snapshot(
-        policy_dir,
         "active-traffic-shaper.json",
-        spec.release_id,
-        rendered_extensions.traffic_shaper_policy.as_ref(),
-    )
-    .await?
-    {
-        changed = true;
-    }
-    if materialize_policy_snapshot(
-        policy_dir,
         "active-request-size-limit.json",
-        spec.release_id,
-        rendered_extensions.request_size_limit_policy.as_ref(),
-    )
-    .await?
-    {
-        changed = true;
-    }
-    if materialize_policy_snapshot(
-        policy_dir,
         "active-traffic-split.json",
-        spec.release_id,
-        rendered_extensions.traffic_split_policy.as_ref(),
-    )
-    .await?
-    {
-        changed = true;
-    }
-    if materialize_policy_snapshot(
-        policy_dir,
         "active-canary-release.json",
-        spec.release_id,
-        rendered_extensions.canary_release_policy.as_ref(),
-    )
-    .await?
-    {
-        changed = true;
-    }
-    if materialize_policy_snapshot(
-        policy_dir,
         "active-blue-green.json",
-        spec.release_id,
-        rendered_extensions.blue_green_policy.as_ref(),
-    )
-    .await?
-    {
-        changed = true;
-    }
-    if materialize_policy_snapshot(
-        policy_dir,
         "active-request-mirror.json",
-        spec.release_id,
-        rendered_extensions.request_mirror_policy.as_ref(),
-    )
-    .await?
-    {
-        changed = true;
-    }
-    if materialize_policy_snapshot(
-        policy_dir,
         "active-request-termination.json",
-        spec.release_id,
-        rendered_extensions.request_termination_policy.as_ref(),
-    )
-    .await?
-    {
-        changed = true;
+    ] {
+        let legacy_path = policy_dir.join(legacy_name);
+        if legacy_path.exists() {
+            let _ = tokio::fs::remove_file(legacy_path).await;
+        }
     }
 
     // 2. Upstream Configuration (Object: Upstream)
@@ -249,5 +263,6 @@ pub async fn materialize_nginx(
 
     Ok(MaterializeResult {
         nginx_changed: changed,
+        policy_changed,
     })
 }

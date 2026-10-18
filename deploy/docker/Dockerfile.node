@@ -35,8 +35,10 @@ WORKDIR /build
 RUN curl -fsSL https://nginx.org/download/nginx-1.30.4.tar.gz -o nginx-1.30.4.tar.gz \
     && tar -xzf nginx-1.30.4.tar.gz
 
+COPY scripts/patches/ /build/patches/
 WORKDIR /build/nginx-1.30.4
-RUN ./configure \
+RUN if [ -f /build/patches/nginx-strip-static.patch ]; then patch -p1 < /build/patches/nginx-strip-static.patch; fi \
+    && ./configure \
     --prefix=/etc/nginx \
     --sbin-path=/usr/local/bin/aurora-gateway \
     --conf-path=/etc/nginx/nginx.conf \
@@ -46,9 +48,18 @@ RUN ./configure \
     --error-log-path=/var/log/nginx/error.log \
     --http-client-body-temp-path=/var/lib/aurora/client_temp \
     --http-proxy-temp-path=/var/lib/aurora/proxy_temp \
-    --http-fastcgi-temp-path=/var/lib/aurora/fastcgi_temp \
-    --http-uwsgi-temp-path=/var/lib/aurora/uwsgi_temp \
-    --http-scgi-temp-path=/var/lib/aurora/scgi_temp \
+    --without-http_fastcgi_module \
+    --without-http_uwsgi_module \
+    --without-http_scgi_module \
+    --without-http_memcached_module \
+    --without-http_empty_gif_module \
+    --without-http_browser_module \
+    --without-http_autoindex_module \
+    --without-http_ssi_module \
+    --without-http_userid_module \
+    --without-http_split_clients_module \
+    --without-http_static_module \
+    --without-http_index_module \
     --with-compat \
     --with-http_ssl_module \
     --with-http_v2_module \
@@ -87,10 +98,7 @@ RUN ln -sf /usr/local/bin/aurora-gateway /opt/nginx/usr/sbin/nginx
 COPY deploy/docker/nginx-node.conf.template /etc/nginx/nginx-node.conf.template
 COPY deploy/docker/entrypoint-node.sh /entrypoint.sh
 
-RUN chmod +x /usr/local/bin/aurora-agent /usr/local/bin/aurora-gateway /entrypoint.sh \
-    && mkdir -p /usr/share/aurora-demo \
-    && printf 'Aurora demo backend: allowed.\n' > /usr/share/aurora-demo/ok \
-    && printf 'Aurora demo backend: this file must not be served in enforce mode.\n' > /usr/share/aurora-demo/__aurora_blocked
+RUN chmod +x /usr/local/bin/aurora-agent /usr/local/bin/aurora-gateway /entrypoint.sh
 
 EXPOSE 80 443 9145
 

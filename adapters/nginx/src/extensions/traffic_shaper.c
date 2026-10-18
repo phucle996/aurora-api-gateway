@@ -86,11 +86,20 @@ char *ngx_http_gateway_merge_traffic_shaper(ngx_conf_t *cf,
   return NGX_CONF_OK;
 }
 
+/**
+ * Request Hot-Path Evaluator for Traffic Shaper (bandwidth / burst limiting).
+ * Straight-line execution without branch generation check or IPC dilution.
+ * Reads static engine if configured, or falls back to dynamic SHM active engine.
+ */
 ngx_int_t ngx_http_gateway_eval_traffic_shaper(ngx_http_request_t *r,
                                                ngx_http_gateway_conf_t *conf,
                                                ngx_str_t host) {
-  if (!conf->traffic_shaper_engine) {
-    return NGX_DECLINED;
+  AuroraTrafficShaperEngine *engine = conf->traffic_shaper_engine;
+  if (!engine) {
+    engine = (AuroraTrafficShaperEngine *)gateway_active_engines[AURORA_EXT_TRAFFIC_SHAPER];
+    if (!engine) {
+      return NGX_DECLINED;
+    }
   }
 
   ngx_str_t client_ip = r->connection->addr_text;
@@ -102,7 +111,7 @@ ngx_int_t ngx_http_gateway_eval_traffic_shaper(ngx_http_request_t *r,
   ngx_memzero(&decision, sizeof(decision));
 
   uint32_t status = aurora_traffic_shaper_evaluate(
-      conf->traffic_shaper_engine, host.data, host.len, r->uri.data, r->uri.len,
+      engine, host.data, host.len, r->uri.data, r->uri.len,
       client_ip.data, client_ip.len, r, ngx_http_gateway_header_lookup,
       &decision);
   if (status != 0) {

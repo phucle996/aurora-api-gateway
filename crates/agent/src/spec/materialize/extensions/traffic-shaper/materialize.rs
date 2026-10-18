@@ -16,9 +16,6 @@ pub fn materialize(
     validate_traffic_shaper_config(instance, &config)?;
 
     *traffic_shaper_policy = Some(Value::Object(config));
-    server.push_str(
-        "gateway_traffic_shaper_policy /var/lib/aurora-policy/active-traffic-shaper.json;\n",
-    );
-    *has_server = true;
+    let _ = (server, has_server);
     Ok(())
 }

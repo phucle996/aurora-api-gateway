@@ -99,10 +99,23 @@ ngx_http_gateway_merge_request_termination(ngx_conf_t *cf,
   return NGX_CONF_OK;
 }
 
+/**
+ * Request Hot-Path Evaluator for Request Termination (immediate mock/error response).
+ * Straight-line execution without branch generation check or IPC dilution.
+ * Reads static engine if configured, or falls back to dynamic SHM active engine.
+ */
 ngx_int_t ngx_http_gateway_eval_request_termination(
     ngx_http_request_t *r, ngx_http_gateway_conf_t *conf, ngx_str_t host) {
-  if (!conf || !conf->request_termination_engine) {
+  if (!conf) {
     return NGX_DECLINED;
+  }
+
+  AuroraRequestTerminationEngine *engine = conf->request_termination_engine;
+  if (!engine) {
+    engine = (AuroraRequestTerminationEngine *)gateway_active_engines[AURORA_EXT_REQUEST_TERMINATION];
+    if (!engine) {
+      return NGX_DECLINED;
+    }
   }
 
   /* Trích xuất header đến mà không cấp phát bộ nhớ động (0.00 warm heap alloc)
@@ -136,7 +149,7 @@ ngx_int_t ngx_http_gateway_eval_request_termination(
   ngx_memzero(&decision, sizeof(decision));
 
   uint32_t status = aurora_request_termination_evaluate(
-      conf->request_termination_engine, host.data, host.len, r->uri.data,
+      engine, host.data, host.len, r->uri.data,
       r->uri.len, r->method_name.data, r->method_name.len, in_headers,
       headers_count, &decision);
 

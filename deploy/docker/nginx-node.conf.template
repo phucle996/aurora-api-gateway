@@ -55,14 +55,12 @@ http {
 
         default_type text/plain;
 
-        root /usr/share/aurora-demo;
-        location / {
-            try_files $uri =404;
+        location = /ok {
+            return 200 "Aurora demo backend: allowed.\n";
         }
 
-        location = /_aurora/config {
-            default_type text/plain;
-            alias /etc/nginx/aurora-config-view.conf;
+        location = /__aurora_blocked {
+            return 200 "Aurora demo backend: this file must not be served in enforce mode.\n";
         }
 
         location = /metrics {

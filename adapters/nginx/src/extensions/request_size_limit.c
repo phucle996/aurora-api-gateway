@@ -90,10 +90,19 @@ char *ngx_http_gateway_merge_request_size_limit(ngx_conf_t *cf,
   return NGX_CONF_OK;
 }
 
+/**
+ * Request Hot-Path Evaluator for Request Size Limiting.
+ * Straight-line execution without branch generation check or IPC dilution.
+ * Reads static engine if configured, or falls back to dynamic SHM active engine.
+ */
 ngx_int_t ngx_http_gateway_eval_request_size_limit(
     ngx_http_request_t *r, ngx_http_gateway_conf_t *conf, ngx_str_t host) {
-  if (!conf->request_size_limit_engine) {
-    return NGX_DECLINED;
+  AuroraRequestSizeLimitEngine *engine = conf->request_size_limit_engine;
+  if (!engine) {
+    engine = (AuroraRequestSizeLimitEngine *)gateway_active_engines[AURORA_EXT_REQUEST_SIZE_LIMIT];
+    if (!engine) {
+      return NGX_DECLINED;
+    }
   }
 
   ngx_str_t client_ip = r->connection->addr_text;
@@ -111,7 +120,7 @@ ngx_int_t ngx_http_gateway_eval_request_size_limit(
   ngx_memzero(&decision, sizeof(decision));
 
   uint32_t status = aurora_request_size_limit_evaluate(
-      conf->request_size_limit_engine, host.data, host.len, r->uri.data,
+      engine, host.data, host.len, r->uri.data,
       r->uri.len, client_ip.data, client_ip.len, header_bytes, body_bytes, r,
       ngx_http_gateway_header_lookup, &decision);
 

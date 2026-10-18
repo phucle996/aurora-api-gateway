@@ -16,9 +16,6 @@ pub fn materialize(
     validate_traffic_split_config(instance, &config)?;
 
     *traffic_split_policy = Some(Value::Object(config));
-    server.push_str(
-        "gateway_traffic_split_policy /var/lib/aurora-policy/active-traffic-split.json;\n",
-    );
-    *has_server = true;
+    let _ = (server, has_server);
     Ok(())
 }

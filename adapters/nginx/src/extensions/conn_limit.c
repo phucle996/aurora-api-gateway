@@ -148,11 +148,20 @@ uint32_t ngx_http_gateway_header_lookup(void *ctx, const uint8_t *name,
   return 1;
 }
 
+/**
+ * Request Hot-Path Evaluator for Connection Limiting.
+ * Straight-line execution without branch generation check or IPC dilution.
+ * Reads static engine if configured, or falls back to dynamic SHM active engine.
+ */
 ngx_int_t ngx_http_gateway_eval_conn_limit(ngx_http_request_t *r,
                                            ngx_http_gateway_conf_t *conf,
                                            ngx_str_t host) {
-  if (!conf->conn_limit_engine) {
-    return NGX_DECLINED;
+  AuroraConnectionLimitEngine *engine = conf->conn_limit_engine;
+  if (!engine) {
+    engine = (AuroraConnectionLimitEngine *)gateway_active_engines[AURORA_EXT_CONN_LIMIT];
+    if (!engine) {
+      return NGX_DECLINED;
+    }
   }
 
   ngx_str_t client_ip = r->connection->addr_text;
@@ -164,7 +173,7 @@ ngx_int_t ngx_http_gateway_eval_conn_limit(ngx_http_request_t *r,
   ngx_memzero(&decision, sizeof(decision));
 
   uint32_t status = aurora_conn_limit_acquire(
-      conf->conn_limit_engine, host.data, host.len, r->uri.data, r->uri.len,
+      engine, host.data, host.len, r->uri.data, r->uri.len,
       client_ip.data, client_ip.len, r, ngx_http_gateway_header_lookup,
       &decision);
   if (status == 1) {
@@ -292,11 +301,11 @@ ngx_int_t ngx_http_gateway_eval_conn_limit(ngx_http_request_t *r,
     ngx_pool_cleanup_t *cln = ngx_pool_cleanup_add(
         r->pool, sizeof(ngx_http_gateway_conn_limit_ctx_t));
     if (cln == NULL) {
-      aurora_conn_limit_release(conf->conn_limit_engine, &decision.token);
+      aurora_conn_limit_release(engine, &decision.token);
       return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
     ngx_http_gateway_conn_limit_ctx_t *ctx = cln->data;
-    ctx->engine = conf->conn_limit_engine;
+    ctx->engine = engine;
     ctx->token = decision.token;
     cln->handler = ngx_http_gateway_conn_limit_req_cleanup;
   }

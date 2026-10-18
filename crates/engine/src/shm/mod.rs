@@ -6,9 +6,11 @@
 
 pub mod logs;
 pub mod metrics;
+pub mod policy;
 
 pub use logs::*;
 pub use metrics::*;
+pub use policy::*;
 
 pub const TELEMETRY_MAGIC: u32 = 0x4155524F; // "AURO"
 pub const TELEMETRY_VERSION: u32 = 2;

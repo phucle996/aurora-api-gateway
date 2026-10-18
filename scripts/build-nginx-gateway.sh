@@ -106,6 +106,14 @@ if [[ ! -f "$aurora_source/nginx-${ver}/configure" ]]; then
     tar -xzf "$archive" -C "$aurora_source"
 fi
 
+# Apply patch to allow stripping static and index modules if not already applied
+if [[ -f "$aurora_root/scripts/patches/nginx-strip-static.patch" ]]; then
+    if ! grep -q "HTTP_STATIC" "$aurora_source/nginx-${ver}/auto/options"; then
+        echo "==> Applying patch to remove static and index modules..."
+        patch -p1 -d "$aurora_source/nginx-${ver}" < "$aurora_root/scripts/patches/nginx-strip-static.patch"
+    fi
+fi
+
 echo "==> Configuring and compiling static aurora-gateway (NGINX ${ver} + in-tree module)..."
 cd "$aurora_source/nginx-${ver}"
 
@@ -119,9 +127,18 @@ cd "$aurora_source/nginx-${ver}"
     --error-log-path=/var/log/nginx/error.log \
     --http-client-body-temp-path=/var/lib/aurora/client_temp \
     --http-proxy-temp-path=/var/lib/aurora/proxy_temp \
-    --http-fastcgi-temp-path=/var/lib/aurora/fastcgi_temp \
-    --http-uwsgi-temp-path=/var/lib/aurora/uwsgi_temp \
-    --http-scgi-temp-path=/var/lib/aurora/scgi_temp \
+    --without-http_fastcgi_module \
+    --without-http_uwsgi_module \
+    --without-http_scgi_module \
+    --without-http_memcached_module \
+    --without-http_empty_gif_module \
+    --without-http_browser_module \
+    --without-http_autoindex_module \
+    --without-http_ssi_module \
+    --without-http_userid_module \
+    --without-http_split_clients_module \
+    --without-http_static_module \
+    --without-http_index_module \
     --with-compat \
     --with-http_ssl_module \
     --with-http_v2_module \

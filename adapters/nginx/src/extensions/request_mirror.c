@@ -86,11 +86,24 @@ char *ngx_http_gateway_merge_request_mirror(ngx_conf_t *cf,
   return NGX_CONF_OK;
 }
 
+/**
+ * Request Hot-Path Evaluator for Request Mirroring.
+ * Straight-line execution without branch generation check or IPC dilution.
+ * Reads static engine if configured, or falls back to dynamic SHM active engine.
+ */
 ngx_int_t ngx_http_gateway_eval_request_mirror(ngx_http_request_t *r,
                                                ngx_http_gateway_conf_t *conf,
                                                ngx_str_t host) {
-  if (!conf || !conf->request_mirror_engine) {
+  if (!conf) {
     return NGX_DECLINED;
+  }
+
+  AuroraRequestMirrorEngine *engine = conf->request_mirror_engine;
+  if (!engine) {
+    engine = (AuroraRequestMirrorEngine *)gateway_active_engines[AURORA_EXT_REQUEST_MIRROR];
+    if (!engine) {
+      return NGX_DECLINED;
+    }
   }
 
   /* Subrequests should inherit main request mirror decision without
@@ -116,7 +129,7 @@ ngx_int_t ngx_http_gateway_eval_request_mirror(ngx_http_request_t *r,
   ngx_str_t method = r->method_name;
 
   uint32_t status = aurora_request_mirror_evaluate(
-      conf->request_mirror_engine, host.data, host.len, r->uri.data, r->uri.len,
+      engine, host.data, host.len, r->uri.data, r->uri.len,
       method.data, method.len, random_seed, &decision);
 
   if (status != 0) {

@@ -85,11 +85,24 @@ char *ngx_http_gateway_merge_traffic_split(ngx_conf_t *cf,
   return NGX_CONF_OK;
 }
 
+/**
+ * Request Hot-Path Evaluator for Dynamic Traffic Split.
+ * Straight-line execution without branch generation check or IPC dilution.
+ * Reads static engine if configured, or falls back to dynamic SHM active engine.
+ */
 ngx_int_t ngx_http_gateway_eval_traffic_split(ngx_http_request_t *r,
                                               ngx_http_gateway_conf_t *conf,
                                               ngx_str_t host) {
-  if (!conf || !conf->traffic_split_engine) {
+  if (!conf) {
     return NGX_DECLINED;
+  }
+
+  AuroraTrafficSplitEngine *engine = conf->traffic_split_engine;
+  if (!engine) {
+    engine = (AuroraTrafficSplitEngine *)gateway_active_engines[AURORA_EXT_TRAFFIC_SPLIT];
+    if (!engine) {
+      return NGX_DECLINED;
+    }
   }
 
   ngx_http_gateway_ctx_t *ctx =
@@ -118,7 +131,7 @@ ngx_int_t ngx_http_gateway_eval_traffic_split(ngx_http_request_t *r,
   ngx_memzero(&decision, sizeof(decision));
 
   uint32_t status = aurora_traffic_split_evaluate(
-      conf->traffic_split_engine, host.data, host.len, r->uri.data, r->uri.len,
+      engine, host.data, host.len, r->uri.data, r->uri.len,
       client_ip.data, client_ip.len, random_seed, r,
       ngx_http_gateway_header_lookup, &decision);
 
