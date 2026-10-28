@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
+	"net"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -556,7 +557,15 @@ func GenerateNginxUpstreamsConf(upstreams []entity.UpstreamItem) string {
 				flagStr = " " + strings.Join(flags, " ")
 			}
 
-			sb.WriteString(fmt.Sprintf("    server %s%s resolve;\n", srv.Address, flagStr))
+			resolveSuffix := ""
+			h, _, err := net.SplitHostPort(srv.Address)
+			if err != nil {
+				h = srv.Address
+			}
+			if u.DynamicDNS && net.ParseIP(h) == nil {
+				resolveSuffix = " resolve"
+			}
+			sb.WriteString(fmt.Sprintf("    server %s%s%s;\n", srv.Address, flagStr, resolveSuffix))
 		}
 
 		keepalive := u.Transport.KeepAliveConnections

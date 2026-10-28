@@ -3,18 +3,7 @@ ngx_module_type=HTTP
 ngx_module_name=ngx_http_gateway_module
 ngx_module_srcs="$ngx_addon_dir/src/module.c \
                  $ngx_addon_dir/src/pipeline.c \
-                 $ngx_addon_dir/src/telemetry.c \
-                 $ngx_addon_dir/src/extensions/ip_restriction.c \
-                 $ngx_addon_dir/src/extensions/jwt.c \
-                 $ngx_addon_dir/src/extensions/rate_limit.c \
-                 $ngx_addon_dir/src/extensions/conn_limit.c \
-                 $ngx_addon_dir/src/extensions/traffic_shaper.c \
-                 $ngx_addon_dir/src/extensions/request_size_limit.c \
-                 $ngx_addon_dir/src/extensions/traffic_split.c \
-                 $ngx_addon_dir/src/extensions/canary_release.c \
-                 $ngx_addon_dir/src/extensions/blue_green.c \
-                 $ngx_addon_dir/src/extensions/request_mirror.c \
-                 $ngx_addon_dir/src/extensions/request_termination.c"
+                 $ngx_addon_dir/src/telemetry.c"
 ngx_module_incs="$ngx_addon_dir/include"
 ngx_module_libs="$ngx_addon_dir/../../target/release/libaurora_ffi.a -Wl,--exclude-libs,ALL -ldl -lpthread -lm"
 . auto/module

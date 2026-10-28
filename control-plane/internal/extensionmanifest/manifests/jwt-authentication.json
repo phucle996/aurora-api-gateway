@@ -43,28 +43,36 @@
         "key": "id",
         "label": "Origin Rule ID",
         "type": "text",
-        "required": true
+        "required": true,
+        "placeholder": "shop-api-prod"
       },
       {
         "key": "priority",
         "label": "Priority",
-        "type": "number"
+        "type": "number",
+        "default": 0
       },
       {
         "key": "host",
         "label": "Origin (Host / Domain)",
         "type": "text",
-        "required": true
+        "required": true,
+        "placeholder": "api.shop.local"
       },
       {
         "key": "path_prefix",
         "label": "Base Path Prefix",
-        "type": "text"
+        "type": "text",
+        "required": true,
+        "default": "/",
+        "placeholder": "/api"
       },
       {
         "key": "algorithm",
         "label": "Algorithm",
         "type": "select",
+        "required": true,
+        "default": "RS256",
         "options": [
           {
             "label": "RS256 (RSA 2048/4096)",
@@ -114,17 +122,20 @@
       {
         "key": "require_exp",
         "label": "Require Expiration (exp claim)",
-        "type": "boolean"
+        "type": "boolean",
+        "default": true
       },
       {
         "key": "validate_nbf",
         "label": "Validate Not Before (nbf claim)",
-        "type": "boolean"
+        "type": "boolean",
+        "default": false
       },
       {
         "key": "clock_skew_secs",
         "label": "Clock skew (seconds)",
-        "type": "number"
+        "type": "number",
+        "default": 60
       },
       {
         "key": "issuer",
@@ -135,6 +146,43 @@
         "key": "audience",
         "label": "Audience (aud)",
         "type": "text"
+      },
+      {
+        "key": "token_source",
+        "label": "Token Source (Header or Cookie)",
+        "type": "select",
+        "required": true,
+        "default": "header",
+        "options": [
+          {
+            "label": "HTTP Header (e.g. Authorization)",
+            "value": "header"
+          },
+          {
+            "label": "HTTP Cookie (e.g. access_token)",
+            "value": "cookie"
+          }
+        ]
+      },
+      {
+        "key": "header_name",
+        "label": "Header Name (e.g. Authorization or X-Auth-Token)",
+        "type": "text",
+        "default": "Authorization",
+        "placeholder": "Authorization"
+      },
+      {
+        "key": "cookie_name",
+        "label": "Cookie Name (e.g. access_token or session)",
+        "type": "text",
+        "placeholder": "access_token"
+      },
+      {
+        "key": "token_prefix",
+        "label": "Token Prefix (e.g. 'Bearer ')",
+        "type": "text",
+        "default": "Bearer ",
+        "placeholder": "Bearer "
       },
       {
         "key": "claim_rules",
@@ -180,7 +228,11 @@
           "type": "object",
           "additionalProperties": true,
           "required": [
-            "id"
+            "id",
+            "host",
+            "path_prefix",
+            "algorithm",
+            "token_source"
           ],
           "properties": {
             "id": {
@@ -202,7 +254,8 @@
             },
             "path_prefix": {
               "type": "string",
-              "maxLength": 8192
+              "maxLength": 8192,
+              "pattern": "^/.*"
             },
             "exclude_paths": {
               "type": "array",
@@ -214,7 +267,19 @@
             },
             "algorithm": {
               "type": "string",
-              "maxLength": 16
+              "maxLength": 16,
+              "enum": [
+                "RS256",
+                "RS384",
+                "RS512",
+                "HS256",
+                "HS384",
+                "HS512",
+                "ES256",
+                "ES384",
+                "EdDSA",
+                "ED25519"
+              ]
             },
             "secret": {
               "type": "string",
@@ -256,6 +321,25 @@
             "audience": {
               "type": "string",
               "maxLength": 512
+            },
+            "token_source": {
+              "type": "string",
+              "enum": [
+                "header",
+                "cookie"
+              ]
+            },
+            "header_name": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "cookie_name": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "token_prefix": {
+              "type": "string",
+              "maxLength": 64
             },
             "require_exp": {
               "type": "boolean"

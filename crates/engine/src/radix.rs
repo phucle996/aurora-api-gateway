@@ -17,8 +17,8 @@ pub struct RadixNode<T> {
     pub prefix: Vec<u8>,
     /// Full cumulative path prefix represented by this node.
     pub full_prefix: Vec<u8>,
-    /// Indices of child nodes in the arena.
-    pub children: Vec<usize>,
+    /// Pairs of (first byte of child prefix, index of child in arena).
+    pub children: Vec<(u8, usize)>,
     /// Values stored at this exact prefix boundary.
     pub values: Vec<T>,
 }
@@ -75,6 +75,7 @@ impl<T> PathRadixTree<T> {
             if common_len < self.nodes[curr_idx].prefix.len() {
                 // Must split current node
                 let split_prefix = self.nodes[curr_idx].prefix[common_len..].to_vec();
+                let split_first_byte = split_prefix[0];
                 let full_prefix_child = self.nodes[curr_idx].full_prefix.clone();
 
                 let split_len = split_prefix.len();
@@ -92,7 +93,9 @@ impl<T> PathRadixTree<T> {
                 self.nodes[curr_idx]
                     .full_prefix
                     .truncate(full_len - split_len);
-                self.nodes[curr_idx].children.push(child_idx);
+                self.nodes[curr_idx]
+                    .children
+                    .push((split_first_byte, child_idx));
             }
 
             rem_key = &rem_key[common_len..];
@@ -106,9 +109,8 @@ impl<T> PathRadixTree<T> {
             // Find a child that shares the first byte of rem_key
             let first_byte = rem_key[0];
             let mut found_child = None;
-            for &c_idx in &self.nodes[curr_idx].children {
-                if !self.nodes[c_idx].prefix.is_empty() && self.nodes[c_idx].prefix[0] == first_byte
-                {
+            for &(b, c_idx) in &self.nodes[curr_idx].children {
+                if b == first_byte {
                     found_child = Some(c_idx);
                     break;
                 }
@@ -124,13 +126,16 @@ impl<T> PathRadixTree<T> {
                     new_full_prefix.extend_from_slice(rem_key);
 
                     let new_child_idx = self.nodes.len();
+                    let new_child_first_byte = rem_key[0];
                     self.nodes.push(RadixNode {
                         prefix: rem_key.to_vec(),
                         full_prefix: new_full_prefix,
                         children: Vec::new(),
                         values: vec![value],
                     });
-                    self.nodes[curr_idx].children.push(new_child_idx);
+                    self.nodes[curr_idx]
+                        .children
+                        .push((new_child_first_byte, new_child_idx));
                     return;
                 }
             }
@@ -187,9 +192,8 @@ impl<T> PathRadixTree<T> {
             // Find next child matching rem_path[0]
             let first_byte = rem_path[0];
             let mut next_idx = None;
-            for &c_idx in &node.children {
-                if !self.nodes[c_idx].prefix.is_empty() && self.nodes[c_idx].prefix[0] == first_byte
-                {
+            for &(b, c_idx) in &node.children {
+                if b == first_byte {
                     next_idx = Some(c_idx);
                     break;
                 }
@@ -241,7 +245,29 @@ impl<T> PathRadixTree<T> {
 
 #[inline(always)]
 fn common_prefix_len(a: &[u8], b: &[u8]) -> usize {
-    a.iter().zip(b.iter()).take_while(|(x, y)| x == y).count()
+    let min_len = a.len().min(b.len());
+    let mut i = 0;
+
+    // Fast path: chunk by 8 bytes (64-bit word) using SWAR integer XOR
+    while i + 8 <= min_len {
+        let a_chunk = u64::from_ne_bytes(a[i..i + 8].try_into().unwrap());
+        let b_chunk = u64::from_ne_bytes(b[i..i + 8].try_into().unwrap());
+        let diff = a_chunk ^ b_chunk;
+        if diff != 0 {
+            #[cfg(target_endian = "little")]
+            return i + (diff.trailing_zeros() as usize / 8);
+
+            #[cfg(target_endian = "big")]
+            return i + (diff.leading_zeros() as usize / 8);
+        }
+        i += 8;
+    }
+
+    // Scalar fallback for remaining bytes
+    while i < min_len && a[i] == b[i] {
+        i += 1;
+    }
+    i
 }
 
 #[cfg(test)]

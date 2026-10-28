@@ -8,176 +8,41 @@
 
 /*
  * Cấu hình Gateway cho từng location / server block trong NGINX.
+ * Hoàn toàn là Phase Bridge, không chứa bất kỳ logic hay cấu hình của extension nào.
  */
 typedef struct {
   ngx_flag_t enabled; /* Bật/tắt Gateway (on/off) */
-  ngx_str_t ip_restriction_policy;
-  AuroraIpRestrictionEngine *ip_restriction_engine;
-#define access_policy ip_restriction_policy
-#define access_engine ip_restriction_engine
-  ngx_str_t jwt_policy;
-  AuroraJwtEngine *jwt_engine;
-  ngx_str_t rate_limit_policy;
-  AuroraRateLimitEngine *rate_limit_engine;
-  ngx_str_t conn_limit_policy;
-  AuroraConnectionLimitEngine *conn_limit_engine;
-  ngx_str_t traffic_shaper_policy;
-  AuroraTrafficShaperEngine *traffic_shaper_engine;
-  ngx_str_t request_size_limit_policy;
-  AuroraRequestSizeLimitEngine *request_size_limit_engine;
-  ngx_str_t traffic_split_policy;
-  AuroraTrafficSplitEngine *traffic_split_engine;
-  ngx_str_t canary_release_policy;
-  AuroraCanaryReleaseEngine *canary_release_engine;
-  ngx_str_t blue_green_policy;
-  AuroraBlueGreenEngine *blue_green_engine;
-  ngx_str_t request_mirror_policy;
-  AuroraRequestMirrorEngine *request_mirror_engine;
-  ngx_str_t request_termination_policy;
-  AuroraRequestTerminationEngine *request_termination_engine;
 } ngx_http_gateway_conf_t;
 
 typedef struct {
-  ngx_str_t chosen_upstream;
-  ngx_str_t mirror_upstream;
-  ngx_str_t rule_id;
-  ngx_str_t deploy_slot;
+  ngx_str_t target_upstream;
   ngx_uint_t evaluated;
-  ngx_uint_t is_canary;
-  ngx_uint_t is_header_override;
-  ngx_uint_t is_mirrored;
-  ngx_uint_t is_terminated;
 } ngx_http_gateway_ctx_t;
 
 extern ngx_module_t ngx_http_gateway_module;
-extern ngx_shm_zone_t *gateway_telemetry_zone;
 
-/* Dynamic In-Memory Engine Registry (Zero-reload, straight-line hot path) */
-extern void *gateway_active_engines[AURORA_EXT_COUNT];
-extern uint64_t gateway_active_generations[AURORA_EXT_COUNT];
-void *ngx_http_gateway_get_engine(uint32_t ext_id);
-void ngx_http_gateway_policy_sync_handler(ngx_event_t *ev);
+typedef struct {
+  AuroraReleaseToken token;
+} ngx_http_gateway_conn_token_ctx_t;
 
-/* Pipeline Handler */
+void ngx_http_gateway_conn_token_req_cleanup(void *data);
+
+/* Pipeline Access Phase Handler */
 ngx_int_t ngx_http_gateway_handler(ngx_http_request_t *r);
 
-/* Extension: IP Restriction (formerly Access Policy) */
-char *ngx_http_gateway_merge_ip_restriction(ngx_conf_t *cf,
-                                            ngx_http_gateway_conf_t *prev,
-                                            ngx_http_gateway_conf_t *conf);
-ngx_int_t ngx_http_gateway_eval_ip_restriction(ngx_http_request_t *r,
-                                               ngx_http_gateway_conf_t *conf,
-                                               ngx_str_t host);
-
-#define ngx_http_gateway_merge_access ngx_http_gateway_merge_ip_restriction
-#define ngx_http_gateway_eval_access ngx_http_gateway_eval_ip_restriction
-
-/* Extension: JWT Authentication */
-char *ngx_http_gateway_merge_jwt(ngx_conf_t *cf, ngx_http_gateway_conf_t *prev,
-                                 ngx_http_gateway_conf_t *conf);
-ngx_int_t ngx_http_gateway_eval_jwt(ngx_http_request_t *r,
-                                    ngx_http_gateway_conf_t *conf,
-                                    ngx_str_t host);
-
-/* Shared: header lookup callback for extensions */
+/* Shared: header lookup callback */
 uint32_t ngx_http_gateway_header_lookup(void *ctx, const uint8_t *name,
                                         size_t name_len,
                                         const uint8_t **out_val,
                                         size_t *out_val_len);
 
-/* Extension: Rate Limit */
-char *ngx_http_gateway_merge_rate_limit(ngx_conf_t *cf,
-                                        ngx_http_gateway_conf_t *prev,
-                                        ngx_http_gateway_conf_t *conf);
-ngx_int_t ngx_http_gateway_eval_rate_limit(ngx_http_request_t *r,
-                                           ngx_http_gateway_conf_t *conf,
-                                           ngx_str_t host);
-
-/* Extension: Connection Limit */
-char *ngx_http_gateway_merge_conn_limit(ngx_conf_t *cf,
-                                        ngx_http_gateway_conf_t *prev,
-                                        ngx_http_gateway_conf_t *conf);
-ngx_int_t ngx_http_gateway_eval_conn_limit(ngx_http_request_t *r,
-                                           ngx_http_gateway_conf_t *conf,
-                                           ngx_str_t host);
-
-/* Extension: Traffic Shaper */
-char *ngx_http_gateway_merge_traffic_shaper(ngx_conf_t *cf,
-                                            ngx_http_gateway_conf_t *prev,
-                                            ngx_http_gateway_conf_t *conf);
-ngx_int_t ngx_http_gateway_eval_traffic_shaper(ngx_http_request_t *r,
-                                               ngx_http_gateway_conf_t *conf,
-                                               ngx_str_t host);
-
-/* Extension: Request Size Limit */
-char *ngx_http_gateway_merge_request_size_limit(ngx_conf_t *cf,
-                                                ngx_http_gateway_conf_t *prev,
-                                                ngx_http_gateway_conf_t *conf);
-ngx_int_t ngx_http_gateway_eval_request_size_limit(
-    ngx_http_request_t *r, ngx_http_gateway_conf_t *conf, ngx_str_t host);
-
-/* Extension: Traffic Split */
-char *ngx_http_gateway_merge_traffic_split(ngx_conf_t *cf,
-                                           ngx_http_gateway_conf_t *prev,
-                                           ngx_http_gateway_conf_t *conf);
-ngx_int_t ngx_http_gateway_eval_traffic_split(ngx_http_request_t *r,
-                                              ngx_http_gateway_conf_t *conf,
-                                              ngx_str_t host);
+/* NGINX Variable Getters */
+ngx_int_t ngx_http_gateway_variables(ngx_conf_t *cf);
 ngx_int_t ngx_http_gateway_variable_upstream(ngx_http_request_t *r,
                                              ngx_http_variable_value_t *v,
                                              uintptr_t data);
-ngx_int_t ngx_http_gateway_variable_split_rule(ngx_http_request_t *r,
-                                               ngx_http_variable_value_t *v,
-                                               uintptr_t data);
 
-/* Extension: Canary Release */
-char *ngx_http_gateway_merge_canary_release(ngx_conf_t *cf,
-                                            ngx_http_gateway_conf_t *prev,
-                                            ngx_http_gateway_conf_t *conf);
-ngx_int_t ngx_http_gateway_eval_canary_release(ngx_http_request_t *r,
-                                               ngx_http_gateway_conf_t *conf,
-                                               ngx_str_t host);
-ngx_int_t ngx_http_gateway_variable_canary_status(ngx_http_request_t *r,
-                                                  ngx_http_variable_value_t *v,
-                                                  uintptr_t data);
-
-/* Extension: Blue-Green Deployment */
-char *ngx_http_gateway_merge_blue_green(ngx_conf_t *cf,
-                                        ngx_http_gateway_conf_t *prev,
-                                        ngx_http_gateway_conf_t *conf);
-ngx_int_t ngx_http_gateway_eval_blue_green(ngx_http_request_t *r,
-                                           ngx_http_gateway_conf_t *conf,
-                                           ngx_str_t host);
-ngx_int_t ngx_http_gateway_variable_deploy_slot(ngx_http_request_t *r,
-                                                ngx_http_variable_value_t *v,
-                                                uintptr_t data);
-
-/* Extension: Request Mirror */
-char *ngx_http_gateway_merge_request_mirror(ngx_conf_t *cf,
-                                            ngx_http_gateway_conf_t *prev,
-                                            ngx_http_gateway_conf_t *conf);
-ngx_int_t ngx_http_gateway_eval_request_mirror(ngx_http_request_t *r,
-                                               ngx_http_gateway_conf_t *conf,
-                                               ngx_str_t host);
-ngx_int_t ngx_http_gateway_variable_mirror_upstream(
-    ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
-ngx_int_t ngx_http_gateway_variable_mirror_status(ngx_http_request_t *r,
-                                                  ngx_http_variable_value_t *v,
-                                                  uintptr_t data);
-
-/* Extension: Request Termination */
-char *ngx_http_gateway_merge_request_termination(ngx_conf_t *cf,
-                                                 ngx_http_gateway_conf_t *prev,
-                                                 ngx_http_gateway_conf_t *conf);
-ngx_int_t ngx_http_gateway_eval_request_termination(
-    ngx_http_request_t *r, ngx_http_gateway_conf_t *conf, ngx_str_t host);
-ngx_int_t ngx_http_gateway_variable_termination_status(
-    ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
-
-/* Telemetry, Variables, and Metrics Handler */
-ngx_int_t ngx_http_gateway_telemetry_zone_init(ngx_shm_zone_t *zone,
-                                               void *previous);
-ngx_int_t ngx_http_gateway_variables(ngx_conf_t *cf);
+/* Content and Telemetry Handlers */
 char *ngx_http_gateway_metrics_directive(ngx_conf_t *cf, ngx_command_t *cmd,
                                          void *conf);
 ngx_int_t ngx_http_gateway_metrics_handler(ngx_http_request_t *r);

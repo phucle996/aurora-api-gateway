@@ -43,7 +43,7 @@ func (m *mockSpecSyncRepo) GetAuthorityData(ctx context.Context, nodeID string) 
 				ID:              "prometheus",
 				ManifestKey:     "builtin/prometheus",
 				ManifestVersion: 1,
-				ConfigJSON:      `{"port":9145,"prometheus":{"enabled":true,"path":"/metrics"}}`,
+				ConfigJSON:      `{"port":9145,"allowlist":["127.0.0.1"],"prometheus":{"enabled":true,"path":"/metrics"}}`,
 			},
 		},
 	}, nil

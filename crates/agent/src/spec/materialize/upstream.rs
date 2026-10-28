@@ -36,9 +36,12 @@ pub fn generate_upstreams_conf(upstreams: &[UpstreamSpec], raw_override: Option<
         buf.push_str(&format!("upstream {} {{\n", up.name));
         buf.push_str(&format!("    zone aurora_http_{} 64k;\n", up.name));
         for s in &up.servers {
+            let host_part = s.addr.split(':').next().unwrap_or(&s.addr);
+            let is_ip = host_part.parse::<std::net::IpAddr>().is_ok();
+            let resolve_flag = if is_ip { "" } else { " resolve" };
             buf.push_str(&format!(
-                "    server {} weight={} resolve;\n",
-                s.addr, s.weight
+                "    server {} weight={}{};\n",
+                s.addr, s.weight, resolve_flag
             ));
         }
         buf.push_str("}\n");
@@ -94,7 +97,7 @@ mod tests {
         let conf = generate_upstreams_conf(&upstreams, None);
         assert!(conf.contains("upstream backend_api {"));
         assert!(conf.contains("zone aurora_http_backend_api 64k;"));
-        assert!(conf.contains("server 10.0.0.1:8080 weight=3 resolve;"));
-        assert!(conf.contains("server 10.0.0.2:8080 weight=1 resolve;"));
+        assert!(conf.contains("server 10.0.0.1:8080 weight=3;"));
+        assert!(conf.contains("server 10.0.0.2:8080 weight=1;"));
     }
 }

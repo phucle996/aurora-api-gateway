@@ -125,12 +125,7 @@ impl PolicyShmHeader {
 
     /// Update a specific slot with JSON policy bytes.
     /// Returns true if updated successfully, false if payload exceeds slot capacity.
-    pub fn update_slot(
-        &mut self,
-        slot_id: u32,
-        generation: u64,
-        payload: Option<&[u8]>,
-    ) -> bool {
+    pub fn update_slot(&mut self, slot_id: u32, generation: u64, payload: Option<&[u8]>) -> bool {
         let idx = slot_id as usize;
         if idx >= POLICY_MAX_SLOTS {
             return false;

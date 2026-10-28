@@ -219,10 +219,9 @@ mod tests {
             ..Default::default()
         };
         let nginx = NginxManager::new(nginx_bin, cfg.gateway_conf.clone());
-        let dispatcher = Arc::new(Mutex::new(ExtensionDispatcher::new(
-            Arc::new(cfg.hostname.clone()),
-            None,
-        )));
+        let dispatcher = Arc::new(Mutex::new(ExtensionDispatcher::new(Arc::new(
+            cfg.hostname.clone(),
+        ))));
         let grpc = GrpcClient::new(&cfg).expect("create lazy grpc client");
         let runner = SpecSyncRunner::new(cfg, nginx, dispatcher, grpc);
 

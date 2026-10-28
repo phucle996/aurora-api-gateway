@@ -11,76 +11,134 @@ aurora_versions="$aurora_root/scripts/nginx-versions.txt"
 aurora_bin="$aurora_root/build/bin"
 mkdir -p "$aurora_source" "$aurora_bin"
 
-echo "==> Building Rust FFI engine (libaurora_ffi.a)..."
+echo "==> Resolving Rust FFI engine (libaurora_ffi.a)..."
 cd "$aurora_root"
-cargo build --locked --release -p aurora-ffi
+if [[ "${SKIP_CARGO:-0}" != "1" ]] && command -v cargo >/dev/null 2>&1; then
+    cargo build --locked --release -p aurora-ffi
+elif [[ -f "$aurora_root/target/release/libaurora_ffi.a" ]]; then
+    echo "==> Reusing prebuilt $aurora_root/target/release/libaurora_ffi.a"
+else
+    echo "FATAL: cargo not found and target/release/libaurora_ffi.a does not exist" >&2
+    exit 1
+fi
 
-# Resolve dependencies (PCRE2 and OpenSSL headers)
-aurora_cc_flags=""
-aurora_ld_flags=""
+# Resolve dependencies: By default (STATIC_DEPS=1), vendored OpenSSL, PCRE2, and zlib
+# are compiled statically directly into aurora-gateway for cross-machine portability
+# and maximum hardware acceleration (AES-NI, AVX2, NIST P-256 GCC 128-bit).
+STATIC_DEPS="${STATIC_DEPS:-1}"
+extra_configure_flags=()
 
-need_pcre=0
-need_ssl=0
-need_zlib=0
-[[ ! -f /usr/include/pcre2.h ]] && need_pcre=1
-[[ ! -f /usr/include/openssl/ssl.h ]] && need_ssl=1
-[[ ! -f /usr/include/zlib.h ]] && need_zlib=1
+if [[ "$STATIC_DEPS" == "1" ]]; then
+    static_deps_dir="$aurora_root/build/static-deps"
+    mkdir -p "$static_deps_dir"
 
-if [[ $need_pcre -eq 1 || $need_ssl -eq 1 || $need_zlib -eq 1 ]]; then
-    mkdir -p "$aurora_root/build/nginx-deps/root"
-    cd "$aurora_root/build/nginx-deps"
-    if [[ $need_pcre -eq 1 && ! -f root/usr/include/pcre2.h ]]; then
-        echo "==> Downloading libpcre2-dev headers..."
-        apt-get download libpcre2-dev 2>/dev/null || true
-        for deb in libpcre2-dev_*.deb; do
-            [[ -f "$deb" ]] && dpkg-deb --extract "$deb" root
-        done
-    fi
-    if [[ $need_ssl -eq 1 && ! -f root/usr/include/openssl/ssl.h ]]; then
-        echo "==> Downloading libssl-dev headers..."
-        apt-get download libssl-dev 2>/dev/null || true
-        for deb in libssl-dev_*.deb; do
-            [[ -f "$deb" ]] && dpkg-deb --extract "$deb" root
-        done
-    fi
-    if [[ $need_zlib -eq 1 && ! -f root/usr/include/zlib.h ]]; then
-        echo "==> Downloading zlib1g-dev headers..."
-        apt-get download zlib1g-dev 2>/dev/null || true
-        for deb in zlib1g-dev_*.deb; do
-            [[ -f "$deb" ]] && dpkg-deb --extract "$deb" root
-        done
+    openssl_ver="${OPENSSL_VERSION:-3.0.15}"
+    pcre2_ver="${PCRE2_VERSION:-10.44}"
+    zlib_ver="${ZLIB_VERSION:-1.3.1}"
+
+    openssl_src="$static_deps_dir/openssl-$openssl_ver"
+    pcre2_src="$static_deps_dir/pcre2-$pcre2_ver"
+    zlib_src="$static_deps_dir/zlib-$zlib_ver"
+
+    if [[ ! -d "$openssl_src" ]]; then
+        echo "==> Downloading OpenSSL ${openssl_ver} source (LTS static)..."
+        curl --fail --location --silent --show-error \
+            "https://github.com/openssl/openssl/releases/download/openssl-${openssl_ver}/openssl-${openssl_ver}.tar.gz" \
+            | tar -xz -C "$static_deps_dir"
     fi
 
-    # Fix symlinks to point to host system libraries and avoid linking against static archives with extra unneeded deps
-    rm -f root/usr/lib/x86_64-linux-gnu/*.a 2>/dev/null || true
-    for pcre_so in /usr/lib/x86_64-linux-gnu/libpcre2-8.so* /lib/x86_64-linux-gnu/libpcre2-8.so*; do
-        if [[ -f "$pcre_so" ]]; then
-            ln -sf "$pcre_so" root/usr/lib/x86_64-linux-gnu/libpcre2-8.so
-            break
-        fi
-    done
-    for ssl_so in /usr/lib/x86_64-linux-gnu/libssl.so* /lib/x86_64-linux-gnu/libssl.so*; do
-        if [[ -f "$ssl_so" ]]; then
-            ln -sf "$ssl_so" root/usr/lib/x86_64-linux-gnu/libssl.so
-            break
-        fi
-    done
-    for crypto_so in /usr/lib/x86_64-linux-gnu/libcrypto.so* /lib/x86_64-linux-gnu/libcrypto.so*; do
-        if [[ -f "$crypto_so" ]]; then
-            ln -sf "$crypto_so" root/usr/lib/x86_64-linux-gnu/libcrypto.so
-            break
-        fi
-    done
-    for z_so in /usr/lib/x86_64-linux-gnu/libz.so* /lib/x86_64-linux-gnu/libz.so*; do
-        if [[ -f "$z_so" ]]; then
-            ln -sf "$z_so" root/usr/lib/x86_64-linux-gnu/libz.so
-            break
-        fi
-    done
+    if [[ ! -d "$pcre2_src" ]]; then
+        echo "==> Downloading PCRE2 ${pcre2_ver} source (static)..."
+        curl --fail --location --silent --show-error \
+            "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${pcre2_ver}/pcre2-${pcre2_ver}.tar.gz" \
+            | tar -xz -C "$static_deps_dir"
+    fi
 
-    aurora_cc_flags="-I$aurora_root/build/nginx-deps/root/usr/include -I$aurora_root/build/nginx-deps/root/usr/include/x86_64-linux-gnu"
-    aurora_ld_flags="-L$aurora_root/build/nginx-deps/root/usr/lib/x86_64-linux-gnu"
-    cd "$aurora_root"
+    if [[ ! -d "$zlib_src" ]]; then
+        echo "==> Downloading zlib ${zlib_ver} source (static)..."
+        curl --fail --location --silent --show-error \
+            "https://github.com/madler/zlib/releases/download/v${zlib_ver}/zlib-${zlib_ver}.tar.gz" \
+            | tar -xz -C "$static_deps_dir"
+    fi
+
+    extra_configure_flags+=(
+        "--with-openssl=$openssl_src"
+        "--with-openssl-opt=enable-ec_nistp_64_gcc_128 no-shared no-tests threads"
+        "--with-pcre=$pcre2_src"
+        "--with-pcre-jit"
+        "--with-zlib=$zlib_src"
+    )
+else
+    aurora_cc_flags=""
+    aurora_ld_flags=""
+
+    need_pcre=0
+    need_ssl=0
+    need_zlib=0
+    [[ ! -f /usr/include/pcre2.h ]] && need_pcre=1
+    [[ ! -f /usr/include/openssl/ssl.h ]] && need_ssl=1
+    [[ ! -f /usr/include/zlib.h ]] && need_zlib=1
+
+    if [[ $need_pcre -eq 1 || $need_ssl -eq 1 || $need_zlib -eq 1 ]]; then
+        mkdir -p "$aurora_root/build/nginx-deps/root"
+        cd "$aurora_root/build/nginx-deps"
+        if [[ $need_pcre -eq 1 && ! -f root/usr/include/pcre2.h ]]; then
+            echo "==> Downloading libpcre2-dev headers..."
+            apt-get download libpcre2-dev 2>/dev/null || true
+            for deb in libpcre2-dev_*.deb; do
+                [[ -f "$deb" ]] && dpkg-deb --extract "$deb" root
+            done
+        fi
+        if [[ $need_ssl -eq 1 && ! -f root/usr/include/openssl/ssl.h ]]; then
+            echo "==> Downloading libssl-dev headers..."
+            apt-get download libssl-dev 2>/dev/null || true
+            for deb in libssl-dev_*.deb; do
+                [[ -f "$deb" ]] && dpkg-deb --extract "$deb" root
+            done
+        fi
+        if [[ $need_zlib -eq 1 && ! -f root/usr/include/zlib.h ]]; then
+            echo "==> Downloading zlib1g-dev headers..."
+            apt-get download zlib1g-dev 2>/dev/null || true
+            for deb in zlib1g-dev_*.deb; do
+                [[ -f "$deb" ]] && dpkg-deb --extract "$deb" root
+            done
+        fi
+
+        rm -f root/usr/lib/x86_64-linux-gnu/*.a 2>/dev/null || true
+        for pcre_so in /usr/lib/x86_64-linux-gnu/libpcre2-8.so* /lib/x86_64-linux-gnu/libpcre2-8.so*; do
+            if [[ -f "$pcre_so" ]]; then
+                ln -sf "$pcre_so" root/usr/lib/x86_64-linux-gnu/libpcre2-8.so
+                break
+            fi
+        done
+        for ssl_so in /usr/lib/x86_64-linux-gnu/libssl.so* /lib/x86_64-linux-gnu/libssl.so*; do
+            if [[ -f "$ssl_so" ]]; then
+                ln -sf "$ssl_so" root/usr/lib/x86_64-linux-gnu/libssl.so
+                break
+            fi
+        done
+        for crypto_so in /usr/lib/x86_64-linux-gnu/libcrypto.so* /lib/x86_64-linux-gnu/libcrypto.so*; do
+            if [[ -f "$crypto_so" ]]; then
+                ln -sf "$crypto_so" root/usr/lib/x86_64-linux-gnu/libcrypto.so
+                break
+            fi
+        done
+        for z_so in /usr/lib/x86_64-linux-gnu/libz.so* /lib/x86_64-linux-gnu/libz.so*; do
+            if [[ -f "$z_so" ]]; then
+                ln -sf "$z_so" root/usr/lib/x86_64-linux-gnu/libz.so
+                break
+            fi
+        done
+
+        aurora_cc_flags="-I$aurora_root/build/nginx-deps/root/usr/include -I$aurora_root/build/nginx-deps/root/usr/include/x86_64-linux-gnu"
+        aurora_ld_flags="-L$aurora_root/build/nginx-deps/root/usr/lib/x86_64-linux-gnu"
+        cd "$aurora_root"
+    fi
+
+    extra_configure_flags+=(
+        "--with-cc-opt=$aurora_cc_flags"
+        "--with-ld-opt=$aurora_ld_flags"
+    )
 fi
 
 ver="${NGINX_VERSION:-1.30.4}"
@@ -137,8 +195,6 @@ cd "$aurora_source/nginx-${ver}"
     --without-http_ssi_module \
     --without-http_userid_module \
     --without-http_split_clients_module \
-    --without-http_static_module \
-    --without-http_index_module \
     --with-compat \
     --with-http_ssl_module \
     --with-http_v2_module \
@@ -147,8 +203,7 @@ cd "$aurora_source/nginx-${ver}"
     --with-stream \
     --with-stream_ssl_module \
     --with-stream_realip_module \
-    --with-cc-opt="$aurora_cc_flags" \
-    --with-ld-opt="$aurora_ld_flags" \
+    "${extra_configure_flags[@]}" \
     --add-module="$aurora_root/adapters/nginx" \
     > "$aurora_source/configure-${ver}.log" 2>&1 || {
     tail -60 "$aurora_source/configure-${ver}.log"

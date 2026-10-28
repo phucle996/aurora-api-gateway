@@ -17,3 +17,4 @@
 /control-plane/internal/console/dist/*
 !/control-plane/internal/console/dist/index.html
 /crates/engine/benches/*.csv
+backend/aurora-backend

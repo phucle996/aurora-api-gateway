@@ -4,7 +4,7 @@
 
 | Extension key | Renderer | Output |
 | --- | --- | --- |
-| `builtin/prometheus` | `agent-metrics` | Agent HTTP scrape endpoint, normally `:9145/metrics` |
+| `builtin/prometheus` | `prometheus` | Dynamic HTTP scrape endpoint configured per extension specification |
 | `builtin/opentelemetry-metrics` | `opentelemetry-metrics` | Periodic OTLP metrics over HTTP or gRPC |
 | `builtin/opentelemetry-logs` | `opentelemetry-logs` | Batched OTLP access logs over HTTP or gRPC |
 | `builtin/opentelemetry-tracing` | `opentelemetry-tracing` | Batched OTLP trace spans with head sampling over HTTP or gRPC |
@@ -12,13 +12,11 @@
 
 The [manifest files](../control-plane/internal/extensionmanifest/manifests) define required fields, ranges and defaults. The [dispatcher](../crates/agent/src/extension/dispatcher.rs) manages these exporters separately. Set the extension status and configuration through the console/API; changing a JSON `enabled` field alone is not a substitute for the extension activation workflow.
 
-## NGINX to agent
+## In-Process Background Phase (Shadow Worker)
 
-The [Docker NGINX template](../deploy/docker/nginx-node.conf.template) emits JSON syslog datagrams to `/dev/shm/aurora_access.sock`, conditional on `$gateway_log_active`. Active LogBus subscriptions register through `/dev/shm/aurora_gateway_telemetry.bin`. The agent binds the socket before starting its managed NGINX process.
+Aurora Gateway processes telemetry, access logs, and distributed traces in-process via a dedicated companion thread: the **Shadow Worker** (`aurora-shadow-{id}`). The Shadow Worker operates at Linux `SCHED_IDLE` priority to ensure 0% CPU contention with request serving on the traffic worker.
 
-Custom NGINX deployments must supply the equivalent log format, destination and condition. Agent and NGINX need access to the same socket and shared-memory paths. Enabling an exporter cannot supply missing access-log directives in an unrelated NGINX configuration.
-
-The template emits request metadata and `waf_action`. It does not emit a WAF rule ID. `include_waf_details` preserves fields present in the input; it does not reconstruct unavailable rule metadata. NGINX `request_time` is in seconds and is converted to milliseconds by the agent.
+At the NGINX `NGX_HTTP_LOG_PHASE`, request metadata is captured on the stack and handed off to the Shadow Worker via a non-blocking in-process ring channel (< 40ns). Access logs are generated using a pre-templated byte blitter (eliminating runtime reflection and serde overhead), and flushes occur during CPU idle periods. Out-of-process Unix Domain Socket IPC (`/dev/shm/aurora_access.sock`) has been completely decommissioned.
 
 ## Standard stream logs
 

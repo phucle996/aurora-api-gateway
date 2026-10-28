@@ -71,7 +71,7 @@ async fn test_materialize_nginx_files() {
         .unwrap();
     assert!(up_conf.contains("upstream backend"));
     assert!(up_conf.contains("zone aurora_http_backend 64k;"));
-    assert!(up_conf.contains("server 127.0.0.1:8080 weight=2 resolve;"));
+    assert!(up_conf.contains("server 127.0.0.1:8080 weight=2;"));
 
     // Second run with same spec should NOT report changed
     let res2 = materialize_nginx(&spec, &policy_dir, &routing_dir)
@@ -113,7 +113,7 @@ fn test_extensions_generation() {
             version: 1,
             renderer: "engine-jwt-rs256".to_string(),
             manifest_digest: String::new(),
-            config_json: r#"{"rules":[{"id":"api","host":"api.example.test","path_prefix":"/api","public_key_pem":"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A\n-----END PUBLIC KEY-----","issuer":"https://issuer.example.test","audience":"gateway"}]}"#.to_string(),
+            config_json: r#"{"rules":[{"id":"api","host":"api.example.test","path_prefix":"/api","algorithm":"RS256","token_source":"header","header_name":"Authorization","token_prefix":"Bearer ","public_key_pem":"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A\n-----END PUBLIC KEY-----","issuer":"https://issuer.example.test","audience":"gateway"}]}"#.to_string(),
         },
     ];
     let rendered = render_extensions(&extensions).unwrap();
@@ -151,7 +151,7 @@ async fn test_jwt_extension_materializes_and_removes_ffi_snapshot() {
             version: 1,
             renderer: "engine-jwt-rs256".to_string(),
             manifest_digest: String::new(),
-            config_json: r#"{"rules":[{"id":"api","host":"api.example.test","path_prefix":"/","public_key_pem":"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A\n-----END PUBLIC KEY-----"}]}"#.to_string(),
+            config_json: r#"{"rules":[{"id":"api","host":"api.example.test","path_prefix":"/","algorithm":"RS256","token_source":"header","header_name":"Authorization","token_prefix":"Bearer ","public_key_pem":"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A\n-----END PUBLIC KEY-----"}]}"#.to_string(),
         }],
         ..Default::default()
     };
@@ -175,7 +175,8 @@ async fn test_jwt_extension_materializes_and_removes_ffi_snapshot() {
         .expect("remove JWT snapshot");
     assert!(!result.nginx_changed);
     assert!(!policy_dir.join("active-jwt.json").exists());
-    let (gen_disabled, jwt_disabled) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_JWT);
+    let (gen_disabled, jwt_disabled) =
+        read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_JWT);
     assert_eq!(gen_disabled, 92);
     assert!(jwt_disabled.is_empty());
     let _ = tokio::fs::remove_dir_all(base).await;
@@ -208,7 +209,8 @@ async fn test_rate_limit_extension_materializes_and_removes_ffi_snapshot() {
         .expect("materialize rate-limit snapshot");
     assert!(!policy_dir.join("active-rate-limit.json").exists());
     assert!(res.policy_changed);
-    let (slot_gen, rl) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_RATE_LIMIT);
+    let (slot_gen, rl) =
+        read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_RATE_LIMIT);
     assert_eq!(slot_gen, 88);
     assert!(rl.contains("\"generation\":88"));
     assert!(rl.contains("\"token_bucket\""));
@@ -223,7 +225,8 @@ async fn test_rate_limit_extension_materializes_and_removes_ffi_snapshot() {
         .expect("remove rate-limit snapshot");
     assert!(!result.nginx_changed);
     assert!(!policy_dir.join("active-rate-limit.json").exists());
-    let (gen_disabled, rl_disabled) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_RATE_LIMIT);
+    let (gen_disabled, rl_disabled) =
+        read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_RATE_LIMIT);
     assert_eq!(gen_disabled, 89);
     assert!(rl_disabled.is_empty());
     let _ = tokio::fs::remove_dir_all(base).await;
@@ -256,7 +259,8 @@ async fn test_connection_limit_extension_materializes_and_removes_ffi_snapshot()
         .expect("materialize connection-limit snapshot");
     assert!(!policy_dir.join("active-connection-limit.json").exists());
     assert!(res.policy_changed);
-    let (slot_gen, cl) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_CONN_LIMIT);
+    let (slot_gen, cl) =
+        read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_CONN_LIMIT);
     assert_eq!(slot_gen, 99);
     assert!(cl.contains("\"generation\":99"));
     assert!(cl.contains("\"max_connections\":5"));
@@ -271,7 +275,8 @@ async fn test_connection_limit_extension_materializes_and_removes_ffi_snapshot()
         .expect("remove connection-limit snapshot");
     assert!(!result.nginx_changed);
     assert!(!policy_dir.join("active-connection-limit.json").exists());
-    let (gen_disabled, cl_disabled) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_CONN_LIMIT);
+    let (gen_disabled, cl_disabled) =
+        read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_CONN_LIMIT);
     assert_eq!(gen_disabled, 100);
     assert!(cl_disabled.is_empty());
     let _ = tokio::fs::remove_dir_all(base).await;
@@ -307,7 +312,8 @@ async fn test_traffic_shaper_extension_materializes_and_removes_snapshot() {
         .expect("materialize traffic-shaper snapshot");
     assert!(!policy_dir.join("active-traffic-shaper.json").exists());
     assert!(res.policy_changed);
-    let (slot_gen, ts) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_TRAFFIC_SHAPER);
+    let (slot_gen, ts) =
+        read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_TRAFFIC_SHAPER);
     assert_eq!(slot_gen, 88);
     assert!(ts.contains("\"generation\":88"));
     assert!(ts.contains("\"rate_kb_per_sec\":1024"));
@@ -323,7 +329,8 @@ async fn test_traffic_shaper_extension_materializes_and_removes_snapshot() {
         .expect("remove traffic-shaper snapshot");
     assert!(!result.nginx_changed);
     assert!(!policy_dir.join("active-traffic-shaper.json").exists());
-    let (gen_disabled, ts_disabled) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_TRAFFIC_SHAPER);
+    let (gen_disabled, ts_disabled) =
+        read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_TRAFFIC_SHAPER);
     assert_eq!(gen_disabled, 89);
     assert!(ts_disabled.is_empty());
     let _ = tokio::fs::remove_dir_all(base).await;
@@ -378,7 +385,10 @@ async fn test_materialize_nginx_request_size_limit_snapshot_lifecycle() {
         .expect("materialize request-size-limit snapshot");
     assert!(!policy_dir.join("active-request-size-limit.json").exists());
     assert!(res.policy_changed);
-    let (slot_gen, rsl) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_REQUEST_SIZE_LIMIT);
+    let (slot_gen, rsl) = read_shm_slot_string(
+        &policy_dir,
+        aurora_engine::shm::AURORA_EXT_REQUEST_SIZE_LIMIT,
+    );
     assert_eq!(slot_gen, 99);
     assert!(rsl.contains("\"generation\":99"));
     assert!(rsl.contains("\"max_request_bytes\":52428800"));
@@ -394,7 +404,10 @@ async fn test_materialize_nginx_request_size_limit_snapshot_lifecycle() {
         .expect("remove request-size-limit snapshot");
     assert!(!result.nginx_changed);
     assert!(!policy_dir.join("active-request-size-limit.json").exists());
-    let (gen_disabled, rsl_disabled) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_REQUEST_SIZE_LIMIT);
+    let (gen_disabled, rsl_disabled) = read_shm_slot_string(
+        &policy_dir,
+        aurora_engine::shm::AURORA_EXT_REQUEST_SIZE_LIMIT,
+    );
     assert_eq!(gen_disabled, 100);
     assert!(rsl_disabled.is_empty());
     let _ = tokio::fs::remove_dir_all(base).await;
@@ -446,7 +459,8 @@ async fn test_materialize_nginx_traffic_split_snapshot_lifecycle() {
         .expect("materialize traffic-split snapshot");
     assert!(!policy_dir.join("active-traffic-split.json").exists());
     assert!(res.policy_changed);
-    let (slot_gen, ts) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_TRAFFIC_SPLIT);
+    let (slot_gen, ts) =
+        read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_TRAFFIC_SPLIT);
     assert_eq!(slot_gen, 101);
     assert!(ts.contains("\"generation\":101"));
     assert!(ts.contains("\"checkout_v1\""));
@@ -463,7 +477,8 @@ async fn test_materialize_nginx_traffic_split_snapshot_lifecycle() {
         .expect("remove traffic-split snapshot");
     assert!(!result.nginx_changed);
     assert!(!policy_dir.join("active-traffic-split.json").exists());
-    let (gen_disabled, ts_disabled) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_TRAFFIC_SPLIT);
+    let (gen_disabled, ts_disabled) =
+        read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_TRAFFIC_SPLIT);
     assert_eq!(gen_disabled, 102);
     assert!(ts_disabled.is_empty());
     let _ = tokio::fs::remove_dir_all(base).await;
@@ -521,7 +536,8 @@ async fn test_materialize_nginx_writes_and_removes_canary_release_snapshot() {
         .expect("materialize canary-release snapshot");
     assert!(!policy_dir.join("active-canary-release.json").exists());
     assert!(res.policy_changed);
-    let (slot_gen, cr) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_CANARY_RELEASE);
+    let (slot_gen, cr) =
+        read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_CANARY_RELEASE);
     assert_eq!(slot_gen, 201);
     assert!(cr.contains("\"generation\":201"));
     assert!(cr.contains("\"backend_v1\""));
@@ -537,7 +553,8 @@ async fn test_materialize_nginx_writes_and_removes_canary_release_snapshot() {
         .expect("remove canary-release snapshot");
     assert!(!result.nginx_changed);
     assert!(!policy_dir.join("active-canary-release.json").exists());
-    let (gen_disabled, cr_disabled) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_CANARY_RELEASE);
+    let (gen_disabled, cr_disabled) =
+        read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_CANARY_RELEASE);
     assert_eq!(gen_disabled, 202);
     assert!(cr_disabled.is_empty());
     let _ = tokio::fs::remove_dir_all(base).await;
@@ -580,7 +597,8 @@ async fn test_materialize_nginx_writes_and_removes_blue_green_snapshot() {
         .expect("materialize blue-green snapshot");
     assert!(!policy_dir.join("active-blue-green.json").exists());
     assert!(res.policy_changed);
-    let (slot_gen, bg) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_BLUE_GREEN);
+    let (slot_gen, bg) =
+        read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_BLUE_GREEN);
     assert_eq!(slot_gen, 301);
     assert!(bg.contains("\"generation\":301"));
     assert!(bg.contains("\"app_blue\""));
@@ -596,7 +614,8 @@ async fn test_materialize_nginx_writes_and_removes_blue_green_snapshot() {
         .expect("remove blue-green snapshot");
     assert!(!result.nginx_changed);
     assert!(!policy_dir.join("active-blue-green.json").exists());
-    let (gen_disabled, bg_disabled) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_BLUE_GREEN);
+    let (gen_disabled, bg_disabled) =
+        read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_BLUE_GREEN);
     assert_eq!(gen_disabled, 302);
     assert!(bg_disabled.is_empty());
     let _ = tokio::fs::remove_dir_all(base).await;
@@ -639,7 +658,8 @@ async fn test_materialize_nginx_writes_and_removes_request_mirror_snapshot() {
         .expect("materialize request-mirror snapshot");
     assert!(!policy_dir.join("active-request-mirror.json").exists());
     assert!(res.policy_changed);
-    let (slot_gen, rm) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_REQUEST_MIRROR);
+    let (slot_gen, rm) =
+        read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_REQUEST_MIRROR);
     assert_eq!(slot_gen, 401);
     assert!(rm.contains("\"generation\":401"));
     assert!(rm.contains("\"app_primary\""));
@@ -655,7 +675,8 @@ async fn test_materialize_nginx_writes_and_removes_request_mirror_snapshot() {
         .expect("remove request-mirror snapshot");
     assert!(!result.nginx_changed);
     assert!(!policy_dir.join("active-request-mirror.json").exists());
-    let (gen_disabled, rm_disabled) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_REQUEST_MIRROR);
+    let (gen_disabled, rm_disabled) =
+        read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_REQUEST_MIRROR);
     assert_eq!(gen_disabled, 402);
     assert!(rm_disabled.is_empty());
     let _ = tokio::fs::remove_dir_all(base).await;
@@ -697,7 +718,10 @@ async fn test_materialize_nginx_writes_and_removes_request_termination_snapshot(
         .expect("materialize request-termination snapshot");
     assert!(!policy_dir.join("active-request-termination.json").exists());
     assert!(res.policy_changed);
-    let (slot_gen, rt) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_REQUEST_TERMINATION);
+    let (slot_gen, rt) = read_shm_slot_string(
+        &policy_dir,
+        aurora_engine::shm::AURORA_EXT_REQUEST_TERMINATION,
+    );
     assert_eq!(slot_gen, 501);
     assert!(rt.contains("\"generation\":501"));
     assert!(rt.contains("\"status_code\":503"));
@@ -712,7 +736,10 @@ async fn test_materialize_nginx_writes_and_removes_request_termination_snapshot(
         .expect("remove request-termination snapshot");
     assert!(!result.nginx_changed);
     assert!(!policy_dir.join("active-request-termination.json").exists());
-    let (gen_disabled, rt_disabled) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_REQUEST_TERMINATION);
+    let (gen_disabled, rt_disabled) = read_shm_slot_string(
+        &policy_dir,
+        aurora_engine::shm::AURORA_EXT_REQUEST_TERMINATION,
+    );
     assert_eq!(gen_disabled, 502);
     assert!(rt_disabled.is_empty());
     let _ = tokio::fs::remove_dir_all(base).await;
@@ -741,7 +768,11 @@ fn test_ip_restriction_renderer_generates_cidr_rules_from_instance_config() {
     assert_eq!(rules[2]["path_prefix"], "/admin");
     assert_eq!(rules[2]["priority"], 7);
     assert_eq!(rules[0]["networks"][0], "198.51.100.0/24");
-    assert!(!rendered.server_conf.contains("gateway_ip_restriction_policy"));
+    assert!(
+        !rendered
+            .server_conf
+            .contains("gateway_ip_restriction_policy")
+    );
 }
 
 #[test]
@@ -799,7 +830,8 @@ async fn test_ip_restriction_extension_materializes_and_removes_snapshot() {
 
     let access_path = policy_dir.join("active-ip-restriction.json");
     assert!(!access_path.exists());
-    let (slot_gen, ip_data) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_IP_RESTRICTION);
+    let (slot_gen, ip_data) =
+        read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_IP_RESTRICTION);
     assert_eq!(slot_gen, 101);
     assert!(ip_data.contains("\"10.0.0.0/8\""));
     assert!(ip_data.contains("\"generation\":101"));
@@ -824,7 +856,8 @@ async fn test_ip_restriction_extension_materializes_and_removes_snapshot() {
         !access_path.exists(),
         "active-ip-restriction.json should be removed when extension is absent"
     );
-    let (gen2, ip_data2) = read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_IP_RESTRICTION);
+    let (gen2, ip_data2) =
+        read_shm_slot_string(&policy_dir, aurora_engine::shm::AURORA_EXT_IP_RESTRICTION);
     assert_eq!(gen2, 102);
     assert!(ip_data2.is_empty());
 
@@ -1727,5 +1760,166 @@ fn test_render_extensions_request_header_transform_precedence() {
     assert!(
         pos_transform < pos_correlation,
         "request header transform (pos {pos_transform}) MUST be placed ahead of correlation-id (pos {pos_correlation})"
+    );
+}
+
+#[test]
+fn test_render_extensions_prometheus_dynamic_port_and_allowlist() {
+    let instances = vec![ExtensionInstanceSpec {
+        instance_id: "prom-main".to_string(),
+        key: "builtin/prometheus".to_string(),
+        version: 1,
+        renderer: "agent-metrics".to_string(),
+        manifest_digest: String::new(),
+        config_json: serde_json::json!({
+            "port": 9145,
+            "path": "/metrics",
+            "allowlist": ["10.0.0.0/8", "127.0.0.1"]
+        })
+        .to_string(),
+    }];
+
+    let rendered = render_extensions(&instances).expect("render must succeed");
+
+    assert!(rendered.http_conf.contains("listen 9145;"));
+    assert!(rendered.http_conf.contains("allow 10.0.0.0/8;"));
+    assert!(rendered.http_conf.contains("allow 127.0.0.1;"));
+    assert!(rendered.http_conf.contains("deny all;"));
+    assert!(rendered.http_conf.contains("location = /metrics {"));
+    assert!(rendered.http_conf.contains("gateway_metrics;"));
+    // Ensure server_conf does not have leaked metrics directives
+    assert!(!rendered.server_conf.contains("gateway_metrics;"));
+}
+
+#[test]
+fn test_render_extensions_prometheus_custom_path_and_cidrs() {
+    let instances = vec![ExtensionInstanceSpec {
+        instance_id: "prom-custom".to_string(),
+        key: "builtin/prometheus".to_string(),
+        version: 1,
+        renderer: "prometheus".to_string(),
+        manifest_digest: String::new(),
+        config_json: serde_json::json!({
+            "port": 19145,
+            "path": "/internal/prometheus",
+            "allowlist": ["192.168.1.50"]
+        })
+        .to_string(),
+    }];
+
+    let rendered = render_extensions(&instances).expect("render must succeed");
+
+    assert!(rendered.http_conf.contains("listen 19145;"));
+    assert!(rendered.http_conf.contains("allow 192.168.1.50;"));
+    assert!(rendered.http_conf.contains("deny all;"));
+    assert!(
+        rendered
+            .http_conf
+            .contains("location = /internal/prometheus {")
+    );
+}
+
+#[test]
+fn test_render_extensions_prometheus_allow_all() {
+    let instances = vec![ExtensionInstanceSpec {
+        instance_id: "prom-all".to_string(),
+        key: "builtin/prometheus".to_string(),
+        version: 1,
+        renderer: "agent-metrics".to_string(),
+        manifest_digest: String::new(),
+        config_json: serde_json::json!({
+            "port": 9145,
+            "allowlist": ["0.0.0.0/0"]
+        })
+        .to_string(),
+    }];
+
+    let rendered = render_extensions(&instances).expect("render must succeed");
+
+    assert!(rendered.http_conf.contains("listen 9145;"));
+    assert!(rendered.http_conf.contains("allow all;"));
+    assert!(!rendered.http_conf.contains("deny all;"));
+}
+
+#[test]
+fn test_render_extensions_prometheus_requires_port() {
+    let instances = vec![ExtensionInstanceSpec {
+        instance_id: "prom-no-port".to_string(),
+        key: "builtin/prometheus".to_string(),
+        version: 1,
+        renderer: "agent-metrics".to_string(),
+        manifest_digest: String::new(),
+        config_json: serde_json::json!({
+            "allowlist": ["127.0.0.1"]
+        })
+        .to_string(),
+    }];
+
+    let err = render_extensions(&instances).expect_err("missing port must fail");
+    assert!(err.contains("requires 'port' to be explicitly configured"));
+}
+
+#[test]
+fn test_render_extensions_prometheus_requires_allowlist() {
+    let instances = vec![ExtensionInstanceSpec {
+        instance_id: "prom-no-allowlist".to_string(),
+        key: "builtin/prometheus".to_string(),
+        version: 1,
+        renderer: "agent-metrics".to_string(),
+        manifest_digest: String::new(),
+        config_json: serde_json::json!({
+            "port": 9145,
+            "allowlist": []
+        })
+        .to_string(),
+    }];
+
+    let err = render_extensions(&instances).expect_err("empty allowlist must fail");
+    assert!(err.contains("requires non-empty 'allowlist'"));
+}
+
+#[test]
+fn test_render_extensions_prometheus_rejects_invalid_cidr() {
+    let instances = vec![ExtensionInstanceSpec {
+        instance_id: "prom-bad-cidr".to_string(),
+        key: "builtin/prometheus".to_string(),
+        version: 1,
+        renderer: "agent-metrics".to_string(),
+        manifest_digest: String::new(),
+        config_json: serde_json::json!({
+            "port": 9145,
+            "allowlist": ["not-an-ip-address"]
+        })
+        .to_string(),
+    }];
+
+    let err = render_extensions(&instances).expect_err("invalid IP must fail");
+    assert!(err.contains("not a valid IP or CIDR"));
+}
+
+#[test]
+fn test_render_extensions_prometheus_disabled_emits_no_server_block() {
+    let instances = vec![ExtensionInstanceSpec {
+        instance_id: "prom-disabled".to_string(),
+        key: "builtin/prometheus".to_string(),
+        version: 1,
+        renderer: "agent-metrics".to_string(),
+        manifest_digest: String::new(),
+        config_json: serde_json::json!({
+            "enabled": false,
+            "port": 9145,
+            "allowlist": ["127.0.0.1"]
+        })
+        .to_string(),
+    }];
+
+    let rendered =
+        render_extensions(&instances).expect("disabled extension should succeed with no-op");
+    assert!(!rendered.http_conf.contains("listen 9145;"));
+    assert!(!rendered.http_conf.contains("gateway_metrics;"));
+    assert!(
+        rendered
+            .http_conf
+            .contains("# No active HTTP-level extension directives")
     );
 }

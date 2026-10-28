@@ -10,128 +10,194 @@
 #include <time.h>
 
 int main(void) {
-    AuroraDecision decision;
-    _Static_assert(sizeof(AuroraDecision) == 32, "ABI decision layout changed");
+    // 1. ABI Version Validation
     assert(aurora_gateway_abi_version() == 4);
 
-    // 1. IP Restriction Extension Test (Canonical API)
+    // 2. Gateway Process Initialization (SHM, Shadow Worker, and Policy Space)
+    assert(aurora_gateway_process_init(0) == 0);
+    puts("Gateway Process Initialization: pass");
+
     const char *ip_policy = "{\"schema_version\":1,\"generation\":9,\"rules\":[{\"id\":101,\"priority\":1,\"action\":\"block\",\"networks\":[\"192.168.1.0/24\"],\"host\":\"*\",\"path_prefix\":\"/admin\",\"method\":\"*\",\"schedule\":\"always\",\"expires_at\":0,\"log\":true,\"reputation\":false,\"alert\":false}]}";
-    AuroraIpRestrictionEngine *ip_engine = NULL;
-    assert(aurora_ip_restriction_create(NULL, 0, &ip_engine) == 1 && ip_engine == NULL);
-    assert(aurora_ip_restriction_create((const uint8_t *)ip_policy, strlen(ip_policy), &ip_engine) == 0);
-    assert(aurora_ip_restriction_generation(ip_engine) == 9);
 
-    const uint8_t ip[] = "192.168.1.50";
-    const uint8_t host[] = "example.com";
-    const uint8_t path[] = "/admin/users";
-    const uint8_t method[] = "GET";
-    AuroraIpRestrictionInput input = {
-        .ip = ip,
-        .ip_len = strlen((const char *)ip),
-        .host = host,
-        .host_len = strlen((const char *)host),
-        .path = path,
-        .path_len = strlen((const char *)path),
-        .method = method,
-        .method_len = strlen((const char *)method),
-        .now = 1000,
-    };
-    assert(aurora_ip_restriction_evaluate(ip_engine, &input, &decision) == 0);
-    assert(decision.action == 1 && decision.rule_id == 101 && decision.generation == 9);
+    // 3. Dynamic Policy Hot-Swap via SHM & Out-of-band Sync
+    assert(aurora_gateway_policy_writer_update(0, 10, (const uint8_t *)ip_policy, strlen(ip_policy)) == 0);
+    aurora_gateway_policy_sync();
+    puts("Dynamic Policy SHM & Out-of-band Sync: pass");
 
-    aurora_ip_restriction_destroy(ip_engine);
-    aurora_ip_restriction_destroy(NULL);
-    puts("Aurora IP Restriction FFI: create, evaluate block, destroy pass");
+    // 4. Gateway Phase 1: HTTP Access Phase (Phase-Only, Zero Extension Awareness)
+    {
+        // Sub-test A: Blocked IP -> Deny 403
+        AuroraAccessInput in_blocked = {
+            .client_ip = (const uint8_t *)"192.168.1.50",
+            .client_ip_len = 12,
+            .host = (const uint8_t *)"example.com",
+            .host_len = 11,
+            .path = (const uint8_t *)"/admin/users",
+            .path_len = 12,
+            .method = (const uint8_t *)"GET",
+            .method_len = 3,
+            .query = NULL,
+            .query_len = 0,
+            .content_length = 0,
+            .random_seed = 42,
+            .now_ms = 1000,
+        };
+        AuroraAccessOutcome outcome_blocked;
+        assert(aurora_gateway_phase_access(&in_blocked, NULL, NULL, &outcome_blocked) == 0);
+        assert(outcome_blocked.action == AURORA_ACTION_DENY);
+        assert(outcome_blocked.status_code == 403);
 
-    // Test SHM init via file (creates /dev/shm file, maps GATEWAY_METRICS)
-    assert(aurora_gateway_init_shm(NULL) == 0);
+        // Sub-test B: Allowed IP -> Allow 200
+        AuroraAccessInput in_allowed = {
+            .client_ip = (const uint8_t *)"10.0.0.1",
+            .client_ip_len = 8,
+            .host = (const uint8_t *)"example.com",
+            .host_len = 11,
+            .path = (const uint8_t *)"/admin/users",
+            .path_len = 12,
+            .method = (const uint8_t *)"GET",
+            .method_len = 3,
+            .query = NULL,
+            .query_len = 0,
+            .content_length = 0,
+            .random_seed = 42,
+            .now_ms = 1000,
+        };
+        AuroraAccessOutcome outcome_allowed;
+        assert(aurora_gateway_phase_access(&in_allowed, NULL, NULL, &outcome_allowed) == 0);
+        assert(outcome_allowed.action == AURORA_ACTION_ALLOW);
+        assert(outcome_allowed.status_code == 200);
 
-    // L7: Core request recording
-    aurora_gateway_record_request(200, 15);
-    aurora_gateway_record_request(404, 3);
-    aurora_gateway_record_request(502, 1200);
+        puts("Phase 1 Access: route trie evaluation, deny 403, allow 200 pass");
+    }
 
-    // L7: Traffic volume recording
-    aurora_gateway_record_traffic(1024, 4096, 1, 1);
-    aurora_gateway_record_traffic(512, 2048, 0, 0);
+    // 5. Gateway Phase 2: HTTP Content Phase (/metrics, /healthz)
+    {
+        uint8_t raw_body[4096];
+        AuroraContentOutcome cout;
+        memset(&cout, 0, sizeof(cout));
+        cout.body = raw_body;
+        cout.body_cap = sizeof(raw_body);
 
-    // L4: Connection gauges
-    aurora_gateway_record_connections(10, 2, 4, 4);
+        // Test /metrics
+        AuroraContentInput cin_metrics = {
+            .host = (const uint8_t *)"localhost",
+            .host_len = 9,
+            .path = (const uint8_t *)"/metrics",
+            .path_len = 8,
+            .method = (const uint8_t *)"GET",
+            .method_len = 3,
+            .query = NULL,
+            .query_len = 0,
+        };
+        assert(aurora_gateway_phase_content(&cin_metrics, &cout) == 0);
+        assert(cout.status_code == 200);
+        assert(cout.body_len > 0);
+        assert(strstr((const char *)cout.content_type, "text/plain") != NULL);
 
-    // L4: SSL handshake recording
-    aurora_gateway_record_ssl(1, 0);
-    aurora_gateway_record_ssl(1, 1);
-    aurora_gateway_record_ssl(0, 0);
+        // Test /healthz
+        memset(&cout, 0, sizeof(cout));
+        cout.body = raw_body;
+        cout.body_cap = sizeof(raw_body);
+        AuroraContentInput cin_healthz = {
+            .host = (const uint8_t *)"localhost",
+            .host_len = 9,
+            .path = (const uint8_t *)"/healthz",
+            .path_len = 8,
+            .method = (const uint8_t *)"GET",
+            .method_len = 3,
+            .query = NULL,
+            .query_len = 0,
+        };
+        assert(aurora_gateway_phase_content(&cin_healthz, &cout) == 0);
+        assert(cout.status_code == 200);
+        assert(strstr((const char *)cout.content_type, "application/json") != NULL);
+        assert(strstr((const char *)raw_body, "UP") != NULL);
 
-    // Upstream recording
-    aurora_gateway_record_upstream(200, 50, 5, 0);
-    aurora_gateway_record_upstream(502, 0, 0, 1);
+        puts("Phase 2 Content: /metrics and /healthz render pass");
+    }
 
-    // Extension metrics recording
-    extension_ip_restriction_record_metrics(1);
-    extension_rate_limit_record_metrics(2);
-    extension_jwt_record_metrics(0);
-    extension_conn_limit_record_metrics(1);
-    extension_traffic_shaper_record_metrics(1);
-    extension_request_size_record_metrics(1);
-    extension_termination_record_metrics();
-    extension_traffic_split_record_metrics(1);
-    extension_canary_record_metrics(1);
-    extension_blue_green_record_metrics(0);
-    extension_mirror_record_metrics();
+    // 6. Gateway Phase 3: HTTP Header Filter Phase
+    {
+        AuroraHeaderFilterInput hf_in = {
+            .upstream_status = 200,
+            .is_websocket = 0,
+        };
+        AuroraHeaderFilterOutcome hf_out;
+        assert(aurora_gateway_phase_header_filter(&hf_in, &hf_out) == 0);
+        assert(hf_out.action == AURORA_FILTER_PASSTHROUGH);
+        puts("Phase 3 Header Filter: passthrough pass");
+    }
 
-    // Log bus gating
-    assert(aurora_gateway_is_log_active() == 0);
+    // 7. Gateway Phase 4: HTTP Body Filter Phase
+    {
+        const char *test_chunk = "hello world payload";
+        AuroraBodyFilterInput bf_in = {
+            .chunk = (const uint8_t *)test_chunk,
+            .chunk_len = strlen(test_chunk),
+            .is_last = 1,
+        };
+        AuroraBodyFilterOutcome bf_out;
+        assert(aurora_gateway_phase_body_filter(&bf_in, &bf_out) == 0);
+        assert(bf_out.action == AURORA_BODY_FILTER_PASSTHROUGH);
+        puts("Phase 4 Body Filter: streaming passthrough pass");
+    }
 
-    aurora_gateway_stop_shm();
-    puts("SHM telemetry: L7/L4/Upstream/Extension metrics recording pass");
+    // 8. Gateway Phase 5: HTTP Log Phase Submission
+    {
+        AuroraLogInput log_test;
+        memset(&log_test, 0, sizeof(log_test));
+        log_test.client_ip = (const uint8_t *)"192.168.1.100";
+        log_test.client_ip_len = 13;
+        log_test.method = (const uint8_t *)"GET";
+        log_test.method_len = 3;
+        log_test.uri = (const uint8_t *)"/test/background";
+        log_test.uri_len = 16;
+        log_test.status = 200;
+        log_test.duration_ms = 12;
+        log_test.bytes_sent = 1024;
+        log_test.bytes_recv = 128;
+        assert(aurora_gateway_phase_log(&log_test) == 0);
+        puts("Phase 5 Log: 1-FFI non-blocking submit pass");
+    }
 
-    // 5. Rate Limit FFI smoke test
-    const char *rl_policy = "{\"schema_version\":1,\"generation\":1,\"algorithm\":\"token_bucket\",\"memory_size_mb\":10,\"max_keys\":10000,\"eviction_policy\":\"lru\",\"overflow_strategy\":\"evict_and_track\",\"rules\":[{\"id\":\"r1\",\"host\":\"*\",\"path_prefix\":\"/rl\",\"limit_by\":\"client_ip\",\"rate\":1,\"burst\":1,\"period_secs\":10,\"action_on_exceeded\":\"throttle\"}]}";
-    AuroraRateLimitEngine *rl_engine = NULL;
-    assert(aurora_rate_limit_create((const uint8_t *)rl_policy, strlen(rl_policy), &rl_engine) == 0);
-    assert(rl_engine != NULL);
-    AuroraRateLimitDecision rl_dec;
-    memset(&rl_dec, 0, sizeof(rl_dec));
-    assert(aurora_rate_limit_evaluate(rl_engine, (const uint8_t *)"test.local", 10, (const uint8_t *)"/rl/test", 8, (const uint8_t *)"10.0.0.1", 8, NULL, NULL, &rl_dec) == 0);
-    assert(rl_dec.allowed == 1);
-    assert(aurora_rate_limit_evaluate(rl_engine, (const uint8_t *)"test.local", 10, (const uint8_t *)"/rl/test", 8, (const uint8_t *)"10.0.0.1", 8, NULL, NULL, &rl_dec) == 0);
-    assert(rl_dec.allowed == 0 && rl_dec.action == 1 && rl_dec.status_code == 429);
-    aurora_rate_limit_destroy(rl_engine);
-    // 6. Policy SHM Substrate & In-Memory Hot-Swap Smoke Test
-    assert(aurora_gateway_init_policy_shm(NULL) == 0);
-    uint64_t init_policy_gen = aurora_gateway_policy_generation();
-    assert(aurora_gateway_policy_writer_update(AURORA_EXT_IP_RESTRICTION, 10,
-                                               (const uint8_t *)ip_policy,
-                                               strlen(ip_policy)) == 0);
-    assert(aurora_gateway_policy_generation() == init_policy_gen + 1);
+    // 9. Live In-Flight Request Gauges & Content Phase Prometheus Integration
+    {
+        assert(aurora_gateway_in_flight_count() == 0);
+        aurora_gateway_in_flight_enter();
+        assert(aurora_gateway_in_flight_count() == 1);
+        aurora_gateway_in_flight_enter();
+        assert(aurora_gateway_in_flight_count() == 2);
+        aurora_gateway_in_flight_leave();
+        assert(aurora_gateway_in_flight_count() == 1);
 
-    uint64_t read_gen = 0;
-    size_t read_len = 0;
-    const uint8_t *shm_data = aurora_gateway_policy_slot_get(
-        AURORA_EXT_IP_RESTRICTION, &read_gen, &read_len);
-    assert(shm_data != NULL);
-    assert(read_gen == 10);
-    assert(read_len == strlen(ip_policy));
-    assert(memcmp(shm_data, ip_policy, read_len) == 0);
+        uint8_t prom_buf[2048];
+        AuroraContentOutcome prom_out;
+        memset(&prom_out, 0, sizeof(prom_out));
+        prom_out.body = prom_buf;
+        prom_out.body_cap = sizeof(prom_buf);
+        AuroraContentInput prom_in = {
+            .host = NULL,
+            .host_len = 0,
+            .path = (const uint8_t *)"/metrics",
+            .path_len = 8,
+            .method = (const uint8_t *)"GET",
+            .method_len = 3,
+            .query = NULL,
+            .query_len = 0,
+        };
+        assert(aurora_gateway_phase_content(&prom_in, &prom_out) == 0);
+        assert(prom_out.body_len > 0);
+        assert(strstr((const char *)prom_buf, "gateway_requests_in_flight 1") != NULL);
+        aurora_gateway_in_flight_leave();
+        assert(aurora_gateway_in_flight_count() == 0);
+        puts("Live In-Flight Gauges & Prometheus render pass");
+    }
 
-    // Verify engine creation and evaluation directly from SHM slot bytes
-    AuroraIpRestrictionEngine *shm_ip_engine = NULL;
-    assert(aurora_ip_restriction_create(shm_data, read_len, &shm_ip_engine) == 0);
-    assert(aurora_ip_restriction_generation(shm_ip_engine) == 9);
-    assert(aurora_ip_restriction_evaluate(shm_ip_engine, &input, &decision) == 0);
-    assert(decision.action == 1 && decision.rule_id == 101 && decision.generation == 9);
-    aurora_ip_restriction_destroy(shm_ip_engine);
+    // 10. Process Shutdown
+    aurora_gateway_process_exit();
+    puts("Gateway Process Exit: clean shutdown pass");
 
-    // Clear slot
-    assert(aurora_gateway_policy_writer_clear(AURORA_EXT_IP_RESTRICTION, 11) == 0);
-    assert(aurora_gateway_policy_generation() == init_policy_gen + 2);
-    shm_data = aurora_gateway_policy_slot_get(AURORA_EXT_IP_RESTRICTION, &read_gen, &read_len);
-    assert(shm_data == NULL && read_len == 0 && read_gen == 11);
-
-    aurora_gateway_stop_policy_shm();
-    puts("Policy SHM: in-memory hot-swap, generation tracking, zero-copy slot pass");
-
-    puts("C -> Rust ABI v4: lifecycle, limits, allow/block, invalid inputs pass");
+    puts("C -> Rust Pure Phase-Driven FFI ABI v4: all checks passed cleanly!");
     return 0;
 }

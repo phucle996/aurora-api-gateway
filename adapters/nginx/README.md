@@ -10,20 +10,20 @@ node scripts/test-nginx-module.mjs
 
 Artifact: `build/modules/ngx_http_gateway_module.so`, loaded via `load_module`.
 
-### Gateway Architecture & Extensions
-- **Module Core**: `src/module.c`, `src/pipeline.c`, `src/telemetry.c`
-- **Extensions**:
-  - `src/extensions/access.c` (`gateway_access_policy`)
-  - `src/extensions/jwt.c` (`gateway_jwt_policy`)
-  - `src/extensions/rate_limit.c` (`gateway_rate_limit_policy`)
+### Gateway Phase-Driven Architecture
+- **Module Core**:
+  - `src/module.c`: Process lifecycle, Shared Memory (SHM) policy synchronization, and polymorphic engine binding.
+  - `src/pipeline.c`: Unified HTTP Access Phase hook (`aurora_gateway_phase_access`). Single straight-line FFI dispatch for all ingress security & routing rules.
+  - `src/telemetry.c`: NGINX variables and Log Phase hook (`aurora_gateway_phase_log`).
+- **Phase Integration**:
+  - **Access Phase**: Dispatches request metadata stack to Rust `AccessPhaseSpace` (< 35ns).
+  - **Background Phase**: Hands off completed request metadata to companion Shadow Worker thread (`aurora-shadow-{id}`, `SCHED_IDLE`).
+  - **Metrics**: Sub-microsecond Prometheus scrape endpoint (`location = /metrics { gateway_metrics; }`).
 
-Directives: `gateway on|off`, `gateway_access_policy`, `gateway_jwt_policy`, `gateway_rate_limit_policy`, `gateway_metrics`.
-Input is normalized URI; errors return HTTP 503; rate limiting returns HTTP 429 with `Retry-After`. `satisfy any` is rejected when enabled.
+Directives: `gateway on|off`, `gateway_metrics`. Policies are dynamically hot-swapped via Shared Memory (`/dev/shm/aurora_gateway_policy.bin`).
 
 
 
-## Access logs and exporter integration
+## Access logs and background telemetry
 
-The [Docker node template](../../deploy/docker/nginx-node.conf.template) uses JSON syslog over `/dev/shm/aurora_access.sock`, gated by `$gateway_log_active`. The agent's log consumers control that flag through shared memory.
-
-A custom NGINX configuration must explicitly include the equivalent log directives; enabling an agent exporter alone does not change arbitrary NGINX templates. Request duration from `$request_time` is in seconds. See [observability](../../docs/observability.md) for consumer lifecycles and delivery limits.
+Access logs, traces, and metrics are captured in-process at `NGX_HTTP_LOG_PHASE` by `ngx_http_gateway_log_handler` and dispatched via `aurora_gateway_phase_log` to the companion Shadow Worker thread (`aurora-shadow-{id}`, `SCHED_IDLE`). Logs are rendered using zero-allocation pre-templated byte blitters and flushed during CPU idle periods, eliminating Unix Domain Socket IPC overhead. See [observability](../../docs/observability.md) for details.

@@ -62,7 +62,7 @@ func TestJWTManifestRequiresAtLeastOneRuleBeforeEnable(t *testing.T) {
 	if err := ValidateForEnable(manifest, `{"rules":[]}`); err == nil {
 		t.Fatal("expected empty JWT rules to be rejected before enable")
 	}
-	if err := ValidateForEnable(manifest, `{"rules":[{"id":"gateway","host":"api.example.test","path_prefix":"/","public_key_pem":"-----BEGIN PUBLIC KEY-----\\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtest\\n-----END PUBLIC KEY-----"}]}`); err != nil {
+	if err := ValidateForEnable(manifest, `{"rules":[{"id":"gateway","host":"api.example.test","path_prefix":"/","algorithm":"RS256","token_source":"header","header_name":"Authorization","token_prefix":"Bearer ","public_key_pem":"-----BEGIN PUBLIC KEY-----\\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtest\\n-----END PUBLIC KEY-----"}]}`); err != nil {
 		t.Fatalf("expected populated JWT rule to be enableable: %v", err)
 	}
 }

@@ -24,6 +24,6 @@ The control plane owns desired configuration. The agent periodically retrieves a
 
 ## Observability path
 
-NGINX completion counters are read from shared memory. Its configured access log sends JSON via a Unix datagram socket when `$gateway_log_active` is true. Agent subscriptions feed std-log and OTLP log workers; Prometheus and OTLP metrics read counters separately.
+Live in-flight requests and early rejections are tracked at Ingress via cacheline-aligned L1 Core-Local metrics (< 1ns). At Egress (`NGX_HTTP_LOG_PHASE`), request metadata is handed off non-blocking to the in-process companion Shadow Worker (`aurora-shadow-{id}`, `SCHED_IDLE`) via a bounded channel (< 40ns). The Shadow Worker formats pre-templated JSON access logs and maintains pre-computed zero-allocation Prometheus and OTLP wire buffers. NGINX exposes `/metrics` directly with sub-microsecond response latency (< 500ns). Out-of-process UDS IPC (`/dev/shm/aurora_access.sock`) has been completely decommissioned.
 
 Log export does not provide durable audit delivery or a zero-overhead guarantee. Queues can overflow and exporters can fail. See [observability.md](observability.md) for current limits and configuration.

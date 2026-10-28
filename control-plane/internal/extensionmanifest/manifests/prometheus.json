@@ -4,11 +4,15 @@
   "id": "prometheus",
   "name": "Prometheus Metrics",
   "category": "observability",
-  "description": "Runs the agent metrics exporter in Prometheus / OpenMetrics format.",
+  "description": "Runs the dedicated Prometheus metrics exporter on an isolated management port with dynamic IP allowlist.",
   "renderer": "agent-metrics",
   "builtin": true,
   "default_config": {
     "port": 9145,
+    "path": "/metrics",
+    "allowlist": [
+      "127.0.0.1"
+    ],
     "prometheus": {
       "enabled": true,
       "path": "/metrics"
@@ -21,14 +25,21 @@
         "key": "port",
         "label": "Exporter Port",
         "type": "number",
-        "description": "Cổng lắng nghe Prometheus metrics (mặc định: 9145)",
+        "description": "Cổng lắng nghe Prometheus metrics (VD: 9145)",
         "required": true
       },
       {
-        "key": "prometheus.path",
+        "key": "path",
         "label": "Metrics Scrape Path",
         "type": "text",
         "description": "Đường dẫn endpoint cào metrics (mặc định: /metrics)",
+        "required": true
+      },
+      {
+        "key": "allowlist",
+        "label": "Allowed Prometheus Scrapers (CIDR/IP)",
+        "type": "array",
+        "description": "Danh sách IP hoặc dải mạng CIDR của Prometheus Server được phép truy cập (VD: 10.0.0.0/8, 127.0.0.1)",
         "required": true
       }
     ]
@@ -36,11 +47,22 @@
   "config_schema": {
     "type": "object",
     "additionalProperties": false,
+    "required": ["port", "allowlist"],
     "properties": {
       "port": {
         "type": "integer",
         "minimum": 1024,
         "maximum": 65535
+      },
+      "path": {
+        "type": "string",
+        "maxLength": 256
+      },
+      "allowlist": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
       },
       "prometheus": {
         "type": "object",
@@ -52,6 +74,12 @@
           "path": {
             "type": "string",
             "maxLength": 256
+          },
+          "allowlist": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       }

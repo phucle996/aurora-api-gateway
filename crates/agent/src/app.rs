@@ -1,7 +1,6 @@
 use crate::config::Config;
 use crate::extension::ExtensionDispatcher;
 use crate::grpc::GrpcClient;
-use crate::logs::{LogBus, LogShmHandle};
 use crate::nginx::NginxManager;
 use crate::sync;
 use anyhow::Result;
@@ -9,13 +8,12 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
-use tracing::{info, warn};
+use tracing::info;
 
 pub struct App {
     pub cfg: Arc<Config>,
     pub nginx: Arc<NginxManager>,
     pub grpc_client: GrpcClient,
-    pub log_bus: Option<Arc<LogBus>>,
     pub started_at: i64,
 }
 
@@ -46,26 +44,10 @@ impl App {
             .await;
         }
 
-        // 3. Initialize high-performance LogBus
-        let shm_handle = LogShmHandle::open_or_create().map(Arc::new);
-        let log_bus = match LogBus::bind(None, shm_handle) {
-            Ok(bus) => {
-                info!(
-                    path = %bus.socket_path().display(),
-                    "Initialized LogBus Unix datagram socket"
-                );
-                Some(Arc::new(bus))
-            }
-            Err(e) => {
-                warn!("Failed to bind LogBus Unix datagram socket: {e}");
-                None
-            }
-        };
-
-        // 4. Initialize Gateway Manager (syntax test & reload only)
+        // 3. Initialize Gateway Manager (syntax test & reload only)
         let nginx = NginxManager::new(cfg.gateway_bin.clone(), cfg.gateway_conf.clone());
 
-        // 5. Initialize gRPC Client
+        // 4. Initialize gRPC Client
         let grpc_endpoint = cfg.grpc_endpoint();
         info!(
             grpc_endpoint = %grpc_endpoint,
@@ -78,7 +60,6 @@ impl App {
             cfg,
             nginx,
             grpc_client,
-            log_bus,
             started_at,
         })
     }
@@ -87,10 +68,9 @@ impl App {
         info!("Starting Aurora Dataplane Agent background sync workers");
 
         // Initialize Extension Dispatcher
-        let dispatcher = Arc::new(Mutex::new(ExtensionDispatcher::new(
-            Arc::new(self.cfg.hostname.clone()),
-            self.log_bus.clone(),
-        )));
+        let dispatcher = Arc::new(Mutex::new(ExtensionDispatcher::new(Arc::new(
+            self.cfg.hostname.clone(),
+        ))));
 
         // Spawn Unified SpecSync runner
         let spec_sync = Arc::new(sync::spec::SpecSyncRunner::new(

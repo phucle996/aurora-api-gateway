@@ -1,0 +1,7 @@
+# Aurora API Gateway - Compilation & Microarchitecture Profile
+#
+# Default profile: Cloud Performance Edition (x86-64-v3)
+# Enables 256-bit AVX2, FMA, and BMI1/BMI2 instructions across modern cloud instances
+# (AWS EC2 c5/m5/t3+, Azure Dv3+, GCP N2/C2, AMD EPYC Zen 3, modern bare-metal).
+[build]
+rustflags = ["-C", "target-cpu=x86-64-v3"]

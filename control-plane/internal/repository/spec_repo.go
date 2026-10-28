@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/phucle996/aurora-api-gateway/control-plane/internal/domain/entity"
@@ -85,7 +86,15 @@ func (r *SpecSyncRepository) GetAuthorityData(ctx context.Context, nodeID string
 			if len(flags) > 0 {
 				flagStr = " " + strings.Join(flags, " ")
 			}
-			sb.WriteString(fmt.Sprintf("    server %s%s resolve;\n", srv.Address, flagStr))
+			resolveSuffix := ""
+			h, _, err := net.SplitHostPort(srv.Address)
+			if err != nil {
+				h = srv.Address
+			}
+			if net.ParseIP(h) == nil {
+				resolveSuffix = " resolve"
+			}
+			sb.WriteString(fmt.Sprintf("    server %s%s%s;\n", srv.Address, flagStr, resolveSuffix))
 		}
 
 		var transport struct {

@@ -53,10 +53,16 @@ pub unsafe extern "C" fn aurora_gateway_init_policy_shm(path: *const std::ffi::c
     let file_res = OpenOptions::new()
         .read(true)
         .write(true)
-        .create(true)
-        .truncate(false)
-        .mode(0o666)
-        .open(target);
+        .open(target)
+        .or_else(|_| {
+            OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(false)
+                .mode(0o666)
+                .open(target)
+        });
 
     if let Ok(file) = file_res {
         let _ = file.set_len(POLICY_SHM_TOTAL_BYTES as u64);
@@ -216,19 +222,15 @@ mod tests {
         let tmp_path = format!("/tmp/test_aurora_policy_{}.bin", std::process::id());
         let c_path = std::ffi::CString::new(tmp_path.clone()).unwrap();
 
-        assert_eq!(unsafe { aurora_gateway_init_policy_shm(c_path.as_ptr()) }, 0);
+        assert_eq!(
+            unsafe { aurora_gateway_init_policy_shm(c_path.as_ptr()) },
+            0
+        );
         assert_eq!(aurora_gateway_policy_generation(), 0);
 
         let json = br#"{"test": true}"#;
         assert_eq!(
-            unsafe {
-                aurora_gateway_policy_writer_update(
-                    0,
-                    42,
-                    json.as_ptr(),
-                    json.len(),
-                )
-            },
+            unsafe { aurora_gateway_policy_writer_update(0, 42, json.as_ptr(), json.len(),) },
             0
         );
         assert_eq!(aurora_gateway_policy_generation(), 1);

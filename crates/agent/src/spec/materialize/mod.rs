@@ -48,10 +48,16 @@ pub fn sync_policy_to_shm(
     let file = std::fs::OpenOptions::new()
         .read(true)
         .write(true)
-        .create(true)
-        .truncate(false)
-        .mode(0o666)
-        .open(target)?;
+        .open(target)
+        .or_else(|_| {
+            std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(false)
+                .mode(0o666)
+                .open(target)
+        })?;
 
     file.set_len(POLICY_SHM_TOTAL_BYTES as u64)?;
     let fd = std::os::unix::io::AsRawFd::as_raw_fd(&file);
@@ -79,17 +85,38 @@ pub fn sync_policy_to_shm(
     header.ensure_header();
 
     let slots: [(u32, Option<&serde_json::Value>); 11] = [
-        (AURORA_EXT_IP_RESTRICTION, rendered.ip_restriction_policy.as_ref()),
+        (
+            AURORA_EXT_IP_RESTRICTION,
+            rendered.ip_restriction_policy.as_ref(),
+        ),
         (AURORA_EXT_JWT, rendered.jwt_policy.as_ref()),
         (AURORA_EXT_RATE_LIMIT, rendered.rate_limit_policy.as_ref()),
         (AURORA_EXT_CONN_LIMIT, rendered.conn_limit_policy.as_ref()),
-        (AURORA_EXT_TRAFFIC_SHAPER, rendered.traffic_shaper_policy.as_ref()),
-        (AURORA_EXT_REQUEST_SIZE_LIMIT, rendered.request_size_limit_policy.as_ref()),
-        (AURORA_EXT_TRAFFIC_SPLIT, rendered.traffic_split_policy.as_ref()),
-        (AURORA_EXT_CANARY_RELEASE, rendered.canary_release_policy.as_ref()),
+        (
+            AURORA_EXT_TRAFFIC_SHAPER,
+            rendered.traffic_shaper_policy.as_ref(),
+        ),
+        (
+            AURORA_EXT_REQUEST_SIZE_LIMIT,
+            rendered.request_size_limit_policy.as_ref(),
+        ),
+        (
+            AURORA_EXT_TRAFFIC_SPLIT,
+            rendered.traffic_split_policy.as_ref(),
+        ),
+        (
+            AURORA_EXT_CANARY_RELEASE,
+            rendered.canary_release_policy.as_ref(),
+        ),
         (AURORA_EXT_BLUE_GREEN, rendered.blue_green_policy.as_ref()),
-        (AURORA_EXT_REQUEST_MIRROR, rendered.request_mirror_policy.as_ref()),
-        (AURORA_EXT_REQUEST_TERMINATION, rendered.request_termination_policy.as_ref()),
+        (
+            AURORA_EXT_REQUEST_MIRROR,
+            rendered.request_mirror_policy.as_ref(),
+        ),
+        (
+            AURORA_EXT_REQUEST_TERMINATION,
+            rendered.request_termination_policy.as_ref(),
+        ),
     ];
 
     let mut any_changed = false;
@@ -180,13 +207,13 @@ pub async fn materialize_nginx(
     } else {
         None
     };
-    let policy_changed = sync_policy_to_shm(
-        spec.release_id,
-        &rendered_extensions,
-        shm_target.as_deref(),
-    )?;
+    let policy_changed =
+        sync_policy_to_shm(spec.release_id, &rendered_extensions, shm_target.as_deref())?;
     if policy_changed {
-        info!("Updated dynamic policy SHM (release_id: {})", spec.release_id);
+        info!(
+            "Updated dynamic policy SHM (release_id: {})",
+            spec.release_id
+        );
     }
 
     // Clean up any legacy active-*.json files from policy_dir if present

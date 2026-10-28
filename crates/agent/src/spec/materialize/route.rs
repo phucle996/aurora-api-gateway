@@ -134,11 +134,12 @@ pub fn generate_domain_routing_conf(spec: &Spec, routing_dir: &Path) -> String {
         deduped.sort_by_key(|location| Reverse(location.path.len()));
 
         let matched_cert = find_matching_certificate(&spec.certificates, &host);
+        let s_name = if host == "*" { "_" } else { host.as_str() };
 
         // 1. HTTP Server Block
         buf.push_str(&format!(
             "server {{\n    listen 80;\n    server_name {};\n    include /etc/nginx/gateway-pipeline.conf;\n",
-            host
+            s_name
         ));
         render_locations_into(&mut buf, &deduped, routing_dir);
         buf.push_str("}\n\n");
@@ -156,7 +157,7 @@ pub fn generate_domain_routing_conf(spec: &Spec, routing_dir: &Path) -> String {
             buf.push_str(&format!(
                 "server {{\n    listen 443 ssl;\n{}    server_name {};\n    include /etc/nginx/gateway-pipeline.conf;\n\n    ssl_certificate {};\n    ssl_certificate_key {};\n    ssl_protocols TLSv1.2 TLSv1.3;\n    ssl_ciphers HIGH:!aNULL:!MD5;\n\n    http2 on;\n    http3 on;\n    quic_retry on;\n    add_header Alt-Svc 'h3=\":443\"; ma=86400' always;\n",
                 quic_listen,
-                host,
+                s_name,
                 cert_file.display(),
                 key_file.display()
             ));
@@ -208,7 +209,7 @@ pub fn render_locations_into(
             ));
         }
 
-        buf.push_str("        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_connect_timeout 5s;\n");
+        buf.push_str("        proxy_http_version 1.1;\n        proxy_set_header Connection \"\";\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_connect_timeout 5s;\n");
 
         let mut scheme = "http";
         if let Some(tls) = loc.origin_tls.as_ref().filter(|tls| tls.enabled) {

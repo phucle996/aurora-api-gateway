@@ -7,16 +7,13 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // 1. Setup structured logging for extension runtime diagnostics
+    // 1. Setup structured logging for agent runtime diagnostics
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "info,aurora_agent=debug".into()),
         )
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_writer(aurora_agent::extension::std_log::output::DiagnosticWriter),
-        )
+        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
         .init();
 
     // 2. Load Configuration

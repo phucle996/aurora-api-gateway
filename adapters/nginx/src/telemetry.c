@@ -1,53 +1,14 @@
 #include "gateway.h"
 
-ngx_shm_zone_t *gateway_telemetry_zone;
-
-/* Telemetry alone is shared across workers/reloads. Policy handles stay COW. */
-ngx_int_t ngx_http_gateway_telemetry_zone_init(ngx_shm_zone_t *zone,
-                                               void *previous) {
-  ngx_slab_pool_t *pool = (ngx_slab_pool_t *)zone->shm.addr;
-  if (previous) {
-    zone->data = previous;
-    return NGX_OK;
-  }
-  if (zone->shm.exists) {
-    zone->data = pool->data;
-    return NGX_OK;
-  }
-  zone->data = ngx_slab_calloc(pool, 64);
-  if (!zone->data) {
-    return NGX_ERROR;
-  }
-  pool->data = zone->data;
-  return NGX_OK;
-}
-
 static ngx_int_t ngx_http_gateway_generation(ngx_http_request_t *r,
                                              ngx_http_variable_value_t *v,
                                              uintptr_t data) {
   (void)data;
-  ngx_http_gateway_conf_t *conf =
-      ngx_http_get_module_loc_conf(r, ngx_http_gateway_module);
-  u_char *p;
-
-  AuroraIpRestrictionEngine *engine = NULL;
-  if (conf && conf->ip_restriction_engine) {
-    engine = conf->ip_restriction_engine;
-  } else {
-    engine = (AuroraIpRestrictionEngine *)gateway_active_engines[AURORA_EXT_IP_RESTRICTION];
-  }
-
-  if (!engine) {
-    v->not_found = 1;
-    return NGX_OK;
-  }
-
-  p = ngx_pnalloc(r->pool, NGX_INT64_LEN);
+  u_char *p = ngx_pnalloc(r->pool, NGX_INT64_LEN);
   if (p == NULL) {
     return NGX_ERROR;
   }
-  v->len =
-      ngx_sprintf(p, "%uL", aurora_ip_restriction_generation(engine)) - p;
+  v->len = ngx_sprintf(p, "%uL", aurora_gateway_policy_generation()) - p;
   v->data = p;
   v->valid = 1;
   v->no_cacheable = 1;
@@ -55,30 +16,12 @@ static ngx_int_t ngx_http_gateway_generation(ngx_http_request_t *r,
   return NGX_OK;
 }
 
-static ngx_int_t ngx_http_gateway_variable_log_active(
-    ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data) {
-  (void)r;
-  (void)data;
-  if (aurora_gateway_is_log_active()) {
-    v->len = 1;
-    v->data = (u_char *)"1";
-  } else {
-    v->len = 1;
-    v->data = (u_char *)"0";
-  }
-  v->valid = 1;
-  v->no_cacheable = 1;
-  v->not_found = 0;
-  return NGX_OK;
-}
-
-/* Optional observability variables, not an all-workers activation
- * acknowledgement. */
+/* Optional observability variables */
 ngx_int_t ngx_http_gateway_variables(ngx_conf_t *cf) {
   ngx_http_variable_t *v;
 
-  ngx_str_t access_name = ngx_string("gateway_ip_restriction_generation");
-  v = ngx_http_add_variable(cf, &access_name, NGX_HTTP_VAR_NOCACHEABLE);
+  ngx_str_t gen_name = ngx_string("gateway_generation");
+  v = ngx_http_add_variable(cf, &gen_name, NGX_HTTP_VAR_NOCACHEABLE);
   if (v == NULL) {
     return NGX_ERROR;
   }
@@ -91,62 +34,42 @@ ngx_int_t ngx_http_gateway_variables(ngx_conf_t *cf) {
   }
   v->get_handler = ngx_http_gateway_variable_upstream;
 
-  ngx_str_t rule_name = ngx_string("gateway_split_rule");
-  v = ngx_http_add_variable(cf, &rule_name, NGX_HTTP_VAR_NOCACHEABLE);
-  if (v == NULL) {
-    return NGX_ERROR;
-  }
-  v->get_handler = ngx_http_gateway_variable_split_rule;
+  return NGX_OK;
+}
 
-  ngx_str_t canary_status_name = ngx_string("gateway_canary_status");
-  v = ngx_http_add_variable(cf, &canary_status_name, NGX_HTTP_VAR_NOCACHEABLE);
-  if (v == NULL) {
-    return NGX_ERROR;
+ngx_int_t ngx_http_gateway_variable_upstream(ngx_http_request_t *r,
+                                             ngx_http_variable_value_t *v,
+                                             uintptr_t data) {
+  (void)data;
+  ngx_http_gateway_conf_t *conf =
+      ngx_http_get_module_loc_conf(r, ngx_http_gateway_module);
+  if (conf == NULL) {
+    v->not_found = 1;
+    return NGX_OK;
   }
-  v->get_handler = ngx_http_gateway_variable_canary_status;
 
-  ngx_str_t deploy_slot_name = ngx_string("gateway_deploy_slot");
-  v = ngx_http_add_variable(cf, &deploy_slot_name, NGX_HTTP_VAR_NOCACHEABLE);
-  if (v == NULL) {
-    return NGX_ERROR;
+  ngx_http_gateway_ctx_t *ctx =
+      ngx_http_get_module_ctx(r, ngx_http_gateway_module);
+  if (ctx == NULL || !ctx->evaluated) {
+    (void)ngx_http_gateway_handler(r);
+    ctx = ngx_http_get_module_ctx(r, ngx_http_gateway_module);
   }
-  v->get_handler = ngx_http_gateway_variable_deploy_slot;
 
-  ngx_str_t mirror_up_name = ngx_string("gateway_mirror_upstream");
-  v = ngx_http_add_variable(cf, &mirror_up_name, NGX_HTTP_VAR_NOCACHEABLE);
-  if (v == NULL) {
-    return NGX_ERROR;
+  if (ctx != NULL && ctx->target_upstream.len > 0) {
+    v->len = ctx->target_upstream.len;
+    v->data = ctx->target_upstream.data;
+    v->valid = 1;
+    v->no_cacheable = 1;
+    v->not_found = 0;
+    return NGX_OK;
   }
-  v->get_handler = ngx_http_gateway_variable_mirror_upstream;
 
-  ngx_str_t mirror_status_name = ngx_string("gateway_mirror_status");
-  v = ngx_http_add_variable(cf, &mirror_status_name, NGX_HTTP_VAR_NOCACHEABLE);
-  if (v == NULL) {
-    return NGX_ERROR;
-  }
-  v->get_handler = ngx_http_gateway_variable_mirror_status;
-
-  ngx_str_t termination_status_name = ngx_string("gateway_termination_status");
-  v = ngx_http_add_variable(cf, &termination_status_name,
-                            NGX_HTTP_VAR_NOCACHEABLE);
-  if (v == NULL) {
-    return NGX_ERROR;
-  }
-  v->get_handler = ngx_http_gateway_variable_termination_status;
-
-  ngx_str_t log_active_name = ngx_string("gateway_log_active");
-  v = ngx_http_add_variable(cf, &log_active_name, NGX_HTTP_VAR_NOCACHEABLE);
-  if (v == NULL) {
-    return NGX_ERROR;
-  }
-  v->get_handler = ngx_http_gateway_variable_log_active;
-
+  v->not_found = 1;
   return NGX_OK;
 }
 
 /*
- * Thiết lập location content handler khi directive gateway_metrics /
- * aurora_waf_metrics xuất hiện.
+ * Thiết lập location content handler khi directive gateway_metrics xuất hiện.
  */
 char *ngx_http_gateway_metrics_directive(ngx_conf_t *cf, ngx_command_t *cmd,
                                          void *conf) {
@@ -161,14 +84,16 @@ char *ngx_http_gateway_metrics_directive(ngx_conf_t *cf, ngx_command_t *cmd,
 }
 
 /*
- * Xử lý HTTP GET /metrics: gọi FFI sinh dữ liệu Prometheus/OpenMetrics text và
- * trả về client.
+ * Xử lý HTTP Content Phase của Gateway: thực thi sinh payload trực tiếp
+ * mà không cần chuyển tiếp upstream (e.g. /metrics, /healthz).
+ * C Adapter hoàn toàn không biết logic của plugin, chỉ tương tác thuần túy
+ * qua Gateway Phase 2: HTTP Content Phase.
  */
 ngx_int_t ngx_http_gateway_metrics_handler(ngx_http_request_t *r) {
   ngx_int_t rc;
   ngx_buf_t *b;
   ngx_chain_t out;
-  u_char *metrics_buf;
+  u_char *content_buf;
   size_t written = 0;
 
   /* Chỉ chấp nhận GET hoặc HEAD */
@@ -181,19 +106,55 @@ ngx_int_t ngx_http_gateway_metrics_handler(ngx_http_request_t *r) {
     return rc;
   }
 
-  const char *msg =
-      "# Aurora Gateway metrics are exported via aurora-agent (port 9100)\n";
-  written = ngx_strlen(msg);
-  metrics_buf = ngx_pnalloc(r->pool, written + 1);
-  if (metrics_buf == NULL) {
-    return NGX_HTTP_INTERNAL_SERVER_ERROR;
-  }
-  ngx_memcpy(metrics_buf, msg, written);
+  u_char raw_body[8192];
+  AuroraContentInput cin = {
+      .host = r->headers_in.server.data,
+      .host_len = r->headers_in.server.len,
+      .path = r->uri.data,
+      .path_len = r->uri.len,
+      .method = r->method_name.data,
+      .method_len = r->method_name.len,
+      .query = r->args.data,
+      .query_len = r->args.len,
+  };
+  AuroraContentOutcome cout;
+  ngx_memzero(&cout, sizeof(cout));
+  cout.body = raw_body;
+  cout.body_cap = sizeof(raw_body);
 
-  r->headers_out.status = NGX_HTTP_OK;
+  uint32_t phase_rc = aurora_gateway_phase_content(&cin, &cout);
+  if (phase_rc == 0 && cout.body_len > 0) {
+    written = cout.body_len;
+    content_buf = ngx_pnalloc(r->pool, written + 1);
+    if (content_buf == NULL) {
+      return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+    ngx_memcpy(content_buf, raw_body, written);
+  } else {
+    const char *fallback = "# No content available\n";
+    written = ngx_strlen(fallback);
+    content_buf = ngx_pnalloc(r->pool, written + 1);
+    if (content_buf == NULL) {
+      return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+    ngx_memcpy(content_buf, fallback, written);
+  }
+
+  r->headers_out.status =
+      (cout.status_code > 0) ? (ngx_uint_t)cout.status_code : NGX_HTTP_OK;
   r->headers_out.content_length_n = written;
-  ngx_str_set(&r->headers_out.content_type,
-              "text/plain; version=0.0.4; charset=utf-8");
+  if (cout.content_type_len > 0) {
+    u_char *ct = ngx_pnalloc(r->pool, cout.content_type_len);
+    if (ct == NULL) {
+      return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+    ngx_memcpy(ct, cout.content_type, cout.content_type_len);
+    r->headers_out.content_type.len = cout.content_type_len;
+    r->headers_out.content_type.data = ct;
+  } else {
+    ngx_str_set(&r->headers_out.content_type,
+                "text/plain; version=0.0.4; charset=utf-8");
+  }
 
   if (r->method == NGX_HTTP_HEAD) {
     rc = ngx_http_send_header(r);
@@ -207,7 +168,7 @@ ngx_int_t ngx_http_gateway_metrics_handler(ngx_http_request_t *r) {
     return NGX_HTTP_INTERNAL_SERVER_ERROR;
   }
 
-  ngx_memcpy(b->pos, metrics_buf, written);
+  ngx_memcpy(b->pos, content_buf, written);
   b->last = b->pos + written;
   b->last_buf = (r == r->main) ? 1 : 0;
   b->last_in_chain = 1;
@@ -225,102 +186,125 @@ ngx_int_t ngx_http_gateway_metrics_handler(ngx_http_request_t *r) {
 
 /*
  * Hook vào HTTP LOG Phase của NGINX: thực thi sau khi request đã hoàn tất và
- * client đã nhận phản hồi. Ghi nhận thời gian xử lý và mã trạng thái HTTP một
- * cách bất đồng bộ, không block client.
+ * client đã nhận phản hồi.
+ *
+ * C Adapter chỉ đóng vai trò Dumb Bridge: trích xuất metadata phẳng ngay trên
+ * stack và bàn giao toàn bộ sang Gateway Phase 5: HTTP Log Phase (Shadow
+ * Worker) bằng 1 lệnh duy nhất: aurora_gateway_phase_log(&log_input).
  */
 ngx_int_t ngx_http_gateway_log_handler(ngx_http_request_t *r) {
   ngx_time_t *tp;
   ngx_msec_int_t ms;
-  uint32_t status;
   ngx_http_gateway_conf_t *conf;
   ngx_http_gateway_ctx_t *ctx;
+  AuroraLogInput log_input;
 
   if (r == NULL) {
     return NGX_OK;
   }
+
+  /* Giảm In-Flight Request Gauge ngay khi request bước vào Log Phase (< 1ns) */
+  aurora_gateway_in_flight_leave();
 
   conf = ngx_http_get_module_loc_conf(r, ngx_http_gateway_module);
   if (conf == NULL || !conf->enabled) {
     return NGX_OK;
   }
 
-  /* L4: Connection gauges (lockless store) */
-  if (ngx_stat_active != NULL) {
-    aurora_gateway_record_connections(
-        (uint64_t)*ngx_stat_active,
-        ngx_stat_reading ? (uint64_t)*ngx_stat_reading : 0,
-        ngx_stat_writing ? (uint64_t)*ngx_stat_writing : 0,
-        ngx_stat_waiting ? (uint64_t)*ngx_stat_waiting : 0);
+  ngx_memzero(&log_input, sizeof(AuroraLogInput));
+
+  /* 1. Client IP */
+  if (r->connection && r->connection->addr_text.len > 0) {
+    log_input.client_ip = r->connection->addr_text.data;
+    log_input.client_ip_len = r->connection->addr_text.len;
   }
 
-  /* L7: Request timing */
+  /* 2. Method */
+  if (r->method_name.len > 0) {
+    log_input.method = r->method_name.data;
+    log_input.method_len = r->method_name.len;
+  }
+
+  /* 3. URI */
+  if (r->uri.len > 0) {
+    log_input.uri = r->uri.data;
+    log_input.uri_len = r->uri.len;
+  }
+
+  /* 4. Host */
+  if (r->headers_in.server.len > 0) {
+    log_input.host = r->headers_in.server.data;
+    log_input.host_len = r->headers_in.server.len;
+  }
+
+  /* 5. User-Agent */
+  if (r->headers_in.user_agent != NULL &&
+      r->headers_in.user_agent->value.len > 0) {
+    log_input.user_agent = r->headers_in.user_agent->value.data;
+    log_input.user_agent_len = r->headers_in.user_agent->value.len;
+  }
+
+  /* 6. Status */
+  log_input.status = (r->headers_out.status > 0)
+                         ? (uint32_t)r->headers_out.status
+                         : (uint32_t)r->err_status;
+  if (log_input.status == 0) {
+    log_input.status = 200;
+  }
+
+  /* 7. Request timing */
   tp = ngx_timeofday();
   ms = (ngx_msec_int_t)((tp->sec - r->start_sec) * 1000 +
                         (tp->msec - r->start_msec));
-  if (ms < 0) {
-    ms = 0;
-  }
+  log_input.duration_ms = (ms < 0) ? 0 : (uint32_t)ms;
 
-  status = (r->headers_out.status > 0) ? (uint32_t)r->headers_out.status
-                                       : (uint32_t)r->err_status;
-  if (status == 0) {
-    status = 200;
-  }
-
-  aurora_gateway_record_request(status, (uint64_t)ms);
-
-  /* L7: Traffic volume (bytes in/out, SSL flag, extension-matched flag) */
-  {
-    uint64_t bytes_in = (uint64_t)r->request_length;
-    uint64_t bytes_out = (uint64_t)r->connection->sent;
-    uint32_t is_ssl = 0;
-    uint32_t is_matched = 0;
-
-#if (NGX_SSL)
-    if (r->connection->ssl) {
-      is_ssl = 1;
-    }
-#endif
-
-    ctx = ngx_http_get_module_ctx(r, ngx_http_gateway_module);
-    if (ctx != NULL && ctx->evaluated) {
-      is_matched = 1;
-    }
-
-    aurora_gateway_record_traffic(bytes_in, bytes_out, is_ssl, is_matched);
+  /* 8. Traffic volume */
+  log_input.bytes_recv = (uint64_t)r->request_length;
+  if (r->connection) {
+    log_input.bytes_sent = (uint64_t)r->connection->sent;
   }
 
 #if (NGX_SSL)
-  /* L4: SSL handshake recording (only for main requests, once per connection) */
-  if (r == r->main && r->connection->ssl && r->connection->requests == 1) {
-    /* SSL_session_reused returns 1 if session was reused from cache */
-    uint32_t reused =
-        (SSL_session_reused(r->connection->ssl->connection)) ? 1 : 0;
-    aurora_gateway_record_ssl(1, reused);
+  if (r->connection && r->connection->ssl) {
+    log_input.is_ssl = 1;
+    if (r == r->main && r->connection->requests == 1) {
+      log_input.ssl_reused =
+          (SSL_session_reused(r->connection->ssl->connection)) ? 1 : 0;
+    }
   }
 #endif
 
-  /* Upstream: response status, latency, connect time, failures */
+  ctx = ngx_http_get_module_ctx(r, ngx_http_gateway_module);
+  if (ctx != NULL && ctx->evaluated) {
+    log_input.is_matched = 1;
+  }
+
+  /* 9. Upstream info */
   if (r->upstream && r->upstream->state) {
     ngx_http_upstream_state_t *us = r->upstream->state;
-    uint32_t up_status =
-        (us->status > 0) ? (uint32_t)us->status : 0;
-    uint64_t response_ms = 0;
-    uint64_t connect_ms = 0;
-    uint32_t failed = 0;
-
+    log_input.upstream_status = (us->status > 0) ? (uint32_t)us->status : 0;
     if (us->response_time != (ngx_msec_t)-1) {
-      response_ms = (uint64_t)us->response_time;
+      log_input.upstream_response_ms = (uint32_t)us->response_time;
     }
     if (us->connect_time != (ngx_msec_t)-1) {
-      connect_ms = (uint64_t)us->connect_time;
+      log_input.upstream_connect_ms = (uint32_t)us->connect_time;
     }
-    if (up_status == 0 || up_status >= 502) {
-      failed = 1;
-    }
-
-    aurora_gateway_record_upstream(up_status, response_ms, connect_ms, failed);
   }
+
+  /* 10. Gauge metrics (Active connections) */
+  if (ngx_stat_active != NULL) {
+    log_input.active_conns = (uint64_t)*ngx_stat_active;
+    log_input.reading_conns =
+        ngx_stat_reading ? (uint64_t)*ngx_stat_reading : 0;
+    log_input.writing_conns =
+        ngx_stat_writing ? (uint64_t)*ngx_stat_writing : 0;
+    log_input.waiting_conns =
+        ngx_stat_waiting ? (uint64_t)*ngx_stat_waiting : 0;
+  }
+
+  /* 11. Bàn giao sang Gateway Phase 5: HTTP Log Phase duy nhất (Non-blocking, <
+   * 40ns) */
+  aurora_gateway_phase_log(&log_input);
 
   return NGX_OK;
 }
