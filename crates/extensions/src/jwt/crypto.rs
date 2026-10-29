@@ -24,7 +24,7 @@
 //!    Supports arbitrary dot-notation (`user.profile.id`) and auto-flattening arrays
 //!    (`roles: ["admin", "dev"]` -> `"admin, dev"`).
 
-use super::types::{KeyInput, MAX_JWT_KEYS_PER_ORIGIN};
+use super::types::{KeyInput, MAX_JWT_KEYS_PER_ORIGIN, PayloadFormat};
 use crate::{Error, MAX_PATH_BYTES};
 use base64::prelude::*;
 use ring::hmac;
@@ -48,8 +48,8 @@ pub enum JwtAlgorithm {
     EdDSA,
 }
 
-/// 64-bit little-endian mask for 5-byte algorithm identifiers (bits 0..39 with 0xDF case folding).
-pub const ALG_5B_MASK: u64 = 0x00_00_00_DF_DF_DF_DF_DF;
+/// 64-bit little-endian mask for 5-byte exact algorithm identifiers (bits 0..39).
+pub const ALG_5B_MASK: u64 = 0x00_00_00_FF_FF_FF_FF_FF;
 
 impl JwtAlgorithm {
     /// 64-bit masked integer representation for 1-cycle SWAR algorithm matching.
@@ -64,7 +64,7 @@ impl JwtAlgorithm {
             Self::RS512 => b"RS512\0\0\0",
             Self::ES256 => b"ES256\0\0\0",
             Self::ES384 => b"ES384\0\0\0",
-            Self::EdDSA => b"EDDSA\0\0\0",
+            Self::EdDSA => b"EdDSA\0\0\0",
         };
         u64::from_le_bytes(*bytes) & ALG_5B_MASK
     }
@@ -124,7 +124,7 @@ impl FromStr for JwtAlgorithm {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim().to_ascii_uppercase().as_str() {
+        match s.trim() {
             "HS256" => Ok(Self::HS256),
             "HS384" => Ok(Self::HS384),
             "HS512" => Ok(Self::HS512),
@@ -133,7 +133,7 @@ impl FromStr for JwtAlgorithm {
             "RS512" => Ok(Self::RS512),
             "ES256" => Ok(Self::ES256),
             "ES384" => Ok(Self::ES384),
-            "EDDSA" | "ED25519" => Ok(Self::EdDSA),
+            "EdDSA" | "Ed25519" => Ok(Self::EdDSA),
             _ => Err(Error::InvalidPolicy),
         }
     }
@@ -531,26 +531,65 @@ pub(crate) fn compile_keys(
     Ok((primary_key, keys_by_kid))
 }
 
+/// Verified token payload, either parsed JSON or decoded raw string.
+pub enum VerifiedPayload {
+    Json(serde_json::Value),
+    Raw(String),
+}
+
 /// Result of successful cryptographic token verification.
 pub struct VerifiedToken {
-    /// Parsed JSON payload containing token claims.
-    pub payload: serde_json::Value,
+    /// Parsed token payload (JSON or Raw).
+    pub payload: VerifiedPayload,
     /// Token expiration epoch seconds (0 if not specified).
     pub exp_epoch_secs: u64,
-    /// Key ID (`kid`) from JOSE header if present.
-    pub kid: Option<String>,
+    /// Optional token unique identifier (jti) for instant revocation.
+    pub jti: Option<String>,
 }
 
 /// Policy invariants passed to `verify_jwt`.
 pub struct JwtValidationConfig<'a> {
     pub expected_alg: JwtAlgorithm,
-    pub key: &'a VerifierKey,
+    pub primary_key: &'a VerifierKey,
+    pub keys_by_kid: Option<&'a HashMap<String, VerifierKey>>,
     pub now_epoch: u64,
+    pub payload_format: PayloadFormat,
     pub validate_exp: bool,
+    pub require_exp: bool,
     pub validate_nbf: bool,
     pub clock_skew_secs: u64,
     pub expected_issuer: Option<&'a str>,
     pub expected_audience: Option<&'a str>,
+}
+
+/// Robust epoch timestamp parser supporting u64, non-negative i64, finite positive f64,
+/// and numeric string representations often encountered in enterprise JWT payloads.
+#[inline]
+pub(crate) fn parse_epoch_secs(val: &serde_json::Value) -> Option<u64> {
+    match val {
+        serde_json::Value::Number(n) => {
+            if let Some(u) = n.as_u64() {
+                Some(u)
+            } else if let Some(i) = n.as_i64() {
+                (i >= 0).then_some(i as u64)
+            } else if let Some(f) = n.as_f64() {
+                (f >= 0.0 && f.is_finite() && f <= (u64::MAX as f64)).then_some(f as u64)
+            } else {
+                None
+            }
+        }
+        serde_json::Value::String(s) => {
+            let trimmed = s.trim();
+            trimmed.parse::<u64>().ok().or_else(|| {
+                trimmed
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|f| *f >= 0.0 && f.is_finite() && *f <= (u64::MAX as f64))
+                    .map(|f| f as u64)
+            })
+        }
+        _ => None,
+    }
 }
 
 /// Verifies a raw JWT string using SIMD dot hunting, stack buffers, and hardware crypto.
@@ -560,15 +599,12 @@ pub fn verify_jwt(
     token: &str,
     config: &JwtValidationConfig<'_>,
 ) -> Result<VerifiedToken, &'static str> {
-    // 1. SIMD Dot Hunting using memchr (1-2ns)
+    // 1. SIMD Dot Hunting using memchr_iter (1 continuous SIMD pass)
     let token_bytes = token.as_bytes();
-    let first_dot = memchr::memchr(b'.', token_bytes).ok_or("Missing first dot")?;
-    let rest = &token_bytes[first_dot + 1..];
-    let second_dot_offset = memchr::memchr(b'.', rest).ok_or("Missing second dot")?;
-    let second_dot = first_dot + 1 + second_dot_offset;
-
-    // Fail-fast on extra dots
-    if memchr::memchr(b'.', &rest[second_dot_offset + 1..]).is_some() {
+    let mut dot_iter = memchr::memchr_iter(b'.', token_bytes);
+    let first_dot = dot_iter.next().ok_or("Missing first dot")?;
+    let second_dot = dot_iter.next().ok_or("Missing second dot")?;
+    if dot_iter.next().is_some() {
         return Err("Unexpected additional dots");
     }
 
@@ -586,7 +622,7 @@ pub fn verify_jwt(
     let signing_input = &token_bytes[..second_dot];
 
     // 3. Decode JOSE header into stack buffer (zero heap allocation)
-    let mut header_stack_buf = [0u8; 128];
+    let mut header_stack_buf = [0u8; 512];
     let header_bytes = decode_base64url_to_slice(header_b64, &mut header_stack_buf)?;
     let header_json: JoseHeader<'_> =
         serde_json::from_slice(header_bytes).map_err(|_| "Malformed JOSE header JSON")?;
@@ -594,14 +630,16 @@ pub fn verify_jwt(
     if !matches_algorithm(header_json.alg, config.expected_alg) {
         return Err("Algorithm mismatch");
     }
-    let kid = header_json.kid.map(|k| k.to_string());
+
+    let key = match (config.keys_by_kid, header_json.kid) {
+        (Some(keys), Some(kid)) => keys.get(kid).unwrap_or(config.primary_key),
+        _ => config.primary_key,
+    };
 
     // 4. Decode signature into stack buffer and verify via Hardware Crypto (zero heap alloc)
     let mut sig_stack_buf = [0u8; 512];
     let signature_bytes = decode_base64url_to_slice(signature_b64, &mut sig_stack_buf)?;
-    config
-        .key
-        .verify(config.expected_alg, signing_input, signature_bytes)?;
+    key.verify(config.expected_alg, signing_input, signature_bytes)?;
 
     // 5. Decode payload into stack buffer (zero allocation for standard tokens < 2KB)
     let mut payload_stack_buf = [0u8; 2048];
@@ -612,65 +650,90 @@ pub fn verify_jwt(
         Cow::Owned(decode_base64url(payload_b64)?)
     };
 
-    let payload: serde_json::Value =
-        serde_json::from_slice(&payload_bytes).map_err(|_| "Malformed JWT payload JSON")?;
+    let verified_payload = match config.payload_format {
+        PayloadFormat::Json => {
+            let val: serde_json::Value =
+                serde_json::from_slice(&payload_bytes).map_err(|_| "Malformed JWT payload JSON")?;
+            VerifiedPayload::Json(val)
+        }
+        PayloadFormat::Raw => {
+            let s = std::str::from_utf8(&payload_bytes)
+                .map_err(|_| "Malformed UTF-8 payload")?
+                .to_string();
+            VerifiedPayload::Raw(s)
+        }
+    };
 
-    // 6. Expiration & Temporal Invariants (Branchless arithmetic condition fusion)
-    let exp_epoch = payload.get("exp").and_then(|v| v.as_u64()).unwrap_or(0);
-    let is_expired =
-        (exp_epoch > 0) & (config.now_epoch > exp_epoch.saturating_add(config.clock_skew_secs));
-    if is_expired {
-        return Err("Token has expired");
-    }
-    if config.validate_exp && exp_epoch == 0 {
+    // 6. Expiration & Temporal Invariants (supports u64, f64, i64, and string numbers)
+    let (exp_epoch, nbf_epoch, jti) = match &verified_payload {
+        VerifiedPayload::Json(json) => {
+            let exp = json.get("exp").and_then(parse_epoch_secs).unwrap_or(0);
+            let nbf = json.get("nbf").and_then(parse_epoch_secs);
+            let jti = json.get("jti").and_then(|v| v.as_str()).map(|s| s.to_string());
+            (exp, nbf, jti)
+        }
+        VerifiedPayload::Raw(_) => (0, None, None),
+    };
+
+    let exp_missing = config.require_exp & (exp_epoch == 0);
+    let exp_expired = config.validate_exp
+        & (exp_epoch > 0)
+        & (config.now_epoch > exp_epoch.saturating_add(config.clock_skew_secs));
+    if exp_missing {
         return Err("Missing required exp claim");
+    }
+    if exp_expired {
+        return Err("Token has expired");
     }
 
     if config.validate_nbf
-        && let Some(nbf) = payload.get("nbf").and_then(|v| v.as_u64())
+        && let Some(nbf) = nbf_epoch
         && config.now_epoch.saturating_add(config.clock_skew_secs) < nbf
     {
         return Err("Token is not active yet (nbf)");
     }
 
-    // 7. Issuer Validation
-    if let Some(expected_iss) = config.expected_issuer
-        && !expected_iss.is_empty()
-    {
-        let actual_iss = payload.get("iss").and_then(|v| v.as_str()).unwrap_or("");
-        if actual_iss != expected_iss {
-            return Err("Issuer mismatch");
-        }
-    }
-
-    // 8. Audience Validation
-    if let Some(expected_aud) = config.expected_audience
-        && !expected_aud.is_empty()
-    {
-        let aud_matched = match payload.get("aud") {
-            Some(serde_json::Value::String(s)) => s == expected_aud,
-            Some(serde_json::Value::Array(arr)) => {
-                arr.iter().any(|v| v.as_str() == Some(expected_aud))
+    if let VerifiedPayload::Json(json) = &verified_payload {
+        // 7. Issuer Validation
+        if let Some(expected_iss) = config.expected_issuer
+            && !expected_iss.is_empty()
+        {
+            let actual_iss = json.get("iss").and_then(|v| v.as_str()).unwrap_or("");
+            if actual_iss != expected_iss {
+                return Err("Issuer mismatch");
             }
-            _ => false,
-        };
-        if !aud_matched {
-            return Err("Audience mismatch");
+        }
+
+        // 8. Audience Validation
+        if let Some(expected_aud) = config.expected_audience
+            && !expected_aud.is_empty()
+        {
+            let aud_matched = match json.get("aud") {
+                Some(serde_json::Value::String(s)) => s == expected_aud,
+                Some(serde_json::Value::Array(arr)) => {
+                    arr.iter().any(|v| v.as_str() == Some(expected_aud))
+                }
+                _ => false,
+            };
+            if !aud_matched {
+                return Err("Audience mismatch");
+            }
         }
     }
 
     Ok(VerifiedToken {
-        payload,
+        payload: verified_payload,
         exp_epoch_secs: exp_epoch,
-        kid,
+        jti,
     })
 }
 
-/// Resolves nested claim path with dot-notation (e.g. `user.profile.id`) and flattens arrays,
-/// borrowing directly from the parsed JSON payload when possible to avoid allocations.
+/// Resolves nested claim path with dot-notation (e.g. `user.profile.id` or `users.0.name`)
+/// and formats primitives, objects, or arrays into `Cow<'a, str>` without unnecessary allocations.
 ///
-/// - Primitives (`String`, `Bool`) borrow zero-allocation.
-/// - Numbers and Arrays are formatted into `Cow::Owned`.
+/// - Strings borrow zero-allocation.
+/// - Booleans return static string slices (`"true"` / `"false"`).
+/// - Numbers, Objects, and Arrays are formatted into `Cow::Owned`.
 #[inline]
 pub fn resolve_claim_path_cow<'a>(
     value: &'a serde_json::Value,
@@ -682,6 +745,10 @@ pub fn resolve_claim_path_cow<'a>(
             serde_json::Value::Object(map) => {
                 current = map.get(segment)?;
             }
+            serde_json::Value::Array(arr) => {
+                let idx = segment.parse::<usize>().ok()?;
+                current = arr.get(idx)?;
+            }
             _ => return None,
         }
     }
@@ -690,47 +757,52 @@ pub fn resolve_claim_path_cow<'a>(
         serde_json::Value::Number(n) => Some(Cow::Owned(n.to_string())),
         serde_json::Value::Bool(b) => Some(Cow::Borrowed(if *b { "true" } else { "false" })),
         serde_json::Value::Array(arr) => {
-            let items: Vec<String> = arr
-                .iter()
-                .filter_map(|item| match item {
-                    serde_json::Value::String(s) => Some(s.clone()),
-                    serde_json::Value::Number(n) => Some(n.to_string()),
-                    _ => None,
-                })
-                .collect();
-            if items.is_empty() {
+            let mut buf = String::with_capacity(arr.len() * 16);
+            let mut first = true;
+            for item in arr {
+                let s = match item {
+                    serde_json::Value::String(s) => s.as_str(),
+                    serde_json::Value::Number(n) => {
+                        let num_str = n.to_string();
+                        if !first {
+                            buf.push_str(", ");
+                        }
+                        buf.push_str(&num_str);
+                        first = false;
+                        continue;
+                    }
+                    serde_json::Value::Bool(b) => {
+                        if *b {
+                            "true"
+                        } else {
+                            "false"
+                        }
+                    }
+                    serde_json::Value::Null => continue,
+                    other => {
+                        let other_str = other.to_string();
+                        if !first {
+                            buf.push_str(", ");
+                        }
+                        buf.push_str(&other_str);
+                        first = false;
+                        continue;
+                    }
+                };
+                if !first {
+                    buf.push_str(", ");
+                }
+                buf.push_str(s);
+                first = false;
+            }
+            if buf.is_empty() {
                 None
             } else {
-                Some(Cow::Owned(items.join(", ")))
+                Some(Cow::Owned(buf))
             }
         }
-        _ => None,
-    }
-}
-
-/// Resolves nested claim path with dot-notation (e.g. `user.profile.id`) and flattens arrays.
-///
-/// Backward-compatible wrapper returning owned `String`.
-#[inline]
-pub fn resolve_claim_path(value: &serde_json::Value, path: &str) -> Option<String> {
-    resolve_claim_path_cow(value, path).map(|c| c.into_owned())
-}
-
-/// Validates whether a claim path satisfies the expected value or regex assertion without allocations.
-#[inline]
-pub fn matches_assert_claim(
-    payload: &serde_json::Value,
-    path: &str,
-    expected: &str,
-    regex: Option<&regex::Regex>,
-) -> bool {
-    let Some(actual) = resolve_claim_path_cow(payload, path) else {
-        return false;
-    };
-    if let Some(re) = regex {
-        re.is_match(&actual)
-    } else {
-        expected == "*" || actual == expected
+        serde_json::Value::Object(_) => Some(Cow::Owned(current.to_string())),
+        serde_json::Value::Null => None,
     }
 }
 

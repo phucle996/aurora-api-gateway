@@ -12,7 +12,7 @@ COPY proto/ proto/
 COPY crates/ crates/
 COPY adapters/ adapters/
 
-RUN cargo build --release -p aurora-agent \
+RUN cargo build --release -p aurora-control-worker \
     && cargo build --release -p aurora-ffi
 
 # ── Stage 2: Static Aurora Gateway Builder ──────────────────────────
@@ -90,15 +90,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=gateway-builder /opt/bin/aurora-gateway /usr/local/bin/aurora-gateway
-COPY --from=rust-builder /app/target/release/aurora-agent /usr/local/bin/aurora-agent
-
-# Backward compatibility symlink for any legacy tests looking for /opt/nginx/usr/sbin/nginx
-RUN ln -sf /usr/local/bin/aurora-gateway /opt/nginx/usr/sbin/nginx
+COPY --from=rust-builder /app/target/release/aurora-control-worker /usr/local/bin/aurora-control-worker
 
 COPY deploy/docker/nginx-node.conf.template /etc/nginx/nginx-node.conf.template
 COPY deploy/docker/entrypoint-node.sh /entrypoint.sh
 
-RUN chmod +x /usr/local/bin/aurora-agent /usr/local/bin/aurora-gateway /entrypoint.sh
+RUN chmod +x /usr/local/bin/aurora-control-worker /usr/local/bin/aurora-gateway /entrypoint.sh
 
 EXPOSE 80 443 9145
 

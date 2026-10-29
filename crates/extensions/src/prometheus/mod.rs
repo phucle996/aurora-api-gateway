@@ -1,12 +1,15 @@
 //! Prometheus Exporter Plugin Subsystem.
 
 pub mod engine;
+pub mod materialize;
 pub mod plugin;
 pub mod task;
 
 pub use engine::*;
 pub use plugin::PrometheusPlugin;
-pub use task::HttpMetricTask;
+pub use task::{
+    HttpMetricTask, WorkerHttpMetrics, get_worker_http_metrics, record_http_metrics,
+};
 
 #[cfg(test)]
 mod tests {
@@ -31,6 +34,7 @@ mod tests {
             reading_conns: 10,
             writing_conns: 30,
             waiting_conns: 10,
+            dropped_tasks: 7,
             cpu_utilization: 0.25,
             memory_used_bytes: 4294967296,
             memory_total_bytes: 17179869184,
@@ -42,6 +46,7 @@ mod tests {
         let text = std::str::from_utf8(&scrape).expect("valid utf-8");
 
         assert!(text.contains("gateway_requests_in_flight 42"));
+        assert!(text.contains("aurora_background_dropped_tasks_total{gateway=\"test-gateway\",node=\"node-test\"} 7"));
         assert!(text.contains("status=\"2xx\"} 1000"));
         assert!(text.contains("status=\"5xx\"} 2"));
         assert!(text.contains("direction=\"in\"} 102400"));

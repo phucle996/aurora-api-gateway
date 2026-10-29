@@ -109,9 +109,15 @@ fn default_redis_pool_size() -> usize {
     8
 }
 
+fn default_schema_version() -> u32 {
+    1
+}
+
 #[derive(Deserialize)]
 pub(crate) struct Snapshot {
+    #[serde(default = "default_schema_version")]
     pub schema_version: u32,
+    #[serde(default)]
     pub generation: u64,
     #[serde(default)]
     pub mode: RateLimitMode,

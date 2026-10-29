@@ -2,6 +2,7 @@
 
 pub mod decision;
 pub mod hardware;
+pub mod kernel;
 pub mod metrics;
 pub mod radix;
 pub mod request;
@@ -9,6 +10,8 @@ pub mod shadow;
 pub mod shm;
 
 pub use decision::*;
+pub use hardware::*;
+pub use kernel::*;
 pub use metrics::*;
 pub use radix::PathRadixTree;
 pub use request::*;

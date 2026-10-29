@@ -27,11 +27,11 @@ fn test_snapshot_deserialization_with_rules_and_host_origin_alias() {
         "/api/healthz",
         "/api/public/"
       ],
-      "forward_headers": [
+      "claim_rules": [
         {
           "header_key": "X-User-Id",
           "payload_key": "sub",
-          "value": "*"
+          "values_match": "*"
         }
       ],
       "host": "*",
@@ -44,8 +44,17 @@ fn test_snapshot_deserialization_with_rules_and_host_origin_alias() {
           "public_key_pem": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAn7DE87UDxm5+ziZltyDP\ndf+GG8FbBgk3xb6yFnN5NgwhJJ/fv26Jx3GhPTumP6viDuQZYmG+5nBEf9hQLJMS\nypcGvr5RiEnPe5lgAmqYUp6e4WK9hk3XxBECCwcAIkBUGW88EjduR/PLLtLDn8dt\nqHUb9Z8WQVzp+1uwoLENdIzrYhIBejfIOFqFKCNGLz8MlNxSmDWz5hEe1SNQu/wk\ngTSKRe8b5ztT73oM6cvCLqOOXc5sxsIsq0R+tNXDxxEcxFpFs+7DMvLceAghCgmn\nLNT+PNZNBzXTl2UAY6KCbtCO61I9yAk5C7hRKjp7/qhnqc1dUUp04at6ZsumCTj2\n2QIDAQAB\n-----END PUBLIC KEY-----\n"
         }
       ],
-      "origin": "*",
       "path_prefix": "/api",
+      "token_source": "header",
+      "header_name": "Authorization",
+      "token_prefix": "Bearer "
+    },
+    {
+      "algorithm": "HS256",
+      "id": "alias-origin-rule",
+      "origin": "api.alias.test",
+      "path_prefix": "/alias",
+      "secret": "super-secret-1234567890",
       "token_source": "header",
       "header_name": "Authorization",
       "token_prefix": "Bearer "
@@ -82,10 +91,10 @@ fn test_symmetric_hs256_with_exclude_paths_and_forward_headers() {
                 "token_source": "header",
                 "header_name": "Authorization",
                 "token_prefix": "Bearer ",
-                "forward_headers": [
-                    { "payload_key": "sub", "header_key": "X-User-Id", "value": "*" },
-                    { "payload_key": "role", "header_key": "X-User-Role", "value": "^(admin|operator)$" },
-                    { "payload_key": "tenant_id", "header_key": "X-Tenant-Id", "value": "^T-[0-9]+$" }
+                "claim_rules": [
+                    { "payload_key": "sub", "header_key": "X-User-Id", "values_match": "*" },
+                    { "payload_key": "role", "header_key": "X-User-Role", "values_match": "^(admin|operator)$" },
+                    { "payload_key": "tenant_id", "header_key": "X-Tenant-Id", "values_match": "^T-[0-9]+$" }
                 ]
             }
         ]
@@ -835,13 +844,15 @@ fn test_nbf_future_token_rejected() {
 fn test_branchless_bearer_prefix_and_whitespace() {
     use super::engine::is_bearer_authorization;
 
-    // Positive cases (any case of "Bearer " + at least 1 byte)
+    // Positive case: exact case "Bearer " + at least 1 byte of token
     assert!(is_bearer_authorization(b"Bearer abc"));
-    assert!(is_bearer_authorization(b"bearer abc"));
-    assert!(is_bearer_authorization(b"BEARER abc"));
-    assert!(is_bearer_authorization(b"bEaReR abc"));
 
-    // Negative cases
+    // Negative cases: strict case-sensitivity (lowercase/uppercase/mixed-case must be rejected)
+    assert!(!is_bearer_authorization(b"bearer abc"));
+    assert!(!is_bearer_authorization(b"BEARER abc"));
+    assert!(!is_bearer_authorization(b"bEaReR abc"));
+
+    // Other negative cases
     assert!(!is_bearer_authorization(b""));
     assert!(!is_bearer_authorization(b"Bearer"));
     assert!(!is_bearer_authorization(b"Bearer ")); // len <= 7
@@ -858,7 +869,7 @@ fn test_branchless_bearer_prefix_and_whitespace() {
 fn test_swar_algorithm_matching() {
     use super::crypto::{JwtAlgorithm, matches_algorithm};
 
-    // All 9 algorithms match themselves case-insensitively
+    // All 9 algorithms match exact case
     let algs = [
         (JwtAlgorithm::HS256, "HS256"),
         (JwtAlgorithm::HS384, "HS384"),
@@ -873,9 +884,12 @@ fn test_swar_algorithm_matching() {
 
     for (alg, name) in algs {
         assert!(matches_algorithm(name, alg));
-        assert!(matches_algorithm(&name.to_lowercase(), alg));
-        assert!(matches_algorithm(&name.to_uppercase(), alg));
+        // Strict case-sensitivity: lowercase must fail
+        assert!(!matches_algorithm(&name.to_lowercase(), alg));
     }
+
+    // EdDSA must strictly match "EdDSA", not "EDDSA"
+    assert!(!matches_algorithm("EDDSA", JwtAlgorithm::EdDSA));
 
     // Cross-algorithm mismatches
     assert!(!matches_algorithm("HS384", JwtAlgorithm::HS256));
@@ -1102,4 +1116,764 @@ fn test_jwt_token_source_strict_validation_no_fallback() {
             serde_json::json!({ "schema_version": 1, "generation": idx + 1, "origins": [origin] });
         assert!(JwtEngine::from_snapshot(snap.to_string().as_bytes()).is_err());
     }
+}
+
+#[test]
+fn test_flexible_numeric_and_string_exp_nbf() {
+    let secret = "enterprise-secret-123456789";
+    let policy_json = serde_json::json!({
+        "schema_version": 1,
+        "generation": 200,
+        "origins": [
+            {
+                "id": "flex-origin",
+                "origin": "api.enterprise.local",
+                "path_prefix": "/api",
+                "algorithm": "HS256",
+                "secret": secret,
+                "token_source": "header",
+                "header_name": "Authorization",
+                "token_prefix": "Bearer ",
+                "require_exp": true,
+                "validate_nbf": true,
+                "clock_skew_secs": 0
+            }
+        ]
+    });
+
+    let engine = JwtEngine::from_snapshot(policy_json.to_string().as_bytes()).unwrap();
+
+    // 1. Float exp in the future -> Allow
+    let claims_float_exp = serde_json::json!({
+        "sub": "user_float",
+        "exp": 2500000000.5f64
+    });
+    let token_float = encode(
+        &Header::default(),
+        &claims_float_exp,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    ).unwrap();
+    let auth = format!("Bearer {token_float}");
+    let res = engine.evaluate_at(b"api.enterprise.local", b"/api/data", Some(auth.as_bytes()), 1700000000).unwrap();
+    assert!(matches!(res, JwtDecision::Allow { .. }));
+
+    // 2. Float exp in the past -> Unauthorized (Expired)
+    let claims_expired_float = serde_json::json!({
+        "sub": "user_float",
+        "exp": 1600000000.5f64
+    });
+    let token_expired_float = encode(
+        &Header::default(),
+        &claims_expired_float,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    ).unwrap();
+    let auth = format!("Bearer {token_expired_float}");
+    let res = engine.evaluate_at(b"api.enterprise.local", b"/api/data", Some(auth.as_bytes()), 1700000000).unwrap();
+    assert_eq!(res, JwtDecision::Unauthorized);
+
+    // 3. String exp in the future -> Allow
+    let claims_str_exp = serde_json::json!({
+        "sub": "user_str",
+        "exp": "2500000000"
+    });
+    let token_str = encode(
+        &Header::default(),
+        &claims_str_exp,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    ).unwrap();
+    let auth = format!("Bearer {token_str}");
+    let res = engine.evaluate_at(b"api.enterprise.local", b"/api/data", Some(auth.as_bytes()), 1700000000).unwrap();
+    assert!(matches!(res, JwtDecision::Allow { .. }));
+
+    // 4. String float exp in the future -> Allow
+    let claims_str_float_exp = serde_json::json!({
+        "sub": "user_str_float",
+        "exp": "2500000000.75"
+    });
+    let token_str_float = encode(
+        &Header::default(),
+        &claims_str_float_exp,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    ).unwrap();
+    let auth = format!("Bearer {token_str_float}");
+    let res = engine.evaluate_at(b"api.enterprise.local", b"/api/data", Some(auth.as_bytes()), 1700000000).unwrap();
+    assert!(matches!(res, JwtDecision::Allow { .. }));
+
+    // 5. Future nbf (float) -> Unauthorized
+    let claims_future_nbf = serde_json::json!({
+        "sub": "user_future",
+        "exp": 2500000000u64,
+        "nbf": 1800000000.5f64
+    });
+    let token_nbf = encode(
+        &Header::default(),
+        &claims_future_nbf,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    ).unwrap();
+    let auth = format!("Bearer {token_nbf}");
+    let res = engine.evaluate_at(b"api.enterprise.local", b"/api/data", Some(auth.as_bytes()), 1700000000).unwrap();
+    assert_eq!(res, JwtDecision::Unauthorized);
+
+    // 6. When validate_exp is explicitly set to false, expired tokens are NOT rejected
+    let policy_no_validate_exp = serde_json::json!({
+        "schema_version": 1,
+        "generation": 205,
+        "origins": [
+            {
+                "id": "no-val-exp-origin",
+                "origin": "api.enterprise.local",
+                "path_prefix": "/api",
+                "algorithm": "HS256",
+                "secret": secret,
+                "token_source": "header",
+                "header_name": "Authorization",
+                "token_prefix": "Bearer ",
+                "validate_exp": false
+            }
+        ]
+    });
+    let engine_no_val_exp = JwtEngine::from_snapshot(policy_no_validate_exp.to_string().as_bytes()).unwrap();
+    let expired_auth = format!("Bearer {token_expired_float}");
+    let res_no_val = engine_no_val_exp.evaluate_at(b"api.enterprise.local", b"/api/data", Some(expired_auth.as_bytes()), 1700000000).unwrap();
+    assert!(matches!(res_no_val, JwtDecision::Allow { .. }));
+}
+
+#[test]
+fn test_enterprise_claim_types_and_nested_array_indexing() {
+    let secret = "enterprise-types-secret-123456";
+    let policy_json = serde_json::json!({
+        "schema_version": 1,
+        "generation": 201,
+        "origins": [
+            {
+                "id": "types-origin",
+                "origin": "api.types.local",
+                "path_prefix": "/api",
+                "algorithm": "HS256",
+                "secret": secret,
+                "token_source": "header",
+                "header_name": "Authorization",
+                "token_prefix": "Bearer ",
+                "claim_rules": [
+                    { "payload_key": "active", "header_key": "X-Is-Active" },
+                    { "payload_key": "settings", "header_key": "X-Settings" },
+                    { "payload_key": "members.0.name", "header_key": "X-First-Member" },
+                    { "payload_key": "tags", "header_key": "X-Tags" }
+                ]
+            }
+        ]
+    });
+
+    let engine = JwtEngine::from_snapshot(policy_json.to_string().as_bytes()).unwrap();
+
+    let claims = serde_json::json!({
+        "sub": "user_types",
+        "exp": 2500000000u64,
+        "active": true,
+        "settings": { "theme": "dark", "level": 5 },
+        "members": [
+            { "name": "alice" },
+            { "name": "bob" }
+        ],
+        "tags": ["alpha", 123, false]
+    });
+
+    let token = encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    ).unwrap();
+    let auth = format!("Bearer {token}");
+
+    let res = engine.evaluate_at(b"api.types.local", b"/api/data", Some(auth.as_bytes()), 1700000000).unwrap();
+    match res {
+        JwtDecision::Allow { forwarded_headers } => {
+            let map: std::collections::HashMap<_, _> = forwarded_headers.iter().cloned().collect();
+            assert_eq!(map.get("X-Is-Active").map(|s| s.as_str()), Some("true"));
+            assert_eq!(map.get("X-First-Member").map(|s| s.as_str()), Some("alice"));
+            assert_eq!(map.get("X-Tags").map(|s| s.as_str()), Some("alpha, 123, false"));
+            assert!(map.get("X-Settings").unwrap().contains("\"theme\":\"dark\""));
+        }
+        JwtDecision::Unauthorized => panic!("Expected Allow"),
+    }
+}
+
+#[test]
+fn test_strict_case_sensitivity_cookie_and_prefix() {
+    let secret = "case-sensitivity-secret-123456";
+    let policy_json = serde_json::json!({
+        "schema_version": 1,
+        "generation": 202,
+        "origins": [
+            {
+                "id": "cookie-case-origin",
+                "origin": "api.case.local",
+                "path_prefix": "/cookie",
+                "algorithm": "HS256",
+                "secret": secret,
+                "token_source": "cookie",
+                "cookie_name": "AuthToken"
+            },
+            {
+                "id": "prefix-case-origin",
+                "origin": "api.case.local",
+                "path_prefix": "/prefix",
+                "algorithm": "HS256",
+                "secret": secret,
+                "token_source": {
+                    "type": "header",
+                    "name": "Authorization",
+                    "prefix": "Bearer "
+                }
+            }
+        ]
+    });
+
+    let engine = JwtEngine::from_snapshot(policy_json.to_string().as_bytes()).unwrap();
+
+    let claims = serde_json::json!({ "sub": "test", "exp": 2500000000u64 });
+    let token = encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    ).unwrap();
+
+    // 1. Exact cookie name "AuthToken" -> Allow
+    let cookie_exact = format!("AuthToken={token}");
+    let res = engine.evaluate_with_lookup_at(b"api.case.local", b"/cookie", |n| {
+        (n == "cookie").then_some(cookie_exact.as_bytes())
+    }, 1700000000).unwrap();
+    assert!(matches!(res, JwtDecision::Allow { .. }));
+
+    // 2. Lowercase cookie name "authtoken" -> Unauthorized
+    let cookie_lower = format!("authtoken={token}");
+    let res = engine.evaluate_with_lookup_at(b"api.case.local", b"/cookie", |n| {
+        (n == "cookie").then_some(cookie_lower.as_bytes())
+    }, 1700000000).unwrap();
+    assert_eq!(res, JwtDecision::Unauthorized);
+
+    // 3. Exact prefix "Bearer " -> Allow
+    let auth_exact = format!("Bearer {token}");
+    let res = engine.evaluate_with_lookup_at(b"api.case.local", b"/prefix", |n| {
+        (n == "Authorization").then_some(auth_exact.as_bytes())
+    }, 1700000000).unwrap();
+    assert!(matches!(res, JwtDecision::Allow { .. }));
+
+    // 4. Lowercase prefix "bearer " -> Unauthorized
+    let auth_lower = format!("bearer {token}");
+    let res = engine.evaluate_with_lookup_at(b"api.case.local", b"/prefix", |n| {
+        (n == "Authorization").then_some(auth_lower.as_bytes())
+    }, 1700000000).unwrap();
+    assert_eq!(res, JwtDecision::Unauthorized);
+}
+
+#[test]
+fn test_max_forward_headers_validation_limit() {
+    let mut rules_17 = Vec::new();
+    for i in 0..17 {
+        rules_17.push(serde_json::json!({
+            "payload_key": format!("k_{i}"),
+            "header_key": format!("X-Header-{i}")
+        }));
+    }
+
+    let bad_snapshot = serde_json::json!({
+        "schema_version": 1,
+        "generation": 203,
+        "origins": [
+            {
+                "id": "limit-origin",
+                "origin": "*",
+                "path_prefix": "/api",
+                "algorithm": "HS256",
+                "secret": "test-secret-12345",
+                "token_source": "header",
+                "header_name": "Authorization",
+                "claim_rules": rules_17
+            }
+        ]
+    });
+
+    // 17 forward headers must be rejected at compile time
+    assert!(JwtEngine::from_snapshot(bad_snapshot.to_string().as_bytes()).is_err());
+
+    // 16 forward headers must be accepted
+    let mut rules_16 = Vec::new();
+    for i in 0..16 {
+        rules_16.push(serde_json::json!({
+            "payload_key": format!("k_{i}"),
+            "header_key": format!("X-Header-{i}")
+        }));
+    }
+    let ok_snapshot = serde_json::json!({
+        "schema_version": 1,
+        "generation": 204,
+        "origins": [
+            {
+                "id": "limit-origin",
+                "origin": "*",
+                "path_prefix": "/api",
+                "algorithm": "HS256",
+                "secret": "test-secret-12345",
+                "token_source": "header",
+                "header_name": "Authorization",
+                "claim_rules": rules_16
+            }
+        ]
+    });
+    assert!(JwtEngine::from_snapshot(ok_snapshot.to_string().as_bytes()).is_ok());
+}
+
+fn make_raw_jwt(header_json: &str, raw_payload: &str, secret: &str) -> String {
+    use base64::prelude::*;
+    let h_b64 = BASE64_URL_SAFE_NO_PAD.encode(header_json.as_bytes());
+    let p_b64 = BASE64_URL_SAFE_NO_PAD.encode(raw_payload.as_bytes());
+    let signing_input = format!("{h_b64}.{p_b64}");
+    let key = ring::hmac::Key::new(ring::hmac::HMAC_SHA256, secret.as_bytes());
+    let sig = ring::hmac::sign(&key, signing_input.as_bytes());
+    let sig_b64 = BASE64_URL_SAFE_NO_PAD.encode(sig.as_ref());
+    format!("{signing_input}.{sig_b64}")
+}
+
+#[test]
+fn test_explicit_raw_payload_format_with_regex_captures() {
+    let secret = "raw-payload-secret-123456789";
+    let policy_json = serde_json::json!({
+        "schema_version": 1,
+        "generation": 300,
+        "origins": [
+            {
+                "id": "raw-origin",
+                "origin": "api.raw.local",
+                "path_prefix": "/api",
+                "algorithm": "HS256",
+                "secret": secret,
+                "token_source": "header",
+                "header_name": "Authorization",
+                "token_prefix": "Bearer ",
+                "payload_format": "raw",
+                "claim_rules": [
+                    {
+                        "payload_key": "^(?P<val>[^|]+)",
+                        "header_key": "X-User-Id",
+                        "required": true
+                    },
+                    {
+                        "payload_key": "\\|(?P<val>[^|]+)\\|",
+                        "header_key": "X-User-Role",
+                        "values_match": "^(admin|operator)$",
+                        "required": true
+                    },
+                    {
+                        "payload_key": "\\|([^|]+)$",
+                        "header_key": "X-Dept-Code",
+                        "required": false
+                    }
+                ]
+            }
+        ]
+    });
+
+    let engine = JwtEngine::from_snapshot(policy_json.to_string().as_bytes()).unwrap();
+
+    // 1. Valid RAW token with matching admin role
+    let token = make_raw_jwt(
+        r#"{"alg":"HS256","typ":"JWT"}"#,
+        "usr_999|admin|finance_sec",
+        secret,
+    );
+    let auth = format!("Bearer {token}");
+
+    let res = engine
+        .evaluate_at(b"api.raw.local", b"/api/report", Some(auth.as_bytes()), 1700000000)
+        .unwrap();
+
+    match res {
+        JwtDecision::Allow { forwarded_headers } => {
+            let map: std::collections::HashMap<_, _> = forwarded_headers.iter().cloned().collect();
+            assert_eq!(map.get("X-User-Id").map(|s| s.as_str()), Some("usr_999"));
+            assert_eq!(map.get("X-User-Role").map(|s| s.as_str()), Some("admin"));
+            assert_eq!(map.get("X-Dept-Code").map(|s| s.as_str()), Some("finance_sec"));
+        }
+        JwtDecision::Unauthorized => panic!("Expected Allow for valid raw token"),
+    }
+
+    // 2. RAW token with role not matching values_match -> Unauthorized (because required=true)
+    let bad_role_token = make_raw_jwt(
+        r#"{"alg":"HS256","typ":"JWT"}"#,
+        "usr_999|guest|finance_sec",
+        secret,
+    );
+    let bad_auth = format!("Bearer {bad_role_token}");
+    let res_bad = engine
+        .evaluate_at(b"api.raw.local", b"/api/report", Some(bad_auth.as_bytes()), 1700000000)
+        .unwrap();
+    assert_eq!(res_bad, JwtDecision::Unauthorized);
+}
+
+#[test]
+fn test_explicit_payload_format_strict_no_auto() {
+    let secret = "strict-format-secret-123456";
+
+    // 1. "auto" is strictly rejected (no guessing/magic allowed)
+    let auto_snap = serde_json::json!({
+        "schema_version": 1,
+        "generation": 301,
+        "origins": [
+            {
+                "id": "auto-origin",
+                "origin": "*",
+                "path_prefix": "/api",
+                "algorithm": "HS256",
+                "secret": secret,
+                "token_source": "header",
+                "header_name": "Authorization",
+                "payload_format": "auto"
+            }
+        ]
+    });
+    assert!(JwtEngine::from_snapshot(auto_snap.to_string().as_bytes()).is_err());
+
+    // 2. Uppercase "JSON" / "RAW" are strictly rejected (strict case 1:1)
+    let upper_json_snap = serde_json::json!({
+        "schema_version": 1,
+        "generation": 302,
+        "origins": [
+            {
+                "id": "upper-origin",
+                "origin": "*",
+                "path_prefix": "/api",
+                "algorithm": "HS256",
+                "secret": secret,
+                "token_source": "header",
+                "header_name": "Authorization",
+                "payload_format": "JSON"
+            }
+        ]
+    });
+    assert!(JwtEngine::from_snapshot(upper_json_snap.to_string().as_bytes()).is_err());
+
+    let upper_raw_snap = serde_json::json!({
+        "schema_version": 1,
+        "generation": 303,
+        "origins": [
+            {
+                "id": "upper-raw-origin",
+                "origin": "*",
+                "path_prefix": "/api",
+                "algorithm": "HS256",
+                "secret": secret,
+                "token_source": "header",
+                "header_name": "Authorization",
+                "payload_format": "RAW"
+            }
+        ]
+    });
+    assert!(JwtEngine::from_snapshot(upper_raw_snap.to_string().as_bytes()).is_err());
+
+    // 3. Explicit "json" and "raw" (exact lowercase) succeed
+    let ok_json_snap = serde_json::json!({
+        "schema_version": 1,
+        "generation": 304,
+        "origins": [
+            {
+                "id": "ok-json-origin",
+                "origin": "*",
+                "path_prefix": "/api",
+                "algorithm": "HS256",
+                "secret": secret,
+                "token_source": "header",
+                "header_name": "Authorization",
+                "payload_format": "json"
+            }
+        ]
+    });
+    assert!(JwtEngine::from_snapshot(ok_json_snap.to_string().as_bytes()).is_ok());
+
+    let ok_raw_snap = serde_json::json!({
+        "schema_version": 1,
+        "generation": 305,
+        "origins": [
+            {
+                "id": "ok-raw-origin",
+                "origin": "*",
+                "path_prefix": "/api",
+                "algorithm": "HS256",
+                "secret": secret,
+                "token_source": "header",
+                "header_name": "Authorization",
+                "payload_format": "raw"
+            }
+        ]
+    });
+    assert!(JwtEngine::from_snapshot(ok_raw_snap.to_string().as_bytes()).is_ok());
+}
+
+#[test]
+fn test_declarative_revocation_token_and_jti_in_snapshot() {
+    let secret = "revocation-secret-key-123456789";
+
+    let valid_claims = serde_json::json!({ "sub": "user_valid", "jti": "jti_allowed", "exp": 2_000_000_000u64 });
+    let valid_token = encode(
+        &Header::default(),
+        &valid_claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .unwrap();
+
+    let revoked_tok_claims = serde_json::json!({ "sub": "user_revoked_tok", "exp": 2_000_000_000u64 });
+    let revoked_token = encode(
+        &Header::default(),
+        &revoked_tok_claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .unwrap();
+
+    let revoked_jti_claims = serde_json::json!({ "sub": "user_revoked_jti", "jti": "blacklisted_uuid_42", "exp": 2_000_000_000u64 });
+    let revoked_jti_token = encode(
+        &Header::default(),
+        &revoked_jti_claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .unwrap();
+
+    let policy_json = serde_json::json!({
+        "schema_version": 1,
+        "generation": 401,
+        "origins": [
+            {
+                "id": "revocation-origin",
+                "origin": "api.auth.local",
+                "path_prefix": "/api",
+                "algorithm": "HS256",
+                "secret": secret,
+                "token_source": "header",
+                "header_name": "Authorization",
+                "token_prefix": "Bearer ",
+                "revoked_tokens": [revoked_token],
+                "revoked_jtis": ["blacklisted_uuid_42"],
+                "claim_rules": [
+                    { "payload_key": "sub", "header_key": "X-User-Id" }
+                ]
+            }
+        ]
+    });
+
+    let engine = JwtEngine::from_snapshot(policy_json.to_string().as_bytes()).unwrap();
+
+    // 1. Valid token must be allowed
+    let res_valid = engine
+        .evaluate(
+            b"api.auth.local",
+            b"/api/profile",
+            Some(format!("Bearer {valid_token}").as_bytes()),
+        )
+        .unwrap();
+    assert!(matches!(res_valid, JwtDecision::Allow { .. }));
+
+    // 2. Token in revoked_tokens must be rejected immediately via negative cache
+    let res_tok = engine
+        .evaluate(
+            b"api.auth.local",
+            b"/api/profile",
+            Some(format!("Bearer {revoked_token}").as_bytes()),
+        )
+        .unwrap();
+    assert_eq!(res_tok, JwtDecision::Unauthorized);
+
+    // 3. Token with jti in revoked_jtis must be rejected
+    let res_jti = engine
+        .evaluate(
+            b"api.auth.local",
+            b"/api/profile",
+            Some(format!("Bearer {revoked_jti_token}").as_bytes()),
+        )
+        .unwrap();
+    assert_eq!(res_jti, JwtDecision::Unauthorized);
+}
+
+#[test]
+fn test_runtime_revocation_token_and_jti_via_engine() {
+    let secret = "runtime-revocation-secret-987654";
+
+    let tok1_claims = serde_json::json!({ "sub": "user_runtime_1", "jti": "jti_111", "exp": 2_000_000_000u64 });
+    let token1 = encode(
+        &Header::default(),
+        &tok1_claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .unwrap();
+
+    let tok2_claims = serde_json::json!({ "sub": "user_runtime_2", "jti": "jti_222", "exp": 2_000_000_000u64 });
+    let token2 = encode(
+        &Header::default(),
+        &tok2_claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .unwrap();
+
+    let policy_json = serde_json::json!({
+        "schema_version": 1,
+        "generation": 402,
+        "origins": [
+            {
+                "id": "runtime-origin",
+                "origin": "api.runtime.local",
+                "path_prefix": "/api",
+                "algorithm": "HS256",
+                "secret": secret,
+                "token_source": "header",
+                "header_name": "Authorization",
+                "token_prefix": "Bearer ",
+                "claim_rules": [
+                    { "payload_key": "sub", "header_key": "X-User-Id" }
+                ]
+            }
+        ]
+    });
+
+    let engine = JwtEngine::from_snapshot(policy_json.to_string().as_bytes()).unwrap();
+
+    // 1. Initially both tokens are allowed and get cached in positive cache
+    let r1 = engine
+        .evaluate(
+            b"api.runtime.local",
+            b"/api/user",
+            Some(format!("Bearer {token1}").as_bytes()),
+        )
+        .unwrap();
+    assert!(matches!(r1, JwtDecision::Allow { .. }));
+
+    let r2 = engine
+        .evaluate(
+            b"api.runtime.local",
+            b"/api/user",
+            Some(format!("Bearer {token2}").as_bytes()),
+        )
+        .unwrap();
+    assert!(matches!(r2, JwtDecision::Allow { .. }));
+
+    // 2. Revoke token1 explicitly at runtime -> immediately evicted from positive cache and rejected
+    engine.revoke_token(Some(b"api.runtime.local"), &token1, 2_000_000_000);
+
+    let r1_after_revoke = engine
+        .evaluate(
+            b"api.runtime.local",
+            b"/api/user",
+            Some(format!("Bearer {token1}").as_bytes()),
+        )
+        .unwrap();
+    assert_eq!(r1_after_revoke, JwtDecision::Unauthorized);
+
+    // Token2 must still be valid
+    let r2_still_ok = engine
+        .evaluate(
+            b"api.runtime.local",
+            b"/api/user",
+            Some(format!("Bearer {token2}").as_bytes()),
+        )
+        .unwrap();
+    assert!(matches!(r2_still_ok, JwtDecision::Allow { .. }));
+
+    // 3. Revoke token2 by JTI ("jti_222") at runtime -> immediately invalidated on positive cache hit
+    engine.revoke_jti(Some(b"api.runtime.local"), "jti_222", 2_000_000_000);
+
+    let r2_after_jti_revoke = engine
+        .evaluate(
+            b"api.runtime.local",
+            b"/api/user",
+            Some(format!("Bearer {token2}").as_bytes()),
+        )
+        .unwrap();
+    assert_eq!(r2_after_jti_revoke, JwtDecision::Unauthorized);
+}
+
+#[test]
+fn test_jwt_empty_redis_object_runs_pure_local_mode() {
+    let secret = "empty-redis-secret-123456";
+    let policy_json = serde_json::json!({
+        "schema_version": 1,
+        "generation": 501,
+        "origins": [
+            {
+                "id": "empty-redis-origin",
+                "origin": "api.local.test",
+                "path_prefix": "/api",
+                "algorithm": "HS256",
+                "secret": secret,
+                "token_source": "header",
+                "header_name": "Authorization",
+                "token_prefix": "Bearer ",
+                "redis": {}, // Empty object -> pure local mode
+                "claim_rules": [
+                    { "payload_key": "sub", "header_key": "X-User-Id" }
+                ]
+            }
+        ]
+    });
+
+    let engine = JwtEngine::from_snapshot(policy_json.to_string().as_bytes()).unwrap();
+
+    let claims = serde_json::json!({ "sub": "usr_local_only", "exp": 2_000_000_000u64 });
+    let token = encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .unwrap();
+
+    let res = engine
+        .evaluate(
+            b"api.local.test",
+            b"/api/test",
+            Some(format!("Bearer {token}").as_bytes()),
+        )
+        .unwrap();
+    assert!(matches!(res, JwtDecision::Allow { .. }));
+}
+
+#[test]
+fn test_jwt_redis_config_deserialization_and_pre_arming() {
+    let secret = "redis-config-secret-789";
+    let policy_json = serde_json::json!({
+        "schema_version": 1,
+        "generation": 502,
+        "origins": [
+            {
+                "id": "redis-l2-origin",
+                "origin": "api.distributed.test",
+                "path_prefix": "/api",
+                "algorithm": "HS256",
+                "secret": secret,
+                "token_source": "header",
+                "header_name": "Authorization",
+                "token_prefix": "Bearer ",
+                "redis": {
+                    "endpoint": "redis://127.0.0.1:6379",
+                    "timeout_ms": 30,
+                    "pool_size": 4
+                },
+                "claim_rules": [
+                    { "payload_key": "sub", "header_key": "X-User-Id" }
+                ]
+            }
+        ]
+    });
+
+    // Deserialization with explicit redis endpoint succeeds cleanly
+    let engine = JwtEngine::from_snapshot(policy_json.to_string().as_bytes()).unwrap();
+    assert_eq!(engine.generation(), 502);
+
+    // Verify shadow pre-arming logic:
+    // When a revocation item (jti, token hash, or raw token) is received from Redis,
+    // apply_revocation_item pre-arms L1 Sheet Cache with status = 0 immediately!
+    let raw_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzdG9sZW4ifQ.dummy_sig";
+    let token_hash = super::cache::JwtCache::hash_token(raw_token);
+    let cache = super::cache::JwtCache::new(2, 16, 300, 60);
+
+    super::redis_sync::apply_revocation_item(&cache, raw_token, 100);
+    assert_eq!(cache.lookup(token_hash, 100), super::cache::CacheLookup::HitDeny);
+
+    super::redis_sync::apply_revocation_item(&cache, "jti:blacklisted-jti-42:2000", 100);
+    assert!(cache.is_negative(super::cache::JwtCache::hash_jti("blacklisted-jti-42"), 1500));
 }

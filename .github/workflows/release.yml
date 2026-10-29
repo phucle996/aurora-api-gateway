@@ -52,8 +52,8 @@ jobs:
       - name: Build aurora-compile (Rust compiler binary)
         run: cargo build --locked --release -p aurora-engine --bin aurora-compile
 
-      - name: Build aurora-agent (Rust node agent)
-        run: cargo build --locked --release -p aurora-agent
+      - name: Build aurora-control-worker (Rust control worker)
+        run: cargo build --locked --release -p aurora-control-worker
 
       # ── NGINX 1.30.4 runtime and Gateway dynamic module ────────────────────
       - name: Build NGINX 1.30.4 Gateway module
@@ -130,7 +130,7 @@ jobs:
           # Binaries
           cp build/aurora-controller             "dist/${DIST}/bin/"
           cp target/release/aurora-compile       "dist/${DIST}/bin/"
-          cp target/release/aurora-agent         "dist/${DIST}/bin/"
+          cp target/release/aurora-control-worker "dist/${DIST}/bin/"
 
           # NGINX 1.30.4 runtime and Gateway dynamic module
           cp -rf build/nginx-runtime/*           "dist/${DIST}/nginx-runtime/"

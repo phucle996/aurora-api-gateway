@@ -4,7 +4,7 @@
 //! to update the precomputed Prometheus exposition engine.
 
 use super::engine::{PrometheusValues, get_prometheus_engine};
-use super::task::HttpMetricTask;
+use super::task::{HttpMetricTask, get_worker_http_metrics};
 use crate::metrics::node::CpuStatSampler;
 use std::time::Instant;
 
@@ -64,6 +64,7 @@ impl PrometheusPlugin {
     }
 
     pub fn tick(&mut self) {
+        self.sync_worker_metrics();
         if self.last_os_sample.elapsed() >= std::time::Duration::from_secs(1) {
             self.sample_os_metrics();
         } else if self.dirty {
@@ -73,9 +74,43 @@ impl PrometheusPlugin {
     }
 
     pub fn flush(&mut self) {
+        self.sync_worker_metrics();
         if self.dirty {
             get_prometheus_engine().update_values(self.prom_values);
             self.dirty = false;
+        }
+    }
+
+    fn sync_worker_metrics(&mut self) {
+        let snap = get_worker_http_metrics().snapshot();
+        if snap.requests_2xx > 0
+            || snap.requests_3xx > 0
+            || snap.requests_4xx > 0
+            || snap.requests_5xx > 0
+            || snap.requests_other > 0
+        {
+            self.prom_values.requests_2xx = snap.requests_2xx;
+            self.prom_values.requests_3xx = snap.requests_3xx;
+            self.prom_values.requests_4xx = snap.requests_4xx;
+            self.prom_values.requests_5xx = snap.requests_5xx;
+            self.prom_values.requests_other = snap.requests_other;
+            self.prom_values.bytes_in = snap.bytes_in;
+            self.prom_values.bytes_out = snap.bytes_out;
+            self.prom_values.duration_sum_ms = snap.duration_sum_ms;
+            self.prom_values.duration_buckets = snap.duration_buckets;
+            if snap.active_conns > 0 {
+                self.prom_values.active_conns = snap.active_conns;
+                self.prom_values.reading_conns = snap.reading_conns;
+                self.prom_values.writing_conns = snap.writing_conns;
+                self.prom_values.waiting_conns = snap.waiting_conns;
+            }
+            self.dirty = true;
+        }
+
+        let dropped = crate::background::dropped_tasks_count();
+        if dropped != self.prom_values.dropped_tasks {
+            self.prom_values.dropped_tasks = dropped;
+            self.dirty = true;
         }
     }
 

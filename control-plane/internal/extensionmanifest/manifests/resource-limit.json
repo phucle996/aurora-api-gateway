@@ -1,0 +1,125 @@
+{
+  "key": "builtin/resource-limit",
+  "version": 1,
+  "id": "resource-limit",
+  "name": "Resource Limit",
+  "category": "traffic_control",
+  "description": "Guards gateway against oversized requests and header bombing with configurable header and payload size limits.",
+  "renderer": "resource-limit",
+  "builtin": true,
+  "default_config": {
+    "rules": [
+      {
+        "id": "default-limit",
+        "priority": 100,
+        "origin": "*",
+        "path_prefix": "/",
+        "header_limit": 65536,
+        "payload_limit": 10485760,
+        "rejected_code_header": 431,
+        "rejected_code_payload": 413,
+        "response_body_header": "{\"error\":\"request_header_fields_too_large\",\"message\":\"Request header exceeds limit\"}",
+        "response_body_payload": "{\"error\":\"payload_too_large\",\"message\":\"Payload size exceeds limit\"}"
+      }
+    ]
+  },
+  "ui_schema": {
+    "layout_type": "form",
+    "fields": []
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "rules"
+    ],
+    "properties": {
+      "rules": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 64,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "priority": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000
+            },
+            "origin": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 253
+            },
+            "path_prefix": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "header_limit": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10485760
+            },
+            "payload_limit": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10737418240
+            },
+            "max_header_bytes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10485760
+            },
+            "max_body_bytes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10737418240
+            },
+            "max_request_bytes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10737418240
+            },
+            "rejected_code_header": {
+              "type": "integer",
+              "minimum": 400,
+              "maximum": 599
+            },
+            "rejected_code_payload": {
+              "type": "integer",
+              "minimum": 400,
+              "maximum": 599
+            },
+            "rejected_code": {
+              "type": "integer",
+              "minimum": 400,
+              "maximum": 599
+            },
+            "response_body_header": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "response_body_payload": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "response_body": {
+              "type": "string",
+              "maxLength": 4096
+            }
+          }
+        }
+      }
+    }
+  }
+}

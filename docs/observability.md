@@ -55,8 +55,8 @@ Log queues are in memory. Lagging subscriptions may skip records; failed OTLP ba
 
 ```bash
 # Repository root: focused agent tests
-cargo test -p aurora-agent --lib std_log
-cargo test -p aurora-agent --lib opentelemetry
+cargo test -p aurora-control-worker --lib std_log
+cargo test -p aurora-control-worker --lib opentelemetry
 
 # With the corresponding exporters enabled in the running Compose stack
 curl --fail http://localhost:9145/metrics

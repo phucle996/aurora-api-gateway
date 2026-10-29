@@ -1,10 +1,20 @@
 //! Core-Local Metrics Registry for Aurora Gateway.
 //!
-//! Provides sub-nanosecond, lock-free live gauge tracking for in-flight requests and
-//! Access Phase extension early rejections.
+//! # Role: Intrinsic Metrics Kernel (Lõi Metrics Nội Tại)
 //!
-//! Each metric block is cacheline-aligned (64 bytes) to eliminate False Sharing and
-//! cross-core cache invalidation on the request hot path.
+//! This module implements the raw, low-level Intrinsic Metrics substrate of the Aurora Gateway core:
+//! - Sub-nanosecond, lock-free live gauge tracking for in-flight requests (`in_flight_requests`).
+//! - Access Phase extension early rejection counters (`rejected_ip`, `rejected_jwt`, etc.).
+//! - Cacheline-aligned (64 bytes, `#[repr(align(64))]`) to eliminate False Sharing and cross-core cache invalidations.
+//!
+//! # Decoupled Transport Invariant:
+//! This substrate is strictly an **Intrinsic Scalar Registry**:
+//! - It maintains ZERO knowledge of exposition protocols (Prometheus, OpenMetrics, StatsD, OTLP).
+//! - It performs ZERO string formatting, ZERO heap allocations, and ZERO network socket I/O.
+//! - When unobserved (no transport plugins registered), hot-path updates are either bypassed entirely
+//!   or confined to relaxed atomic scalar operations on local CPU L1 cachelines (< 1ns).
+//! - Higher-level telemetry transport plugins (e.g. `builtin/prometheus`) inspect these values
+//!   asynchronously without ever stalling the traffic worker loop.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -43,7 +53,11 @@ impl CoreLocalMetrics {
 
     #[inline(always)]
     pub fn leave_request(&self) {
-        self.in_flight_requests.fetch_sub(1, Ordering::Relaxed);
+        let _ = self
+            .in_flight_requests
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |val| {
+                Some(val.saturating_sub(1))
+            });
     }
 
     #[inline(always)]

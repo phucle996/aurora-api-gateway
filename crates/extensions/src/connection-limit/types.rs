@@ -124,9 +124,15 @@ fn default_limit_by() -> String {
     "client_ip".to_string()
 }
 
+fn default_schema_version() -> u32 {
+    1
+}
+
 #[derive(Deserialize)]
 pub(crate) struct ConnLimitSnapshot {
+    #[serde(default = "default_schema_version")]
     pub schema_version: u32,
+    #[serde(default)]
     pub generation: u64,
     #[serde(default)]
     pub mode: ConnLimitMode,

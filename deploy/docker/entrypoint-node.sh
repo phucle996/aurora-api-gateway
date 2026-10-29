@@ -100,10 +100,10 @@ if [ -n "${GRPC_URL:-}" ]; then
   EXEC_ARGS+=(--grpc-url "${GRPC_URL}")
 fi
 
-/usr/local/bin/aurora-agent "${EXEC_ARGS[@]}" &
-AGENT_PID=$!
+/usr/local/bin/aurora-control-worker "${EXEC_ARGS[@]}" &
+WORKER_PID=$!
 
-trap 'echo "[Aurora Dataplane] Stopping Agent ($AGENT_PID)..."; kill -TERM "$AGENT_PID" 2>/dev/null || true' SIGTERM SIGINT
+trap 'echo "[Aurora Dataplane] Stopping Control Worker ($WORKER_PID)..."; kill -TERM "$WORKER_PID" 2>/dev/null || true' SIGTERM SIGINT
 
 echo "[Aurora Dataplane] Starting Aurora Gateway Core (Traffic Path) as PID 1..."
 exec "${GATEWAY_BIN}" -g "daemon off;" -c "${GATEWAY_CONF:-${NGINX_CONF:-/etc/nginx/nginx.conf}}"

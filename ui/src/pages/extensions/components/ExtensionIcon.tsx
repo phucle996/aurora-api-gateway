@@ -240,7 +240,7 @@ export function ExtensionIcon({ id, category, className = 'w-5 h-5' }: Extension
       return <Split className={className} />;
     case 'traffic-shaper': // đã imple 
       return <Wifi className={className} />;
-    case 'request-size-limit': // đã imple 
+    case 'resource-limit': // đã imple 
       return <Shrink className={className} />;
     case 'traffic-split': // đã imple 
       return <GitFork className={className} />;

@@ -21,7 +21,7 @@ Extensions are compiled by the control plane into the node spec wire format and 
 | **JWT Authentication** | `builtin/jwt-auth` | FFI / NGINX | Validates RS256/HS256 JWT tokens, checks claims, and injects upstream headers. |
 | **IP Restriction** | `builtin/ip-restriction` | FFI / NGINX | Allowlist or denylist client IP addresses and CIDR blocks. |
 | **Connection Limit** | `builtin/connection-limit` | NGINX | Limits concurrent TCP connections per client IP or upstream service. |
-| **Request Size Limit** | `builtin/request-size-limit` | NGINX | Restricts maximum allowed HTTP client body size to prevent resource exhaustion. |
+| **Resource Limit** | `builtin/resource-limit` | FFI / Engine | Restricts maximum allowed HTTP request headers and payload size to prevent resource exhaustion and header bombing. |
 | **Request Termination** | `builtin/request-termination` | NGINX | Synthesizes early responses (e.g., custom maintenance pages or mock APIs) with configurable status codes. |
 
 ---

@@ -10,6 +10,21 @@ use aurora_engine::shadow::{
 use std::sync::Mutex;
 
 static ACTIVE_SHADOW_HANDLE: Mutex<Option<ShadowWorkerHandle>> = Mutex::new(None);
+static CUSTOM_LOG_PATH: Mutex<Option<String>> = Mutex::new(None);
+
+/// Sets the explicit structured log destination path passed from NGINX `gateway_std_log <path>`.
+///
+/// # Safety
+/// `ptr` must point to valid UTF-8 memory of at least `len` bytes or be null.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn aurora_gateway_set_log_path(ptr: *const u8, len: usize) {
+    if !ptr.is_null() && len > 0 {
+        let slice = unsafe { std::slice::from_raw_parts(ptr, len) };
+        if let (Ok(s), Ok(mut lock)) = (std::str::from_utf8(slice), CUSTOM_LOG_PATH.lock()) {
+            *lock = Some(s.to_string());
+        }
+    }
+}
 
 /// Starts the Shadow Worker thread for this NGINX worker process.
 /// Called from C: `ngx_http_gateway_init_process`.
@@ -36,17 +51,45 @@ pub unsafe extern "C" fn aurora_gateway_shadow_start(worker_id: u32) -> u32 {
     *lock = Some(handle);
 
     // Initialize Background Task channel and dispatch task runner to Shadow Worker
-    let (task_tx, task_rx) = tokio::sync::mpsc::channel(4096);
+    let (task_tx, task_rx) = tokio::sync::mpsc::channel(8192);
     aurora_extensions::set_task_sender(task_tx);
+    aurora_extensions::register_telemetry_subscriber(aurora_extensions::TELEMETRY_SUB_METRICS);
 
-    let access_log_plugin = aurora_extensions::AccessLogPlugin::new(std::io::stdout(), 128);
+    if std::env::var("AURORA_STD_LOG").as_deref() == Ok("1")
+        || std::env::var("AURORA_STD_LOG").as_deref() == Ok("true")
+        || std::env::var("AURORA_STD_LOG_PATH").is_ok()
+    {
+        aurora_extensions::register_telemetry_subscriber(
+            aurora_extensions::TELEMETRY_SUB_STD_LOG,
+        );
+    }
+
+    let explicit_path = CUSTOM_LOG_PATH.lock().ok().and_then(|l| l.clone());
+    let writer: Box<dyn std::io::Write + Send + 'static> = match explicit_path.or_else(|| std::env::var("AURORA_STD_LOG_PATH").ok()) {
+        Some(path) if path == "stdout" => Box::new(std::io::stdout()),
+        Some(path) if path == "stderr" => Box::new(std::io::stderr()),
+        Some(path) if !path.is_empty() => match std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+        {
+            Ok(file) => Box::new(file),
+            Err(e) => {
+                eprintln!("Failed to open log path {path}: {e}, falling back to stdout");
+                Box::new(std::io::stdout())
+            }
+        },
+        _ => Box::new(std::io::stdout()),
+    };
+
+    let std_log_plugin = aurora_extensions::std_log::StdLogPlugin::new(writer, 256);
     let prom_plugin = aurora_extensions::PrometheusPlugin::new();
     let flush_interval = std::time::Duration::from_millis(100);
 
     let _ = try_dispatch_shadow(Box::pin(async move {
         aurora_extensions::run_shadow_task_dispatcher(
             task_rx,
-            access_log_plugin,
+            std_log_plugin,
             prom_plugin,
             flush_interval,
         )
@@ -63,6 +106,7 @@ pub unsafe extern "C" fn aurora_gateway_shadow_start(worker_id: u32) -> u32 {
 /// Called once per worker process during shutdown.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn aurora_gateway_shadow_stop() -> u32 {
+    aurora_extensions::set_telemetry_subscribers(0);
     aurora_extensions::clear_task_sender();
     clear_core_shadow_sender();
     let mut lock = match ACTIVE_SHADOW_HANDLE.lock() {

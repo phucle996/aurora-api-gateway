@@ -16,8 +16,8 @@ use crate::{
     jwt::{JwtDecision, JwtEngine},
     rate_limit::RateLimitEngine,
     request_mirror::RequestMirrorEngine,
-    request_size_limit::RequestSizeLimitEngine,
     request_termination::RequestTerminationEngine,
+    resource_limit::ResourceLimiter,
     traffic_shaper::TrafficShaperEngine,
     traffic_split::TrafficSplitEngine,
 };
@@ -30,7 +30,7 @@ pub struct AccessPhaseEngines<'a> {
     pub rate_limit: Option<&'a RateLimitEngine>,
     pub connection_limit: Option<&'a ConnectionLimitEngine>,
     pub traffic_shaper: Option<&'a TrafficShaperEngine>,
-    pub request_size_limit: Option<&'a RequestSizeLimitEngine>,
+    pub resource_limit: Option<&'a ResourceLimiter>,
     pub request_termination: Option<&'a RequestTerminationEngine>,
     pub traffic_split: Option<&'a TrafficSplitEngine>,
     pub canary_release: Option<&'a CanaryReleaseEngine>,
@@ -53,7 +53,7 @@ impl<'a> AccessPhaseSpace<'a> {
     fn check_admission(
         &self,
         ctx: &AccessRequestContext<'a>,
-        header_lookup: &impl Fn(&str) -> Option<&'a [u8]>,
+        _header_lookup: &impl Fn(&str) -> Option<&'a [u8]>,
     ) -> Option<AccessDenial<'a>> {
         if let Some(ip_eng) = self.engines.ip_restriction
             && let Ok(decision) = ip_eng.evaluate_ctx(ctx)
@@ -67,18 +67,14 @@ impl<'a> AccessPhaseSpace<'a> {
             });
         }
 
-        if let Some(rsl_eng) = self.engines.request_size_limit {
-            let decision = rsl_eng.evaluate_ctx(ctx, header_lookup);
+        if let Some(res_limiter) = self.engines.resource_limit {
+            let decision = res_limiter.evaluate_ctx(ctx);
             if !decision.allowed {
                 return Some(AccessDenial {
-                    status: decision.rejected_code,
+                    status: decision.status_code,
                     www_authenticate: false,
                     content_type: None,
-                    body: if decision.response_body.is_empty() {
-                        None
-                    } else {
-                        Some(decision.response_body)
-                    },
+                    body: (!decision.response_body.is_empty()).then_some(decision.response_body),
                 });
             }
         }
@@ -89,16 +85,9 @@ impl<'a> AccessPhaseSpace<'a> {
                 return Some(AccessDenial {
                     status: decision.status_code,
                     www_authenticate: false,
-                    content_type: if decision.content_type.is_empty() {
-                        None
-                    } else {
-                        Some(decision.content_type)
-                    },
-                    body: if decision.body.is_empty() {
-                        None
-                    } else {
-                        Some(decision.body.as_bytes())
-                    },
+                    content_type: (!decision.content_type.is_empty())
+                        .then_some(decision.content_type),
+                    body: (!decision.body.is_empty()).then_some(decision.body.as_bytes()),
                 });
             }
         }
@@ -131,7 +120,7 @@ impl<'a> AccessPhaseSpace<'a> {
                 }),
             }
         } else {
-            Ok(Arc::new([]))
+            Ok(crate::jwt::empty_forwarded_headers())
         }
     }
 

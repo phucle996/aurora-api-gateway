@@ -16,8 +16,8 @@ use std::{
 use aurora_engine::PathRadixTree;
 use aurora_extensions::{
     AccessPhaseEngines, BlueGreenEngine, CanaryReleaseEngine, ConnectionLimitEngine,
-    IpRestrictionEngine, JwtEngine, RateLimitEngine, RequestMirrorEngine, RequestSizeLimitEngine,
-    RequestTerminationEngine, TrafficShaperEngine, TrafficSplitEngine,
+    IpRestrictionEngine, JwtEngine, RateLimitEngine, RequestMirrorEngine, RequestTerminationEngine,
+    ResourceLimiter, TrafficShaperEngine, TrafficSplitEngine,
 };
 
 pub const AURORA_EXT_IP_RESTRICTION: usize = 0;
@@ -25,7 +25,7 @@ pub const AURORA_EXT_JWT: usize = 1;
 pub const AURORA_EXT_RATE_LIMIT: usize = 2;
 pub const AURORA_EXT_CONN_LIMIT: usize = 3;
 pub const AURORA_EXT_TRAFFIC_SHAPER: usize = 4;
-pub const AURORA_EXT_REQUEST_SIZE_LIMIT: usize = 5;
+pub const AURORA_EXT_RESOURCE_LIMIT: usize = 5;
 pub const AURORA_EXT_TRAFFIC_SPLIT: usize = 6;
 pub const AURORA_EXT_CANARY_RELEASE: usize = 7;
 pub const AURORA_EXT_BLUE_GREEN: usize = 8;
@@ -41,7 +41,7 @@ pub struct GatewayActiveSpace {
     pub rate_limit: Option<Arc<RateLimitEngine>>,
     pub connection_limit: Option<Arc<ConnectionLimitEngine>>,
     pub traffic_shaper: Option<Arc<TrafficShaperEngine>>,
-    pub request_size_limit: Option<Arc<RequestSizeLimitEngine>>,
+    pub resource_limit: Option<Arc<ResourceLimiter>>,
     pub traffic_split: Option<Arc<TrafficSplitEngine>>,
     pub canary_release: Option<Arc<CanaryReleaseEngine>>,
     pub blue_green: Option<Arc<BlueGreenEngine>>,
@@ -76,8 +76,8 @@ impl GatewayActiveSpace {
         if mask & (1 << AURORA_EXT_TRAFFIC_SHAPER) != 0 {
             engines.traffic_shaper = self.traffic_shaper.as_deref();
         }
-        if mask & (1 << AURORA_EXT_REQUEST_SIZE_LIMIT) != 0 {
-            engines.request_size_limit = self.request_size_limit.as_deref();
+        if mask & (1 << AURORA_EXT_RESOURCE_LIMIT) != 0 {
+            engines.resource_limit = self.resource_limit.as_deref();
         }
         if mask & (1 << AURORA_EXT_REQUEST_TERMINATION) != 0 {
             engines.request_termination = self.request_termination.as_deref();
@@ -157,7 +157,7 @@ pub extern "C" fn aurora_gateway_policy_sync() {
                 AURORA_EXT_RATE_LIMIT => next.rate_limit = None,
                 AURORA_EXT_CONN_LIMIT => next.connection_limit = None,
                 AURORA_EXT_TRAFFIC_SHAPER => next.traffic_shaper = None,
-                AURORA_EXT_REQUEST_SIZE_LIMIT => next.request_size_limit = None,
+                AURORA_EXT_RESOURCE_LIMIT => next.resource_limit = None,
                 AURORA_EXT_TRAFFIC_SPLIT => next.traffic_split = None,
                 AURORA_EXT_CANARY_RELEASE => next.canary_release = None,
                 AURORA_EXT_BLUE_GREEN => next.blue_green = None,
@@ -193,9 +193,9 @@ pub extern "C" fn aurora_gateway_policy_sync() {
                         next.traffic_shaper = Some(Arc::new(eng));
                     }
                 }
-                AURORA_EXT_REQUEST_SIZE_LIMIT => {
-                    if let Ok(eng) = RequestSizeLimitEngine::from_snapshot(bytes) {
-                        next.request_size_limit = Some(Arc::new(eng));
+                AURORA_EXT_RESOURCE_LIMIT => {
+                    if let Ok(eng) = ResourceLimiter::from_snapshot(bytes) {
+                        next.resource_limit = Some(Arc::new(eng));
                     }
                 }
                 AURORA_EXT_TRAFFIC_SPLIT => {
@@ -246,8 +246,8 @@ pub extern "C" fn aurora_gateway_policy_sync() {
         if next.traffic_shaper.is_some() {
             active_mask |= 1 << AURORA_EXT_TRAFFIC_SHAPER;
         }
-        if next.request_size_limit.is_some() {
-            active_mask |= 1 << AURORA_EXT_REQUEST_SIZE_LIMIT;
+        if next.resource_limit.is_some() {
+            active_mask |= 1 << AURORA_EXT_RESOURCE_LIMIT;
         }
         if next.traffic_split.is_some() {
             active_mask |= 1 << AURORA_EXT_TRAFFIC_SPLIT;
@@ -297,6 +297,12 @@ pub unsafe extern "C" fn aurora_gateway_process_exit() {
     if !old.is_null() {
         unsafe { drop(Box::from_raw(old)) };
     }
+}
+
+/// Probes and returns host OS kernel network acceleration capabilities bitmap.
+#[unsafe(no_mangle)]
+pub extern "C" fn aurora_gateway_probe_kernel() -> u32 {
+    aurora_engine::kernel::probe_kernel_capabilities().raw
 }
 
 /// Generic polymorphic extension constructor.
@@ -364,8 +370,8 @@ pub unsafe extern "C" fn aurora_gateway_extension_create(
             }
             _ => 1,
         },
-        AURORA_EXT_REQUEST_SIZE_LIMIT => match catch_unwind(AssertUnwindSafe(|| {
-            aurora_extensions::RequestSizeLimitEngine::from_snapshot(bytes)
+        AURORA_EXT_RESOURCE_LIMIT => match catch_unwind(AssertUnwindSafe(|| {
+            aurora_extensions::ResourceLimiter::from_snapshot(bytes)
         })) {
             Ok(Ok(engine)) => {
                 unsafe { *out = Box::into_raw(Box::new(engine)).cast() };
@@ -458,9 +464,9 @@ pub unsafe extern "C" fn aurora_gateway_extension_destroy(
                 engine as *mut aurora_extensions::TrafficShaperEngine,
             ));
         },
-        AURORA_EXT_REQUEST_SIZE_LIMIT => unsafe {
+        AURORA_EXT_RESOURCE_LIMIT => unsafe {
             drop(Box::from_raw(
-                engine as *mut aurora_extensions::RequestSizeLimitEngine,
+                engine as *mut aurora_extensions::ResourceLimiter,
             ));
         },
         AURORA_EXT_TRAFFIC_SPLIT => unsafe {

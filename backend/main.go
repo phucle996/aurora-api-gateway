@@ -281,6 +281,8 @@ func (s *Server) routes() http.Handler {
 
 	// 6. Diagnostics & Echo
 	mux.HandleFunc("/api/v1/echo", s.handleEcho)
+	mux.HandleFunc("/api/v1/cookie", s.handleEcho)
+	mux.HandleFunc("/api/v1/bypass", s.handleEcho)
 
 	return s.withMiddleware(mux)
 }
@@ -658,11 +660,11 @@ func (s *Server) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
 
 	var totalCents int64
 	type itemDetail struct {
-		productID  int64
-		sku        string
-		name       string
-		quantity   int
-		unitPrice  int64
+		productID int64
+		sku       string
+		name      string
+		quantity  int
+		unitPrice int64
 	}
 	details := make([]itemDetail, 0, len(req.Items))
 

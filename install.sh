@@ -356,10 +356,10 @@ if [ ! -f /etc/aurora/admin.token ]; then
   chown aurora:aurora /etc/aurora/admin.token
 fi
 
-if [ ! -f /etc/aurora/agent.env ]; then
-  echo "==> Generating default agent environment in /etc/aurora/agent.env..."
-  cat > /etc/aurora/agent.env << AGENT_ENV_EOF
-# Aurora API Gateway Agent Environment
+if [ ! -f /etc/aurora/control-worker.env ]; then
+  echo "==> Generating default environment in /etc/aurora/control-worker.env..."
+  cat > /etc/aurora/control-worker.env << WORKER_ENV_EOF
+# Aurora API Gateway Control Worker Environment
 CONTROLLER_URL=http://127.0.0.1:8080
 GRPC_URL=http://127.0.0.1:9099
 AUTH_TOKEN=
@@ -367,19 +367,19 @@ GATEWAY_BIN=/usr/local/bin/aurora-gateway
 GATEWAY_CONF=/etc/nginx/nginx.conf
 POLICY_DIR=/var/lib/aurora-policy
 ROUTING_DIR=/var/lib/aurora-routing
-AGENT_ENV_EOF
-  chmod 600 /etc/aurora/agent.env
+WORKER_ENV_EOF
+  chmod 600 /etc/aurora/control-worker.env
 fi
 
 # ── Binaries ───────────────────────────────────────────────────────────────────
 echo "==> Installing Aurora API Gateway binaries..."
-install -m 755 "${PAYLOAD_DIR}/bin/aurora-controller" /usr/local/bin/aurora-controller
-install -m 755 "${PAYLOAD_DIR}/bin/aurora-compile"    /usr/local/bin/aurora-compile
-if [ -f "${PAYLOAD_DIR}/bin/aurora-agent" ]; then
-  install -m 755 "${PAYLOAD_DIR}/bin/aurora-agent"    /usr/local/bin/aurora-agent
+install -m 755 "${PAYLOAD_DIR}/bin/aurora-controller"     /usr/local/bin/aurora-controller
+install -m 755 "${PAYLOAD_DIR}/bin/aurora-compile"        /usr/local/bin/aurora-compile
+if [ -f "${PAYLOAD_DIR}/bin/aurora-control-worker" ]; then
+  install -m 755 "${PAYLOAD_DIR}/bin/aurora-control-worker" /usr/local/bin/aurora-control-worker
 fi
 if [ -f "${PAYLOAD_DIR}/bin/aurora-gateway" ]; then
-  install -m 755 "${PAYLOAD_DIR}/bin/aurora-gateway"  /usr/local/bin/aurora-gateway
+  install -m 755 "${PAYLOAD_DIR}/bin/aurora-gateway"        /usr/local/bin/aurora-gateway
 fi
 
 # ── Dataplane Appliance Runtime (NGINX 1.30.4 + Module) ───────────────────────
@@ -513,12 +513,12 @@ WantedBy=multi-user.target
 UNIT_EOF
 fi
 
-# ── Generate Dataplane Agent systemd unit (aurora-agent) ──────────────────────
-if [ -f /usr/local/bin/aurora-agent ]; then
-  echo "==> Generating aurora-agent.service..."
-  cat > /etc/systemd/system/aurora-agent.service << 'UNIT_EOF'
+# ── Generate Control Worker systemd unit (aurora-control-worker) ──────────────
+if [ -f /usr/local/bin/aurora-control-worker ]; then
+  echo "==> Generating aurora-control-worker.service..."
+  cat > /etc/systemd/system/aurora-control-worker.service << 'UNIT_EOF'
 [Unit]
-Description=Aurora API Gateway Dataplane Supervisor and Node Agent
+Description=Aurora API Gateway Dataplane Control Plane Worker
 Documentation=https://github.com/phucle996/aurora-api-gateway
 After=network-online.target aurora-gateway.service
 Wants=network-online.target aurora-gateway.service
@@ -532,10 +532,10 @@ Environment="GATEWAY_BIN=/usr/local/bin/aurora-gateway"
 Environment="GATEWAY_CONF=/etc/nginx/nginx.conf"
 Environment="POLICY_DIR=/var/lib/aurora-policy"
 Environment="ROUTING_DIR=/var/lib/aurora-routing"
-EnvironmentFile=-/etc/aurora/agent.env
+EnvironmentFile=-/etc/aurora/control-worker.env
 
 ExecStartPre=/usr/bin/mkdir -p /var/lib/aurora-policy /var/lib/aurora-routing /var/lib/aurora-routing/dependencies /run/aurora
-ExecStart=/usr/local/bin/aurora-agent
+ExecStart=/usr/local/bin/aurora-control-worker
 
 Restart=always
 RestartSec=3s
@@ -570,10 +570,10 @@ if [ -n "$SELECTED_NGINX" ]; then
   echo "  NGINX detected: ${SELECTED_NGINX} (v${SELECTED_VERSION})"
   echo "  Module installed: $(basename "$SELECTED_MODULE") -> ${NGINX_MODULES_PATH}"
   echo ""
-  echo "  To start the Dataplane Agent:"
+  echo "  To start the Dataplane Control Worker:"
   echo "    1. Ensure 'load_module ${NGINX_MODULES_PATH}/ngx_http_gateway_module.so;' is at the top of nginx.conf"
-  echo "    2. Review /etc/aurora/agent.env"
-  echo "    3. sudo systemctl enable --now aurora-agent"
+  echo "    2. Review /etc/aurora/control-worker.env"
+  echo "    3. sudo systemctl enable --now aurora-control-worker"
 else
   echo "  Pre-built modules copied to /usr/lib/nginx/modules/:"
   for f in /usr/lib/nginx/modules/ngx_http_gateway_module-*.so; do

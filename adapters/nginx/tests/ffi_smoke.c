@@ -15,6 +15,8 @@ int main(void) {
 
     // 2. Gateway Process Initialization (SHM, Shadow Worker, and Policy Space)
     assert(aurora_gateway_process_init(0) == 0);
+    uint32_t caps = aurora_gateway_probe_kernel();
+    printf("Kernel Acceleration Capabilities: 0x%04x\n", caps);
     puts("Gateway Process Initialization: pass");
 
     const char *ip_policy = "{\"schema_version\":1,\"generation\":9,\"rules\":[{\"id\":101,\"priority\":1,\"action\":\"block\",\"networks\":[\"192.168.1.0/24\"],\"host\":\"*\",\"path_prefix\":\"/admin\",\"method\":\"*\",\"schedule\":\"always\",\"expires_at\":0,\"log\":true,\"reputation\":false,\"alert\":false}]}";
@@ -39,6 +41,7 @@ int main(void) {
             .query = NULL,
             .query_len = 0,
             .content_length = 0,
+            .header_length = 0,
             .random_seed = 42,
             .now_ms = 1000,
         };
@@ -60,6 +63,7 @@ int main(void) {
             .query = NULL,
             .query_len = 0,
             .content_length = 0,
+            .header_length = 0,
             .random_seed = 42,
             .now_ms = 1000,
         };

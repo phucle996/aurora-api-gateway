@@ -11,6 +11,7 @@ pub struct RequestContext<'a> {
     pub method: &'a [u8],
     pub query: &'a [u8],
     pub content_length: u64,
+    pub header_length: u64,
     pub random_seed: u32,
     pub now_ms: u64,
 }

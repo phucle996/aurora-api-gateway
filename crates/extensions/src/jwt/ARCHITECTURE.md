@@ -1,14 +1,14 @@
 # Architecture & Micro-Design: `jwt` Extension
 
 <p align="center">
-  <strong>Deep-dive architectural specification, memory geometry, and assembly-level optimizations of the Aurora API Gateway JWT authentication engine.</strong>
+  <strong>Tài liệu đặc tả kiến trúc vi mô, hình học bộ nhớ (Memory Geometry), kỹ thuật tối ưu hóa mã máy (Assembly-level Optimizations), và cơ chế đồng bộ phân tán L2 của phân hệ Aurora API Gateway JWT.</strong>
 </p>
 
 ---
 
-## 1. Design Philosophy & Core Invariants
+## 1. Triết lý Thiết kế & Các Invariant Cốt lõi (Design Philosophy & Invariants)
 
-The **`jwt`** extension is built around 6 core micro-architectural invariants engineered for maximum hardware efficiency on modern cloud infrastructure:
+Phân hệ **`jwt`** được thiết kế dựa trên 7 invariant vi kiến trúc nhằm khai thác tối đa hiệu năng của vi xử lý x86-64 và AArch64 hiện đại trên môi trường Cloud:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -16,24 +16,32 @@ The **`jwt`** extension is built around 6 core micro-architectural invariants en
 ├───────────────────────┬─────────────────────────┬───────────────────────────────┤
 │ 1. Zero Allocations   │ 2. Share-Nothing        │ 3. Fail-Fast Arithmetic       │
 │    Zero heap allocs   │    Process-isolated,    │    Rejects malformed tokens   │
-│    on evaluation path │    0 IPC, 0 futexes     │    in 1-5 ns via bitwise ops  │
+│    trên Hot-Path      │    0 IPC, 0 futexes     │    trong 1-5 ns bằng bitwise  │
 ├───────────────────────┼─────────────────────────┼───────────────────────────────┤
-│ 4. Cache-Line Aware   │ 5. RAM as Compute Power │ 6. Strict Non-Fallback        │
-│    64B aligned shards │    Retains resident RSS,│    Header vs Cookie isolation,│
-│    stops False Sharing│    prevents churn       │    no heuristic fallback      │
+│ 4. Cache-Line Aware   │ 5. Unified 4-Col Sheet  │ 6. Out-of-Band L2 Pre-Arming  │
+│    Shards align 64B   │    1 probe O(1) lookup, │    Shadow Worker syncs Redis, │
+│    chống False Sharing│    1-cycle in-place flip│    0 network I/O on hot path  │
 └───────────────────────┴─────────────────────────┴───────────────────────────────┘
 ```
 
-1. **Zero-Allocation Hot Path**: Every cached evaluation (cache hit) and early rejection gate executes with **exactly 0 bytes of dynamic heap allocation** (zero calls to `malloc` / `free`).
-2. **Share-Nothing Concurrency**: Each NGINX worker process maintains its own independent `JwtEngine` and `JwtCache` in process-local memory. Eliminates inter-process synchronization (IPC), cross-process shared memory mutexes, and kernel futex contention.
-3. **Fail-Fast Arithmetic Gates**: Instead of parsing JSON payloads or executing Base64 decoding upfront, the engine validates structural invariants (signature length, SWAR head bitmasks, unsigned underflow bounds) in 1 ALU clock cycle.
-4. **Cache-Line Alignment (`#[repr(align(64))]`)**: Multithreaded internal structures are strictly aligned to the 64-byte L1/L2 cache line boundary, eliminating *False Sharing* (MESI cache coherence invalidation storms between CPU cores).
-5. **RAM as Compute Capacity & Hysteresis Burst Retention**: Shard memory is pre-allocated upfront and retained in Resident Set Size (RSS). During traffic spikes, shards expand and **deliberately hold expanded memory** through a 15-second quiet window, preventing memory thrashing and eliminating kernel page faults.
-6. **Strict Non-Fallback Isolation**: Token extraction sources (`Header` or `Cookie`) are strictly separated. The engine never guesses or falls back across transport boundaries, preserving security invariants against credential smuggling.
+1. **Zero-Allocation Hot Path**:
+   Mọi request cache hit hoặc bị từ chối sớm (Early Rejection) đều thực thi với **chính xác 0.000 bytes cấp phát heap** (hoàn toàn không gọi `malloc`/`free` hay `Box`/`Vec`).
+2. **Share-Nothing Concurrency**:
+   Mỗi tiến trình NGINX Worker duy trì một cá thể `JwtEngine` và `JwtCache` độc lập trong process-local memory. Loại bỏ hoàn toàn chi phí đồng bộ liên tiến trình (IPC), mutex trên shared memory, và kernel futex contention.
+3. **Fail-Fast Arithmetic Gates**:
+   Thay vì giải mã Base64 hoặc parse JSON trước, engine kiểm tra tính toàn vẹn hình học (độ dài chữ ký, SWAR mask, unsigned underflow bounds) ngay trong 1 chu kỳ ALU của CPU.
+4. **Cache-Line Alignment (`#[repr(align(64))]`)**:
+   Mỗi Shard container được căn lề nghiêm ngặt theo biên 64 bytes của CPU cache line, triệt tiêu hoàn toàn hiện tượng *False Sharing* (xung đột dòng nhớ MESI giữa các lõi CPU).
+5. **Unified 4-Column Sheet Cache**:
+   Thay thế mô hình Dual-HashMap bằng bảng phẳng duy nhất 40-byte row, hỗ trợ **Single-Probe Lookup (~7-10ns)** và **1-Chu kỳ Lật Bit Thu hồi tại chỗ (`row.status = 0`)**.
+6. **Out-of-Band L2 Redis Pre-Arming**:
+   Tầng phân tán L2 được giao toàn quyền cho **Shadow Worker (`aurora-shadow`)**. NGINX Traffic Worker không bao giờ tạo socket hay chờ Redis I/O.
+7. **Strict Non-Fallback Isolation**:
+   Phân tách tuyệt đối giữa Header và Cookie. Engine không bao giờ đoán hoặc fallback ngầm giữa các transport boundaries, bảo vệ chống tấn công Credential Smuggling.
 
 ---
 
-## 2. Component Topology
+## 2. Cấu trúc Thành phần (Component Topology)
 
 ```mermaid
 classDiagram
@@ -56,299 +64,280 @@ classDiagram
         +algorithm: JwtAlgorithm
         +primary_key: VerifierKey
         +keys_by_kid: HashMap~String, VerifierKey~
-        +token_source: TokenSource
+        +token_location: TokenLocation
+        +token_prefix: Box~[u8]~
         +claim_rules: Vec~CompiledClaimRule~
         +cache: Option~Arc~JwtCache~~
     }
 
-    class TokenSource {
-        <<enumeration>>
-        Header(name: String, prefix: Option~String~)
-        Cookie(name: String, prefix: Option~String~)
-    }
-
     class JwtCache {
-        -shards: Box~[CacheShard]~
+        -shards: Box~[RwLock~CacheShard~]~
         -mask: usize
+        -default_ttl_secs: u64
+        -negative_ttl_secs: u64
+        -has_revoked_jtis: AtomicBool
+        +hash_token_bytes(bytes: &[u8]) u64
         +hash_token(token: &str) u64
-        +get_valid(hash: u64, now: u64) Option~Arc~[(String, String)]~~
-        +insert_valid(hash: u64, exp: u64, headers: Arc, now: u64)
-        +is_negative(hash: u64, now: u64) bool
-        +insert_invalid(hash: u64, now: u64)
+        +hash_jti(jti: &str) u64
+        +lookup(hash: u64, now: u64) CacheLookup
+        +insert_positive(hash, exp, headers, jti_hash, now)
+        +revoke_token(hash: u64, until: u64, now: u64)
+        +revoke_jti(jti: &str, until: u64, now: u64)
+        +insert_negative(hash: u64, now: u64)
     }
 
     class CacheShard {
-        -positive: FxHashMap~u64, ValidTokenEntry~
-        -negative: FxHashMap~u64, InvalidTokenEntry~
+        -entries: FxHashMap~u64, CacheRow~
         -base_entries: usize
         -max_burst_entries: usize
-        -last_positive_surge_epoch: u64
-        -last_negative_surge_epoch: u64
+        -last_surge_epoch: u64
+    }
+
+    class CacheRow {
+        +expire_epoch_secs: u64
+        +jti_hash: u64
+        +forwarded_headers: Arc~[(String, String)]~
+        +status: u8
+        +_reserved: [u8; 7]
     }
 
     JwtEngine *-- IndexedOrigin
     IndexedOrigin *-- OriginPolicy
-    OriginPolicy *-- TokenSource
     OriginPolicy *-- JwtCache
     JwtCache *-- CacheShard
+    CacheShard *-- CacheRow
 ```
 
-### 2.1 Compressed Radix Routing Tree (`PathRadixTree`)
-- Matches incoming request `(Host, Path)` tuples against configured origin policies in $O(K)$ time, where $K$ is the path length.
-- When multiple rules cover the same domain (e.g. `/api/v1` using RS256 and `/api/v2` using EdDSA), the Radix Trie resolves the most specific path prefix with deterministic priority tie-breaking.
+### 2.1 Cây Định tuyến Radix Nén (`PathRadixTree`)
+- Khớp nối cặp `(Host, Path)` của request đến với origin policies trong thời gian $O(K)$, trong đó $K$ là độ dài URI path.
+- Khi nhiều rules cùng trỏ tới 1 domain (ví dụ `/api/v1` dùng RS256 và `/api/v2` dùng EdDSA), cây Radix giải quyết prefix dài nhất và ưu tiên theo `rank`/`priority` tất định.
 
 ---
 
-## 3. Micro-Architectural Optimizations
+## 3. Các Tối ưu hóa Vi kiến trúc Cấp CPU (Assembly-Level Optimizations)
 
-### 3.1 64-Bit SWAR Prefix Check (Single ALU Instruction)
+### 3.1 Kiểm tra Tiền tố SWAR 64-Bit (1 Lệnh ALU Duy Nhất)
+Việc kiểm tra tiền tố `"Bearer "` không phân biệt chữ hoa/thường (`case-insensitive`) bằng vòng lặp thông thường sẽ sinh ra 7 đến 9 lệnh nhảy điều kiện (`cmp + jne`), tiềm ẩn rủi ro branch misprediction stall ($\approx 15-20$ CPU cycles).
 
-Validating the case-insensitive `"Bearer "` prefix in standard `Authorization` headers typically involves `strip_prefix` or `eq_ignore_ascii_case`, emitting 7 to 9 conditional branch instructions (`cmp + jne`) and risking branch misprediction stalls ($\approx 15-20$ CPU cycles).
-
-Aurora replaces this scalar loop with a **SWAR** (SIMD Within A Register) operation on a single 64-bit integer:
+Aurora thay thế toàn bộ bằng kỹ thuật **SWAR** (SIMD Within A Register) trên một số nguyên 64-bit duy nhất:
 
 ```
 Auth Bytes:    ['b', 'e', 'a', 'r', 'e', 'r', ' ', <token_head>]
 Little-Endian: 0x??_20_72_65_72_61_65_62
-AND Mask:      0x00_FF_DF_DF_DF_DF_DF_DF   (Clears bit 5 = 0x20 from 'B'..'r', leaves byte 6 unchanged)
-Result:        0x00_20_52_45_52_41_45_42   (Matches constant BEARER_PREFIX_MASKED)
+AND Mask:      0x00_FF_DF_DF_DF_DF_DF_DF   (Xóa bit 5 = 0x20 từ 'B'..'r', giữ nguyên byte khoảng trắng 0x20)
+Result:        0x00_20_52_45_52_41_45_42   (Khớp hằng số BEARER_PREFIX_MASKED trong 1 clock cycle)
 ```
 
-Simultaneously, the minimum length (8 bytes) and maximum length (`MAX_AUTHORIZATION_BYTES = 16,384`) checks are fused into **exactly 1 unsigned underflow subtraction**:
-
+Đồng thời, việc kiểm tra độ dài tối thiểu (8 bytes) và tối đa (`MAX_AUTHORIZATION_BYTES = 16,384`) được gộp thành **đúng 1 phép trừ unsigned underflow**:
 ```rust
-// Unsigned underflow wraps values < 8 to > MAX_AUTHORIZATION_BYTES
 if auth.len().wrapping_sub(8) > (MAX_AUTHORIZATION_BYTES - 8) {
-    return false;
+    return false; // Giá trị < 8 sẽ quấn quanh thành số dương cực lớn > MAX
 }
-let mut buf = [0u8; 8];
-buf.copy_from_slice(&auth[..8]);
-let head = u64::from_le_bytes(buf);
-(head & CASE_INSENSITIVE_7B_MASK) == BEARER_PREFIX_MASKED
 ```
 
-> [!TIP]
-> This sequence compiles to clean, branchless assembly: `sub`, `cmp`, `ja`, `mov rax, [rdi]`, `and rax, rsi`, `cmp rax, rdx`. No conditional jump instructions exist in the primary execution flow.
-
----
-
-### 3.2 SIMD Whitespace Vector Scan (AVX2 / SSE / NEON)
-
-RFC 7519 strictly prohibits whitespace characters (`' '`, `'\t'`, `'\n'`, `'\r'`, `'\x0C'`) within raw JWT token strings. Rather than iterating byte-by-byte, the engine executes multi-character SIMD vector scans using `memchr3` and `memchr2`:
-
+### 3.2 Single-Pass Vectorized Dot Hunting (`memchr_iter`)
+Để tách 3 phần `header.payload.signature` trong JWT, Aurora sử dụng vòng lặp SIMD duy nhất:
 ```rust
-// SIMD vector scan (AVX2/SSE) for whitespace characters across token slice
-if memchr::memchr3(b' ', b'\t', b'\n', token_bytes).is_some()
-    || memchr::memchr2(b'\r', 0x0C, token_bytes).is_some()
-{
-    return Ok(JwtDecision::Unauthorized);
+let token_bytes = token.as_bytes();
+let mut dot_iter = memchr::memchr_iter(b'.', token_bytes);
+let first_dot = dot_iter.next().ok_or("Missing first dot")?;
+let second_dot = dot_iter.next().ok_or("Missing second dot")?;
+if dot_iter.next().is_some() {
+    return Err("Unexpected additional dots");
 }
 ```
-This inspects 32 bytes per cycle on AVX2 or 16 bytes per cycle on SSE/NEON, detecting malformed tokens in 1-2 clock cycles.
+* **Không phân mảnh slice**: Tận dụng triệt để thanh ghi vector (AVX2 trên x86-64 / NEON trên ARM) quét 32 bytes/chu kỳ, tìm 2 dấu chấm và kiểm tra tính hợp lệ trong 1-2 ns.
+
+### 3.3 Băm Trực tiếp Byte (`hash_token_bytes`) & Trì hoãn Quét UTF-8
+* **Vấn đề trên kiến trúc cũ**: Trước khi tìm cache, request phải chạy `std::str::from_utf8` quét 1500 bytes token, tiêu tốn **40-70 ns**. Trong khi đó, việc lookup cache chỉ tốn **7-10 ns**!
+* **Giải pháp Tối thượng**:
+  ```rust
+  // 1. Hot Path: Băm trực tiếp byte slice chưa qua parse UTF-8 (~5ns)
+  let h = JwtCache::hash_token_bytes(token_bytes);
+  if let Some(ref cache) = origin.cache {
+      match cache.lookup(h, now_epoch) {
+          CacheLookup::HitAllow(headers) => return Ok(JwtDecision::Allow { forwarded_headers: headers }),
+          CacheLookup::HitDeny => return Ok(JwtDecision::Unauthorized),
+          CacheLookup::Miss => {}
+      }
+  }
+  // 2. Chỉ khi Cache Miss mới cần kiểm tra UTF-8 để chạy verify_jwt!
+  let token_str = std::str::from_utf8(token_bytes).map_err(|_| Error::InvalidRequest)?;
+  ```
+  $\rightarrow$ **Tiết kiệm 40-70 ns cho 98-99% lưu lượng sản xuất!**
+
+### 3.4 Khóa Chữ ký 1-Nanosecond Fail-Fast Length Guard
+Trước khi giải mã Base64URL hoặc tính toán mật mã tốn kém, engine so sánh độ dài chuỗi Base64 của chữ ký với cấu trúc hình học cố định của thuật toán:
+* `HS256`: chính xác 43 ký tự.
+* `HS384`: chính xác 64 ký tự.
+* `HS512` / `ES256` / `EdDSA`: chính xác 86 ký tự.
+* `ES384`: chính xác 128 ký tự.
+
+Nếu độ dài không khớp $\rightarrow$ Từ chối ngay trong **1 nanosecond**, triệt tiêu nguy cơ CPU Starvation khi bị tấn công Brute-force Flood.
 
 ---
 
-### 3.3 1-Nanosecond Fail-Fast Signature Guard
+## 4. Phân hệ `JwtCache` & Bảng Tính Trạng Thái Thống Nhất (Sheet Cache)
 
-A valid Base64URL JWT token has a strictly invariant signature length determined by its cryptographic algorithm:
-- **HS256 / ES256**: 32-byte raw signature $\rightarrow$ exactly **43 Base64URL characters**.
-- **RS256 (2048-bit)**: 256-byte raw signature $\rightarrow$ exactly **342 Base64URL characters**.
-- **EdDSA (Ed25519)**: 64-byte raw signature $\rightarrow$ exactly **86 Base64URL characters**.
+```
+                 ┌────────────────────────────────────────────────────────┐
+                 │          64-WAY LOCK-STRIPED SHEET JWT CACHE           │
+                 │     FxHasher(token_bytes) -> shard_idx = hash & 0x3F   │
+                 └──────────────────────────┬─────────────────────────────┘
+                                            │
+          ┌───────────────────┬─────────────┴───────┬───────────────────┐
+          ▼                   ▼                     ▼                   ▼
+   ┌──────────────┐    ┌──────────────┐      ┌──────────────┐    ┌──────────────┐
+   │ Shard #0     │    │ Shard #1     │      │ ...          │    │ Shard #63    │
+   │ Align(64B)   │    │ Align(64B)   │      │              │    │ Align(64B)   │
+   │ RwLock       │    │ RwLock       │      │              │    │ RwLock       │
+   │ Single Sheet │    │ Single Sheet │      │              │    │ Single Sheet │
+   │ Flat Entries │    │ Flat Entries │      │              │    │ Flat Entries │
+   └──────────────┘    └──────────────┘      └──────────────┘    └──────────────┘
+```
 
+### 4.1 Hình học Bộ nhớ Tinh gọn 40-Byte (`CacheRow`)
+Mỗi slot trong bảng băm của Shard lưu trữ một `CacheRow` được nén chặt với cấu trúc nhị phân 8-byte aligned:
+
+```
++------------------------------------+------------------------------------+
+| Offset 00..07: expire_epoch (u64)  | Offset 08..15: jti_hash (u64)      |
++------------------------------------+------------------------------------+
+| Offset 16..31: forwarded_headers (Arc<[(String, String)]> - Fat Ptr)   |
++------------------------------------+------------------------------------+
+| Offset 32:     status (u8)         | Offset 33..39: _reserved ([u8; 7]) |
++------------------------------------+------------------------------------+
+Tổng kích thước: Đúng 40 bytes (giảm từ 48 bytes), 0 byte padding rác!
+```
+
+* `jti_hash = 0`: Biểu thị token không có claim `jti` (Sentinel Zero Value, tiết kiệm 8 bytes so với `Option<u64>`).
+* `status = 1`: Positive / Allow (Token hợp lệ, trả về headers chuyển tiếp).
+* `status = 0`: Negative / Deny (Token không hợp lệ hoặc đã bị thu hồi/đăng xuất).
+
+### 4.2 Cờ Atomic JTI Guard (`has_revoked_jtis`)
+Khi token chứa claim `jti`, việc kiểm tra thu hồi JTI trên hot path tiềm ẩn nguy cơ phải probe thêm shard thứ 2.
+Aurora giải quyết triệt để bằng cờ atomic:
 ```rust
-let sig_b64 = &token_str[second_dot + 1..];
-if sig_b64.len() != cfg.expected_alg.signature_b64_len() {
-    return Err(Error::InvalidSignature);
+if row.jti_hash != 0 && self.has_revoked_jtis.load(Ordering::Relaxed) {
+    // Chỉ nhảy sang JTI shard khi thực sự có ít nhất 1 JTI bị thu hồi trong cache!
 }
 ```
-If an attacker sends malformed garbage (e.g. `header.payload.invalid`), the engine rejects the request in 1 ns using integer comparison, **consuming zero CPU cycles on Base64 decoding or cryptographic math**.
+* **Khi không có JTI nào bị hủy (99.999% thời gian)**: `has_revoked_jtis == false` $\rightarrow$ Bỏ qua hoàn toàn, đưa 100% lưu lượng về đúng **1 Hash Probe duy nhất**.
+* **Khi có JTI bị hủy**: Hàm `revoke_jti` gọi `self.has_revoked_jtis.store(true, Ordering::Release)` để kích hoạt kiểm tra.
 
----
-
-### 3.4 Longest Common Prefix (LCP Guard) & SWAR for Exclude Paths
-
-When origins define multiple `exclude_paths` (e.g. `/api/auth/login`, `/api/auth/register`, `/api/auth/refresh`), the engine pre-compiles an `LcpGuard`:
-- Calculates the Longest Common Prefix across all whitelisted paths (`/api/auth/`).
-- Pre-compiles the first 8 bytes of the LCP into a native `u64`.
-- Incoming requests not sharing this prefix (e.g. `/api/orders`, `/user/info`) are bypassed from further exclude checks in **1 ALU cycle (`head & mask == expected`)**.
-
-```rust
-#[inline(always)]
-pub(crate) fn matches(&self, path: &[u8]) -> bool {
-    if path.len() < self.len {
-        return false;
-    }
-    if path.len() >= 8 {
-        let mut buf = [0u8; 8];
-        buf.copy_from_slice(&path[..8]);
-        let head = u64::from_ne_bytes(buf);
-        (head & self.mask) == self.expected
-    } else {
-        let mut buf = [0u8; 8];
-        buf.copy_from_slice(&path[..self.len]);
-        let head = u64::from_ne_bytes(buf);
-        (head & self.mask) == self.expected
-    }
-}
-```
-
----
-
-## 4. `JwtCache` Subsystem & Hysteresis Memory Management
-
-```
-                ┌────────────────────────────────────────────────────────┐
-                │             64-WAY LOCK-STRIPED JWT CACHE              │
-                │        FxHasher(token) -> shard_idx = hash & 0x3F      │
-                └──────────────────────────┬─────────────────────────────┘
-                                           │
-         ┌───────────────────┬─────────────┴───────┬───────────────────┐
-         ▼                   ▼                     ▼                   ▼
-  ┌──────────────┐    ┌──────────────┐      ┌──────────────┐    ┌──────────────┐
-  │ Shard #0     │    │ Shard #1     │      │ ...          │    │ Shard #63    │
-  │ Align(64B)   │    │ Align(64B)   │      │              │    │ Align(64B)   │
-  │ RwLock       │    │ RwLock       │      │              │    │ RwLock       │
-  │ Positive Fx  │    │ Positive Fx  │      │              │    │ Positive Fx  │
-  │ Negative Fx  │    │ Negative Fx  │      │              │    │ Negative Fx  │
-  └──────────────┘    └──────────────┘      └──────────────┘    └──────────────┘
-```
-
-### 4.1 False Sharing Elimination via 64-Byte Alignment
-
-Each `CacheShard` is explicitly aligned to CPU cache line boundaries:
+### 4.3 Triệt tiêu False Sharing bằng Căn lề 64-Byte
+Mỗi container `CacheShard` được bọc bởi chỉ thị `#[repr(align(64))]`:
 ```rust
 #[repr(align(64))]
 struct CacheShard {
-    positive: FxHashMap<u64, ValidTokenEntry>,
-    negative: FxHashMap<u64, InvalidTokenEntry>,
+    entries: FxHashMap<u64, CacheRow>,
     base_entries: usize,
     max_burst_entries: usize,
-    last_positive_surge_epoch: u64,
-    last_negative_surge_epoch: u64,
+    last_surge_epoch: u64,
 }
 ```
-L1/L2 cache lines on modern x86-64 and aarch64 processors are 64 bytes wide. Strict alignment guarantees that adjacent shards occupy physically distinct cache lines. A write lock acquired on Shard 0 by CPU Core 0 **never triggers MESI cache invalidation interrupts** on CPU Core 1 reading Shard 1.
+Dòng nhớ L1/L2 trên vi xử lý hiện đại là 64 bytes. Việc căn lề đảm bảo Shard 0 và Shard 1 nằm trên hai dòng nhớ vật lý hoàn toàn khác nhau. Một luồng ghi trên Shard 0 **không bao giờ kích hoạt ngắt vô hiệu hóa bộ đệm MESI** trên luồng đọc của Shard 1.
 
----
-
-### 4.2 Hysteresis Burst Retention & 15-Second Cooldown Drain
-
-Conventional hash tables expand on demand and shrink immediately upon item removal (`shrink_to_fit`). This pattern induces **Memory Thrashing**: continuous allocation and deallocation cycles causing allocator fragmentation and kernel page faults.
-
-Aurora employs a **Hysteresis Burst Management** state machine:
-
+### 4.4 Hysteresis Burst Retention & Cooldown Drain 15-Giây
 ```mermaid
 stateDiagram-v2
-    [*] --> BaselineCapacity: Pre-allocate base_entries in resident RSS
+    [*] --> BaselineCapacity: Pre-allocate base_entries in RSS
 
-    BaselineCapacity --> TrafficSurge: Traffic exceeds base_entries
+    BaselineCapacity --> TrafficSurge: Traffic vượt ngưỡng base_entries
     state TrafficSurge {
-        [*] --> RetainExpandedRAM: Expand up to max_burst_entries
-        RetainExpandedRAM --> MarkTimestamp: Record last_surge_epoch
-        MarkTimestamp --> RetainExpandedRAM: Retain expanded capacity in RSS
+        [*] --> RetainExpandedRAM: Mở rộng tới max_burst_entries (4x)
+        RetainExpandedRAM --> MarkTimestamp: Ghi nhận last_surge_epoch
+        MarkTimestamp --> RetainExpandedRAM: Giữ nguyên RAM trong RSS, chống thrashing
     }
 
-    TrafficSurge --> QuietWindow: >= 15 seconds without overflow
+    TrafficSurge --> QuietWindow: >= 15 giây không có tràn ngưỡng
     state QuietWindow {
-        PruneExpired: Retain entries with exp > now
+        PruneExpired: Dọn dẹp entries có exp <= now
         ShrinkToBaseline: shrink_to(base_entries)
         PruneExpired --> ShrinkToBaseline
     }
 
-    QuietWindow --> BaselineCapacity: Shard returns to steady state
-    QuietWindow --> TrafficSurge: New surge arrives (Reuses mapped RSS in 0 syscalls)
+    QuietWindow --> BaselineCapacity: Shard trở về dung lượng tiêu chuẩn
+    QuietWindow --> TrafficSurge: Đợt surge mới (Tái sử dụng RSS đã ánh xạ trong 0 syscalls)
 ```
-
-1. **Baseline Pre-Allocation**: During startup, shards pre-allocate `base_entries` in resident memory, avoiding allocation latency on the request path.
-2. **Surge Retention**: When incoming traffic exceeds `base_entries`, the shard expands up to `max_burst_entries` (4x baseline) and **deliberately retains the allocated capacity**.
-3. **15-Second Cooldown Window**:
-   $$\Delta t = \text{now\_epoch} - \text{last\_surge\_epoch} \ge 15\text{s}$$
-   Only when the system experiences $\ge 15$ continuous seconds without an overflow event does the shard prune expired entries and shrink excess capacity back toward baseline.
-4. **Syscall-Free Memory Reuse**: Memory released by `shrink_to` remains mapped in the process's physical address space by the system allocator (`ptmalloc`/`jemalloc`). Subsequent bursts immediately reuse these mapped pages in **0 kernel syscalls**.
 
 ---
 
-## 5. Zero-Copy RFC 6265 Cookie Parser
+## 5. Tầng Phân tán L2 Redis & Version Gated Reconciliation
 
-HTTP `Cookie` headers are semicolon-separated key-value pairs: `session=123; token="jwt_val"; theme=dark`.
+Để đảm bảo khả năng thu hồi token đồng bộ giữa hàng chục node Gateway mà không làm suy giảm hiệu năng 7-10ns của Hot Path, Aurora áp dụng mô hình **Out-of-Band Shadow Sync Layer**:
 
-[`extract_cookie_value`](file:///home/phucle/Desktop/aurora-api-gateway/crates/engine/src/extensions/jwt/engine.rs#L60-L100) scans incoming byte slices directly:
-
-```rust
-pub(crate) fn extract_cookie_value<'a>(cookie_header: &'a [u8], target_name: &[u8]) -> Option<&'a [u8]> {
-    let mut rest = cookie_header;
-    while !rest.is_empty() {
-        // 1. Slice next pair using memchr scanning for ';'
-        let (pair, remainder) = match memchr::memchr(b';', rest) {
-            Some(idx) => (&rest[..idx], &rest[idx + 1..]),
-            None => (rest, &[][..]),
-        };
-        rest = remainder;
-
-        // 2. Strip leading/trailing ASCII whitespace
-        let trimmed = trim_ascii_whitespace(pair);
-        
-        // 3. Exact key match guard (prevents collision between access_token_other vs access_token)
-        if trimmed.len() > target_name.len()
-            && trimmed[target_name.len()] == b'='
-            && trimmed[..target_name.len()].eq_ignore_ascii_case(target_name)
-        {
-            let mut val = &trimmed[target_name.len() + 1..];
-            // 4. Strip surrounding double quotes per RFC 6265 quoted-string grammar
-            if val.len() >= 2 && val.first() == Some(&b'"') && val.last() == Some(&b'"') {
-                val = &val[1..val.len() - 1];
-            }
-            return Some(val);
-        }
-    }
-    None
-}
 ```
-- **Zero Allocations**: Returns a borrowed subslice `&'a [u8]` directly referencing NGINX socket memory.
-- **Prefix Collision Safety**: The boundary guard `trimmed[target.len()] == b'='` guarantees that `access_token` will never match `access_token_extra`.
+[ Backend Logout ]
+       │
+       ▼
+ [ Redis L2 ]
+   - INCR aurora:jwt:revocation_version
+   - SADD aurora:jwt:revoked_set <token_or_jti>
+   - PUBLISH aurora:jwt:revocations <token_or_jti>#<version>
+       │
+       ▼ (Out-of-band qua Shadow Worker)
+┌────────────────────────────────────────────────────────┐
+│ Shadow Worker (Tokio spawn_blocking):                  │
+│   1. Real-time Pub/Sub: Lật bit row.status = 0 (< 1ms) │
+│   2. Version Gate Check: GET revocation_version (O(1)) │
+│   3. Reconciliation: Cursor SSCAN COUNT 100 on desync  │
+│   4. Yielding: Nghỉ 1ms mỗi trang (Zero thread stall)  │
+└──────────────────────────┬─────────────────────────────┘
+                           │ Pre-arm RAM (status = 0)
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│ Traffic Worker Hot Path (NGINX C Worker Thread)        │
+│   - Single-probe lookup: status == 0 -> 401 (~7-10ns)  │
+│   - TUYỆT ĐỐI 0 network I/O, 0 Redis socket trên Hot   │
+└────────────────────────────────────────────────────────┘
+```
+
+### 5.1 Version Gate Check ($O(1)$, ~8 Bytes Trên Mạng)
+Định kỳ mỗi 30 giây (hoặc sau khi socket Pub/Sub hết thời gian nhàn rỗi `PUBSUB_READ_TIMEOUT = 5s`), Shadow Worker mượn 1 kết nối từ pool để gọi:
+```text
+GET aurora:jwt:revocation_version
+```
+* Nếu `remote_version <= local_version`: **Dừng ngay lập tức**! Chi phí quét = 0, CPU = 0, khóa cache = 0.
+* Nếu `remote_version > local_version` (dấu hiệu mạng nội bộ vừa bị rớt packet làm trôi mất Pub/Sub message): Gateway kích hoạt quy trình quét bù.
+
+### 5.2 Phân trang Con trỏ `SSCAN COUNT 100` & Micro-Yielding
+Thay vì dùng `SMEMBERS` (lệnh $O(N)$ làm block Redis và tràn buffer mạng):
+1. Shadow Worker gọi `SSCAN aurora:jwt:revoked_set <cursor> COUNT 100`.
+2. Với mỗi trang 100 tokens: nạp vào L1 Sheet Cache (mỗi token chỉ giữ write lock trên 1 shard duy nhất trong $\approx 10\text{ ns}$).
+3. Giữa mỗi trang, thread gọi `std::thread::sleep(Duration::from_millis(1))` để nhả CPU bus và bộ nhớ, đảm bảo không bao giờ tranh chấp với luồng NGINX hay làm nghẽn các tác vụ logging/telemetry khác của Shadow Worker.
 
 ---
 
-## 6. Multi-Process Concurrency & FFI Safety Boundaries
+## 6. Trình Phân tích Cookie RFC 6265 Zero-Copy
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        NGINX MASTER PROCESS                            │
-│           Process lifecycle management, socket listening               │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │ fork()
-            ┌───────────────────────┴───────────────────────┐
-            ▼                                               ▼
-┌───────────────────────────────┐               ┌───────────────────────────────┐
-│     NGINX WORKER #0           │               │     NGINX WORKER #1           │
-│ ┌───────────────────────────┐ │               │ ┌───────────────────────────┐ │
-│ │ ngx_http_gateway_jwt_mod  │ │               │ │ ngx_http_gateway_jwt_mod  │ │
-│ └─────────────┬─────────────┘ │               │ └─────────────┬─────────────┘ │
-│               │ C ABI FFI     │               │               │ C ABI FFI     │
-│ ┌─────────────▼─────────────┐ │               │ ┌─────────────▼─────────────┐ │
-│ │ Rust JwtEngine            │ │               │ │ Rust JwtEngine            │ │
-│ │ - Radix Tree (Immutable)  │ │               │ │ - Radix Tree (Immutable)  │ │
-│ │ - JwtCache (Process Heap) │ │               │ │ - JwtCache (Process Heap) │ │
-│ └───────────────────────────┘ │               │ └───────────────────────────┘ │
-└───────────────────────────────┘               └───────────────────────────────┘
-```
+HTTP `Cookie` headers chứa các cặp phân tách bởi dấu chấm phẩy: `session=123; token="jwt_val"; theme=dark`.
 
-- **Panic-Free Boundary**: All FFI calls from the NGINX C module into Rust are wrapped in [`std::panic::catch_unwind`](file:///home/phucle/Desktop/aurora-api-gateway/crates/ffi/src/extensions/jwt/mod.rs#L109-L121). Unhandled exceptions convert cleanly into error status codes, preventing worker crashes (SIGSEGV / SIGABRT).
-- **C ABI Layout**: `AuroraJwtDecision` uses `#[repr(C)]` layout with fixed stack arrays. Header data transfers between Rust and NGINX occur entirely on the execution stack with zero pointer indirection overhead.
+Hàm [`extract_cookie_value`](file:///home/phucle/Desktop/aurora-api-gateway/crates/extensions/src/jwt/engine.rs#L50-L89) quét trực tiếp byte slice từ socket:
+* **Zero Allocations**: Trả về `Option<&'a [u8]>` mượn trực tiếp từ bộ nhớ NGINX socket.
+* **Prefix Collision Safety**: Điều kiện biên `trimmed[target.len()] == b'='` loại trừ hoàn toàn việc nhầm lẫn giữa `access_token` và `access_token_extra`.
+* **RFC 6265 Quoted-String Guard**: Tự động bóc cặp dấu ngoặc kép `"` bao quanh giá trị cookie nếu có mà không cần tạo chuỗi mới.
 
 ---
 
-## 7. Empirical Microbenchmark Summary
+## 7. Ranh giới FFI C $\leftrightarrow$ Rust & An toàn Đa Luồng
 
-Measured on AMD EPYC 7763 hardware (`cargo bench -p aurora-engine --bench jwt_evaluate`):
+- **Panic-Free Boundary**: Mọi lời gọi FFI từ NGINX C module sang Rust đều được bao bọc bởi `std::panic::catch_unwind`. Ngoại lệ chưa bắt (unhandled panic) được chuyển đổi thành mã lỗi trả về an toàn, tuyệt đối không gây sập tiến trình worker (SIGSEGV / SIGABRT).
+- **Stack-Allocated ABI Layout**: Cấu trúc kết quả quyết định `AuroraJwtDecision` sử dụng định dạng `#[repr(C)]` với mảng stack cố định. Headers chuyển tiếp được truyền qua con trỏ stack mà không phát sinh thêm lớp pointer indirection nào.
 
-| Evaluation Scenario | Algorithm | Cache State | Median Latency | Allocations / Eval | Architecture Notes |
+---
+
+## 8. Kết quả Thực nghiệm Vi kiến trúc (Microbenchmarks)
+
+Đo lường trên phần cứng AMD EPYC 7763 thông qua bộ kiểm thử in-process Criterion (`cargo bench -p aurora-extensions --bench jwt_evaluate`):
+
+| Thuật toán | Kịch bản kiểm thử | Trạng thái Cache | Độ trễ Trung vị (P50) | Cấp phát Heap / Eval | Ghi chú Vi kiến trúc |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| **HS256** | HMAC-SHA256 | Warm Hit | **123.1 ns** | **0.000 allocs** | `Arc<[(String, String)]>` projection & FxHash |
-| **RS256** | RSA PKCS#1 v1.5 | Warm Hit | **160.1 ns** | **0.000 allocs** | Eliminates RSA math after initial verify |
-| **ES256** | ECDSA P-256 | Warm Hit | **130.3 ns** | **0.000 allocs** | Matches symmetric verification throughput |
-| **EdDSA** | Ed25519 | Warm Hit | **129.0 ns** | **0.000 allocs** | Optimized for microservice auth |
-| **Bypass** | Any | Exclude Match | **57.0 ns** | **0.000 allocs** | 1-cycle SWAR LcpGuard comparison |
-| **Missing** | Any | No Token | **51.5 ns** | **0.000 allocs** | Instant edge rejection via Radix gate |
-| **Malformed**| Any | Bad Signature | **93.7 ns** | **0.000 allocs** | Fail-fast Base64URL length guard |
-| **Multi-16** | HS256 | 16 Claim Rules | **154.9 ns** | **0.000 allocs** | Zero-allocation `Cow<'a, str>` claims matching |
+| **ES256** | ECDSA P-256 | Warm Hit | **96.7 ns** | **0.000 allocs** | Nhảy trực tiếp qua Single-Probe Sheet |
+| **EdDSA** | Ed25519 | Warm Hit | **100.9 ns** | **0.000 allocs** | Tối ưu hóa vi dịch vụ cao cấp |
+| **HS256** | HMAC-SHA256 | Warm Hit | **104.5 ns** | **0.000 allocs** | FxHash bytes trực tiếp, 0 quét UTF-8 |
+| **RS256** | RSA PKCS#1 v1.5 | Warm Hit | **119.9 ns** | **0.000 allocs** | Loại bỏ 100% toán học RSA sau xác thực đầu |
+| **Bypass** | Bất kỳ | Exclude Match | **56.6 ns** | **0.000 allocs** | 1-cycle SWAR LcpGuard comparison |
+| **Missing** | Bất kỳ | Thiếu Token | **51.2 ns** | **0.000 allocs** | Chặn đứng tức thời tại Radix Gate |
+| **Malformed**| Bất kỳ | Chữ ký Giả mạo | **84.6 ns** | **0.000 allocs** | 1-ns length guard loại bỏ ngay |
+| **Multi-16** | HS256 | 16 Claim Rules | **127.7 ns** | **0.000 allocs** | Trích xuất `Cow<'a, str>` 0 cấp phát heap |

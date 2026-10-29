@@ -18,6 +18,11 @@ static ngx_command_t ngx_http_gateway_commands[] = {
     {ngx_string("gateway_metrics"), NGX_HTTP_LOC_CONF | NGX_CONF_NOARGS,
      ngx_http_gateway_metrics_directive, 0, 0, NULL},
 
+    /* Standard Stream & Structured Log Directive */
+    {ngx_string("gateway_std_log"),
+     NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+     ngx_http_gateway_std_log_directive, 0, 0, NULL},
+
     ngx_null_command};
 
 static ngx_http_module_t ngx_http_gateway_context = {
@@ -61,11 +66,6 @@ static char *ngx_http_gateway_merge_conf(ngx_conf_t *cf, void *parent,
   return NGX_CONF_OK;
 }
 
-static ngx_int_t ngx_http_gateway_content_phase_fallback(ngx_http_request_t *r) {
-  (void)r;
-  return NGX_DECLINED;
-}
-
 static ngx_int_t ngx_http_gateway_init(ngx_conf_t *cf) {
   ngx_http_core_main_conf_t *main;
   ngx_http_handler_pt *handler;
@@ -83,14 +83,15 @@ static ngx_int_t ngx_http_gateway_init(ngx_conf_t *cf) {
   }
   *handler = ngx_http_gateway_handler;
 
-  /* Đăng ký fallback handler vào Content Phase của NGINX */
-  handler = ngx_array_push(&main->phases[NGX_HTTP_CONTENT_PHASE].handlers);
-  if (handler == NULL) {
-    return NGX_ERROR;
-  }
-  *handler = ngx_http_gateway_content_phase_fallback;
+  /*
+   * TRIỆT TIÊU HOÀN TOÀN NGINX NATIVE LOG HANDLER:
+   * Loại bỏ toàn bộ handler của ngx_http_log_module khỏi NGX_HTTP_LOG_PHASE.
+   * Ngăn NGINX thực thi ngx_http_log_handler và kiểm tra lcf->off trên hot path,
+   * triệt tiêu hoàn toàn 100% chi phí CPU của module log NGINX cũ dù access_log on hay off.
+   */
+  main->phases[NGX_HTTP_LOG_PHASE].handlers.nelts = 0;
 
-  /* Đăng ký handler vào Log Phase của NGINX */
+  /* Đăng ký handler duy nhất vào Log Phase của NGINX */
   handler = ngx_array_push(&main->phases[NGX_HTTP_LOG_PHASE].handlers);
   if (handler == NULL) {
     return NGX_ERROR;
@@ -120,6 +121,20 @@ static ngx_int_t ngx_http_gateway_init_process(ngx_cycle_t *cycle) {
     ngx_log_error(NGX_LOG_WARN, cycle->log, 0,
                   "Gateway: failed to initialize process substrates on worker %ui",
                   ngx_worker);
+  }
+
+  if (ngx_worker == 0) {
+    uint32_t caps = aurora_gateway_probe_kernel();
+    ngx_log_error(NGX_LOG_NOTICE, cycle->log, 0,
+                  "Gateway: kernel acceleration capabilities: 0x%04uxd "
+                  "(notsent_lowat=%d, cpu_affinity=%d, busy_poll=%d, user_timeout=%d, fastopen=%d, bbr=%d)",
+                  caps,
+                  (caps & AURORA_CAP_TCP_NOTSENT_LOWAT) != 0,
+                  (caps & AURORA_CAP_SO_INCOMING_CPU) != 0,
+                  (caps & AURORA_CAP_SO_BUSY_POLL) != 0,
+                  (caps & AURORA_CAP_TCP_USER_TIMEOUT) != 0,
+                  (caps & AURORA_CAP_TCP_FASTOPEN) != 0,
+                  (caps & AURORA_CAP_TCP_BBR) != 0);
   }
 
   /* Đăng ký timer kiểm tra cập nhật policy out-of-band trong event loop (50ms) */

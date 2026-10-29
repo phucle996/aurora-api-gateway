@@ -241,6 +241,11 @@ impl<T> PathRadixTree<T> {
 
         best.map(|(val, _)| val)
     }
+
+    /// Returns an iterator yielding all values stored across all nodes in the tree.
+    pub fn iter_values(&self) -> impl Iterator<Item = &T> {
+        self.nodes.iter().flat_map(|n| n.values.iter())
+    }
 }
 
 #[inline(always)]

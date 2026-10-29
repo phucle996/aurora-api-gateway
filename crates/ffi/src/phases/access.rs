@@ -76,6 +76,7 @@ pub struct AuroraAccessInput {
     pub query: *const u8,
     pub query_len: usize,
     pub content_length: u64,
+    pub header_length: u64,
     pub random_seed: u32,
     pub now_ms: u64,
 }
@@ -143,6 +144,7 @@ unsafe fn extract_request_context(in_ref: &AuroraAccessInput) -> RequestContext<
         method: unsafe { slice_or_default(in_ref.method, in_ref.method_len, b"GET") },
         query: unsafe { slice_or_default(in_ref.query, in_ref.query_len, b"") },
         content_length: in_ref.content_length,
+        header_length: in_ref.header_length,
         random_seed: in_ref.random_seed,
         now_ms: in_ref.now_ms,
     }
@@ -209,10 +211,7 @@ fn populate_deny_outcome(
 ) {
     outcome.action = AURORA_ACTION_DENY;
     outcome.status_code = status as u32;
-
-    if www_authenticate {
-        outcome.flags |= AURORA_FLAG_WWW_AUTH;
-    }
+    outcome.flags |= u32::from(www_authenticate) * AURORA_FLAG_WWW_AUTH;
 
     if let Some(ct) = content_type {
         let b = ct.as_bytes();

@@ -13,17 +13,21 @@ pub const MAX_JWT_ORIGINS: usize = 16;
 pub const MAX_JWT_KEYS_PER_ORIGIN: usize = 8;
 pub const MAX_EXCLUDE_PATHS_PER_ORIGIN: usize = 32;
 pub const MAX_CLAIM_RULES_PER_ORIGIN: usize = 32;
-pub const MAX_FORWARD_HEADERS_PER_ORIGIN: usize = 32;
+pub const MAX_FORWARD_HEADERS_PER_ORIGIN: usize = 16;
 pub const MAX_AUTHORIZATION_BYTES: usize = 16_384;
+
+fn default_schema_version() -> u32 {
+    1
+}
 
 #[derive(Deserialize)]
 pub(crate) struct Snapshot {
+    #[serde(default = "default_schema_version")]
     pub(crate) schema_version: u32,
+    #[serde(default)]
     pub(crate) generation: u64,
-    #[serde(default)]
+    #[serde(default, alias = "rules")]
     pub(crate) origins: Vec<OriginInput>,
-    #[serde(default)]
-    pub(crate) rules: Vec<OriginInput>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -80,14 +84,50 @@ pub(crate) fn default_negative_ttl_secs() -> u64 {
     30
 }
 
+#[derive(Deserialize, Clone, Debug, Default)]
+pub(crate) struct RedisTlsConfigInput {
+    #[serde(default)]
+    pub(crate) enabled: bool,
+    #[serde(default)]
+    pub(crate) ca_cert_pem: Option<String>,
+    #[serde(default)]
+    pub(crate) client_cert_pem: Option<String>,
+    #[serde(default)]
+    pub(crate) client_key_pem: Option<String>,
+    #[serde(default)]
+    pub(crate) insecure_skip_verify: bool,
+}
+
+#[derive(Deserialize, Clone, Debug, Default)]
+pub(crate) struct RedisConfigInput {
+    #[serde(default)]
+    pub(crate) endpoint: String,
+    #[serde(default)]
+    pub(crate) password: Option<String>,
+    #[serde(default)]
+    pub(crate) db: Option<i64>,
+    #[serde(default = "default_redis_timeout_ms")]
+    pub(crate) timeout_ms: u64,
+    #[serde(default = "default_redis_pool_size")]
+    pub(crate) pool_size: usize,
+    #[serde(default)]
+    pub(crate) tls: Option<RedisTlsConfigInput>,
+}
+
+pub(crate) fn default_redis_timeout_ms() -> u64 {
+    50
+}
+
+pub(crate) fn default_redis_pool_size() -> usize {
+    8
+}
+
 #[derive(Deserialize)]
 pub(crate) struct OriginInput {
     pub(crate) id: String,
     #[serde(default)]
     pub(crate) priority: u32,
-    #[serde(default)]
-    pub(crate) origin: String,
-    #[serde(default)]
+    #[serde(default, alias = "origin")]
     pub(crate) host: String,
     pub(crate) path_prefix: String,
     #[serde(default)]
@@ -103,16 +143,18 @@ pub(crate) struct OriginInput {
     pub(crate) issuer: String,
     #[serde(default)]
     pub(crate) audience: String,
+    #[serde(default = "default_validate_exp")]
+    pub(crate) validate_exp: bool,
     #[serde(default)]
     pub(crate) require_exp: bool,
     #[serde(default)]
     pub(crate) validate_nbf: bool,
+    #[serde(default = "default_payload_format")]
+    pub(crate) payload_format: String,
     #[serde(default)]
     pub(crate) clock_skew_secs: u64,
     #[serde(default)]
     pub(crate) claim_rules: Vec<ClaimRuleInput>,
-    #[serde(default)]
-    pub(crate) forward_headers: Vec<ForwardHeaderInput>,
     #[serde(default)]
     pub(crate) cache: Option<CacheConfigInput>,
     #[serde(default)]
@@ -123,26 +165,22 @@ pub(crate) struct OriginInput {
     pub(crate) cookie_name: Option<String>,
     #[serde(default)]
     pub(crate) token_prefix: Option<String>,
+    #[serde(default)]
+    pub(crate) revoked_tokens: Vec<String>,
+    #[serde(default)]
+    pub(crate) revoked_jtis: Vec<String>,
+    #[serde(default)]
+    pub(crate) redis: Option<RedisConfigInput>,
 }
 
-/// Configured source location for JWT token extraction.
+/// Target location for extracting the raw JWT token.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum TokenSource {
-    /// Extract token from an HTTP header.
-    Header {
-        /// Header name (e.g. "Authorization" or "X-Auth-Token").
-        name: String,
-        /// Optional prefix to strip (e.g. "Bearer ").
-        prefix: Option<String>,
-    },
-    /// Extract token from an HTTP Cookie.
-    Cookie {
-        /// Cookie name (e.g. "access_token" or "session").
-        name: String,
-        /// Optional prefix to strip.
-        prefix: Option<String>,
-    },
+pub enum TokenLocation {
+    Header(String),
+    Cookie(Box<[u8]>),
 }
+
+pub type TokenSource = TokenLocation;
 
 #[derive(Deserialize, Clone, Debug)]
 #[serde(untagged)]
@@ -163,130 +201,60 @@ fn default_token_source_type() -> String {
 }
 
 impl OriginInput {
-    pub(crate) fn host(&self) -> &str {
-        if !self.origin.is_empty() {
-            &self.origin
-        } else {
-            &self.host
-        }
-    }
-
-    pub(crate) fn compile_token_source(&mut self) -> Result<TokenSource, Error> {
+    pub(crate) fn compile_token_source(&mut self) -> Result<(TokenLocation, Box<[u8]>), Error> {
         let is_valid_name = |s: &str| {
             !s.is_empty()
                 && s.len() <= 64
-                && s.bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+                && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
         };
 
-        if let Some(ts) = self.token_source.take() {
-            match ts {
-                TokenSourceInput::Type(t) => match t.trim().to_ascii_lowercase().as_str() {
-                    "cookie" => {
-                        if self.header_name.is_some() {
-                            return Err(Error::InvalidPolicy);
-                        }
-                        let name = self.cookie_name.take().unwrap_or_default();
-                        let trimmed = name.trim();
-                        if !is_valid_name(trimmed) {
-                            return Err(Error::InvalidPolicy);
-                        }
-                        let prefix = self.token_prefix.take().filter(|p| !p.is_empty());
-                        Ok(TokenSource::Cookie {
-                            name: if trimmed.len() == name.len() {
-                                name
-                            } else {
-                                trimmed.to_string()
-                            },
-                            prefix,
-                        })
-                    }
-                    "header" => {
-                        if self.cookie_name.is_some() {
-                            return Err(Error::InvalidPolicy);
-                        }
-                        let name = self.header_name.take().unwrap_or_default();
-                        let trimmed = name.trim();
-                        if !is_valid_name(trimmed) {
-                            return Err(Error::InvalidPolicy);
-                        }
-                        let prefix = if let Some(p) = self.token_prefix.take() {
-                            if p.len() > 64 {
-                                return Err(Error::InvalidPolicy);
-                            }
-                            if p.is_empty() { None } else { Some(p) }
-                        } else {
-                            None
-                        };
-                        Ok(TokenSource::Header {
-                            name: if trimmed.len() == name.len() {
-                                name
-                            } else {
-                                trimmed.to_string()
-                            },
-                            prefix,
-                        })
-                    }
-                    _ => Err(Error::InvalidPolicy),
-                },
-                TokenSourceInput::Config {
-                    source_type,
-                    name,
-                    prefix,
-                } => match source_type.trim().to_ascii_lowercase().as_str() {
-                    "cookie" => {
-                        if self.header_name.is_some() {
-                            return Err(Error::InvalidPolicy);
-                        }
-                        let c_name = name.or(self.cookie_name.take()).unwrap_or_default();
-                        let trimmed = c_name.trim();
-                        if !is_valid_name(trimmed) {
-                            return Err(Error::InvalidPolicy);
-                        }
-                        let pref = prefix
-                            .or(self.token_prefix.take())
-                            .filter(|p| !p.is_empty());
-                        Ok(TokenSource::Cookie {
-                            name: if trimmed.len() == c_name.len() {
-                                c_name
-                            } else {
-                                trimmed.to_string()
-                            },
-                            prefix: pref,
-                        })
-                    }
-                    "header" => {
-                        if self.cookie_name.is_some() {
-                            return Err(Error::InvalidPolicy);
-                        }
-                        let h_name = name.or(self.header_name.take()).unwrap_or_default();
-                        let trimmed = h_name.trim();
-                        if !is_valid_name(trimmed) {
-                            return Err(Error::InvalidPolicy);
-                        }
-                        let pref = if let Some(p) = prefix.or(self.token_prefix.take()) {
-                            if p.len() > 64 {
-                                return Err(Error::InvalidPolicy);
-                            }
-                            if p.is_empty() { None } else { Some(p) }
-                        } else {
-                            None
-                        };
-                        Ok(TokenSource::Header {
-                            name: if trimmed.len() == h_name.len() {
-                                h_name
-                            } else {
-                                trimmed.to_string()
-                            },
-                            prefix: pref,
-                        })
-                    }
-                    _ => Err(Error::InvalidPolicy),
-                },
+        let (src_type, custom_name, custom_prefix) = match self.token_source.take() {
+            Some(TokenSourceInput::Type(t)) => (t, None, None),
+            Some(TokenSourceInput::Config {
+                source_type,
+                name,
+                prefix,
+            }) => (source_type, name, prefix),
+            None => return Err(Error::InvalidPolicy),
+        };
+
+        let prefix_bytes = custom_prefix
+            .or_else(|| self.token_prefix.take())
+            .unwrap_or_default()
+            .into_bytes()
+            .into_boxed_slice();
+
+        if prefix_bytes.len() > 64 {
+            return Err(Error::InvalidPolicy);
+        }
+
+        match src_type.trim() {
+            "header" => {
+                if self.cookie_name.is_some() {
+                    return Err(Error::InvalidPolicy);
+                }
+                let name = custom_name.or_else(|| self.header_name.take()).unwrap_or_default();
+                let trimmed = name.trim();
+                if !is_valid_name(trimmed) {
+                    return Err(Error::InvalidPolicy);
+                }
+                Ok((TokenLocation::Header(trimmed.to_string()), prefix_bytes))
             }
-        } else {
-            // Strict invariant: token_source must be explicitly configured
-            Err(Error::InvalidPolicy)
+            "cookie" => {
+                if self.header_name.is_some() {
+                    return Err(Error::InvalidPolicy);
+                }
+                let name = custom_name.or_else(|| self.cookie_name.take()).unwrap_or_default();
+                let trimmed = name.trim();
+                if !is_valid_name(trimmed) {
+                    return Err(Error::InvalidPolicy);
+                }
+                Ok((
+                    TokenLocation::Cookie(trimmed.as_bytes().to_vec().into_boxed_slice()),
+                    prefix_bytes,
+                ))
+            }
+            _ => Err(Error::InvalidPolicy),
         }
     }
 }
@@ -314,25 +282,30 @@ pub(crate) struct ClaimRuleInput {
     pub(crate) required: bool,
 }
 
-#[derive(Deserialize, Clone, Debug)]
-pub(crate) struct ForwardHeaderInput {
-    pub(crate) payload_key: String,
-    pub(crate) header_key: String,
-    #[serde(default = "default_match_all")]
-    pub(crate) value: String,
-}
-
 pub(crate) fn default_match_all() -> String {
     "*".to_string()
 }
 
-pub struct ForwardedHeader {
-    pub name: String,
-    pub value: String,
+pub(crate) fn default_validate_exp() -> bool {
+    true
+}
+
+pub(crate) fn default_payload_format() -> String {
+    "json".to_string()
+}
+
+/// Explicit format of the JWT payload body.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PayloadFormat {
+    /// Standard JSON object with nested/primitive claim keys.
+    Json,
+    /// Custom plain text / delimited raw payload with regex capture extractor.
+    Raw,
 }
 
 pub(crate) struct CompiledClaimRule {
     pub(crate) payload_key: String,
+    pub(crate) raw_extractor: Option<Regex>,
     pub(crate) regex: Option<Regex>,
     pub(crate) header_key: Option<String>,
     pub(crate) required: bool,
@@ -346,12 +319,15 @@ pub(crate) struct OriginPolicy {
     pub(crate) keys_by_kid: HashMap<String, VerifierKey>,
     pub(crate) issuer: Option<String>,
     pub(crate) audience: Option<String>,
+    pub(crate) payload_format: PayloadFormat,
+    pub(crate) validate_exp: bool,
     pub(crate) require_exp: bool,
     pub(crate) validate_nbf: bool,
     pub(crate) clock_skew_secs: u64,
     pub(crate) claim_rules: Vec<CompiledClaimRule>,
     pub(crate) cache: Option<Arc<JwtCache>>,
-    pub(crate) token_source: TokenSource,
+    pub(crate) token_location: TokenLocation,
+    pub(crate) token_prefix: Box<[u8]>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

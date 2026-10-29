@@ -34,11 +34,11 @@ The installer will:
 |------|-------------|
 | `bin/aurora-controller` | Control Plane HTTP/gRPC server & Web UI (Go binary) |
 | `bin/aurora-compile` | Rule & Spec compiler (Rust binary) |
-| `bin/aurora-agent` | Dataplane Node Agent (Rust binary) |
+| `bin/aurora-control-worker` | Dataplane Control Plane Worker (Rust binary) |
 | `bin/aurora-gateway` | Dataplane Core Gateway with in-tree C adapter & Rust FFI Engine (NGINX 1.30.4 static binary) |
 | `modules/ngx_http_gateway_module-*.so` | Pre-built NGINX dynamic modules (for external NGINX installations) |
 | `modules/supported-versions.txt` | List of supported NGINX versions |
-| `deploy/` | Systemd service units (`aurora-controller`, `aurora-gateway`, `aurora-agent`) |
+| `deploy/` | Systemd service units (`aurora-controller`, `aurora-gateway`, `aurora-control-worker`) |
 | `install.sh` | Interactive installer with systemd setup |
 
 ## Supported NGINX Versions

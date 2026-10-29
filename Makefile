@@ -1,9 +1,9 @@
-.PHONY: all build ui controller agent gateway module compiler install uninstall clean
+.PHONY: all build ui controller control-worker gateway module compiler install uninstall clean
 
 all: build
 
 # Build all production artifacts for bare-metal / systemd deployment
-build: ui controller agent gateway
+build: ui controller control-worker gateway
 	@echo "==> Production build completed for systemd deployment."
 
 # 1. Build frontend console
@@ -16,11 +16,11 @@ controller: ui
 	cd control-plane && go build -buildvcs=false -trimpath -o ../build/bin/aurora-controller ./cmd
 	cp build/bin/aurora-controller build/aurora-controller
 
-# 3. Build Dataplane Agent and binaries
-agent:
+# 3. Build Dataplane Control Plane Worker and binaries
+control-worker:
 	mkdir -p build/bin
 	cargo build --workspace --release
-	cp target/release/aurora-agent build/bin/
+	cp target/release/aurora-control-worker build/bin/
 	cp target/release/aurora-compile build/bin/
 
 # 4. Build static aurora-gateway (NGINX 1.30.4 + in-tree module + Rust FFI Engine)
@@ -49,7 +49,7 @@ install: build
 	install -d -m 755 -o root -g root /var/log/nginx
 	install -m 755 build/bin/aurora-controller /usr/local/bin/aurora-controller
 	install -m 755 build/bin/aurora-compile    /usr/local/bin/aurora-compile
-	install -m 755 build/bin/aurora-agent      /usr/local/bin/aurora-agent
+	install -m 755 build/bin/aurora-control-worker /usr/local/bin/aurora-control-worker
 	install -m 755 build/bin/aurora-gateway    /usr/local/bin/aurora-gateway
 	if [ ! -f /etc/aurora/admin.token ]; then \
 		echo "==> Generating /etc/aurora/admin.token..."; \
@@ -64,20 +64,20 @@ install: build
 		chmod 600 /etc/aurora/controller.env; \
 		chown aurora:aurora /etc/aurora/controller.env; \
 	fi
-	if [ ! -f /etc/aurora/agent.env ]; then \
-		echo "==> Generating /etc/aurora/agent.env..."; \
-		printf "CONTROLLER_URL=http://127.0.0.1:8080\nGRPC_URL=http://127.0.0.1:9099\nAUTH_TOKEN=\nGATEWAY_BIN=/usr/local/bin/aurora-gateway\nGATEWAY_CONF=/etc/nginx/nginx.conf\nPOLICY_DIR=/var/lib/aurora-policy\nROUTING_DIR=/var/lib/aurora-routing\n" > /etc/aurora/agent.env; \
-		chmod 600 /etc/aurora/agent.env; \
+	if [ ! -f /etc/aurora/control-worker.env ]; then \
+		echo "==> Generating /etc/aurora/control-worker.env..."; \
+		printf "CONTROLLER_URL=http://127.0.0.1:8080\nGRPC_URL=http://127.0.0.1:9099\nAUTH_TOKEN=\nGATEWAY_BIN=/usr/local/bin/aurora-gateway\nGATEWAY_CONF=/etc/nginx/nginx.conf\nPOLICY_DIR=/var/lib/aurora-policy\nROUTING_DIR=/var/lib/aurora-routing\n" > /etc/aurora/control-worker.env; \
+		chmod 600 /etc/aurora/control-worker.env; \
 	fi
-	install -m 644 deploy/systemd/aurora-controller.service /etc/systemd/system/aurora-controller.service
-	install -m 644 deploy/systemd/aurora-gateway.service    /etc/systemd/system/aurora-gateway.service
-	install -m 644 deploy/systemd/aurora-agent.service      /etc/systemd/system/aurora-agent.service
+	install -m 644 deploy/systemd/aurora-controller.service     /etc/systemd/system/aurora-controller.service
+	install -m 644 deploy/systemd/aurora-gateway.service        /etc/systemd/system/aurora-gateway.service
+	install -m 644 deploy/systemd/aurora-control-worker.service /etc/systemd/system/aurora-control-worker.service
 	if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then \
 		systemctl daemon-reload; \
 		echo "==> Systemd units installed and reloaded."; \
-		echo "    Enable and start Gateway (Traffic): sudo systemctl enable --now aurora-gateway"; \
-		echo "    Enable and start Agent (Sync):      sudo systemctl enable --now aurora-agent"; \
-		echo "    Enable and start Controller:        sudo systemctl enable --now aurora-controller"; \
+		echo "    Enable and start Gateway (Traffic):        sudo systemctl enable --now aurora-gateway"; \
+		echo "    Enable and start Control Worker (Sync):    sudo systemctl enable --now aurora-control-worker"; \
+		echo "    Enable and start Controller:               sudo systemctl enable --now aurora-controller"; \
 	else \
 		echo "==> Units installed to /etc/systemd/system/ (systemd is not active in this environment)."; \
 	fi
@@ -86,10 +86,10 @@ install: build
 uninstall:
 	@echo "==> Uninstalling Aurora API Gateway services..."
 	@if [ "$$(id -u)" -ne 0 ]; then echo "Error: 'make uninstall' must be run as root (e.g. sudo make uninstall)" >&2; exit 1; fi
-	-systemctl stop aurora-agent aurora-gateway aurora-controller 2>/dev/null || true
-	-systemctl disable aurora-agent aurora-gateway aurora-controller 2>/dev/null || true
-	rm -f /etc/systemd/system/aurora-controller.service /etc/systemd/system/aurora-gateway.service /etc/systemd/system/aurora-agent.service
-	rm -f /usr/local/bin/aurora-controller /usr/local/bin/aurora-compile /usr/local/bin/aurora-agent /usr/local/bin/aurora-gateway
+	-systemctl stop aurora-control-worker aurora-gateway aurora-controller 2>/dev/null || true
+	-systemctl disable aurora-control-worker aurora-gateway aurora-controller 2>/dev/null || true
+	rm -f /etc/systemd/system/aurora-controller.service /etc/systemd/system/aurora-gateway.service /etc/systemd/system/aurora-control-worker.service
+	rm -f /usr/local/bin/aurora-controller /usr/local/bin/aurora-compile /usr/local/bin/aurora-control-worker /usr/local/bin/aurora-gateway
 	-systemctl daemon-reload 2>/dev/null || true
 	@echo "==> Aurora API Gateway services and binaries uninstalled."
 

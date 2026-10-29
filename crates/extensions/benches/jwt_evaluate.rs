@@ -188,6 +188,9 @@ fn main() {
                     "path_prefix": "/api",
                     "exclude_paths": ["/api/healthz", "/api/public"],
                     "algorithm": alg,
+                    "token_source": "header",
+                    "header_name": "Authorization",
+                    "token_prefix": "Bearer ",
                     "claim_rules": [
                         { "payload_key": "sub", "values_match": "*", "header_key": "X-User-Id", "required": true },
                         { "payload_key": "role", "values_match": "^(admin|operator)$", "header_key": "X-User-Role", "required": true }

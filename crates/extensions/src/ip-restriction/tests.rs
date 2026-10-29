@@ -1,5 +1,5 @@
+use super::config::IpRestrictionRequest;
 use super::engine::IpRestrictionEngine;
-use super::types::IpRestrictionRequest;
 
 #[test]
 fn test_ipv4_exact_and_subnet_matching() {
@@ -206,4 +206,120 @@ fn test_reject_ipv4_mapped_ipv6_in_snapshot() {
     }"#;
 
     assert!(IpRestrictionEngine::from_snapshot(raw).is_err());
+}
+
+#[test]
+fn test_reject_ipv4_mapped_ipv6_in_declarative_snapshot() {
+    let raw = br#"{
+        "whitelist": ["::ffff:192.0.2.1/128"],
+        "blacklist": [],
+        "rules": []
+    }"#;
+
+    assert!(IpRestrictionEngine::from_snapshot(raw).is_err());
+}
+
+#[test]
+fn test_method_and_path_filtering() {
+    let raw = br#"{
+        "schema_version": 1,
+        "generation": 1,
+        "rules": [
+            {
+                "id": 10,
+                "priority": 1,
+                "action": "block",
+                "networks": ["192.168.10.0/24"],
+                "path_prefix": "/secure",
+                "method": "POST"
+            }
+        ]
+    }"#;
+
+    let engine = IpRestrictionEngine::from_snapshot(raw).unwrap();
+
+    // 192.168.10.5 calling POST /secure -> Block!
+    let res = engine
+        .evaluate(IpRestrictionRequest {
+            ip: b"192.168.10.5",
+            host: b"*",
+            path: b"/secure/upload",
+            method: b"POST",
+            now: 0,
+        })
+        .unwrap();
+    assert_eq!(res.action, 1);
+    assert_eq!(res.rule_id, 10);
+
+    // 192.168.10.5 calling GET /secure -> Not matching method -> Allow!
+    let res2 = engine
+        .evaluate(IpRestrictionRequest {
+            ip: b"192.168.10.5",
+            host: b"*",
+            path: b"/secure/upload",
+            method: b"GET",
+            now: 0,
+        })
+        .unwrap();
+    assert_eq!(res2.action, 0);
+
+    // 192.168.10.5 calling POST /other -> Not matching path -> Allow!
+    let res3 = engine
+        .evaluate(IpRestrictionRequest {
+            ip: b"192.168.10.5",
+            host: b"*",
+            path: b"/other",
+            method: b"POST",
+            now: 0,
+        })
+        .unwrap();
+    assert_eq!(res3.action, 0);
+}
+
+#[test]
+fn test_declarative_whitelist_and_blacklist_combination() {
+    let raw = br#"{
+        "schema_version": 1,
+        "generation": 5,
+        "whitelist": ["10.10.10.50/32"],
+        "blacklist": ["10.10.10.0/24"]
+    }"#;
+
+    let engine = IpRestrictionEngine::from_snapshot(raw).unwrap();
+
+    // 10.10.10.50 is on Whitelist (priority 10) -> Allow!
+    let res = engine
+        .evaluate(IpRestrictionRequest {
+            ip: b"10.10.10.50",
+            host: b"*",
+            path: b"/",
+            method: b"GET",
+            now: 0,
+        })
+        .unwrap();
+    assert_eq!(res.action, 0);
+
+    // 10.10.10.51 is in Blacklist (priority 20) -> Block!
+    let res2 = engine
+        .evaluate(IpRestrictionRequest {
+            ip: b"10.10.10.51",
+            host: b"*",
+            path: b"/",
+            method: b"GET",
+            now: 0,
+        })
+        .unwrap();
+    assert_eq!(res2.action, 1);
+
+    // 10.20.0.1 is outside both -> Default Allow!
+    let res3 = engine
+        .evaluate(IpRestrictionRequest {
+            ip: b"10.20.0.1",
+            host: b"*",
+            path: b"/",
+            method: b"GET",
+            now: 0,
+        })
+        .unwrap();
+    assert_eq!(res3.action, 0);
 }

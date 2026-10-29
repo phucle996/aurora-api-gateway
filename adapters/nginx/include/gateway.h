@@ -45,6 +45,8 @@ ngx_int_t ngx_http_gateway_variable_upstream(ngx_http_request_t *r,
 /* Content and Telemetry Handlers */
 char *ngx_http_gateway_metrics_directive(ngx_conf_t *cf, ngx_command_t *cmd,
                                          void *conf);
+char *ngx_http_gateway_std_log_directive(ngx_conf_t *cf, ngx_command_t *cmd,
+                                         void *conf);
 ngx_int_t ngx_http_gateway_metrics_handler(ngx_http_request_t *r);
 ngx_int_t ngx_http_gateway_log_handler(ngx_http_request_t *r);
 

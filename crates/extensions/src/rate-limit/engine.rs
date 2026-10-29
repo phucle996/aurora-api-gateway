@@ -105,7 +105,6 @@ impl RateLimitEngine {
         let mut snapshot: Snapshot =
             serde_json::from_slice(bytes).map_err(|_| Error::InvalidPolicy)?;
         if snapshot.schema_version != 1
-            || snapshot.generation == 0
             || snapshot.generation > i64::MAX as u64
             || snapshot.rules.is_empty()
             || snapshot.rules.len() > MAX_RATE_LIMIT_RULES

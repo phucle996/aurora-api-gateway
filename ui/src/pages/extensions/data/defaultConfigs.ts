@@ -443,20 +443,19 @@ export const EXTENSION_DEFAULT_CONFIGS: Record<string, Record<string, any>> = {
       }
     ]
   },
-  'request-size-limit': {
+  'resource-limit': {
     rules: [
       {
         id: 'default-limit',
         priority: 100,
         origin: '*',
         path_prefix: '/',
-        limit_by: 'client_ip',
-        match_value: '*',
-        max_request_bytes: 10485760,
-        max_header_bytes: 65536,
-        max_body_bytes: 10485760,
-        rejected_code: 413,
-        response_body: '{"error":"payload_too_large","message":"Request size exceeds limit"}'
+        header_limit: 65536,
+        payload_limit: 10485760,
+        rejected_code_header: 431,
+        rejected_code_payload: 413,
+        response_body_header: '{"error":"request_header_fields_too_large","message":"Request header exceeds limit"}',
+        response_body_payload: '{"error":"payload_too_large","message":"Payload size exceeds limit"}'
       }
     ]
   },

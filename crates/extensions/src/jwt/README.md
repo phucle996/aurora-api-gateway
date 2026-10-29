@@ -1,246 +1,229 @@
 # JWT Authentication Extension (`builtin/jwt-authentication`)
 
 <p align="center">
-  <strong>Sub-microsecond, memory-safe, zero-allocation JWT authentication & claims forwarding engine for Aurora API Gateway.</strong>
+  <strong>Phân hệ xác thực JSON Web Token, trích xuất Claims & thu hồi tức thời cấp vi kiến trúc (Sub-Microsecond, Zero-Allocation, Distributed L2 Pre-Arming) cho Aurora API Gateway.</strong>
 </p>
 
 ---
 
-## 1. Overview & Philosophy
+## 1. Tổng quan & Triết lý Thiết kế (Overview & Philosophy)
 
-The **`builtin/jwt-authentication`** extension provides edge authorization embedded directly into the **NGINX Access Phase** via the high-performance C ABI FFI of Aurora API Gateway.
+**`builtin/jwt-authentication`** là extension xác thực danh tính và trích xuất đặc quyền (Identity Authentication & Claim Forwarding Engine) gốc được biên dịch tĩnh trực tiếp vào lõi **Aurora API Gateway**. Extension được viết bằng **Rust**, tích hợp trực tiếp vào pha `NGX_HTTP_ACCESS_PHASE` của NGINX thông qua Foreign Function Interface (FFI) tầng C ABI, đảm bảo độ trễ xác thực sub-microsecond và hoàn toàn không sinh rác bộ nhớ (Zero Heap Allocation) trên đường dẫn xử lý lưu lượng (Hot Path).
 
-### Core Architectural Invariants
-- **Explicit by Design (Zero Hidden Defaults)**: Aurora Gateway is built for infrastructure engineers and system architects. Every policy decision—including cryptographic algorithm, target host, path prefix, token extraction source, and expiration requirements—must be explicitly declared. The gateway strictly refuses to guess or fallback silently on unconfigured security parameters.
-- **Strict Token Source Isolation**: Deterministic token extraction with **zero guessing and zero fallback** between HTTP Headers and Cookies. If configured for `cookie`, header tokens are strictly ignored (and vice versa), enforcing defense-in-depth security boundaries.
-- **Sub-130 Nanosecond Verification**: Powered by a 64-way lock-striped dual cache ([`JwtCache`](file:///home/phucle/Desktop/aurora-api-gateway/crates/engine/src/extensions/jwt/cache.rs)) and SIMD/SWAR micro-architectural optimizations, cached token evaluation achieves **123.1 ns** (HS256) and **129.0 ns** (EdDSA) with **exactly 0 heap allocations** per request.
-- **High-Throughput Edge Rejection**: Delivers **108,500+ RPS** when rejecting forged, expired, or missing tokens with sub-millisecond response time. Malicious and invalid requests are dropped immediately at the edge and never touch upstream backends.
-- **Zero-Downtime Key Rotation**: Seamlessly routes incoming tokens across active and legacy keys using an $O(1)$ Key Ring indexed by the JOSE Header `kid` (Key ID).
-
----
-
-## 2. Declarative Configuration Reference
-
-Configuration is managed as a declarative snapshot containing origin authorization rules. Below is the full specification of all supported configuration parameters:
-
-| Parameter | Type | Required | Recommended Production Value | Description & Security Invariant |
-| :--- | :---: | :---: | :---: | :--- |
-| **`id`** | `string` | **Yes** | `"shop-api-prod"` | Unique origin rule identifier (maximum 128 characters). |
-| **`host`** / `origin` | `string` | **Yes** | `"api.shop.local"` | Target domain or host pattern. Supports exact domains or wildcard patterns (`*.example.com`, `*`). |
-| **`path_prefix`** | `string` | **Yes** | `"/api"` (or `"/"`) | Base URI path prefix where JWT validation is enforced. Must start with `/`. |
-| **`algorithm`** | `string` | **Yes** | `"RS256"` or `"HS256"` | Cryptographic algorithm: `RS256`, `RS384`, `RS512`, `ES256`, `ES384`, `EdDSA`, `HS256`, `HS384`, `HS512`. Never defaults silently. |
-| **`token_source`** | `string` \| `object` | **Yes** | `"header"` | Extraction source: `"header"` or `"cookie"`. Strictly non-fallback. |
-| **`header_name`** | `string` | Cond.* | `"Authorization"` | Header key when `token_source: "header"`. Required if `token_source` is `"header"`. |
-| **`token_prefix`** | `string` | No | `"Bearer "` | Prefix string stripped before token parsing. Set to `""` for headers/cookies without prefixes. |
-| **`cookie_name`** | `string` | Cond.* | `"access_token"` | Cookie key when `token_source: "cookie"`. Required if `token_source` is `"cookie"`. |
-| **`public_key_pem`** | `string` | Cond.* | *(RFC 7468 PEM)* | Public key PEM for asymmetric algorithms (`RS*`, `ES*`, `EdDSA`). Max 8,192 chars. |
-| **`secret`** | `string` | Cond.* | *(High-entropy 256b)* | Shared secret for symmetric algorithms (`HS*`). Max 4,096 chars. |
-| **`keys`** | `array` | No | `[]` | Key Ring array for multi-key rotation indexed by `kid` (max 8 keys). |
-| **`require_exp`** | `boolean` | No | **`true`** | Mandates the presence and validity of the `exp` claim. Rejects timeless tokens. |
-| **`validate_nbf`** | `boolean` | No | `false` | Validates `nbf` (Not Before) claim if present. Rejects premature tokens. |
-| **`clock_skew_secs`**| `integer` | No | **`60`** | Clock skew tolerance in seconds (0..=300) to compensate for distributed NTP drift. |
-| **`issuer`** | `string` | No | `"https://auth.domain.com"` | Expected `iss` claim. Tokens with mismatching `iss` are rejected at edge. |
-| **`audience`** | `string` | No | `"https://api.domain.com"` | Expected `aud` claim. Tokens with mismatching `aud` are rejected at edge. |
-| **`exclude_paths`** | `list<string>`| No | `["/api/healthz", "/api/auth/login"]` | Whitelist of URI prefixes bypassed without token (max 32 paths, must start with `/`). |
-| **`claim_rules`** | `array` | No | `[]` | Extraction, regex assertion, and upstream header forwarding matrix (max 32 rules). |
-| **`priority`** | `integer` | No | `0` | Evaluation priority (lower numbers indicate higher precedence). |
-| **`cache`** | `object` | No | `{ "enabled": true }` | Micro-architectural cache tuning (`shards`, `max_entries_per_shard`, `default_ttl_secs`, `negative_ttl_secs`). |
-
-*\*Cond. = Required based on configured `algorithm` or `token_source`.*
+### Các Invariant Kiến trúc Cốt lõi:
+1. **Unified 4-Column Sheet Cache**:
+   Thay thế toàn bộ mô hình Dual-HashMap truyền thống bằng một bảng phẳng duy nhất 4 cột liên tục (`expire_epoch_secs`, `status`, `jti_hash`, `forwarded_headers`) được bọc trong 64 Shards độc lập căn lề 64 bytes (`#[repr(align(64))]`).
+2. **Single-Probe Resolution (~7-10ns Hot Path)**:
+   Mọi request đến chỉ thực hiện **duy nhất 1 lần hash probe**. Nếu `status == 1`: chấp thuận ngay lập tức với forward headers đã render sẵn; nếu `status == 0`: từ chối ngay với HTTP 401 mà không tốn chu kỳ CPU nào cho giải mã mật mã.
+3. **1-Chu kỳ Lật Bit Thu hồi tại chỗ (In-Place Bit Flip)**:
+   Khi nhận lệnh thu hồi hoặc người dùng đăng xuất, hệ thống chỉ ghi đè bit `row.status = 0` bằng 1 lệnh `MOV` của CPU. Không xóa node, không cấp phát heap, không rehash bucket.
+4. **Phân tầng L1 & L2 (Tách biệt Hot Path & Shadow Worker)**:
+   * **L1 Sheet Cache (Traffic Worker)**: Vận hành 100% trong RAM của worker NGINX, tuyệt đối không mở socket kết nối Redis, 0 network I/O.
+   * **L2 Redis Layer (Shadow Worker `aurora-shadow`)**: Chạy bất đồng bộ ngầm out-of-band trên Tokio runtime. Tự động nạp trước danh sách token bị hủy khi khởi động (Boot Sync) và lắng nghe sự kiện logout theo thời gian thực (Pub/Sub) trong < 1ms.
+5. **Version Gated Periodic Reconciliation (Zero Desync)**:
+   Mỗi 30s, Shadow Worker gửi đúng 1 lệnh `GET aurora:jwt:revocation_version` ($O(1)$, ~8 bytes). Nếu version không đổi, kết thúc ngay lập tức (chi phí = 0). Nếu phát hiện lệch version, tự động phân trang qua `SSCAN COUNT 100` để quét bù mà không bao giờ làm nghẽn Redis hay gián đoạn các luồng Traffic Worker.
+6. **Zero-Allocation Hot Path**:
+   Đạt chuẩn `0.000` allocations trên mỗi request hit thông qua bộ đệm ngăn xếp (Stack Buffers), băm trực tiếp mảng byte (`hash_token_bytes`), trì hoãn `from_utf8`, và tái sử dụng singleton `empty_forwarded_headers()`.
+7. **Strict Token Source Isolation**:
+   Phân tách tuyệt đối giữa `header` và `cookie`. Không cho phép fallback ngầm giữa các nguồn nhằm triệt tiêu các vector tấn công Credential Smuggling.
 
 ---
 
-## 3. Recommended Production Cookbooks
+## 2. Đặc tả Tham số Cấu hình (Declarative Configuration Schema)
 
-### 3.1 Standard Enterprise OIDC / OAuth2 Bearer Authentication
+Mỗi origin đại diện cho một chính sách xác thực áp dụng cho một hoặc nhiều upstream services. Cấu hình được nạp dưới dạng JSON declarative:
 
-Recommended configuration for public REST APIs receiving standard OAuth2 / OIDC access tokens:
+| Tham số (Field) | Kiểu dữ liệu | Bắt buộc | Ngưỡng cho phép / Định dạng | Giá trị Khuyến nghị | Ý nghĩa & Invariant hệ thống |
+| :--- | :---: | :---: | :--- | :--- | :--- |
+| **`id`** | `string` | **Có** | Tối đa 128 ký tự, không rỗng | `"shop-auth-prod"` | Định danh duy nhất của origin policy. |
+| **`host`** / `origin` | `string` | **Có** | FQDN hoặc Wildcard (`api.domain.com`, `*.domain.com`, `*`) | `"api.domain.com"` | Tên miền áp dụng chính sách. Hỗ trợ tìm kiếm theo Radix Tree. |
+| **`path_prefix`** | `string` | **Có** | Bắt đầu bằng `/`, tối đa 1024 bytes | `"/api/v1"` (hoặc `"/"`) | Tiền tố đường dẫn URI bắt buộc áp dụng kiểm tra JWT. |
+| **`algorithm`** | `string` | **Có** | `HS256`, `HS384`, `HS512`, `RS256`, `RS384`, `RS512`, `ES256`, `ES384`, `EdDSA` | `"RS256"` hoặc `"HS256"` | Thuật toán mật mã chữ ký. Hệ thống từ chối fallback ngầm. |
+| **`token_source`** | `string` \| `object` | **Có** | `"header"` hoặc `"cookie"` | `"header"` | Vị trí trích xuất token. Tuyệt đối không fallback sang vị trí khác. |
+| **`header_name`** | `string` | Có (nếu header) | Tên HTTP header chuẩn | `"Authorization"` | Tên header chứa JWT khi `token_source` là `"header"`. |
+| **`token_prefix`** | `string` | Không | Chuỗi tiền tố (ví dụ: `"Bearer "`) | `"Bearer "` | Tiền tố cần loại bỏ trước khi băm và xác thực token. |
+| **`cookie_name`** | `string` | Có (nếu cookie) | Tên Cookie chuẩn RFC 6265 | `"access_token"` | Tên cookie chứa JWT khi `token_source` là `"cookie"`. |
+| **`public_key_pem`** | `string` | Có (Asym) | Khóa công khai định dạng PEM RFC 7468 | *(PEM public key)* | Khóa công khai cho các thuật toán bất đối xứng (`RS*`, `ES*`, `EdDSA`). |
+| **`secret`** | `string` | Có (Sym) | Chuỗi bí mật đối xứng độ hỗn loạn cao | *(Secret $\ge$ 256 bits)* | Chuỗi bí mật chia sẻ cho các thuật toán đối xứng (`HS*`). |
+| **`keys`** | `array` | Không | Mảng `KeyInput` tối đa 8 phần tử | `[]` | Vòng quay khóa (Key Ring) hỗ trợ xoay khóa zero-downtime theo `kid`. |
+| **`require_exp`** | `boolean` | Không | `true` \| `false` | `true` | Bắt buộc token phải có claim `exp`. Từ chối token vô thời hạn. |
+| **`validate_exp`** | `boolean` | Không | `true` \| `false` | `true` | Kiểm tra thời hạn hết hạn của token so với wall-clock. |
+| **`validate_nbf`** | `boolean` | Không | `true` \| `false` | `false` | Kiểm tra claim `nbf` (Not Before) để chống sử dụng sớm token. |
+| **`clock_skew_secs`**| `integer` | Không | `0` đến `300` giây | `60` | Độ lệch đồng hồ chấp nhận được để bù đắp sai số NTP giữa các máy chủ. |
+| **`issuer`** | `string` | Không | Chuỗi URL / định danh issuer | `"https://auth.domain.com"` | Khớp chính xác claim `iss`. Từ chối token phát hành sai nguồn. |
+| **`audience`** | `string` | Không | Chuỗi định danh audience | `"https://api.domain.com"` | Khớp chính xác claim `aud` (hỗ trợ cả chuỗi và mảng chuỗi). |
+| **`exclude_paths`** | `list<string>`| Không | Tối đa 32 đường dẫn, bắt đầu bằng `/` | `["/api/healthz", "/api/login"]` | Danh sách đường dẫn được bypass mà không cần token. |
+| **`claim_rules`** | `array` | Không | Tối đa 32 quy tắc trích xuất | `[...]` | Bảng ánh xạ claim JSON thành HTTP headers chuyển tiếp lên backend. |
+| **`cache`** | `object` | Không | Cấu hình L1 Sheet Cache | `{ "enabled": true }` | Tùy biến shard count, capacity, và thời gian TTL của L1 cache. |
+| **`redis`** | `object` | Không | Cấu hình L2 Distributed Layer | `{}` (hoặc `{ "endpoint": ... }`) | Đồng bộ phân tán token bị hủy. Bỏ trống hoặc `{}` để chạy thuần Local Mode. |
+
+---
+
+## 3. Mẫu Cấu hình Chuẩn Mực (Production JSON Cookbooks)
+
+### 3.1 Cấu hình Phân tán Production (L1 Sheet Cache + L2 Redis Pre-Arming)
+Khuyến nghị cho hạ tầng microservices quy mô lớn với nhiều node gateway và backend logout tập trung:
 
 ```json
 {
-  "id": "enterprise-api-gateway",
-  "host": "api.example.com",
-  "path_prefix": "/api",
-  "algorithm": "RS256",
-  "public_key_pem": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...\n-----END PUBLIC KEY-----",
-  "token_source": "header",
-  "header_name": "Authorization",
-  "token_prefix": "Bearer ",
-  "issuer": "https://identity.example.com",
-  "audience": "https://api.example.com",
-  "require_exp": true,
-  "clock_skew_secs": 60,
-  "exclude_paths": [
-    "/api/auth/login",
-    "/api/auth/callback",
-    "/api/healthz"
-  ],
-  "claim_rules": [
+  "schema_version": 1,
+  "generation": 100,
+  "origins": [
     {
-      "payload_key": "sub",
-      "values_match": "*",
-      "header_key": "X-User-Id",
-      "required": true
-    },
-    {
-      "payload_key": "roles",
-      "values_match": ".*(admin|operator).*",
-      "header_key": "X-User-Roles",
-      "required": true
+      "id": "ecommerce-api-prod",
+      "host": "api.shop.com",
+      "path_prefix": "/api/v1",
+      "algorithm": "RS256",
+      "public_key_pem": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0zVSlNUkbhLP4B20mKBY...\n-----END PUBLIC KEY-----\n",
+      "token_source": "header",
+      "header_name": "Authorization",
+      "token_prefix": "Bearer ",
+      "require_exp": true,
+      "validate_exp": true,
+      "clock_skew_secs": 60,
+      "issuer": "https://auth.shop.com",
+      "audience": "https://api.shop.com",
+      "exclude_paths": [
+        "/api/v1/healthz",
+        "/api/v1/auth/login",
+        "/api/v1/public/catalog"
+      ],
+      "claim_rules": [
+        {
+          "payload_key": "sub",
+          "header_key": "X-User-Id",
+          "values_match": "*",
+          "required": true
+        },
+        {
+          "payload_key": "user.tenant_id",
+          "header_key": "X-Tenant-Id",
+          "values_match": "^T-[0-9]{4,8}$",
+          "required": true
+        },
+        {
+          "payload_key": "roles",
+          "header_key": "X-User-Roles",
+          "values_match": "*",
+          "required": false
+        }
+      ],
+      "cache": {
+        "enabled": true,
+        "shards": 64,
+        "max_entries_per_shard": 1024,
+        "default_ttl_secs": 300,
+        "negative_ttl_secs": 30
+      },
+      "redis": {
+        "endpoint": "redis://172.16.0.5:6379",
+        "timeout_ms": 50,
+        "pool_size": 8
+      }
     }
   ]
 }
 ```
 
-- **Security Rationale**:
-  - `require_exp: true` prevents indefinite token replay attacks.
-  - `clock_skew_secs: 60` prevents spurious 401 errors caused by minor clock drift across distributed cluster nodes.
-  - Public endpoints (`/api/auth/login`, `/api/healthz`) are bypassed immediately in 1 ALU cycle via SIMD SWAR matching.
-  - Verified user identity (`sub`) and authorized roles (`roles`) are injected directly into upstream headers (`X-User-Id`, `X-User-Roles`) with zero heap copying.
-
----
-
-### 3.2 High-Throughput Microservice Shared Secret (HS256)
-
-Recommended configuration for low-latency internal service-to-service communication:
+### 3.2 Cấu hình Thuần Local Mode (Pure Local Mode L1, Không dùng Redis)
+Khai báo `"redis": {}` rỗng để chạy thuần bộ nhớ in-memory 7ns mà không tạo bất kỳ kết nối mạng hay background worker nào:
 
 ```json
 {
-  "id": "internal-microservice-auth",
-  "host": "rpc.internal.local",
-  "path_prefix": "/v1",
-  "algorithm": "HS256",
-  "secret": "your-256-bit-high-entropy-random-shared-secret-key",
-  "token_source": "header",
-  "header_name": "X-Service-Token",
-  "token_prefix": "",
-  "require_exp": true,
-  "clock_skew_secs": 30,
-  "claim_rules": [
+  "schema_version": 1,
+  "generation": 101,
+  "origins": [
     {
-      "payload_key": "service_name",
-      "values_match": "^(billing|inventory|checkout)$",
-      "header_key": "X-Calling-Service",
-      "required": true
+      "id": "internal-service-local",
+      "host": "internal.service.local",
+      "path_prefix": "/api",
+      "algorithm": "HS256",
+      "secret": "super-secure-high-entropy-symmetric-secret-key-256b!",
+      "token_source": "header",
+      "header_name": "Authorization",
+      "token_prefix": "Bearer ",
+      "require_exp": true,
+      "validate_exp": true,
+      "cache": {
+        "enabled": true
+      },
+      "redis": {}
     }
   ]
 }
 ```
 
-- **Security Rationale**:
-  - Utilizes hardware-accelerated Intel SHA-NI / ARMv8 Crypto instructions for sub-125ns verification.
-  - Custom header `X-Service-Token` without prefix eliminates string slicing overhead.
-  - Enforces caller service identity through regex assertion on `service_name`.
-
----
-
-### 3.3 Single Page Application (SPA) Session Cookie Authentication
-
-Recommended configuration for web portals storing JWTs inside browser `HttpOnly; Secure; SameSite=Strict` cookies:
+### 3.3 Cấu hình Xác thực bằng Cookie RFC 6265 (Zero-Copy Cookie Parser)
+Dành cho ứng dụng Web / Single Page Application (SPA) truyền access token an toàn qua `HttpOnly` Cookie:
 
 ```json
 {
-  "id": "portal-cookie-auth",
-  "host": "portal.example.com",
-  "path_prefix": "/dashboard",
-  "algorithm": "ES256",
-  "public_key_pem": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...\n-----END PUBLIC KEY-----",
-  "token_source": "cookie",
-  "cookie_name": "session_jwt",
-  "token_prefix": "",
-  "require_exp": true,
-  "clock_skew_secs": 60,
-  "exclude_paths": [
-    "/dashboard/public",
-    "/dashboard/assets"
-  ],
-  "claim_rules": [
+  "schema_version": 1,
+  "generation": 102,
+  "origins": [
     {
-      "payload_key": "user.email",
-      "values_match": "*",
-      "header_key": "X-User-Email",
-      "required": true
+      "id": "web-portal-cookie",
+      "host": "portal.company.com",
+      "path_prefix": "/dashboard",
+      "algorithm": "ES256",
+      "public_key_pem": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEtSfg96VSp3mLb/WguwsaTO4DKgGw...\n-----END PUBLIC KEY-----\n",
+      "token_source": "cookie",
+      "cookie_name": "session_token",
+      "token_prefix": "",
+      "require_exp": true,
+      "validate_exp": true
     }
   ]
 }
 ```
 
-- **Security Rationale**:
-  - **Source Isolation**: When `token_source: "cookie"` is set, any incoming `Authorization` header is strictly ignored, preventing cross-protocol confusion and header injection vulnerabilities.
-  - Parses cookie strings zero-copy using an in-place RFC 6265 scanner without allocating temporary substring buffers.
+---
+
+## 4. Cơ chế Hoạt động & Ma trận Tính năng
+
+```
++------------------------------------------------------------------------------------+
+|                                 AURORA JWT ENGINE                                  |
++------------------------------------------------------------------------------------+
+| [1. Radix Match]   -> Host & Path lookup in O(K) time                              |
+| [2. Exclude Match] -> Fast bypass for health checks (1-cycle SWAR LcpGuard)         |
+| [3. Token Extract] -> Zero-copy Header or RFC 6265 Cookie slice                    |
+| [4. Hot Path L1]   -> FxHash bytes -> Single-probe sheet lookup (7-10 ns)          |
+|                       - status == 0 -> 401 Unauthorized immediately               |
+|                       - status == 1 -> Inject pre-formatted headers & Proxy (Allow)|
+| [5. Cache Miss]    -> SIMD memchr_iter dot hunting + Hardware verify               |
+|                       - HS256: Intel SHA-NI / AMD SHA Extensions                   |
+|                       - RS256: RSA-PKCS#1 v1.5 with Ring engine                    |
+|                       - ES256 / EdDSA: High-throughput elliptic curve              |
+| [6. Claims & Store]-> Traversal, Regex validation -> In-place insert to L1         |
++------------------------------------------------------------------------------------+
+                               ▲
+                               │ Out-of-band Pre-Arming (Shadow Worker)
++------------------------------┴-----------------------------------------------------+
+| [L2 Redis Layer]   -> Set aurora:jwt:revoked_set & Pub/Sub aurora:jwt:revocations  |
++------------------------------------------------------------------------------------+
+```
+
+### Ma trận Tính năng So sánh (Feature Matrix)
+
+| Khả năng | Aurora Gateway (`builtin/jwt`) | Envoy Proxy (`jwt_authn`) | Kong Gateway (`jwt`) |
+| :--- | :---: | :---: | :---: |
+| **Kiến trúc Cache** | **Unified 4-Column Sheet (Single-Probe)** | Dual LruCache / Filter State | `lua_shared_dict` |
+| **Độ trễ Cache Hit** | **7 - 10 ns** (In-process Sheet) | 150 - 300 ns | 1.2 - 2.5 µs (Lua/C border) |
+| **Đăng xuất / Thu hồi**| **In-place bit flip (`status = 0`)** | Trục xuất hoặc đợi TTL | Xóa key và lock shm |
+| **Tầng phân tán L2** | **Shadow Pre-Arming (0 Hot Path I/O)** | Khó tích hợp ngoài filter | Polling Redis trên worker |
+| **Độ trễ Edge Rejection** | **< 1 µs** (108.5k+ RPS) | 3.8 ms (43.4k RPS) | 1.1 ms (107k RPS) |
+| **Phân tích Cookie** | **Zero-Copy RFC 6265 Scanner** | Chuỗi con C++ copy | Lua Regex (heap allocation) |
+| **Xoay khóa (Key Ring)** | **O(1) Hash Map theo `kid`** | JWKS Remote / Static | Static Consumer Credential |
+| **Cấp phát bộ nhớ Hot Path** | **0.000 allocations** | Cấp phát đối tượng C++ | Thu gom rác LuaJIT GC |
 
 ---
 
-### 3.4 Zero-Downtime Key Rotation via Key Ring & `kid`
+## 5. Chỉ số Đo lường & Mục tiêu Cam kết (SLO Metrics)
 
-Recommended configuration when rotating verification keys without scheduled downtime:
-
-```json
-{
-  "id": "rotated-auth-origin",
-  "host": "api.domain.com",
-  "path_prefix": "/api",
-  "algorithm": "RS256",
-  "token_source": "header",
-  "header_name": "Authorization",
-  "token_prefix": "Bearer ",
-  "require_exp": true,
-  "clock_skew_secs": 60,
-  "keys": [
-    {
-      "kid": "key-2026-q3-legacy",
-      "public_key_pem": "-----BEGIN PUBLIC KEY-----\n...legacy retiring key...\n-----END PUBLIC KEY-----",
-      "is_primary": false
-    },
-    {
-      "kid": "key-2026-q4-active",
-      "public_key_pem": "-----BEGIN PUBLIC KEY-----\n...new active key...\n-----END PUBLIC KEY-----",
-      "is_primary": true
-    }
-  ]
-}
-```
-
-- **Security Rationale**:
-  - Incoming tokens are inspected for JOSE header `{"kid": "..."}`.
-  - The gateway resolves the corresponding public key from an in-memory hash index in $O(1)$ time.
-  - Tokens without `kid` automatically evaluate against the key designated as `is_primary: true`.
-  - Enables smooth cryptographic key transition across client releases without interrupting active sessions.
-
----
-
-## 4. Request Evaluation Lifecycle
-
-```mermaid
-flowchart TD
-    Req([HTTP Request Arrives at NGINX]) --> Radix[Radix Trie: Match Origin by Host & Path]
-    
-    Radix -- No Origin Match --> AllowBypass[200 OK Pass-Through]
-    Radix -- Matched Origin --> ExcludeCheck{Matches exclude_paths?}
-    
-    ExcludeCheck -- Yes (Whitelisted) --> AllowBypass
-    ExcludeCheck -- No (Protected) --> ExtractToken[Extract Token per Configured token_source]
-    
-    ExtractToken -- Missing / Empty / Wrong Source --> Deny401[401 Unauthorized at Edge]
-    ExtractToken -- Token Extracted --> FastHash[FxHasher: Compute 64-bit Hash in 5ns]
-    
-    FastHash --> NegCacheCheck{Hit Negative Cache?}
-    NegCacheCheck -- Yes (Known Bad Token) --> Deny401
-    NegCacheCheck -- No --> PosCacheCheck{Hit Positive Cache & Not Expired?}
-    
-    PosCacheCheck -- Yes (Cache Hit) --> InjectArc[Inject Upstream Headers via Shared Arc]
-    InjectArc --> ProxyUpstream([Proxy to Upstream Backend])
-    
-    PosCacheCheck -- No (Cache Miss) --> FastSigGuard{Validate Signature Length Guard}
-    FastSigGuard -- Length Mismatch --> SaveNeg[Store in Negative Cache] --> Deny401
-    
-    FastSigGuard -- Length OK --> KidSelect[Select Key from Key Ring by kid]
-    KidSelect --> VerifyCrypto[Execute Cryptographic Signature Verification]
-    
-    VerifyCrypto -- Invalid Signature --> SaveNeg
-    VerifyCrypto -- Signature Valid --> CheckClaims[Validate exp, nbf, iss, aud & Claim Rules]
-    
-    CheckClaims -- Rule Violation --> SaveNeg
-    CheckClaims -- Passed --> SavePos[Store in Positive Cache: Arc forwarded_headers]
-    SavePos --> ProxyUpstream
-```
+Khi triển khai trên môi trường sản xuất chuẩn (4 vCPU, 16GB RAM):
+- **Tỷ lệ trúng Cache (Target Cache Hit Ratio)**: $\ge 98.5\%$ đối với traffic định danh thông thường.
+- **Độ trễ Hot-Path P99 (L1 Hit)**: $\le 20 \text{ ns}$ (đo tại tầng Rust FFI Engine).
+- **Độ trễ Edge Rejection P50**: $\le 0.90 \text{ ms}$ (toàn chu trình HTTP socket to socket).
+- **Độ trễ Đồng bộ Thu hồi L2 (Pub/Sub Sync Latency)**: $\le 1.0 \text{ ms}$ từ khi backend publish đến khi L1 Sheet Cache chuyển `status = 0`.
+- **Rò rỉ Bộ nhớ (Memory Leak Drift)**: **0.00 bytes** sau hàng chục triệu chu kỳ request.

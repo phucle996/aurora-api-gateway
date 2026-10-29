@@ -16,6 +16,14 @@ uint32_t aurora_gateway_process_init(uint32_t worker_id);
 void aurora_gateway_process_exit(void);
 void aurora_gateway_policy_sync(void);
 uint64_t aurora_gateway_policy_generation(void);
+uint32_t aurora_gateway_probe_kernel(void);
+
+#define AURORA_CAP_TCP_NOTSENT_LOWAT (1 << 0)
+#define AURORA_CAP_SO_INCOMING_CPU   (1 << 1)
+#define AURORA_CAP_SO_BUSY_POLL      (1 << 2)
+#define AURORA_CAP_TCP_USER_TIMEOUT  (1 << 3)
+#define AURORA_CAP_TCP_FASTOPEN      (1 << 4)
+#define AURORA_CAP_TCP_BBR           (1 << 5)
 
 /* Dynamic Policy SHM writer for tooling / testing */
 uint32_t aurora_gateway_policy_writer_update(uint32_t slot_id, uint64_t generation,
@@ -62,6 +70,7 @@ typedef struct {
   const uint8_t *query;
   size_t query_len;
   uint64_t content_length;
+  uint64_t header_length;
   uint32_t random_seed;
   uint64_t now_ms;
 } AuroraAccessInput;
@@ -196,7 +205,19 @@ typedef struct {
   uint64_t reading_conns;
   uint64_t writing_conns;
   uint64_t waiting_conns;
+  uint64_t timestamp_unix_nano;
 } AuroraLogInput;
+
+#define AURORA_SUB_STD_LOG    (1 << 0)
+#define AURORA_SUB_METRICS    (1 << 1)
+#define AURORA_SUB_TRACING    (1 << 2)
+
+extern const volatile uint32_t AURORA_TELEMETRY_SUBSCRIBERS;
+
+uint32_t aurora_gateway_has_log_subscribers(void);
+void aurora_gateway_telemetry_subscribe(uint32_t mask);
+void aurora_gateway_telemetry_unsubscribe(uint32_t mask);
+void aurora_gateway_set_log_path(const uint8_t *ptr, size_t len);
 
 uint32_t aurora_gateway_phase_log(const AuroraLogInput *input);
 

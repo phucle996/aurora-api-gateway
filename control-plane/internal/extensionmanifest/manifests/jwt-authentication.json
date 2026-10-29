@@ -101,6 +101,14 @@
           {
             "label": "HS512",
             "value": "HS512"
+          },
+          {
+            "label": "ES384 (ECDSA P-384)",
+            "value": "ES384"
+          },
+          {
+            "label": "EdDSA (Ed25519)",
+            "value": "EdDSA"
           }
         ]
       },
@@ -118,6 +126,12 @@
         "key": "exclude_paths",
         "label": "Exclude Paths (Bypass without Token)",
         "type": "list_string"
+      },
+      {
+        "key": "validate_exp",
+        "label": "Validate Expiration (verify exp timestamp)",
+        "type": "boolean",
+        "default": true
       },
       {
         "key": "require_exp",
@@ -183,6 +197,23 @@
         "type": "text",
         "default": "Bearer ",
         "placeholder": "Bearer "
+      },
+      {
+        "key": "payload_format",
+        "label": "Payload Format",
+        "type": "select",
+        "required": true,
+        "default": "json",
+        "options": [
+          {
+            "label": "JSON Object (Structured claims via dot-notation)",
+            "value": "json"
+          },
+          {
+            "label": "RAW String (Custom text/delimiters via regex capture)",
+            "value": "raw"
+          }
+        ]
       },
       {
         "key": "claim_rules",
@@ -341,6 +372,16 @@
               "type": "string",
               "maxLength": 64
             },
+            "payload_format": {
+              "type": "string",
+              "enum": [
+                "json",
+                "raw"
+              ]
+            },
+            "validate_exp": {
+              "type": "boolean"
+            },
             "require_exp": {
               "type": "boolean"
             },
@@ -380,29 +421,38 @@
                 }
               }
             },
-            "forward_headers": {
+            "revoked_tokens": {
               "type": "array",
-              "maxItems": 32,
               "items": {
-                "type": "object",
-                "additionalProperties": true,
-                "required": [
-                  "payload_key",
-                  "header_key"
-                ],
-                "properties": {
-                  "payload_key": {
-                    "type": "string",
-                    "maxLength": 64
-                  },
-                  "header_key": {
-                    "type": "string",
-                    "maxLength": 64
-                  },
-                  "value": {
-                    "type": "string",
-                    "maxLength": 256
-                  }
+                "type": "string"
+              }
+            },
+            "revoked_jtis": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "redis": {
+              "type": "object",
+              "default": {},
+              "properties": {
+                "endpoint": {
+                  "type": "string"
+                },
+                "password": {
+                  "type": "string"
+                },
+                "db": {
+                  "type": "integer"
+                },
+                "timeout_ms": {
+                  "type": "integer",
+                  "default": 50
+                },
+                "pool_size": {
+                  "type": "integer",
+                  "default": 8
                 }
               }
             }

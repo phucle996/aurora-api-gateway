@@ -1,64 +1,31 @@
-use super::trie::IpRadixTree;
-use super::types::{IpRestrictionRequest, IpRestrictionRule, IpRestrictionSnapshot};
-use crate::{Decision, Error, MAX_PATH_BYTES, MAX_POLICY_BYTES, host_matches, host_specificity};
+//! IP Restriction Evaluation Engine
+//!
+//! Provides high-performance, flat array-based IP access control with zero-allocation
+//! hot path evaluation and instant early-exit short-circuiting.
+
+use super::config::{IpRestrictionRequest, IpRestrictionSnapshot, normalize_cidr_string};
+use super::ip::{ParsedIp, parse_client_ip, parse_ipv4_cidr, parse_ipv6_cidr};
+use super::rule::{FlatIpv4Rule, FlatIpv6Rule, HostMatcher, method_to_mask};
+use crate::{AccessRequestContext, Decision, Error, MAX_PATH_BYTES, MAX_POLICY_BYTES};
 use std::collections::HashSet;
-use std::net::{IpAddr, Ipv4Addr};
-
-#[derive(Clone, Debug)]
-struct RuleBinding {
-    rule_idx: usize,
-    prefix_len: u8,
-}
-
-#[derive(Clone, Debug)]
-pub struct CompiledRule {
-    pub rule: IpRestrictionRule,
-    pub host_bytes: Vec<u8>,
-    pub path_prefix_bytes: Vec<u8>,
-    pub is_any_method: bool,
-    pub method_bytes: Vec<u8>,
-    pub path_prefix_is_slash: bool,
-    pub path_prefix_ends_with_slash: bool,
-}
-
-#[inline(always)]
-fn parse_ipv4_fast(bytes: &[u8]) -> Option<Ipv4Addr> {
-    if bytes.len() < 7 || bytes.len() > 15 {
-        return None;
-    }
-    let mut octets = [0u8; 4];
-    let mut octet_idx = 0;
-    let mut val = 0u32;
-    let mut digits = 0;
-
-    for &b in bytes {
-        if b == b'.' {
-            if digits == 0 || digits > 3 || val > 255 || octet_idx >= 3 {
-                return None;
-            }
-            octets[octet_idx] = val as u8;
-            octet_idx += 1;
-            val = 0;
-            digits = 0;
-        } else if b.is_ascii_digit() {
-            val = val * 10 + (b - b'0') as u32;
-            digits += 1;
-        } else {
-            return None;
-        }
-    }
-
-    if digits == 0 || digits > 3 || val > 255 || octet_idx != 3 {
-        return None;
-    }
-    octets[3] = val as u8;
-    Some(Ipv4Addr::from(octets))
-}
 
 pub struct IpRestrictionEngine {
     generation: u64,
-    tree: IpRadixTree<RuleBinding>,
-    rules: Vec<CompiledRule>,
+    rules_v4: Vec<FlatIpv4Rule>,
+    rules_v6: Vec<FlatIpv6Rule>,
+    is_whitelist_strict: bool,
+}
+
+#[derive(Clone, Debug)]
+struct UnifiedRuleInput {
+    id: u64,
+    priority: u32,
+    is_block: bool,
+    networks: Vec<String>,
+    path_prefix: String,
+    host: String,
+    method: String,
+    log: bool,
 }
 
 impl IpRestrictionEngine {
@@ -67,47 +34,138 @@ impl IpRestrictionEngine {
             return Err(Error::InvalidPolicy);
         }
 
-        let mut snap: IpRestrictionSnapshot =
+        let snap: IpRestrictionSnapshot =
             serde_json::from_slice(bytes).map_err(|_| Error::InvalidPolicy)?;
 
-        if snap.schema_version != 1
-            || (snap.generation == 0 && !snap.rules.is_empty())
-            || snap.generation > i64::MAX as u64
-            || snap.rules.len() > 512
-        {
+        if snap.schema_version != 1 || snap.generation > i64::MAX as u64 {
             return Err(Error::InvalidPolicy);
         }
 
-        snap.rules
-            .sort_by_key(|r| (r.priority, host_specificity(&r.host), r.id));
+        let mut unified_inputs = Vec::new();
+        let mut has_declarative_whitelist = false;
+        let mut has_declarative_blacklist = false;
 
-        let mut ids = HashSet::new();
-        let mut tree = IpRadixTree::new();
-        let mut rules = Vec::with_capacity(snap.rules.len());
+        // 1. Declarative Whitelist
+        for (i, cidr) in snap.whitelist.into_iter().enumerate() {
+            if let Some(norm) = normalize_cidr_string(&cidr) {
+                has_declarative_whitelist = true;
+                unified_inputs.push(UnifiedRuleInput {
+                    id: 10_000 + i as u64,
+                    priority: 10,
+                    is_block: false,
+                    networks: vec![norm],
+                    path_prefix: "/".to_string(),
+                    host: "*".to_string(),
+                    method: "*".to_string(),
+                    log: false,
+                });
+            }
+        }
 
-        for (rule_idx, rule) in snap.rules.into_iter().enumerate() {
-            let host_valid = if rule.host == "*" {
-                true
-            } else if let Some(sub) = rule.host.strip_prefix("*.") {
-                !sub.is_empty()
-                    && sub
-                        .bytes()
-                        .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
-            } else {
-                rule.host
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
+        // 2. Declarative Blacklist
+        for (i, cidr) in snap.blacklist.into_iter().enumerate() {
+            if let Some(norm) = normalize_cidr_string(&cidr) {
+                has_declarative_blacklist = true;
+                unified_inputs.push(UnifiedRuleInput {
+                    id: 20_000 + i as u64,
+                    priority: 20,
+                    is_block: true,
+                    networks: vec![norm],
+                    path_prefix: "/".to_string(),
+                    host: "*".to_string(),
+                    method: "*".to_string(),
+                    log: false,
+                });
+            }
+        }
+
+        // 3. Custom / Configured Rules
+        for (i, cfg_rule) in snap.rules.into_iter().enumerate() {
+            if cfg_rule.enabled == Some(false) {
+                continue;
+            }
+
+            let mut id = match cfg_rule.id {
+                serde_json::Value::Number(n) => n.as_u64().unwrap_or(30_000 + i as u64),
+                serde_json::Value::String(ref s) => s.parse::<u64>().unwrap_or_else(|_| {
+                    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                    std::hash::Hash::hash(s, &mut hasher);
+                    std::hash::Hasher::finish(&hasher)
+                }),
+                _ => 30_000 + i as u64,
             };
+            if id == 0 {
+                id = 30_000 + i as u64;
+            }
+
+            let mut networks = Vec::new();
+            if !cfg_rule.networks.is_empty() {
+                for net in cfg_rule.networks {
+                    if let Some(norm) = normalize_cidr_string(&net) {
+                        networks.push(norm);
+                    }
+                }
+            } else if !cfg_rule.cidr.is_empty()
+                && let Some(norm) = normalize_cidr_string(&cfg_rule.cidr)
+            {
+                networks.push(norm);
+            }
+
+            if networks.is_empty() {
+                continue;
+            }
+
+            let path_prefix = if let Some(p) = cfg_rule.path_prefix {
+                if p.is_empty() { "/".to_string() } else { p }
+            } else if !cfg_rule.match_value.is_empty() {
+                cfg_rule.match_value
+            } else {
+                "/".to_string()
+            };
+
+            let priority = cfg_rule.priority.unwrap_or(100 + i as u32);
+            let is_block = if cfg_rule.action.is_empty() {
+                false
+            } else {
+                cfg_rule.action == "block"
+            };
+
+            if is_block {
+                has_declarative_blacklist = true;
+            } else {
+                has_declarative_whitelist = true;
+            }
+
+            unified_inputs.push(UnifiedRuleInput {
+                id,
+                priority,
+                is_block,
+                networks,
+                path_prefix,
+                host: cfg_rule.host,
+                method: cfg_rule.method,
+                log: cfg_rule.log,
+            });
+        }
+
+        if unified_inputs.len() > 512 {
+            return Err(Error::InvalidPolicy);
+        }
+
+        let mut rules_v4 = Vec::new();
+        let mut rules_v6 = Vec::new();
+        let mut ids = HashSet::new();
+
+        for rule in unified_inputs {
+            let host_matcher = HostMatcher::parse(&rule.host).ok_or(Error::InvalidPolicy)?;
 
             if rule.id == 0
                 || !ids.insert(rule.id)
-                || !matches!(rule.action.as_str(), "allow" | "block" | "log")
                 || rule.networks.is_empty()
                 || rule.networks.len() > 4096
                 || rule.priority > 1_000_000
                 || rule.host.is_empty()
                 || rule.host.len() > 253
-                || !host_valid
                 || !rule.path_prefix.starts_with('/')
                 || rule.path_prefix.len() > 8192
                 || rule
@@ -116,66 +174,62 @@ impl IpRestrictionEngine {
                     .any(|b| b <= 32 || b >= 127 || b"%?#\\*".contains(&b))
                 || rule.path_prefix.contains("//")
                 || rule.path_prefix.split('/').any(|s| s == "." || s == "..")
-                || !matches!(
-                    rule.method.as_str(),
-                    "*" | "GET"
-                        | "HEAD"
-                        | "POST"
-                        | "PUT"
-                        | "PATCH"
-                        | "DELETE"
-                        | "OPTIONS"
-                        | "CONNECT"
-                        | "TRACE"
-                )
             {
                 return Err(Error::InvalidPolicy);
             }
 
-            for cidr in &rule.networks {
-                let (ip_str, bits_str) = cidr.split_once('/').ok_or(Error::InvalidPolicy)?;
-                let ip: IpAddr = ip_str.parse().map_err(|_| Error::InvalidPolicy)?;
-                let bits: u8 = bits_str.parse().map_err(|_| Error::InvalidPolicy)?;
-
-                if (ip.is_ipv4() && bits > 32)
-                    || (ip.is_ipv6() && bits > 128)
-                    || matches!(ip, IpAddr::V6(v) if v.to_ipv4_mapped().is_some())
-                {
-                    return Err(Error::InvalidPolicy);
-                }
-
-                tree.insert(
-                    ip,
-                    bits,
-                    RuleBinding {
-                        rule_idx,
-                        prefix_len: bits,
-                    },
-                );
+            let method_mask = method_to_mask(rule.method.as_bytes());
+            if method_mask == 0 {
+                return Err(Error::InvalidPolicy);
             }
 
-            let host_bytes = rule.host.as_bytes().to_vec();
-            let path_prefix_bytes = rule.path_prefix.as_bytes().to_vec();
-            let is_any_method = rule.method == "*";
-            let method_bytes = rule.method.as_bytes().to_vec();
-            let path_prefix_is_slash = rule.path_prefix == "/";
-            let path_prefix_ends_with_slash = rule.path_prefix.ends_with('/');
-
-            rules.push(CompiledRule {
-                host_bytes,
-                path_prefix_bytes,
-                is_any_method,
-                method_bytes,
-                path_prefix_is_slash,
-                path_prefix_ends_with_slash,
-                rule,
-            });
+            for cidr in &rule.networks {
+                if let Some((network, mask, prefix_len)) = parse_ipv4_cidr(cidr) {
+                    rules_v4.push(FlatIpv4Rule {
+                        mask,
+                        network,
+                        prefix_len,
+                        priority: rule.priority,
+                        is_block: rule.is_block,
+                        rule_id: rule.id,
+                        method_mask,
+                        host: host_matcher.clone(),
+                        path_prefix: rule.path_prefix.as_bytes().to_vec(),
+                        log: rule.log,
+                    });
+                } else if let Some((network, mask, prefix_len)) = parse_ipv6_cidr(cidr) {
+                    rules_v6.push(FlatIpv6Rule {
+                        mask,
+                        network,
+                        prefix_len,
+                        priority: rule.priority,
+                        is_block: rule.is_block,
+                        rule_id: rule.id,
+                        method_mask,
+                        host: host_matcher.clone(),
+                        path_prefix: rule.path_prefix.as_bytes().to_vec(),
+                        log: rule.log,
+                    });
+                } else {
+                    return Err(Error::InvalidPolicy);
+                }
+            }
         }
+
+        // Sort rules for natural Longest Prefix Match (LPM) and Priority:
+        // 1. Smaller priority first (e.g. priority 5 beats priority 10)
+        // 2. Larger prefix_len first (LPM: /32 beats /24, /24 beats /16)
+        // 3. Smaller rule_id first (deterministic tie-breaker)
+        rules_v4.sort_by_key(|r| (r.priority, std::cmp::Reverse(r.prefix_len), r.rule_id));
+        rules_v6.sort_by_key(|r| (r.priority, std::cmp::Reverse(r.prefix_len), r.rule_id));
+
+        let is_whitelist_strict = has_declarative_whitelist && !has_declarative_blacklist;
 
         Ok(Self {
             generation: snap.generation,
-            tree,
-            rules,
+            rules_v4,
+            rules_v6,
+            is_whitelist_strict,
         })
     }
 
@@ -185,7 +239,7 @@ impl IpRestrictionEngine {
     }
 
     #[inline]
-    pub fn evaluate_ctx(&self, ctx: &crate::AccessRequestContext<'_>) -> Result<Decision, Error> {
+    pub fn evaluate_ctx(&self, ctx: &AccessRequestContext<'_>) -> Result<Decision, Error> {
         self.evaluate(IpRestrictionRequest {
             ip: ctx.client_ip,
             host: ctx.host,
@@ -196,17 +250,6 @@ impl IpRestrictionEngine {
     }
 
     pub fn evaluate(&self, q: IpRestrictionRequest<'_>) -> Result<Decision, Error> {
-        let ip = if let Some(v4) = parse_ipv4_fast(q.ip) {
-            IpAddr::V4(v4)
-        } else {
-            let ip_str = std::str::from_utf8(q.ip).map_err(|_| Error::InvalidRequest)?;
-            let parsed_ip: IpAddr = ip_str.parse().map_err(|_| Error::InvalidRequest)?;
-            match parsed_ip {
-                IpAddr::V6(v) => v.to_ipv4_mapped().map(IpAddr::V4).unwrap_or(parsed_ip),
-                _ => parsed_ip,
-            }
-        };
-
         if q.path.is_empty()
             || q.path.len() > MAX_PATH_BYTES
             || q.path[0] != b'/'
@@ -216,64 +259,45 @@ impl IpRestrictionEngine {
             return Err(Error::InvalidRequest);
         }
 
-        let mut decision = Decision {
-            generation: self.generation,
-            ..Default::default()
-        };
+        let parsed_ip = parse_client_ip(q.ip).ok_or(Error::InvalidRequest)?;
+        let req_method_mask = method_to_mask(q.method);
 
-        #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-        struct CandidateRank {
-            priority: u32,
-            rev_prefix_len: std::cmp::Reverse<u8>,
-            id: u64,
-        }
-
-        let mut best_candidate: Option<(CandidateRank, usize)> = None;
-
-        self.tree.for_each_match(ip, |binding| {
-            let compiled = &self.rules[binding.rule_idx];
-            let r = &compiled.rule;
-
-            if !host_matches(&compiled.host_bytes, q.host) {
-                return;
-            }
-
-            if !compiled.is_any_method && compiled.method_bytes.as_slice() != q.method {
-                return;
-            }
-
-            if !q.path.starts_with(&compiled.path_prefix_bytes) {
-                return;
-            }
-
-            if !compiled.path_prefix_is_slash
-                && !compiled.path_prefix_ends_with_slash
-                && q.path.len() > compiled.path_prefix_bytes.len()
-                && q.path[compiled.path_prefix_bytes.len()] != b'/'
-            {
-                return;
-            }
-
-            let rank = CandidateRank {
-                priority: r.priority,
-                rev_prefix_len: std::cmp::Reverse(binding.prefix_len),
-                id: r.id,
-            };
-            match &best_candidate {
-                Some((best_rank, _)) if &rank >= best_rank => {}
-                _ => {
-                    best_candidate = Some((rank, binding.rule_idx));
+        match parsed_ip {
+            ParsedIp::V4(ip_v4) => {
+                for rule in &self.rules_v4 {
+                    if rule.matches(ip_v4, req_method_mask, q.host, q.path) {
+                        return Ok(Decision {
+                            rule_id: rule.rule_id,
+                            action: u32::from(rule.is_block),
+                            log_matches: u32::from(rule.log),
+                            generation: self.generation,
+                            ..Default::default()
+                        });
+                    }
                 }
             }
-        });
-
-        if let Some((_, winner_idx)) = best_candidate {
-            let r = &self.rules[winner_idx].rule;
-            decision.rule_id = r.id;
-            decision.action = u32::from(r.action == "block");
-            decision.log_matches = u32::from(r.action == "log" || r.log);
+            ParsedIp::V6(ip_v6) => {
+                for rule in &self.rules_v6 {
+                    if rule.matches(ip_v6, req_method_mask, q.host, q.path) {
+                        return Ok(Decision {
+                            rule_id: rule.rule_id,
+                            action: u32::from(rule.is_block),
+                            log_matches: u32::from(rule.log),
+                            generation: self.generation,
+                            ..Default::default()
+                        });
+                    }
+                }
+            }
         }
 
-        Ok(decision)
+        // Branchless fallback when no rule matched: strict whitelist denies (1), otherwise allows (0)
+        Ok(Decision {
+            rule_id: 0,
+            action: u32::from(self.is_whitelist_strict),
+            log_matches: 0,
+            generation: self.generation,
+            ..Default::default()
+        })
     }
 }

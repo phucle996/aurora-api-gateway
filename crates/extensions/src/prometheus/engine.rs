@@ -25,6 +25,7 @@ pub struct PrometheusValues {
     pub reading_conns: u64,
     pub writing_conns: u64,
     pub waiting_conns: u64,
+    pub dropped_tasks: u64,
     pub cpu_utilization: f64,
     pub memory_used_bytes: u64,
     pub memory_total_bytes: u64,
@@ -70,7 +71,7 @@ impl PrecomputedPrometheusEngine {
             buf
         } else {
             let mut patched = Vec::with_capacity(buf.len() + 32);
-            let target = b"gateway_requests_in_flight ";
+            let target = b"\ngateway_requests_in_flight ";
             if let Some(pos) = buf.windows(target.len()).position(|w| w == target) {
                 patched.extend_from_slice(&buf[..pos + target.len()]);
                 write_int(&mut patched, live_in_flight);
@@ -220,6 +221,14 @@ impl PrecomputedPrometheusEngine {
             node_id,
             v.waiting_conns,
         );
+
+        out.extend_from_slice(b"# HELP aurora_background_dropped_tasks_total Total background tasks dropped due to queue saturation\n# TYPE aurora_background_dropped_tasks_total counter\naurora_background_dropped_tasks_total{gateway=\"");
+        out.extend_from_slice(gateway_name.as_bytes());
+        out.extend_from_slice(b"\",node=\"");
+        out.extend_from_slice(node_id.as_bytes());
+        out.extend_from_slice(b"\"} ");
+        write_int(out, v.dropped_tasks);
+        out.push(b'\n');
 
         out.extend_from_slice(b"# HELP system_cpu_utilization_ratio Normalized host CPU utilization (0.0 to 1.0)\n# TYPE system_cpu_utilization_ratio gauge\nsystem_cpu_utilization_ratio ");
         write_float_3decimals(out, v.cpu_utilization);
