@@ -106,21 +106,19 @@ pub fn verify_preview_secret<'h>(
             return 1;
         }
     }
-    if let Some(cookie_hdr) = header_lookup("cookie") {
-        if let Some(token_bytes) = extract_cookie_value(cookie_hdr, b"preview_secret")
+    let cookie_match = header_lookup("cookie").and_then(|cookie_hdr| {
+        extract_cookie_value(cookie_hdr, b"preview_secret")
             .or_else(|| extract_cookie_value(cookie_hdr, sec_hdr.as_bytes()))
-        {
-            if !token_bytes.is_empty() && fnv1a_64(token_bytes) == secret_hash {
-                return 1;
-            }
-        }
+            .filter(|b| !b.is_empty() && fnv1a_64(b) == secret_hash)
+    });
+    if cookie_match.is_some() {
+        return 1;
     }
-    if let Some(token_bytes) = extract_query_value(query, b"preview_secret")
+    if let Some(_token_bytes) = extract_query_value(query, b"preview_secret")
         .or_else(|| extract_query_value(query, sec_hdr.as_bytes()))
+        .filter(|b| !b.is_empty() && fnv1a_64(b) == secret_hash)
     {
-        if !token_bytes.is_empty() && fnv1a_64(token_bytes) == secret_hash {
-            return 1;
-        }
+        return 1;
     }
     0
 }
