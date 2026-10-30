@@ -1,6 +1,6 @@
 //! Correlation ID extension materializer.
 
-use crate::materialize::common::{boolean, nginx_header_name, object, string_or};
+use super::common::{boolean, nginx_header_name, object, string_or};
 use serde_json::{Map, Value};
 
 pub fn materialize(

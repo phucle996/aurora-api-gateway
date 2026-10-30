@@ -6,19 +6,26 @@
 //! directly into Aurora's Shared Memory (SHM) policy slots, where each extension engine parses
 //! and validates its own snapshot natively.
 
-use aurora_engine::shm::{
-    AURORA_EXT_BLUE_GREEN, AURORA_EXT_CANARY_RELEASE, AURORA_EXT_CONN_LIMIT,
-    AURORA_EXT_IP_RESTRICTION, AURORA_EXT_JWT, AURORA_EXT_RATE_LIMIT, AURORA_EXT_REQUEST_MIRROR,
-    AURORA_EXT_REQUEST_TERMINATION, AURORA_EXT_RESOURCE_LIMIT, AURORA_EXT_TRAFFIC_SHAPER,
-    AURORA_EXT_TRAFFIC_SPLIT,
-};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub mod common;
+pub mod compression_gzip;
+pub mod correlation_id;
+pub mod cors;
+pub mod dataplane;
+pub mod maintenance;
+pub mod prometheus;
+pub mod request_header_transform;
+pub mod response_buffering;
+pub mod response_header_transform;
+pub mod std_log;
+pub mod timeout_policy;
 
 #[cfg(test)]
 mod tests;
+
+pub use dataplane::resolve_dataplane_shm_slot;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -52,23 +59,6 @@ impl RenderedExtensions {
     pub fn get_shm_slot_json(&self, slot_id: u32) -> Option<Value> {
         self.get_shm_slot(slot_id)
             .and_then(|bytes| serde_json::from_slice(bytes).ok())
-    }
-}
-
-pub fn resolve_dataplane_shm_slot(renderer: &str) -> Option<u32> {
-    match renderer {
-        "ip-restriction" => Some(AURORA_EXT_IP_RESTRICTION),
-        "engine-jwt-rs256" => Some(AURORA_EXT_JWT),
-        "rate-limit" => Some(AURORA_EXT_RATE_LIMIT),
-        "connection-limit" => Some(AURORA_EXT_CONN_LIMIT),
-        "traffic-shaper" => Some(AURORA_EXT_TRAFFIC_SHAPER),
-        "resource-limit" => Some(AURORA_EXT_RESOURCE_LIMIT),
-        "traffic-split" => Some(AURORA_EXT_TRAFFIC_SPLIT),
-        "canary-release" => Some(AURORA_EXT_CANARY_RELEASE),
-        "blue-green" => Some(AURORA_EXT_BLUE_GREEN),
-        "request-mirror" => Some(AURORA_EXT_REQUEST_MIRROR),
-        "request-termination" => Some(AURORA_EXT_REQUEST_TERMINATION),
-        _ => None,
     }
 }
 
@@ -146,7 +136,7 @@ pub fn render_extensions(
 
         match instance.renderer.as_str() {
             "agent-metrics" | "prometheus" => {
-                crate::prometheus::materialize::materialize(
+                prometheus::materialize(
                     instance,
                     &config,
                     &mut http,
@@ -185,40 +175,40 @@ pub fn render_extensions(
                 if std_log_instances > 1 {
                     return Err("NodeSpec contains more than one std-log extension".to_string());
                 }
-                crate::std_log::materialize::materialize(
+                std_log::materialize(
                     &config,
                     &mut regular_server,
                     &mut has_server,
                 )?;
             }
             "correlation-id" => {
-                crate::correlation_id::materialize::materialize(&config, &mut regular_server, &mut has_server)?
+                correlation_id::materialize(&config, &mut regular_server, &mut has_server)?
             }
-            "cors" => crate::cors::materialize::materialize(&config, &mut regular_server, &mut has_server)?,
-            "request-header-transform" => crate::request_header_transform::materialize::materialize(
+            "cors" => cors::materialize(&config, &mut regular_server, &mut has_server)?,
+            "request-header-transform" => request_header_transform::materialize(
                 &config,
                 &mut ingress_server,
                 &mut has_server,
             )?,
-            "response-header-transform" => crate::response_header_transform::materialize::materialize(
+            "response-header-transform" => response_header_transform::materialize(
                 &config,
                 &mut regular_server,
                 &mut has_server,
             )?,
             "compression-gzip" => {
-                crate::compression_gzip::materialize::materialize(&config, &mut regular_server, &mut has_server)?
+                compression_gzip::materialize(&config, &mut regular_server, &mut has_server)?
             }
             "uri-rewrite" => {
                 // Route-scoped extension: configured and evaluated on routes via location plugins
             }
             "response-buffering" => {
-                crate::response_buffering::materialize::materialize(&mut regular_server, &mut has_server)?
+                response_buffering::materialize(&mut regular_server, &mut has_server)?
             }
             "timeout-policy" => {
-                crate::timeout_policy::materialize::materialize(&config, &mut regular_server, &mut has_server)?
+                timeout_policy::materialize(&config, &mut regular_server, &mut has_server)?
             }
             "maintenance" => {
-                crate::maintenance::materialize::materialize(&config, &mut regular_server, &mut has_server)?
+                maintenance::materialize(&config, &mut regular_server, &mut has_server)?
             }
             renderer => {
                 return Err(format!(

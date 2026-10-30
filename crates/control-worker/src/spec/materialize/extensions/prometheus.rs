@@ -1,12 +1,12 @@
-//! Prometheus Metrics Extension Materializer
+//! Prometheus Metrics Extension Materializer.
 //!
 //! Generates a dedicated, isolated NGINX internal management server block inside
 //! `active-extensions-http.conf`. The port and allowed scraper IPs/CIDRs are 100%
 //! dynamically configured via the extension spec. Zero ports or locations are
 //! opened if this extension is omitted or disabled.
 
-use crate::materialize::ExtensionInstanceSpec;
-use crate::materialize::common::{boolean, object, string, unsigned};
+use super::ExtensionInstanceSpec;
+use super::common::{boolean, object, string, unsigned};
 use serde_json::{Map, Value};
 use std::net::IpAddr;
 use std::str::FromStr;

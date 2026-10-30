@@ -1,6 +1,6 @@
 //! Maintenance Mode extension materializer.
 
-use crate::materialize::common::{
+use super::common::{
     nginx_quoted, nginx_request_header_variable, string, string_or, unsigned_or,
 };
 use serde_json::{Map, Value, json};

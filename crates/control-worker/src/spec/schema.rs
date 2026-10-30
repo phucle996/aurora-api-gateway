@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use aurora_extensions::materialize::ExtensionInstanceSpec;
+use super::materialize::ExtensionInstanceSpec;
 use super::materialize::l4::L4Spec;
 use super::materialize::route::RoutingSpec;
 use super::materialize::tls::CertificateSpec;

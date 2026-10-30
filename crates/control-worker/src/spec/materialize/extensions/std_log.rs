@@ -3,7 +3,7 @@
 //! Emits the declarative `gateway_std_log on | off | <path>;` directive into
 //! the NGINX server configuration block, eliminating NGINX's native `access_log`.
 
-use crate::materialize::common::boolean;
+use super::common::boolean;
 use serde_json::{Map, Value};
 
 pub fn materialize(

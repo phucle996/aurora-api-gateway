@@ -1,4 +1,4 @@
-use aurora_extensions::materialize::ExtensionInstanceSpec;
+use crate::spec::materialize::ExtensionInstanceSpec;
 use std::sync::Arc;
 use tracing::debug;
 

@@ -1,6 +1,6 @@
 //! Cross-Origin Resource Sharing (CORS) extension materializer.
 
-use crate::materialize::common::{boolean, nginx_quoted, strings, unsigned_or};
+use super::common::{boolean, nginx_quoted, strings, unsigned_or};
 use serde_json::{Map, Value};
 
 pub fn materialize(

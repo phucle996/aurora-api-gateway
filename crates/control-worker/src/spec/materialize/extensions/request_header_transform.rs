@@ -1,6 +1,6 @@
 //! Request Header Transform extension materializer.
 
-use crate::materialize::common::{
+use super::common::{
     boolean, nginx_header_name, nginx_quoted, nginx_request_header_variable, object, string_or,
     strings,
 };

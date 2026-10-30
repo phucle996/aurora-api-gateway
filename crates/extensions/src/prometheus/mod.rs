@@ -1,7 +1,6 @@
 //! Prometheus Exporter Plugin Subsystem.
 
 pub mod engine;
-pub mod materialize;
 pub mod plugin;
 pub mod task;
 

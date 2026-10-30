@@ -1,6 +1,5 @@
 //! Standard Stream & Structured Log Plugin Subsystem (`builtin/std-log`).
 
-pub mod materialize;
 pub mod plugin;
 pub mod task;
 pub mod template;

@@ -2,7 +2,7 @@ pub mod materialize;
 pub mod schema;
 
 // Re-exports for clean, top-level API
-pub use aurora_extensions::materialize::ExtensionInstanceSpec;
+pub use materialize::ExtensionInstanceSpec;
 pub use materialize::l4::{L4AclRuleSpec, L4ServerSpec, L4ServiceSpec, L4Spec, L4UpstreamSpec};
 pub use materialize::route::{DomainRoutingSpec, LocationRoutingSpec, OriginTLSSpec, RoutingSpec};
 pub use materialize::tls::CertificateSpec;
@@ -14,7 +14,7 @@ pub mod certificate {
     pub use super::materialize::tls::*;
 }
 pub mod extensions {
-    pub use aurora_extensions::materialize::*;
+    pub use super::materialize::extensions::*;
 }
 pub mod l4 {
     pub use super::materialize::l4::*;

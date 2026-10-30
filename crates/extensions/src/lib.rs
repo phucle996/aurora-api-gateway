@@ -13,44 +13,28 @@ pub use aurora_engine::{
 
 pub mod redis_pool;
 
-// Ingress & Access Phase Extensions
+// Ingress & Access Phase Extensions (Pure Dataplane Request Pipeline)
 #[path = "blue-green/mod.rs"]
 pub mod blue_green;
 #[path = "canary-release/mod.rs"]
 pub mod canary_release;
-#[path = "compression-gzip/mod.rs"]
-pub mod compression_gzip;
 #[path = "connection-limit/mod.rs"]
 pub mod connection_limit;
-#[path = "correlation-id/mod.rs"]
-pub mod correlation_id;
-pub mod cors;
 #[path = "ip-restriction/mod.rs"]
 pub mod ip_restriction;
 pub mod jwt;
-pub mod maintenance;
 #[path = "rate-limit/mod.rs"]
 pub mod rate_limit;
-#[path = "request-header-transform/mod.rs"]
-pub mod request_header_transform;
 #[path = "request-mirror/mod.rs"]
 pub mod request_mirror;
 #[path = "request-termination/mod.rs"]
 pub mod request_termination;
 #[path = "resource-limit/mod.rs"]
 pub mod resource_limit;
-#[path = "response-buffering/mod.rs"]
-pub mod response_buffering;
-#[path = "response-header-transform/mod.rs"]
-pub mod response_header_transform;
-#[path = "timeout-policy/mod.rs"]
-pub mod timeout_policy;
 #[path = "traffic-shaper/mod.rs"]
 pub mod traffic_shaper;
 #[path = "traffic-split/mod.rs"]
 pub mod traffic_split;
-#[path = "uri-rewrite/mod.rs"]
-pub mod uri_rewrite;
 
 // Egress & Background Phase Plugins (Exporters & Telemetry Plugins)
 #[path = "std-log/mod.rs"]
@@ -62,7 +46,6 @@ pub mod prometheus;
 
 pub mod access;
 pub mod background;
-pub mod materialize;
 
 // Top-level re-exports for clean ergonomics:
 pub use access::{AccessPhaseEngines, AccessPhaseSpace};

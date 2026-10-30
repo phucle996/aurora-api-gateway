@@ -1,8 +1,6 @@
 //! Response Header Transform extension materializer.
 
-use crate::materialize::common::{
-    nginx_header_name, nginx_quoted, object, strings,
-};
+use super::common::{nginx_header_name, nginx_quoted, object, strings};
 use serde_json::{Map, Value};
 
 pub fn materialize(

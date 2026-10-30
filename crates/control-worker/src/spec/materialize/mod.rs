@@ -1,3 +1,4 @@
+pub mod extensions;
 pub mod l4;
 pub mod route;
 pub mod tls;
@@ -6,8 +7,7 @@ pub mod upstream;
 #[cfg(test)]
 mod tests;
 
-pub use aurora_extensions::materialize::render_extensions;
-pub use aurora_extensions::materialize::{ExtensionInstanceSpec, RenderedExtensions};
+pub use extensions::{render_extensions, ExtensionInstanceSpec, RenderedExtensions};
 pub use l4::generate_l4_streams_conf;
 pub use route as routing;
 pub use route::generate_domain_routing_conf;

@@ -1,6 +1,6 @@
 //! Upstream Timeout Policy extension materializer.
 
-use crate::materialize::common::unsigned;
+use super::common::unsigned;
 use serde_json::{Map, Value};
 
 pub fn materialize(
