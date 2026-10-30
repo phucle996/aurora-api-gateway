@@ -4,9 +4,6 @@ pub mod security;
 pub mod sheet;
 pub mod swar;
 
-#[cfg(test)]
-mod tests;
-
 pub use engine::{BlueGreenDecision, BlueGreenEngine, BlueGreenEvalRequest};
 pub use policy::{
     BlueGreenRuleInput, BlueGreenSnapshot, UpstreamHeaderInput, MAX_BLUE_GREEN_POLICY_BYTES,

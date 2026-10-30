@@ -76,3 +76,35 @@ pub fn parse_slot_swar(bytes: &[u8]) -> Option<u8> {
 pub const fn select_slot_branchless(valid_override: u8, candidate_slot: u8, active_slot: u8) -> u8 {
     (valid_override & candidate_slot) | ((1 - valid_override) & active_slot)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_branchless_selection_arithmetic() {
+        assert_eq!(select_slot_branchless(1, SLOT_GREEN, SLOT_BLUE), SLOT_GREEN);
+        assert_eq!(select_slot_branchless(1, SLOT_BLUE, SLOT_GREEN), SLOT_BLUE);
+        assert_eq!(select_slot_branchless(0, SLOT_GREEN, SLOT_BLUE), SLOT_BLUE);
+        assert_eq!(select_slot_branchless(0, SLOT_BLUE, SLOT_GREEN), SLOT_GREEN);
+    }
+
+    #[test]
+    fn test_swar_slot_parser() {
+        assert_eq!(parse_slot_swar(b"blue"), Some(SLOT_BLUE));
+        assert_eq!(parse_slot_swar(b"BLUE"), Some(SLOT_BLUE));
+        assert_eq!(parse_slot_swar(b"Blue"), Some(SLOT_BLUE));
+        assert_eq!(parse_slot_swar(b"  blue \t"), Some(SLOT_BLUE));
+
+        assert_eq!(parse_slot_swar(b"green"), Some(SLOT_GREEN));
+        assert_eq!(parse_slot_swar(b"GREEN"), Some(SLOT_GREEN));
+        assert_eq!(parse_slot_swar(b"Green"), Some(SLOT_GREEN));
+        assert_eq!(parse_slot_swar(b"  green \r\n"), Some(SLOT_GREEN));
+
+        assert_eq!(parse_slot_swar(b"staging"), None);
+        assert_eq!(parse_slot_swar(b"canary"), None);
+        assert_eq!(parse_slot_swar(b""), None);
+        assert_eq!(parse_slot_swar(b"blu"), None);
+        assert_eq!(parse_slot_swar(b"gree"), None);
+    }
+}

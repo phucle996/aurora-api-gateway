@@ -138,3 +138,77 @@ pub fn verify_cidr_boundary(allowed_cidrs: &[(u32, u32)], client_ip: &[u8]) -> u
     }
     0
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_cookie_value() {
+        let cookie = b"session=abc123; Deploy_Slot=green; tracking=xyz";
+        assert_eq!(extract_cookie_value(cookie, b"deploy_slot"), Some(&b"green"[..]));
+        assert_eq!(extract_cookie_value(cookie, b"DEPLOY_SLOT"), Some(&b"green"[..]));
+        assert_eq!(extract_cookie_value(cookie, b"session"), Some(&b"abc123"[..]));
+        assert_eq!(extract_cookie_value(cookie, b"not_found"), None);
+        assert_eq!(extract_cookie_value(cookie, b""), None);
+    }
+
+    #[test]
+    fn test_extract_query_value() {
+        let query = b"foo=bar&Deploy_Slot=green&baz=123";
+        assert_eq!(extract_query_value(query, b"deploy_slot"), Some(&b"green"[..]));
+        assert_eq!(extract_query_value(query, b"DEPLOY_SLOT"), Some(&b"green"[..]));
+        assert_eq!(extract_query_value(query, b"baz"), Some(&b"123"[..]));
+        assert_eq!(extract_query_value(query, b"not_found"), None);
+    }
+
+    #[test]
+    fn test_verify_preview_secret() {
+        let secret = "top-secret-2026";
+        let secret_hash = fnv1a_64(secret.as_bytes());
+
+        // Header check
+        assert_eq!(
+            verify_preview_secret(secret_hash, Some("x-preview-secret"), b"", &|k| {
+                (k == "x-preview-secret").then_some(b"top-secret-2026")
+            }),
+            1
+        );
+
+        // Cookie check
+        assert_eq!(
+            verify_preview_secret(secret_hash, Some("x-preview-secret"), b"", &|k| {
+                (k == "cookie").then_some(b"preview_secret=top-secret-2026")
+            }),
+            1
+        );
+
+        // Query check
+        assert_eq!(
+            verify_preview_secret(
+                secret_hash,
+                Some("x-preview-secret"),
+                b"preview_secret=top-secret-2026",
+                &|_| None
+            ),
+            1
+        );
+
+        // Wrong secret -> 0
+        assert_eq!(
+            verify_preview_secret(secret_hash, Some("x-preview-secret"), b"", &|k| {
+                (k == "x-preview-secret").then_some(b"wrong-key")
+            }),
+            0
+        );
+    }
+
+    #[test]
+    fn test_verify_cidr_boundary() {
+        let cidrs = [(167772160, 4278190080)]; // 10.0.0.0/8
+        assert_eq!(verify_cidr_boundary(&cidrs, b"10.1.2.3"), 1);
+        assert_eq!(verify_cidr_boundary(&cidrs, b"192.168.1.1"), 0);
+        assert_eq!(verify_cidr_boundary(&cidrs, b"not-an-ip"), 0);
+        assert_eq!(verify_cidr_boundary(&[], b"192.168.1.1"), 1);
+    }
+}

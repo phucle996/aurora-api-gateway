@@ -121,3 +121,133 @@ pub(crate) struct CompiledBlueGreenRule {
     pub secret_hash: u64,
     pub allowed_cidrs: Vec<(u32, u32)>,
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::blue_green::BlueGreenEngine;
+
+    #[test]
+    fn test_flat_format_compatibility() {
+        let policy = r#"{
+            "schema_version": 1,
+            "generation": 5,
+            "active_slot": "green",
+            "blue_upstream": "app_blue",
+            "green_upstream": "app_green",
+            "switch_header": "x-deploy-slot"
+        }"#;
+
+        let engine = BlueGreenEngine::from_snapshot(policy.as_bytes()).unwrap();
+        assert_eq!(engine.rules_count(), 1);
+    }
+
+    #[test]
+    fn test_flat_format_default_switch_header_works() {
+        let policy = r#"{
+            "schema_version": 1,
+            "generation": 1,
+            "active_slot": "blue",
+            "blue_upstream": "app_blue",
+            "green_upstream": "app_green"
+        }"#;
+
+        let engine = BlueGreenEngine::from_snapshot(policy.as_bytes()).unwrap();
+        assert_eq!(engine.rules_count(), 1);
+    }
+
+    #[test]
+    fn test_longest_path_prefix_specificity_sorting() {
+        let policy = r#"{
+            "schema_version": 1,
+            "generation": 1,
+            "rules": [
+                {
+                    "id": "a-root-catchall",
+                    "priority": 100,
+                    "origin": "*",
+                    "path_prefix": "/",
+                    "active_slot": "blue",
+                    "blue_upstream": "root_blue",
+                    "green_upstream": "root_green"
+                },
+                {
+                    "id": "z-checkout-specific",
+                    "priority": 100,
+                    "origin": "*",
+                    "path_prefix": "/api/v1/checkout",
+                    "active_slot": "green",
+                    "blue_upstream": "checkout_blue",
+                    "green_upstream": "checkout_green"
+                }
+            ]
+        }"#;
+
+        let engine = BlueGreenEngine::from_snapshot(policy.as_bytes()).unwrap();
+        let req = crate::blue_green::BlueGreenEvalRequest::new(b"example.com", b"/api/v1/checkout/pay");
+        let d = engine.evaluate(&req, |_| None);
+        assert!(d.matched);
+        assert_eq!(d.rule_id, "z-checkout-specific");
+        assert_eq!(d.upstream, "checkout_green");
+    }
+
+    #[test]
+    fn test_invalid_policy_rejections() {
+        // Same blue and green upstream
+        let same = r#"{
+            "schema_version": 1, "generation": 1,
+            "rules": [{
+                "id": "r1", "origin": "*", "path_prefix": "/", "active_slot": "blue",
+                "blue_upstream": "target", "green_upstream": "target"
+            }]
+        }"#;
+        assert!(BlueGreenEngine::from_snapshot(same.as_bytes()).is_err());
+
+        // Invalid active slot
+        let bad_slot = r#"{
+            "schema_version": 1, "generation": 1,
+            "rules": [{
+                "id": "r1", "origin": "*", "path_prefix": "/", "active_slot": "purple",
+                "blue_upstream": "blue", "green_upstream": "green"
+            }]
+        }"#;
+        assert!(BlueGreenEngine::from_snapshot(bad_slot.as_bytes()).is_err());
+
+        // Missing upstreams
+        let empty = r#"{ "schema_version": 1 }"#;
+        assert!(BlueGreenEngine::from_snapshot(empty.as_bytes()).is_err());
+
+        // Invalid CIDR
+        let bad_cidr = r#"{
+            "schema_version": 1, "generation": 1, "active_slot": "blue",
+            "blue_upstream": "blue", "green_upstream": "green",
+            "allowed_cidrs": ["not-an-ip/33"]
+        }"#;
+        assert!(BlueGreenEngine::from_snapshot(bad_cidr.as_bytes()).is_err());
+
+        // Trimmed duplicate upstreams ("app_blue" vs "  app_blue  ")
+        let trimmed_same = r#"{
+            "schema_version": 1, "generation": 1,
+            "rules": [{
+                "id": "r1", "origin": "*", "path_prefix": "/", "active_slot": "blue",
+                "blue_upstream": "app_blue", "green_upstream": "  app_blue  "
+            }]
+        }"#;
+        assert!(BlueGreenEngine::from_snapshot(trimmed_same.as_bytes()).is_err());
+
+        // CRLF header injection in upstream_headers
+        let crlf_hdr = r#"{
+            "schema_version": 1, "generation": 1, "active_slot": "blue",
+            "blue_upstream": "blue", "green_upstream": "green",
+            "blue_upstream_headers": [{ "name": "x-slot", "value": "blue\r\nX-Injected: pwned" }]
+        }"#;
+        assert!(BlueGreenEngine::from_snapshot(crlf_hdr.as_bytes()).is_err());
+
+        // Invalid characters in secret_header
+        let bad_secret_hdr = r#"{
+            "schema_version": 1, "generation": 1, "active_slot": "blue",
+            "blue_upstream": "blue", "green_upstream": "green",
+            "preview_secret_header": "invalid header name!"
+        }"#;
+        assert!(BlueGreenEngine::from_snapshot(bad_secret_hdr.as_bytes()).is_err());
+    }
+}

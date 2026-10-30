@@ -478,3 +478,181 @@ impl BlueGreenEngine {
         self.rules.len()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_engine(json_str: &str) -> BlueGreenEngine {
+        BlueGreenEngine::from_snapshot(json_str.as_bytes()).unwrap()
+    }
+
+    #[test]
+    fn test_default_active_blue_slot() {
+        let json = r#"{
+            "schema_version": 1, "generation": 1, "active_slot": "blue",
+            "blue_upstream": "app_blue", "green_upstream": "app_green",
+            "blue_upstream_headers": [{ "name": "x-slot", "value": "blue" }],
+            "green_upstream_headers": [{ "name": "x-slot", "value": "green" }]
+        }"#;
+        let engine = test_engine(json);
+        let req = BlueGreenEvalRequest::new(b"example.com", b"/api");
+        let d = engine.evaluate(&req, |_| None);
+        assert!(d.matched);
+        assert_eq!(d.upstream, "app_blue");
+        assert_eq!(d.active_slot, "blue");
+        assert!(!d.is_header_override);
+        assert_eq!(d.upstream_headers, &[("x-slot".to_string(), "blue".to_string())]);
+    }
+
+    #[test]
+    fn test_active_green_slot() {
+        let json = r#"{
+            "schema_version": 1, "generation": 1, "active_slot": "green",
+            "blue_upstream": "app_blue", "green_upstream": "app_green",
+            "green_upstream_headers": [{ "name": "x-slot", "value": "green" }]
+        }"#;
+        let engine = test_engine(json);
+        let req = BlueGreenEvalRequest::new(b"example.com", b"/api");
+        let d = engine.evaluate(&req, |_| None);
+        assert!(d.matched);
+        assert_eq!(d.upstream, "app_green");
+        assert_eq!(d.active_slot, "green");
+        assert!(!d.is_header_override);
+        assert_eq!(d.upstream_headers, &[("x-slot".to_string(), "green".to_string())]);
+    }
+
+    #[test]
+    fn test_switch_header_override() {
+        let json = r#"{
+            "schema_version": 1, "generation": 1, "active_slot": "blue",
+            "blue_upstream": "app_blue", "green_upstream": "app_green",
+            "switch_header": "x-deploy-slot"
+        }"#;
+        let engine = test_engine(json);
+        let req = BlueGreenEvalRequest::new(b"example.com", b"/dashboard");
+
+        // Override to green (lowercase)
+        let d_green = engine.evaluate(&req, |k| (k == "x-deploy-slot").then_some(b"green"));
+        assert!(d_green.matched);
+        assert_eq!(d_green.upstream, "app_green");
+        assert!(d_green.is_header_override);
+
+        // Override to green (SWAR uppercase "GREEN")
+        let d_green_upper = engine.evaluate(&req, |k| (k == "x-deploy-slot").then_some(b"GREEN"));
+        assert!(d_green_upper.matched);
+        assert_eq!(d_green_upper.upstream, "app_green");
+        assert!(d_green_upper.is_header_override);
+
+        // Invalid value falls back to active blue
+        let d_fallback = engine.evaluate(&req, |k| (k == "x-deploy-slot").then_some(b"staging"));
+        assert!(d_fallback.matched);
+        assert_eq!(d_fallback.upstream, "app_blue");
+        assert!(!d_fallback.is_header_override);
+    }
+
+    #[test]
+    fn test_cookie_preview_override() {
+        let json = r#"{
+            "schema_version": 1, "generation": 1, "active_slot": "blue",
+            "blue_upstream": "app_blue", "green_upstream": "app_green",
+            "preview_cookie": "deploy_slot"
+        }"#;
+        let engine = test_engine(json);
+        let req = BlueGreenEvalRequest::new(b"example.com", b"/home");
+
+        let d = engine.evaluate(&req, |k| {
+            (k == "cookie").then_some(b"session=abc123; deploy_slot=green; tracking=xyz")
+        });
+        assert!(d.matched);
+        assert_eq!(d.upstream, "app_green");
+        assert!(d.is_header_override);
+    }
+
+    #[test]
+    fn test_query_param_preview_override() {
+        let json = r#"{
+            "schema_version": 1, "generation": 1, "active_slot": "blue",
+            "blue_upstream": "app_blue", "green_upstream": "app_green",
+            "preview_query_param": "deploy_slot"
+        }"#;
+        let engine = test_engine(json);
+        let req_green = BlueGreenEvalRequest::with_details(
+            b"example.com",
+            b"/search",
+            b"127.0.0.1",
+            b"q=rust&deploy_slot=green&page=1",
+        );
+        let d = engine.evaluate(&req_green, |_| None);
+        assert!(d.matched);
+        assert_eq!(d.upstream, "app_green");
+        assert!(d.is_header_override);
+    }
+
+    #[test]
+    fn test_preview_secret_security_guard() {
+        let json = r#"{
+            "schema_version": 1, "generation": 1, "active_slot": "blue",
+            "blue_upstream": "app_blue", "green_upstream": "app_green",
+            "switch_header": "x-deploy-slot",
+            "preview_secret": "stage-secret-2026",
+            "preview_secret_header": "x-preview-secret"
+        }"#;
+        let engine = test_engine(json);
+        let req = BlueGreenEvalRequest::new(b"example.com", b"/api");
+
+        // Attacker without secret -> Fallback to blue
+        let d_forged = engine.evaluate(&req, |k| (k == "x-deploy-slot").then_some(b"green"));
+        assert_eq!(d_forged.upstream, "app_blue");
+        assert!(!d_forged.is_header_override);
+
+        // Attacker with wrong secret -> Fallback to blue
+        let d_wrong = engine.evaluate(&req, |k| match k {
+            "x-deploy-slot" => Some(b"green"),
+            "x-preview-secret" => Some(b"wrong-key"),
+            _ => None,
+        });
+        assert_eq!(d_wrong.upstream, "app_blue");
+        assert!(!d_wrong.is_header_override);
+
+        // Authorized with valid secret -> Routed to green
+        let d_auth = engine.evaluate(&req, |k| match k {
+            "x-deploy-slot" => Some(b"green"),
+            "x-preview-secret" => Some(b"stage-secret-2026"),
+            _ => None,
+        });
+        assert_eq!(d_auth.upstream, "app_green");
+        assert!(d_auth.is_header_override);
+    }
+
+    #[test]
+    fn test_preview_cidr_and_secret_combined() {
+        let json = r#"{
+            "schema_version": 1, "generation": 1, "active_slot": "blue",
+            "blue_upstream": "app_blue", "green_upstream": "app_green",
+            "switch_header": "x-deploy-slot",
+            "preview_secret": "top-secret-key",
+            "allowed_cidrs": ["10.0.0.0/8"]
+        }"#;
+        let engine = test_engine(json);
+
+        // Valid secret but external IP (8.8.8.8) -> Fallback to blue
+        let req_ext = BlueGreenEvalRequest::with_details(b"example.com", b"/", b"8.8.8.8", b"");
+        let d1 = engine.evaluate(&req_ext, |k| match k {
+            "x-deploy-slot" => Some(b"green"),
+            "x-preview-secret" => Some(b"top-secret-key"),
+            _ => None,
+        });
+        assert_eq!(d1.upstream, "app_blue");
+
+        // Valid secret and internal IP (10.1.2.3) -> ALLOWED Green!
+        let req_int = BlueGreenEvalRequest::with_details(b"example.com", b"/", b"10.1.2.3", b"");
+        let d2 = engine.evaluate(&req_int, |k| match k {
+            "x-deploy-slot" => Some(b"green"),
+            "x-preview-secret" => Some(b"top-secret-key"),
+            _ => None,
+        });
+        assert_eq!(d2.upstream, "app_green");
+        assert!(d2.is_header_override);
+    }
+}
