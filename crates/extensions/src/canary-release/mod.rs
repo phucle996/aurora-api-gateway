@@ -1,11 +1,12 @@
 pub mod engine;
-pub mod types;
+pub mod policy;
 
 #[cfg(test)]
 mod tests;
 
 pub use engine::CanaryReleaseEngine;
-pub use types::{
-    CanaryDecision, CanaryReleaseEvalRequest, CanaryReleaseRuleInput, CanaryReleaseSnapshot,
-    MatchConditionInput, MatchTarget, SplitBy, UpstreamHeaderInput,
+pub use policy::{
+    ByteMatcher, CanaryDecision, CanaryReleaseEvalRequest, CanaryReleaseRuleInput,
+    CanaryReleaseSnapshot, CanarySlotMeta, CanarySlotSheet, MatchConditionInput, MatchTarget,
+    SplitBy, UpstreamHeaderInput,
 };
