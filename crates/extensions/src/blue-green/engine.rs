@@ -273,7 +273,7 @@ impl BlueGreenEngine {
                 return Err(Error::InvalidPolicy);
             }
 
-            let secret_hash = if let Some(ref sec) = rule.preview_secret {
+            let (secret_hash, secret_bytes) = if let Some(ref sec) = rule.preview_secret {
                 let trimmed_sec = sec.trim();
                 if trimmed_sec.len() > 256
                     || trimmed_sec.bytes().any(|b| b == b'\r' || b == b'\n' || b == 0)
@@ -281,12 +281,16 @@ impl BlueGreenEngine {
                     return Err(Error::InvalidPolicy);
                 }
                 if !trimmed_sec.is_empty() {
-                    fnv1a_64(trimmed_sec.as_bytes())
+                    let mut h = fnv1a_64(trimmed_sec.as_bytes());
+                    if h == 0 {
+                        h = 1;
+                    }
+                    (h, Some(Arc::from(trimmed_sec.as_bytes())))
                 } else {
-                    0
+                    (0, None)
                 }
             } else {
-                0
+                (0, None)
             };
 
             let mut allowed_cidrs = Vec::with_capacity(rule.allowed_cidrs.len());
@@ -354,6 +358,7 @@ impl BlueGreenEngine {
                 preview_query_param,
                 secret_header,
                 secret_hash,
+                secret_bytes,
                 allowed_cidrs,
             });
         }
@@ -445,9 +450,10 @@ impl BlueGreenEngine {
             let mut cidr_ok = 1u8;
 
             if has_override == 1 {
-                // 2a. Pre-shared Secret Key validation in 1 integer register comparison
+                // 2a. Pre-shared Secret Key validation with fast-path register check + constant-time comparison
                 secret_ok = verify_preview_secret(
                     rule.secret_hash,
+                    rule.secret_bytes.as_deref(),
                     rule.secret_header.as_deref(),
                     req.query,
                     &header_lookup,

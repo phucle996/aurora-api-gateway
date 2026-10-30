@@ -17,6 +17,7 @@ typedef struct {
 typedef struct {
   ngx_str_t target_upstream;
   ngx_uint_t evaluated;
+  ngx_uint_t in_flight_entered;
 } ngx_http_gateway_ctx_t;
 
 extern ngx_module_t ngx_http_gateway_module;

@@ -87,11 +87,25 @@ pub fn extract_query_value<'a>(query: &'a [u8], param_name: &[u8]) -> Option<&'a
     None
 }
 
+/// Constant-time byte slice comparison to eliminate timing side-channels.
+#[inline(always)]
+pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for i in 0..a.len() {
+        diff |= a[i] ^ b[i];
+    }
+    diff == 0
+}
+
 /// Verifies pre-shared preview secret token across Header, Cookie, and Query.
 /// Returns 1 if valid or unconstrained, 0 if unauthorized.
 #[inline]
 pub fn verify_preview_secret<'h>(
     secret_hash: u64,
+    secret_bytes: Option<&[u8]>,
     secret_header: Option<&str>,
     query: &[u8],
     header_lookup: &impl Fn(&str) -> Option<&'h [u8]>,
@@ -99,24 +113,41 @@ pub fn verify_preview_secret<'h>(
     if secret_hash == 0 {
         return 1;
     }
-    let sec_hdr = secret_header.unwrap_or("x-preview-secret");
-    if let Some(token_bytes) = header_lookup(sec_hdr) {
-        let trimmed = trim_ascii(token_bytes);
-        if !trimmed.is_empty() && fnv1a_64(trimmed) == secret_hash {
-            return 1;
+    let expected = match secret_bytes {
+        Some(b) if !b.is_empty() => b,
+        _ => return 1,
+    };
+
+    let check_candidate = |candidate: &[u8]| -> bool {
+        let trimmed = trim_ascii(candidate);
+        if trimmed.is_empty() {
+            return false;
         }
+        // Fast integer check in 1 register
+        if fnv1a_64(trimmed) != secret_hash {
+            return false;
+        }
+        // Constant-time byte-by-byte verification
+        constant_time_eq(trimmed, expected)
+    };
+
+    let sec_hdr = secret_header.unwrap_or("x-preview-secret");
+    if let Some(token_bytes) = header_lookup(sec_hdr)
+        && check_candidate(token_bytes)
+    {
+        return 1;
     }
     let cookie_match = header_lookup("cookie").and_then(|cookie_hdr| {
         extract_cookie_value(cookie_hdr, b"preview_secret")
             .or_else(|| extract_cookie_value(cookie_hdr, sec_hdr.as_bytes()))
-            .filter(|b| !b.is_empty() && fnv1a_64(b) == secret_hash)
+            .filter(|b| check_candidate(b))
     });
     if cookie_match.is_some() {
         return 1;
     }
     if let Some(_token_bytes) = extract_query_value(query, b"preview_secret")
         .or_else(|| extract_query_value(query, sec_hdr.as_bytes()))
-        .filter(|b| !b.is_empty() && fnv1a_64(b) == secret_hash)
+        .filter(|b| check_candidate(b))
     {
         return 1;
     }
@@ -165,11 +196,12 @@ mod tests {
     #[test]
     fn test_verify_preview_secret() {
         let secret = "top-secret-2026";
-        let secret_hash = fnv1a_64(secret.as_bytes());
+        let secret_bytes = secret.as_bytes();
+        let secret_hash = fnv1a_64(secret_bytes);
 
         // Header check
         assert_eq!(
-            verify_preview_secret(secret_hash, Some("x-preview-secret"), b"", &|k| {
+            verify_preview_secret(secret_hash, Some(secret_bytes), Some("x-preview-secret"), b"", &|k| {
                 (k == "x-preview-secret").then_some(b"top-secret-2026")
             }),
             1
@@ -177,7 +209,7 @@ mod tests {
 
         // Cookie check
         assert_eq!(
-            verify_preview_secret(secret_hash, Some("x-preview-secret"), b"", &|k| {
+            verify_preview_secret(secret_hash, Some(secret_bytes), Some("x-preview-secret"), b"", &|k| {
                 (k == "cookie").then_some(b"preview_secret=top-secret-2026")
             }),
             1
@@ -187,6 +219,7 @@ mod tests {
         assert_eq!(
             verify_preview_secret(
                 secret_hash,
+                Some(secret_bytes),
                 Some("x-preview-secret"),
                 b"preview_secret=top-secret-2026",
                 &|_| None
@@ -196,11 +229,16 @@ mod tests {
 
         // Wrong secret -> 0
         assert_eq!(
-            verify_preview_secret(secret_hash, Some("x-preview-secret"), b"", &|k| {
+            verify_preview_secret(secret_hash, Some(secret_bytes), Some("x-preview-secret"), b"", &|k| {
                 (k == "x-preview-secret").then_some(b"wrong-key")
             }),
             0
         );
+
+        // Constant time comparison works
+        assert!(constant_time_eq(b"hello", b"hello"));
+        assert!(!constant_time_eq(b"hello", b"world"));
+        assert!(!constant_time_eq(b"hello", b"hell"));
     }
 
     #[test]

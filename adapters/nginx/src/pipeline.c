@@ -111,8 +111,13 @@ static ngx_int_t ngx_http_gateway_execute_deny(ngx_http_request_t *r,
   r->headers_out.content_length_n = out->body_len;
 
   if (out->content_type_len > 0) {
+    u_char *ct = ngx_pnalloc(r->pool, out->content_type_len);
+    if (__builtin_expect(ct == NULL, 0)) {
+      return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+    ngx_memcpy(ct, out->content_type, out->content_type_len);
     r->headers_out.content_type.len = out->content_type_len;
-    r->headers_out.content_type.data = (u_char *)out->content_type;
+    r->headers_out.content_type.data = ct;
   } else {
     ngx_str_set(&r->headers_out.content_type, "text/plain; charset=utf-8");
   }
@@ -152,12 +157,10 @@ static ngx_int_t ngx_http_gateway_execute_allow(
   ngx_http_gateway_ctx_t *ctx =
       ngx_http_get_module_ctx(r, ngx_http_gateway_module);
   if (ctx == NULL) {
-    ctx = ngx_palloc(r->pool, sizeof(ngx_http_gateway_ctx_t));
+    ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_gateway_ctx_t));
     if (__builtin_expect(ctx == NULL, 0)) {
       return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
-    ctx->target_upstream.data = NULL;
-    ctx->target_upstream.len = 0;
     ngx_http_set_ctx(r, ctx, ngx_http_gateway_module);
   }
   ctx->evaluated = 1;
@@ -289,6 +292,26 @@ ngx_int_t ngx_http_gateway_handler(ngx_http_request_t *r) {
     ngx_http_gateway_accelerate_socket(r->connection);
   }
 
+  ngx_http_gateway_ctx_t *ctx =
+      ngx_http_get_module_ctx(r, ngx_http_gateway_module);
+  if (ctx != NULL && ctx->evaluated) {
+    return NGX_DECLINED;
+  }
+
+  if (ctx == NULL) {
+    ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_gateway_ctx_t));
+    if (__builtin_expect(ctx == NULL, 0)) {
+      return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+    ngx_http_set_ctx(r, ctx, ngx_http_gateway_module);
+  }
+  ctx->evaluated = 1;
+
+  if (!ctx->in_flight_entered) {
+    aurora_gateway_in_flight_enter();
+    ctx->in_flight_entered = 1;
+  }
+
   ngx_str_t host = r->headers_in.server;
   if (host.len == 0) {
     ngx_http_core_srv_conf_t *server =
@@ -317,10 +340,7 @@ ngx_int_t ngx_http_gateway_handler(ngx_http_request_t *r) {
       .now_ms = (uint64_t)tp->sec * 1000 + tp->msec,
   };
 
-  aurora_gateway_in_flight_enter();
-
   AuroraAccessOutcome outcome;
-  ngx_memzero(&outcome, sizeof(outcome));
 
   if (aurora_gateway_phase_access(&input, r, ngx_http_gateway_header_lookup,
                                   &outcome) != 0) {

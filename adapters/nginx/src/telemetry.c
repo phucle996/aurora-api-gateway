@@ -228,8 +228,12 @@ ngx_int_t ngx_http_gateway_log_handler(ngx_http_request_t *r) {
     return NGX_OK;
   }
 
-  /* Giảm In-Flight Request Gauge ngay khi request bước vào Log Phase (< 1ns) */
-  aurora_gateway_in_flight_leave();
+  /* Giảm In-Flight Request Gauge nếu request đã từng tăng gauge trong Access Phase */
+  ctx = ngx_http_get_module_ctx(r, ngx_http_gateway_module);
+  if (ctx != NULL && ctx->in_flight_entered) {
+    ctx->in_flight_entered = 0;
+    aurora_gateway_in_flight_leave();
+  }
 
   conf = ngx_http_get_module_loc_conf(r, ngx_http_gateway_module);
   if (__builtin_expect(!conf || !conf->enabled, 0)) {

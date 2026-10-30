@@ -119,6 +119,7 @@ pub(crate) struct CompiledBlueGreenRule {
     pub preview_query_param: Option<Vec<u8>>,
     pub secret_header: Option<String>,
     pub secret_hash: u64,
+    pub secret_bytes: Option<std::sync::Arc<[u8]>>,
     pub allowed_cidrs: Vec<(u32, u32)>,
 }
 

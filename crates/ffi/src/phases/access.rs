@@ -160,6 +160,9 @@ fn populate_allow_outcome(
 ) {
     outcome.action = AURORA_ACTION_ALLOW;
     outcome.status_code = 200;
+    outcome.body_len = 0;
+    outcome.content_type_len = 0;
+    let mut flags = 0u32;
 
     let h_count = forwarded_headers.len().min(AURORA_MAX_FORWARD_HEADERS);
     outcome.headers_count = h_count as u32;
@@ -181,12 +184,14 @@ fn populate_allow_outcome(
         let len = b.len().min(128);
         outcome.target_upstream_len = len as u32;
         outcome.target_upstream[..len].copy_from_slice(&b[..len]);
+    } else {
+        outcome.target_upstream_len = 0;
     }
 
     outcome.rate_limit_bytes_per_sec = rate_limit_bytes_per_sec;
 
     if let Some(tok) = conn_token {
-        outcome.flags |= AURORA_FLAG_HAS_RELEASE_TOKEN;
+        flags |= AURORA_FLAG_HAS_RELEASE_TOKEN;
         outcome.release_token.opaque[0] = 1;
         outcome.release_token.opaque[1] = if tok.is_redis { 1 } else { 0 };
         let r_bytes = tok.rule_id.as_bytes();
@@ -198,7 +203,11 @@ fn populate_allow_outcome(
         let id_len = id_bytes.len().min(30);
         outcome.release_token.opaque[3] = id_len as u8;
         outcome.release_token.opaque[34..34 + id_len].copy_from_slice(&id_bytes[..id_len]);
+    } else {
+        outcome.release_token.opaque[0] = 0;
     }
+
+    outcome.flags = flags;
 }
 
 #[inline]
@@ -211,19 +220,27 @@ fn populate_deny_outcome(
 ) {
     outcome.action = AURORA_ACTION_DENY;
     outcome.status_code = status as u32;
-    outcome.flags |= u32::from(www_authenticate) * AURORA_FLAG_WWW_AUTH;
+    outcome.flags = u32::from(www_authenticate) * AURORA_FLAG_WWW_AUTH;
+    outcome.headers_count = 0;
+    outcome.target_upstream_len = 0;
+    outcome.rate_limit_bytes_per_sec = 0;
+    outcome.release_token.opaque[0] = 0;
 
     if let Some(ct) = content_type {
         let b = ct.as_bytes();
         let len = b.len().min(64);
         outcome.content_type_len = len as u32;
         outcome.content_type[..len].copy_from_slice(&b[..len]);
+    } else {
+        outcome.content_type_len = 0;
     }
 
     if let Some(b) = body {
         let len = b.len().min(4096);
         outcome.body_len = len as u32;
         outcome.body[..len].copy_from_slice(&b[..len]);
+    } else {
+        outcome.body_len = 0;
     }
 }
 
@@ -247,7 +264,18 @@ pub unsafe extern "C" fn aurora_gateway_phase_access(
     }
 
     if input.is_null() {
-        unsafe { ptr::write(out_outcome, AuroraAccessOutcome::default()) };
+        unsafe {
+            let out = &mut *out_outcome;
+            out.action = AURORA_ACTION_ALLOW;
+            out.status_code = 200;
+            out.flags = 0;
+            out.headers_count = 0;
+            out.target_upstream_len = 0;
+            out.rate_limit_bytes_per_sec = 0;
+            out.body_len = 0;
+            out.content_type_len = 0;
+            out.release_token.opaque[0] = 0;
+        }
         return 0;
     }
 
@@ -284,7 +312,7 @@ pub unsafe extern "C" fn aurora_gateway_phase_access(
         let space = AccessPhaseSpace::new(space_engines);
         let decision = space.evaluate(&ctx, header_lookup);
 
-        let mut outcome = AuroraAccessOutcome::default();
+        let out = unsafe { &mut *out_outcome };
         match decision {
             AccessDecision::Allow {
                 forwarded_headers,
@@ -293,7 +321,7 @@ pub unsafe extern "C" fn aurora_gateway_phase_access(
                 conn_token,
             } => {
                 populate_allow_outcome(
-                    &mut outcome,
+                    out,
                     forwarded_headers.as_deref().unwrap_or(&[]),
                     target_upstream,
                     rate_limit_bytes_per_sec,
@@ -306,18 +334,13 @@ pub unsafe extern "C" fn aurora_gateway_phase_access(
                 content_type,
                 body,
             } => {
-                populate_deny_outcome(&mut outcome, status, www_authenticate, content_type, body);
+                populate_deny_outcome(out, status, www_authenticate, content_type, body);
             }
         }
-
-        outcome
     }));
 
     match result {
-        Ok(outcome) => {
-            unsafe { ptr::write(out_outcome, outcome) };
-            0
-        }
+        Ok(()) => 0,
         Err(_) => 1,
     }
 }
