@@ -23,8 +23,28 @@ pub const AURORA_EXT_CANARY_RELEASE: u32 = 7;
 pub const AURORA_EXT_BLUE_GREEN: u32 = 8;
 pub const AURORA_EXT_REQUEST_MIRROR: u32 = 9;
 pub const AURORA_EXT_REQUEST_TERMINATION: u32 = 10;
-pub const AURORA_EXT_COUNT: usize = 11;
+pub const AURORA_EXT_RESPONSE_COMPRESSION: u32 = 11;
+pub const AURORA_EXT_RESPONSE_CACHE: u32 = 12;
+pub const AURORA_EXT_COUNT: usize = 13;
+pub const AURORA_SLOT_ROUTE_MASKS: u32 = 15;
 pub const POLICY_MAX_SLOTS: usize = 16;
+
+/// Pre-computed per-route extension bitmask snapshot stored in `AURORA_SLOT_ROUTE_MASKS`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Default)]
+pub struct RouteMaskSnapshot {
+    #[serde(default)]
+    pub routes: Vec<RouteMaskRule>,
+}
+
+/// Bitmask rule binding an HTTP path prefix to enabled/disabled extensions.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct RouteMaskRule {
+    pub path: String,
+    pub allow_mask: u32,
+    pub deny_mask: u32,
+    #[serde(default)]
+    pub explicit: bool,
+}
 
 pub const POLICY_HEADER_SIZE: usize = 4096;
 pub const POLICY_SLOT_TOTAL_SIZE: usize = 65536;

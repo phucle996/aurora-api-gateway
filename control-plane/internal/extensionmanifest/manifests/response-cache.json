@@ -1,0 +1,154 @@
+{
+  "key": "builtin/response-cache",
+  "version": 1,
+  "id": "response-cache",
+  "name": "Response Cache",
+  "category": "response_transformation",
+  "description": "Multi-variant in-memory HTTP response cache with zero-copy pointer handover, sub-microsecond access-phase fast path, and SIMD content negotiation.",
+  "renderer": "response-cache",
+  "builtin": true,
+  "default_config": {
+    "enabled": true,
+    "default_ttl_secs": 300,
+    "max_memory_mb": 256,
+    "max_body_bytes": 10485760,
+    "allowed_methods": [
+      "GET",
+      "HEAD"
+    ],
+    "allowed_status_codes": [
+      200,
+      203,
+      300,
+      301,
+      302,
+      307,
+      308,
+      404
+    ],
+    "eager_compression": false,
+    "routes_override": []
+  },
+  "ui_schema": {
+    "layout_type": "form",
+    "fields": [
+      {
+        "key": "enabled",
+        "label": "Kích hoạt Cache (Enable Response Cache)",
+        "type": "boolean",
+        "description": "Bật hoặc tắt tính năng bộ nhớ đệm phản hồi HTTP"
+      },
+      {
+        "key": "default_ttl_secs",
+        "label": "Thời gian lưu mặc định (Default TTL in Seconds)",
+        "type": "number",
+        "description": "Thời gian sống (TTL) mặc định nếu upstream không gửi max-age (mặc định: 300 giây)"
+      },
+      {
+        "key": "max_memory_mb",
+        "label": "Dung lượng RAM tối đa (Max Memory MB)",
+        "type": "number",
+        "description": "Giới hạn bộ nhớ RAM tối đa cho bộ nhớ đệm (mặc định: 256 MB)"
+      },
+      {
+        "key": "max_body_bytes",
+        "label": "Kích thước phản hồi tối đa (Max Body Bytes)",
+        "type": "number",
+        "description": "Kích thước body lớn nhất được phép lưu cache (mặc định: 10485760 bytes = 10MB)"
+      },
+      {
+        "key": "allowed_methods",
+        "label": "Phương thức HTTP cho phép cache (Allowed Methods)",
+        "type": "array",
+        "item_type": "text",
+        "description": "Danh sách HTTP methods được phép lưu cache (GET, HEAD)"
+      },
+      {
+        "key": "eager_compression",
+        "label": "Nén trước toàn bộ biến thể (Eager Pre-compression)",
+        "type": "boolean",
+        "description": "Tự động nén sẵn các biến thể zstd, br, gzip ngay khi upstream trả về (thay vì nén lazy)"
+      }
+    ]
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "default_ttl_secs": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 864000
+      },
+      "max_memory_mb": {
+        "type": "integer",
+        "minimum": 4,
+        "maximum": 65536
+      },
+      "max_body_bytes": {
+        "type": "integer",
+        "minimum": 128,
+        "maximum": 104857600
+      },
+      "allowed_methods": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "allowed_status_codes": {
+        "type": "array",
+        "items": {
+          "type": "integer"
+        }
+      },
+      "cache_key_query_params": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "cache_key_headers": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "eager_compression": {
+        "type": "boolean"
+      },
+      "routes_override": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path_prefix"
+          ],
+          "properties": {
+            "path_prefix": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "ttl_secs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 864000
+            },
+            "cache_key_headers": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -16,8 +16,13 @@ typedef struct {
 
 typedef struct {
   ngx_str_t target_upstream;
+  ngx_str_t orig_path;
   ngx_uint_t evaluated;
   ngx_uint_t in_flight_entered;
+  ngx_uint_t from_cache;
+  uint32_t route_mask;
+  uint32_t compression_algorithm;
+  size_t orig_content_length;
 } ngx_http_gateway_ctx_t;
 
 extern ngx_module_t ngx_http_gateway_module;
@@ -30,6 +35,12 @@ void ngx_http_gateway_conn_token_req_cleanup(void *data);
 
 /* Pipeline Access Phase Handler */
 ngx_int_t ngx_http_gateway_handler(ngx_http_request_t *r);
+
+/* Egress Filter Handlers */
+extern ngx_http_output_header_filter_pt ngx_http_next_header_filter;
+extern ngx_http_output_body_filter_pt   ngx_http_next_body_filter;
+ngx_int_t ngx_http_gateway_header_filter(ngx_http_request_t *r);
+ngx_int_t ngx_http_gateway_body_filter(ngx_http_request_t *r, ngx_chain_t *in);
 
 /* Shared: header lookup callback */
 uint32_t ngx_http_gateway_header_lookup(void *ctx, const uint8_t *name,

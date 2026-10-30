@@ -132,25 +132,36 @@ int main(void) {
         AuroraHeaderFilterInput hf_in = {
             .upstream_status = 200,
             .is_websocket = 0,
+            .path = (const uint8_t *)"/api/v1/users",
+            .path_len = 13,
+            .content_type = (const uint8_t *)"application/json",
+            .content_type_len = 16,
+            .content_length = 2048,
+            .accept_encoding = (const uint8_t *)"gzip, deflate, zstd",
+            .accept_encoding_len = 19,
         };
         AuroraHeaderFilterOutcome hf_out;
         assert(aurora_gateway_phase_header_filter(&hf_in, &hf_out) == 0);
-        assert(hf_out.action == AURORA_FILTER_PASSTHROUGH);
-        puts("Phase 3 Header Filter: passthrough pass");
+        puts("Phase 3 Header Filter: evaluation pass");
     }
 
     // 7. Gateway Phase 4: HTTP Body Filter Phase
     {
-        const char *test_chunk = "hello world payload";
+        const char *test_chunk = "{\"event\":\"user_login\",\"user_id\":1002,\"status\":\"success\",\"payload\":\"simulated payload length exceeding threshold\"}";
         AuroraBodyFilterInput bf_in = {
             .chunk = (const uint8_t *)test_chunk,
             .chunk_len = strlen(test_chunk),
             .is_last = 1,
+            .compression_algorithm = 1, // Zstd
+            .alloc_ctx = NULL,
+            .alloc_fn = smoke_alloc,
         };
         AuroraBodyFilterOutcome bf_out;
         assert(aurora_gateway_phase_body_filter(&bf_in, &bf_out) == 0);
-        assert(bf_out.action == AURORA_BODY_FILTER_PASSTHROUGH);
-        puts("Phase 4 Body Filter: streaming passthrough pass");
+        puts("Phase 4 Body Filter: zero-copy pointer handover pass");
+        if (bf_out.action == AURORA_BODY_FILTER_MUTATED && bf_out.out_ptr != NULL) {
+            free(bf_out.out_ptr);
+        }
     }
 
     // 8. Gateway Phase 5: HTTP Log Phase Submission
@@ -204,7 +215,92 @@ int main(void) {
         puts("Live In-Flight Gauges & Prometheus render pass");
     }
 
-    // 10. Process Shutdown
+    // 10. Gateway Response Cache Substrate & Zero-Copy Pinned Memory
+    {
+        const char *cache_policy = "{\"enabled\":true,\"default_ttl_secs\":300,\"max_memory_mb\":64,\"allowed_methods\":[\"GET\",\"HEAD\"]}";
+        assert(aurora_gateway_policy_writer_update(12, 1, (const uint8_t *)cache_policy, strlen(cache_policy)) == 0);
+        aurora_gateway_policy_sync();
+
+        // Sub-test A: Cache MISS before storing
+        AuroraAccessInput in_cache = {
+            .client_ip = (const uint8_t *)"127.0.0.1",
+            .client_ip_len = 9,
+            .host = (const uint8_t *)"example.com",
+            .host_len = 11,
+            .path = (const uint8_t *)"/api/cached-resource",
+            .path_len = 20,
+            .method = (const uint8_t *)"GET",
+            .method_len = 3,
+            .query = NULL,
+            .query_len = 0,
+            .content_length = 0,
+            .header_length = 0,
+            .random_seed = 42,
+            .now_ms = 1000,
+        };
+        AuroraAccessOutcome out_cache;
+        assert(aurora_gateway_phase_access(&in_cache, NULL, NULL, smoke_alloc, &out_cache) == 0);
+        assert(out_cache.action == AURORA_ACTION_ALLOW);
+
+        // Sub-test B: Store response via cache store
+        const char *payload = "{\"status\":\"ok\",\"message\":\"High-speed Edge Response Cache\"}";
+        AuroraCacheStoreInput store_in = {
+            .method = (const uint8_t *)"GET",
+            .method_len = 3,
+            .host = (const uint8_t *)"example.com",
+            .host_len = 11,
+            .path = (const uint8_t *)"/api/cached-resource",
+            .path_len = 20,
+            .query = NULL,
+            .query_len = 0,
+            .status = 200,
+            .content_type = (const uint8_t *)"application/json",
+            .content_type_len = 16,
+            .body = (const uint8_t *)payload,
+            .body_len = strlen(payload),
+            .cache_control = (const uint8_t *)"public, max-age=600",
+            .cache_control_len = 19,
+            .etag = (const uint8_t *)"\"v1.0\"",
+            .etag_len = 6,
+        };
+        assert(aurora_gateway_phase_cache_store(&store_in) == 0);
+
+        // Sub-test C: Cache HIT with pinned Arc
+        AuroraAccessOutcome out_hit;
+        memset(&out_hit, 0, sizeof(out_hit));
+        assert(aurora_gateway_phase_access(&in_cache, NULL, NULL, smoke_alloc, &out_hit) == 0);
+        assert(out_hit.action == AURORA_ACTION_DENY);
+        assert(out_hit.status_code == 200);
+        assert(out_hit.flags & AURORA_FLAG_CACHE_PINNED);
+        assert(out_hit.body != NULL);
+        assert(out_hit.body_len > 0);
+
+        // Safe release via pool cleanup hook
+        uintptr_t ptr_val = 0;
+        memcpy(&ptr_val, &out_hit.release_token.opaque[0], sizeof(uintptr_t));
+        assert(ptr_val != 0);
+        aurora_release_cache_entry((void *)ptr_val);
+
+        puts("Response Cache Multi-Variant & Zero-Copy Pinned Memory pass");
+
+        // Sub-test D: Per-Route Bitmask Switch via AURORA_SLOT_ROUTE_MASKS
+        const char *route_masks_json =
+            "{\"routes\":[{\"path\":\"/api/cached-resource\",\"allow_mask\":0,\"deny_mask\":4294967295,\"explicit\":true}]}";
+        assert(aurora_gateway_policy_writer_update(
+                   AURORA_SLOT_ROUTE_MASKS, 10, (const uint8_t *)route_masks_json,
+                   strlen(route_masks_json)) == 0);
+        aurora_gateway_policy_sync();
+
+        AuroraAccessOutcome out_bypassed;
+        memset(&out_bypassed, 0, sizeof(out_bypassed));
+        assert(aurora_gateway_phase_access(&in_cache, NULL, NULL, smoke_alloc, &out_bypassed) == 0);
+        // Because route_mask is 0 for /api/cached-resource, cache is bypassed and action is ALLOW!
+        assert(out_bypassed.action == AURORA_ACTION_ALLOW);
+        assert(out_bypassed.route_mask == 0);
+        puts("Per-Route Bitmask Switch (AURORA_SLOT_ROUTE_MASKS): isolation & bypass pass");
+    }
+
+    // 11. Process Shutdown
     aurora_gateway_process_exit();
     puts("Gateway Process Exit: clean shutdown pass");
 

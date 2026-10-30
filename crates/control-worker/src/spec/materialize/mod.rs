@@ -7,7 +7,9 @@ pub mod upstream;
 #[cfg(test)]
 mod tests;
 
-pub use extensions::{render_extensions, ExtensionInstanceSpec, RenderedExtensions};
+pub use extensions::{
+    compile_route_masks_into_shm, render_extensions, ExtensionInstanceSpec, RenderedExtensions,
+};
 pub use l4::generate_l4_streams_conf;
 pub use route as routing;
 pub use route::generate_domain_routing_conf;
@@ -23,7 +25,10 @@ pub struct MaterializeResult {
     pub policy_changed: bool,
 }
 
-use aurora_engine::shm::{POLICY_SHM_DEFAULT_PATH, POLICY_SHM_TOTAL_BYTES, PolicyShmHeader};
+use aurora_engine::shm::{
+    AURORA_EXT_COUNT, AURORA_SLOT_ROUTE_MASKS, POLICY_SHM_DEFAULT_PATH, POLICY_SHM_TOTAL_BYTES,
+    PolicyShmHeader,
+};
 use std::os::unix::fs::OpenOptionsExt;
 
 /// Synchronizes dynamic policy snapshots directly to Shared Memory (SHM).
@@ -81,8 +86,8 @@ pub fn sync_policy_to_shm(
 
     let mut any_changed = false;
 
-    // Direct write to the 11 dynamic extension SHM slots (0..=10)
-    for slot_id in 0..11 {
+    // Direct write to the dynamic extension SHM slots and Route Bitmask slot
+    for slot_id in (0..(AURORA_EXT_COUNT as u32)).chain(std::iter::once(AURORA_SLOT_ROUTE_MASKS)) {
         if let Some(raw_bytes) = rendered.get_shm_slot(slot_id) {
             // Avoid rewriting identical payload to save memory bus bandwidth
             if let Some((slot_gen, data)) = header.read_slot(slot_id)
@@ -141,8 +146,9 @@ pub async fn materialize_gateway(
     routing_dir: &Path,
 ) -> Result<MaterializeResult, Box<dyn std::error::Error + Send + Sync>> {
     let mut changed = false;
-    let rendered_extensions = render_extensions(&spec.extensions)
+    let mut rendered_extensions = render_extensions(&spec.extensions)
         .map_err(|error| format!("render extension instances: {error}"))?;
+    compile_route_masks_into_shm(&spec.routing, &mut rendered_extensions);
 
     // 1. Dynamic extension policies (synchronized directly to Shared Memory for zero-reload hot-swap)
     let shm_target = if let Ok(path) = std::env::var("AURORA_POLICY_SHM_PATH") {

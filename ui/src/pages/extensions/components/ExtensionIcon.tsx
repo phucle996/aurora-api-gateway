@@ -288,8 +288,11 @@ export function ExtensionIcon({ id, category, className = 'w-5 h-5' }: Extension
       return <VenetianMask className={className} />;
     case 'json-filter':
       return <Filter className={className} />;
+    case 'response-compression':
     case 'compression-gzip':
       return <Archive className={className} />;
+    case 'response-cache':
+      return <DatabaseZap className={className} />;
     case 'compression-brotli':
     case 'brotli_compress':
       return <FileArchive className={className} />;

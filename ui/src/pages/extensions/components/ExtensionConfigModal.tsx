@@ -6,7 +6,9 @@ import { ExtensionRulesTable } from './config/ExtensionRulesTable';
 import { ExtensionRuleEditForm } from './config/ExtensionRuleEditForm';
 import { ExtensionRawJson } from './config/ExtensionRawJson';
 import { ExtensionConfigFooter } from './config/ExtensionConfigFooter';
-import { Table as TableIcon, SlidersHorizontal } from 'lucide-react';
+import { ExtensionProfilesManager } from './config/ExtensionProfilesManager';
+import { resolveExtensionProfiles } from '../data/extensionProfiles';
+import { Table as TableIcon, SlidersHorizontal, Layers } from 'lucide-react';
 
 export function ExtensionConfigModal({
   extension,
@@ -60,7 +62,22 @@ export function ExtensionConfigModal({
     return Boolean(schema.fields && schema.fields.length > 0);
   }, [schema.fields]);
 
-  const [visualTab, setVisualTab] = useState<'rules' | 'parameters'>('rules');
+  const [visualTab, setVisualTab] = useState<'rules' | 'parameters' | 'profiles'>('rules');
+
+  const availableProfilesCount = useMemo(() => {
+    return resolveExtensionProfiles(extension.id, parsedConfig).length;
+  }, [extension.id, parsedConfig]);
+
+  const handleUpdateProfiles = (nextProfiles: Record<string, any>) => {
+    const next = { ...parsedConfig };
+    if (Object.keys(nextProfiles).length > 0) {
+      next.profiles = nextProfiles;
+    } else {
+      delete next.profiles;
+    }
+    setParsedConfig(next);
+    syncToJSON(next, rules);
+  };
 
   // Initialize data on modal open
   useEffect(() => {
@@ -86,11 +103,8 @@ export function ExtensionConfigModal({
     setEditingIndex(null);
     setWorkspaceMode('visual');
 
-    // Default to 'rules' if table is supported, else 'parameters'
-    const isTableType =
-      schema.layout_type === 'table' ||
-      Boolean(schema.table_columns && schema.table_columns.length > 0);
-    setVisualTab(isTableType ? 'rules' : 'parameters');
+    // Default to 'profiles' so users define Extension Profiles first, then 'parameters'
+    setVisualTab('profiles');
   }, [extension, schema.layout_type, schema.table_columns]);
 
   // Sync state between Visual and JSON
@@ -327,25 +341,25 @@ export function ExtensionConfigModal({
               />
             ) : (
               <div className="space-y-5 animate-in fade-in duration-200">
-                {/* Sub-tab navigation if both Parameters and Policy Rules exist */}
-                {hasTable && hasFields && (
-                  <div className="flex items-center justify-between border-b border-border/80 pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setVisualTab('rules')}
-                        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${visualTab === 'rules'
-                            ? 'bg-primary/15 text-primary border border-primary/30 font-semibold shadow-2xs'
-                            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50 border border-transparent'
-                          }`}
-                      >
-                        <TableIcon className="w-3.5 h-3.5" />
-                        <span>Policy Rules & Exceptions</span>
-                        <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-primary/20 text-primary font-mono font-bold">
-                          {rules.length}
-                        </span>
-                      </button>
+                {/* Sub-tab navigation for Extension Profiles, Global Parameters, and Advanced Rules */}
+                <div className="flex items-center justify-between border-b border-border/80 pb-2.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setVisualTab('profiles')}
+                      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${visualTab === 'profiles'
+                          ? 'bg-primary/15 text-primary border border-primary/30 font-semibold shadow-2xs'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/50 border border-transparent'
+                        }`}
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                      <span>Extension Profiles (Gán trên Visual Route Canvas)</span>
+                      <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-primary/20 text-primary font-mono font-bold">
+                        {availableProfilesCount}
+                      </span>
+                    </button>
 
+                    {hasFields && (
                       <button
                         type="button"
                         onClick={() => setVisualTab('parameters')}
@@ -355,17 +369,34 @@ export function ExtensionConfigModal({
                           }`}
                       >
                         <SlidersHorizontal className="w-3.5 h-3.5" />
-                        <span>Global Parameters</span>
+                        <span>Global Engine Parameters</span>
                         <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-muted text-muted-foreground font-mono">
                           {schema.fields?.length || 0}
                         </span>
                       </button>
-                    </div>
+                    )}
+
+                    {hasTable && rules.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setVisualTab('rules')}
+                        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${visualTab === 'rules'
+                            ? 'bg-primary/15 text-primary border border-primary/30 font-semibold shadow-2xs'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50 border border-transparent'
+                          }`}
+                      >
+                        <TableIcon className="w-3.5 h-3.5" />
+                        <span>Legacy Static Rules</span>
+                        <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-primary/20 text-primary font-mono font-bold">
+                          {rules.length}
+                        </span>
+                      </button>
+                    )}
                   </div>
-                )}
+                </div>
 
                 {/* Rules Table Tab */}
-                {(visualTab === 'rules' || (!hasFields && hasTable)) && hasTable && (
+                {visualTab === 'rules' && hasTable && (
                   <ExtensionRulesTable
                     rules={rules}
                     tableColumns={schema.table_columns}
@@ -377,7 +408,7 @@ export function ExtensionConfigModal({
                 )}
 
                 {/* Parameters Form Tab */}
-                {(visualTab === 'parameters' || (!hasTable && hasFields)) && hasFields && (
+                {visualTab === 'parameters' && hasFields && (
                   <ExtensionVisualForm
                     fields={schema.fields || []}
                     parsedConfig={parsedConfig}
@@ -386,6 +417,15 @@ export function ExtensionConfigModal({
                     onToggleShowPassword={(key) =>
                       setShowPasswords((prev) => ({ ...prev, [key]: !prev[key] }))
                     }
+                  />
+                )}
+
+                {/* Route Profiles Tab */}
+                {visualTab === 'profiles' && (
+                  <ExtensionProfilesManager
+                    extensionKey={extension.id}
+                    parsedConfig={parsedConfig}
+                    onUpdateProfiles={handleUpdateProfiles}
                   />
                 )}
               </div>

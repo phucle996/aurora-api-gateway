@@ -659,16 +659,56 @@ export const EXTENSION_DEFAULT_CONFIGS: Record<string, Record<string, any>> = {
       user: ['public_*']
     }
   },
+  'response-compression': {
+    enabled: true,
+    min_length: 1024,
+    prefer_algorithms: ['zstd', 'br', 'gzip'],
+    zstd_level: 3,
+    brotli_level: 4,
+    gzip_level: 4,
+    types: [
+      'application/json',
+      'text/plain',
+      'text/css',
+      'application/javascript',
+      'text/xml',
+      'application/xml',
+      'application/xml+rss',
+      'text/javascript',
+      'image/svg+xml',
+      'application/graphql+json'
+    ],
+    routes_override: []
+  },
+  'response-cache': {
+    enabled: true,
+    default_ttl_secs: 300,
+    max_memory_mb: 256,
+    max_body_bytes: 10485760,
+    allowed_methods: ['GET', 'HEAD'],
+    allowed_status_codes: [200, 203, 300, 301, 302, 307, 308, 404],
+    eager_compression: false,
+    routes_override: []
+  },
   'compression-gzip': {
     enabled: true,
-    level: 6,
+    level: 4,
     min_length: 1024,
+    vary: true,
+    proxied: 'any',
+    http_version: '1.1',
+    disable_msie6: true,
     types: [
-      'text/html',
+      'text/plain',
+      'text/css',
       'application/json',
       'application/javascript',
-      'text/css',
-      'application/xml'
+      'text/xml',
+      'application/xml',
+      'application/xml+rss',
+      'text/javascript',
+      'image/svg+xml',
+      'application/graphql+json'
     ]
   },
   'error-transform': {

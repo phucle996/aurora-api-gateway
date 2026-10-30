@@ -39,6 +39,22 @@ uint32_t aurora_gateway_policy_writer_clear(uint32_t slot_id, uint64_t generatio
 
 #define AURORA_FLAG_WWW_AUTH (1 << 0)
 #define AURORA_FLAG_HAS_RELEASE_TOKEN (1 << 1)
+#define AURORA_FLAG_CACHE_PINNED (1 << 2)
+
+#define AURORA_EXT_IP_RESTRICTION       0
+#define AURORA_EXT_JWT                  1
+#define AURORA_EXT_RATE_LIMIT           2
+#define AURORA_EXT_CONN_LIMIT           3
+#define AURORA_EXT_TRAFFIC_SHAPER       4
+#define AURORA_EXT_RESOURCE_LIMIT       5
+#define AURORA_EXT_TRAFFIC_SPLIT        6
+#define AURORA_EXT_CANARY_RELEASE       7
+#define AURORA_EXT_BLUE_GREEN           8
+#define AURORA_EXT_REQUEST_MIRROR       9
+#define AURORA_EXT_REQUEST_TERMINATION  10
+#define AURORA_EXT_RESPONSE_COMPRESSION 11
+#define AURORA_EXT_RESPONSE_CACHE       12
+#define AURORA_SLOT_ROUTE_MASKS         15
 
 #define AURORA_MAX_FORWARD_HEADERS 16
 
@@ -93,7 +109,7 @@ typedef struct {
   uint32_t target_upstream_len;
   uint32_t body_len;
   uint32_t content_type_len;
-  uint32_t _reserved;
+  uint32_t route_mask;
 
   uint64_t rate_limit_bytes_per_sec;
 
@@ -142,10 +158,18 @@ uint32_t aurora_gateway_phase_content(const AuroraContentInput *input,
 
 #define AURORA_FILTER_PASSTHROUGH 0
 #define AURORA_FILTER_MUTATE 1
+#define AURORA_FILTER_COMPRESS 2
 
 typedef struct {
   uint32_t upstream_status;
   uint32_t is_websocket;
+  const uint8_t *path;
+  size_t path_len;
+  const uint8_t *content_type;
+  size_t content_type_len;
+  size_t content_length;
+  const uint8_t *accept_encoding;
+  size_t accept_encoding_len;
 } AuroraHeaderFilterInput;
 
 typedef struct {
@@ -153,6 +177,9 @@ typedef struct {
   uint32_t override_status;
   uint32_t headers_count;
   AuroraHeader headers[8];
+  uint32_t compression_algorithm;
+  const uint8_t *content_encoding_str;
+  size_t content_encoding_len;
 } AuroraHeaderFilterOutcome;
 
 uint32_t aurora_gateway_phase_header_filter(const AuroraHeaderFilterInput *input,
@@ -163,15 +190,21 @@ uint32_t aurora_gateway_phase_header_filter(const AuroraHeaderFilterInput *input
 /* ========================================================================== */
 
 #define AURORA_BODY_FILTER_PASSTHROUGH 0
+#define AURORA_BODY_FILTER_MUTATED 1
 
 typedef struct {
   const uint8_t *chunk;
   size_t chunk_len;
   uint32_t is_last;
+  uint32_t compression_algorithm;
+  void *alloc_ctx;
+  aurora_alloc_fn alloc_fn;
 } AuroraBodyFilterInput;
 
 typedef struct {
   uint32_t action;
+  uint8_t *out_ptr;
+  size_t out_len;
 } AuroraBodyFilterOutcome;
 
 uint32_t aurora_gateway_phase_body_filter(const AuroraBodyFilterInput *input,
@@ -229,6 +262,33 @@ uint32_t aurora_gateway_phase_log(const AuroraLogInput *input);
 void aurora_gateway_in_flight_enter(void);
 void aurora_gateway_in_flight_leave(void);
 uint64_t aurora_gateway_in_flight_count(void);
+
+/* ========================================================================== */
+/* Gateway Cache Substrate & Zero-Copy Lifecycle                              */
+/* ========================================================================== */
+
+typedef struct {
+  const uint8_t *method;
+  size_t method_len;
+  const uint8_t *host;
+  size_t host_len;
+  const uint8_t *path;
+  size_t path_len;
+  const uint8_t *query;
+  size_t query_len;
+  uint32_t status;
+  const uint8_t *content_type;
+  size_t content_type_len;
+  const uint8_t *body;
+  size_t body_len;
+  const uint8_t *cache_control;
+  size_t cache_control_len;
+  const uint8_t *etag;
+  size_t etag_len;
+} AuroraCacheStoreInput;
+
+void aurora_release_cache_entry(void *data);
+uint32_t aurora_gateway_phase_cache_store(const AuroraCacheStoreInput *input);
 
 #ifdef __cplusplus
 }

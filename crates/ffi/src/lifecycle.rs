@@ -31,7 +31,9 @@ pub const AURORA_EXT_CANARY_RELEASE: usize = 7;
 pub const AURORA_EXT_BLUE_GREEN: usize = 8;
 pub const AURORA_EXT_REQUEST_MIRROR: usize = 9;
 pub const AURORA_EXT_REQUEST_TERMINATION: usize = 10;
-pub const AURORA_EXT_COUNT: usize = 11;
+pub const AURORA_EXT_RESPONSE_COMPRESSION: usize = 11;
+pub const AURORA_EXT_RESPONSE_CACHE: usize = 12;
+pub const AURORA_EXT_COUNT: usize = 13;
 
 /// Active policy space holding live engines and route trie.
 #[derive(Default, Clone)]
@@ -47,19 +49,29 @@ pub struct GatewayActiveSpace {
     pub blue_green: Option<Arc<BlueGreenEngine>>,
     pub request_mirror: Option<Arc<RequestMirrorEngine>>,
     pub request_termination: Option<Arc<RequestTerminationEngine>>,
+    pub response_compression: Option<Arc<aurora_extensions::response_compression::ResponseCompressionEngine>>,
+    pub response_cache: Option<Arc<aurora_extensions::response_cache::ResponseCacheEngine>>,
     pub generations: [u64; AURORA_EXT_COUNT],
+    pub route_masks_gen: u64,
+    pub route_mask_snapshot: aurora_engine::shm::RouteMaskSnapshot,
     pub route_trie: PathRadixTree<u32>,
 }
 
 impl GatewayActiveSpace {
+    /// Resolves the longest-prefix matching extension bitmask for `path`.
+    #[inline(always)]
+    pub fn resolve_route_mask(&self, path: &[u8]) -> u32 {
+        let mut mask = None;
+        self.route_trie.for_each_match(path, |&m| {
+            mask = Some(m);
+        });
+        mask.unwrap_or(u32::MAX)
+    }
+
     /// Builds `AccessPhaseEngines` for the matching route trie path prefix.
     pub fn build_phase_engines<'a>(&'a self, path: &[u8]) -> AccessPhaseEngines<'a> {
         let mut engines = AccessPhaseEngines::default();
-        let mask = self
-            .route_trie
-            .find_best(path, |_| true, |_| 0)
-            .copied()
-            .unwrap_or(u32::MAX);
+        let mask = self.resolve_route_mask(path);
 
         if mask & (1 << AURORA_EXT_IP_RESTRICTION) != 0 {
             engines.ip_restriction = self.ip_restriction.as_deref();
@@ -163,6 +175,8 @@ pub extern "C" fn aurora_gateway_policy_sync() {
                 AURORA_EXT_BLUE_GREEN => next.blue_green = None,
                 AURORA_EXT_REQUEST_MIRROR => next.request_mirror = None,
                 AURORA_EXT_REQUEST_TERMINATION => next.request_termination = None,
+                AURORA_EXT_RESPONSE_COMPRESSION => next.response_compression = None,
+                AURORA_EXT_RESPONSE_CACHE => next.response_cache = None,
                 _ => {}
             }
         } else {
@@ -223,7 +237,48 @@ pub extern "C" fn aurora_gateway_policy_sync() {
                         next.request_termination = Some(Arc::new(eng));
                     }
                 }
+                AURORA_EXT_RESPONSE_COMPRESSION => {
+                    if let Ok(cfg) = serde_json::from_slice::<aurora_extensions::response_compression::ResponseCompressionConfig>(bytes)
+                        && let Ok(eng) = aurora_extensions::response_compression::ResponseCompressionEngine::new(cfg)
+                    {
+                        next.response_compression = Some(Arc::new(eng));
+                    }
+                }
+                AURORA_EXT_RESPONSE_CACHE => {
+                    if let Ok(cfg) = serde_json::from_slice::<aurora_extensions::response_cache::ResponseCacheConfig>(bytes)
+                        && let Ok(eng) = aurora_extensions::response_cache::ResponseCacheEngine::new(cfg)
+                    {
+                        next.response_cache = Some(Arc::new(eng));
+                    }
+                }
                 _ => {}
+            }
+        }
+    }
+
+    // Synchronize Route Bitmask slot (AURORA_SLOT_ROUTE_MASKS = 15)
+    {
+        let mut route_gen = 0u64;
+        let mut route_len = 0usize;
+        let route_data = unsafe {
+            crate::shm::aurora_gateway_policy_slot_get(
+                aurora_engine::shm::AURORA_SLOT_ROUTE_MASKS,
+                &mut route_gen,
+                &mut route_len,
+            )
+        };
+        if route_gen != next.route_masks_gen || ACTIVE_SPACE.load(Ordering::Acquire).is_null() {
+            changed = true;
+            next.route_masks_gen = route_gen;
+            if route_len == 0 || route_data.is_null() {
+                next.route_mask_snapshot = aurora_engine::shm::RouteMaskSnapshot::default();
+            } else {
+                let bytes = unsafe { slice::from_raw_parts(route_data, route_len) };
+                if let Ok(snap) =
+                    serde_json::from_slice::<aurora_engine::shm::RouteMaskSnapshot>(bytes)
+                {
+                    next.route_mask_snapshot = snap;
+                }
             }
         }
     }
@@ -264,8 +319,24 @@ pub extern "C" fn aurora_gateway_policy_sync() {
         if next.request_termination.is_some() {
             active_mask |= 1 << AURORA_EXT_REQUEST_TERMINATION;
         }
+        if next.response_compression.is_some() {
+            active_mask |= 1 << AURORA_EXT_RESPONSE_COMPRESSION;
+        }
+        if next.response_cache.is_some() {
+            active_mask |= 1 << AURORA_EXT_RESPONSE_CACHE;
+        }
 
         trie.insert(b"/", active_mask);
+        for rule in &next.route_mask_snapshot.routes {
+            let base = if rule.explicit { 0 } else { active_mask };
+            let effective = ((base | rule.allow_mask) & !rule.deny_mask) & active_mask;
+            let path_bytes = if rule.path.is_empty() {
+                b"/"
+            } else {
+                rule.path.as_bytes()
+            };
+            trie.insert(path_bytes, effective);
+        }
         next.route_trie = trie;
 
         set_active_space(next);
@@ -424,6 +495,17 @@ pub unsafe extern "C" fn aurora_gateway_extension_create(
             }
             _ => 1,
         },
+        AURORA_EXT_RESPONSE_COMPRESSION => match catch_unwind(AssertUnwindSafe(|| {
+            serde_json::from_slice::<aurora_extensions::response_compression::ResponseCompressionConfig>(bytes)
+                .map_err(|e| format!("parse: {e}"))
+                .and_then(aurora_extensions::response_compression::ResponseCompressionEngine::new)
+        })) {
+            Ok(Ok(engine)) => {
+                unsafe { *out = Box::into_raw(Box::new(engine)).cast() };
+                0
+            }
+            _ => 1,
+        },
         _ => 1,
     }
 }
@@ -492,6 +574,11 @@ pub unsafe extern "C" fn aurora_gateway_extension_destroy(
         AURORA_EXT_REQUEST_TERMINATION => unsafe {
             drop(Box::from_raw(
                 engine as *mut aurora_extensions::RequestTerminationEngine,
+            ));
+        },
+        AURORA_EXT_RESPONSE_COMPRESSION => unsafe {
+            drop(Box::from_raw(
+                engine as *mut aurora_extensions::response_compression::ResponseCompressionEngine,
             ));
         },
         _ => {}

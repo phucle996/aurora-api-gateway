@@ -101,12 +101,47 @@ static uint8_t *ngx_http_gateway_alloc(void *ctx, size_t size) {
  */
 static ngx_int_t ngx_http_gateway_execute_deny(ngx_http_request_t *r,
                                                const AuroraAccessOutcome *out) {
+  ngx_http_gateway_ctx_t *ctx =
+      ngx_http_get_module_ctx(r, ngx_http_gateway_module);
+
   if (out->flags & AURORA_FLAG_WWW_AUTH) {
     ngx_table_elt_t *challenge = ngx_list_push(&r->headers_out.headers);
     if (challenge != NULL) {
       challenge->hash = 1;
       ngx_str_set(&challenge->key, "WWW-Authenticate");
       ngx_str_set(&challenge->value, "Bearer");
+    }
+  }
+
+  /* Release token or cache pinned Arc cleanup hook */
+  if (out->flags & AURORA_FLAG_CACHE_PINNED) {
+    if (ctx != NULL) {
+      ctx->from_cache = 1;
+    }
+    ngx_pool_cleanup_t *cln = ngx_pool_cleanup_add(r->pool, 0);
+    if (cln != NULL) {
+      cln->handler = (ngx_pool_cleanup_pt)aurora_release_cache_entry;
+      uintptr_t ptr_val = 0;
+      ngx_memcpy(&ptr_val, &out->release_token.opaque[0], sizeof(uintptr_t));
+      cln->data = (void *)ptr_val;
+    }
+  }
+
+  /* Response headers (X-Cache, Content-Encoding, Vary, Age, etc.) */
+  uint32_t count = out->headers_count < AURORA_MAX_FORWARD_HEADERS
+                       ? out->headers_count
+                       : AURORA_MAX_FORWARD_HEADERS;
+  for (uint32_t i = 0; i < count; i++) {
+    if (out->headers[i].name_len == 0 || out->headers[i].name == NULL) {
+      continue;
+    }
+    ngx_table_elt_t *h = ngx_list_push(&r->headers_out.headers);
+    if (h != NULL) {
+      h->hash = 1;
+      h->key.len = out->headers[i].name_len;
+      h->key.data = (u_char *)out->headers[i].name;
+      h->value.len = out->headers[i].value_len;
+      h->value.data = (u_char *)out->headers[i].value;
     }
   }
 
@@ -148,9 +183,12 @@ static ngx_int_t ngx_http_gateway_execute_deny(ngx_http_request_t *r,
 
   ngx_int_t rc = ngx_http_send_header(r);
   if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
-    return rc;
+    ngx_http_finalize_request(r, rc);
+    return NGX_DONE;
   }
-  return ngx_http_output_filter(r, &out_chain);
+  rc = ngx_http_output_filter(r, &out_chain);
+  ngx_http_finalize_request(r, rc);
+  return NGX_DONE;
 }
 
 /*
@@ -293,6 +331,19 @@ ngx_int_t ngx_http_gateway_handler(ngx_http_request_t *r) {
     ngx_http_set_ctx(r, ctx, ngx_http_gateway_module);
   }
   ctx->evaluated = 1;
+  ctx->route_mask = 0xFFFFFFFFU;
+
+  if (r->unparsed_uri.len > 0 && r->unparsed_uri.data != NULL &&
+      r->unparsed_uri.data[0] == '/') {
+    size_t plen = 0;
+    while (plen < r->unparsed_uri.len && r->unparsed_uri.data[plen] != '?') {
+      plen++;
+    }
+    ctx->orig_path.data = r->unparsed_uri.data;
+    ctx->orig_path.len = plen;
+  } else {
+    ctx->orig_path = r->uri;
+  }
 
   if (!ctx->in_flight_entered) {
     aurora_gateway_in_flight_enter();
@@ -313,8 +364,8 @@ ngx_int_t ngx_http_gateway_handler(ngx_http_request_t *r) {
       .client_ip_len = r->connection->addr_text.len,
       .host = host.data,
       .host_len = host.len,
-      .path = r->uri.data,
-      .path_len = r->uri.len,
+      .path = ctx->orig_path.data,
+      .path_len = ctx->orig_path.len,
       .method = r->method_name.data,
       .method_len = r->method_name.len,
       .query = r->args.data,
@@ -334,9 +385,200 @@ ngx_int_t ngx_http_gateway_handler(ngx_http_request_t *r) {
     return NGX_HTTP_INTERNAL_SERVER_ERROR;
   }
 
+  ctx->route_mask = outcome.route_mask;
+
   if (outcome.action == AURORA_ACTION_DENY) {
     return ngx_http_gateway_execute_deny(r, &outcome);
   }
 
   return ngx_http_gateway_execute_allow(r, &outcome);
+}
+
+/* ========================================================================== */
+/* Egress Output Filters (Header Filter & Zero-Copy SIMD Body Filter)         */
+/* ========================================================================== */
+
+ngx_int_t ngx_http_gateway_header_filter(ngx_http_request_t *r) {
+  ngx_http_gateway_conf_t *conf =
+      ngx_http_get_module_loc_conf(r, ngx_http_gateway_module);
+  if (conf == NULL || !conf->enabled) {
+    return ngx_http_next_header_filter(r);
+  }
+
+  ngx_http_gateway_ctx_t *ctx =
+      ngx_http_get_module_ctx(r, ngx_http_gateway_module);
+  if (ctx == NULL || ctx->from_cache) {
+    return ngx_http_next_header_filter(r);
+  }
+
+  if (r->headers_out.content_length_n > 0) {
+    ctx->orig_content_length = (size_t)r->headers_out.content_length_n;
+  }
+
+  /* C-level route_mask short-circuit: skip FFI if route disables compression */
+  if (!(ctx->route_mask & (1U << AURORA_EXT_RESPONSE_COMPRESSION))) {
+    return ngx_http_next_header_filter(r);
+  }
+
+  const uint8_t *ae_val = NULL;
+  size_t ae_len = 0;
+  if (r->headers_in.accept_encoding != NULL) {
+    ae_val = (const uint8_t *)r->headers_in.accept_encoding->value.data;
+    ae_len = r->headers_in.accept_encoding->value.len;
+  }
+
+  AuroraHeaderFilterInput input = {
+      .upstream_status = (uint32_t)r->headers_out.status,
+      .is_websocket = 0,
+      .path = (ctx->orig_path.len > 0) ? ctx->orig_path.data : r->uri.data,
+      .path_len = (ctx->orig_path.len > 0) ? ctx->orig_path.len : r->uri.len,
+      .content_type = r->headers_out.content_type.data,
+      .content_type_len = r->headers_out.content_type.len,
+      .content_length = (r->headers_out.content_length_n > 0)
+                            ? (size_t)r->headers_out.content_length_n
+                            : 0,
+      .accept_encoding = ae_val,
+      .accept_encoding_len = ae_len,
+  };
+
+  AuroraHeaderFilterOutcome outcome;
+  if (aurora_gateway_phase_header_filter(&input, &outcome) == 0) {
+    if (outcome.action == AURORA_FILTER_COMPRESS &&
+        outcome.compression_algorithm > 0) {
+      ctx->compression_algorithm = outcome.compression_algorithm;
+
+      /* Gắn header Content-Encoding: zstd / br / gzip */
+      if (outcome.content_encoding_len > 0 &&
+          outcome.content_encoding_str != NULL) {
+        ngx_table_elt_t *ce = ngx_list_push(&r->headers_out.headers);
+        if (ce != NULL) {
+          ce->hash = 1;
+          ngx_str_set(&ce->key, "Content-Encoding");
+          ce->value.len = outcome.content_encoding_len;
+          ce->value.data = (u_char *)outcome.content_encoding_str;
+        }
+      }
+
+      /* Gắn header Vary: Accept-Encoding để phòng ngừa cache poisoning */
+      ngx_table_elt_t *vary = ngx_list_push(&r->headers_out.headers);
+      if (vary != NULL) {
+        vary->hash = 1;
+        ngx_str_set(&vary->key, "Vary");
+        ngx_str_set(&vary->value, "Accept-Encoding");
+      }
+
+      /* Xoá Content-Length vì kích thước payload sau nén sẽ thay đổi */
+      r->headers_out.content_length_n = -1;
+      if (r->headers_out.content_length != NULL) {
+        r->headers_out.content_length->hash = 0;
+        r->headers_out.content_length = NULL;
+      }
+    }
+  }
+
+  return ngx_http_next_header_filter(r);
+}
+
+ngx_int_t ngx_http_gateway_body_filter(ngx_http_request_t *r, ngx_chain_t *in) {
+  if (in == NULL || r->header_only) {
+    return ngx_http_next_body_filter(r, in);
+  }
+
+  ngx_http_gateway_ctx_t *ctx =
+      ngx_http_get_module_ctx(r, ngx_http_gateway_module);
+  if (ctx != NULL && ctx->from_cache) {
+    return ngx_http_next_body_filter(r, in);
+  }
+
+  size_t in_len = (in->buf != NULL) ? (size_t)(in->buf->last - in->buf->pos) : 0;
+  int is_complete_body =
+      (in_len > 0 && in->next == NULL && (r == r->main) &&
+       (in->buf->last_buf || in->buf->last_in_chain ||
+        (ctx != NULL && ctx->orig_content_length > 0 &&
+         in_len >= ctx->orig_content_length) ||
+        (r->headers_out.content_length_n > 0 &&
+         in_len >= (size_t)r->headers_out.content_length_n)));
+
+  /* Single-shot response caching fast-path (C-level route_mask short-circuit) */
+  if (is_complete_body && r->headers_out.status >= 200 &&
+      r->headers_out.status <= 404 &&
+      (ctx == NULL || (ctx->route_mask & (1U << AURORA_EXT_RESPONSE_CACHE)))) {
+    const u_char *cc_val = NULL;
+    size_t cc_len = 0;
+    const u_char *etag_val = NULL;
+    size_t etag_len = 0;
+
+    ngx_list_part_t *part = &r->headers_out.headers.part;
+    ngx_table_elt_t *header = part->elts;
+    while (part != NULL) {
+      for (ngx_uint_t i = 0; i < part->nelts; i++) {
+        if (header[i].hash != 0) {
+          if (header[i].key.len == 13 &&
+              ngx_strncasecmp(header[i].key.data, (u_char *)"cache-control", 13) == 0) {
+            cc_val = header[i].value.data;
+            cc_len = header[i].value.len;
+          } else if (header[i].key.len == 4 &&
+                     ngx_strncasecmp(header[i].key.data, (u_char *)"etag", 4) == 0) {
+            etag_val = header[i].value.data;
+            etag_len = header[i].value.len;
+          }
+        }
+      }
+      part = part->next;
+      if (part != NULL) {
+        header = part->elts;
+      }
+    }
+
+    AuroraCacheStoreInput cache_in = {
+        .method = r->method_name.data,
+        .method_len = r->method_name.len,
+        .host = (r->headers_in.server.len > 0) ? r->headers_in.server.data : (u_char *)"localhost",
+        .host_len = (r->headers_in.server.len > 0) ? r->headers_in.server.len : 9,
+        .path = (ctx != NULL && ctx->orig_path.len > 0) ? ctx->orig_path.data : r->uri.data,
+        .path_len = (ctx != NULL && ctx->orig_path.len > 0) ? ctx->orig_path.len : r->uri.len,
+        .query = r->args.data,
+        .query_len = r->args.len,
+        .status = (uint32_t)r->headers_out.status,
+        .content_type = r->headers_out.content_type.data,
+        .content_type_len = r->headers_out.content_type.len,
+        .body = in->buf->pos,
+        .body_len = in_len,
+        .cache_control = cc_val,
+        .cache_control_len = cc_len,
+        .etag = etag_val,
+        .etag_len = etag_len,
+    };
+    aurora_gateway_phase_cache_store(&cache_in);
+  }
+
+  if (ctx == NULL || ctx->compression_algorithm == 0) {
+    return ngx_http_next_body_filter(r, in);
+  }
+
+  /* Single-shot response compression */
+  if (is_complete_body) {
+    AuroraBodyFilterInput input = {
+        .chunk = in->buf->pos,
+        .chunk_len = in_len,
+        .is_last = 1,
+        .compression_algorithm = ctx->compression_algorithm,
+        .alloc_ctx = (void *)r,
+        .alloc_fn = ngx_http_gateway_alloc,
+    };
+
+      AuroraBodyFilterOutcome outcome;
+      if (aurora_gateway_phase_body_filter(&input, &outcome) == 0) {
+        if (outcome.action == AURORA_BODY_FILTER_MUTATED &&
+            outcome.out_ptr != NULL && outcome.out_len > 0) {
+          /* Zero-copy: Chuyển giao trực tiếp con trỏ bộ nhớ từ pool */
+          in->buf->pos = (u_char *)outcome.out_ptr;
+          in->buf->last = (u_char *)outcome.out_ptr + outcome.out_len;
+        }
+      }
+    }
+    /* Đã nén xong 1-shot, reset cờ */
+    ctx->compression_algorithm = 0;
+
+  return ngx_http_next_body_filter(r, in);
 }

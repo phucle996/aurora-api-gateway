@@ -21,6 +21,7 @@ import {
 import { routesApi } from '../../../lib/api/routes';
 import { upstreamsApi } from '../../../lib/api/upstreams';
 import { DEFAULT_ROUTE_FORM, type RouteFormState } from '../types';
+import { RouteExtensionSwitches } from '../sections/RouteExtensionSwitches';
 
 export default function CreateRoutePage() {
   const navigate = useNavigate();
@@ -535,19 +536,24 @@ export default function CreateRoutePage() {
           <div className="flex items-center justify-between pb-3 border-b border-border">
             <div className="flex items-center gap-2">
               <Code className="w-4 h-4 text-primary" />
-              <h2 className="text-sm font-semibold text-foreground">4. Plugins & Advanced Policy JSON</h2>
+              <h2 className="text-sm font-semibold text-foreground">4. Route Extension Profile & Switches</h2>
             </div>
             <button
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
               className="text-xs text-primary hover:underline font-medium cursor-pointer"
             >
-              {showAdvanced ? 'Hide Editor' : 'Configure Plugins JSON'}
+              {showAdvanced ? 'Hide Raw JSON' : 'Raw JSON Editor'}
             </button>
           </div>
 
-          {showAdvanced ? (
-            <div className="space-y-3">
+          <RouteExtensionSwitches
+            pluginsJson={formData.plugins_json}
+            onChange={handlePluginsJsonChange}
+          />
+
+          {showAdvanced && (
+            <div className="space-y-3 pt-3 border-t border-border/60">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] text-muted-foreground">
@@ -588,10 +594,6 @@ export default function CreateRoutePage() {
                 Define route-specific plugin overrides or extension configurations in JSON format.
               </p>
             </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Optional: Route-level plugin policies (Rate Limiting, CORS, custom headers) are currently using defaults. Click "Configure Plugins JSON" above to override.
-            </p>
           )}
         </div>
 

@@ -4,6 +4,7 @@ import { routesApi } from '../../../lib/api/routes';
 import { upstreamsApi } from '../../../lib/api/upstreams';
 import type { RouteItem, RouteFormState } from '../types';
 import { DEFAULT_ROUTE_FORM } from '../types';
+import { RouteExtensionSwitches } from './RouteExtensionSwitches';
 
 interface RouteModalProps {
   isOpen: boolean;
@@ -339,14 +340,18 @@ export function RouteModal({
             />
           </div>
 
-          {/* Advanced Plugins JSON Collapsible */}
-          <div>
+          {/* Route Extension Profile & Switches */}
+          <div className="pt-2 border-t border-border/50 space-y-3">
+            <RouteExtensionSwitches
+              pluginsJson={formData.plugins_json}
+              onChange={(nextJson) => setFormData({ ...formData, plugins_json: nextJson })}
+            />
             <button
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
-              className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"
+              className="text-xs text-primary hover:underline flex items-center gap-1 font-medium cursor-pointer"
             >
-              {showAdvanced ? 'Hide Advanced Plugins JSON' : 'Show Advanced Plugins JSON (URI Rewrite, Headers)'}
+              {showAdvanced ? 'Hide Raw Plugins JSON' : 'Show Raw Plugins JSON'}
             </button>
             {showAdvanced && (
               <div className="mt-2">

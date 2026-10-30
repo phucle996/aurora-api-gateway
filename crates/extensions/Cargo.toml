@@ -70,3 +70,6 @@ rustc-hash = "2.1"
 parking_lot = "0.12"
 ring = "0.17"
 ipnet = "2"
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
+zstd = { version = "0.13", default-features = false }
+brotli = { version = "7.0", default-features = false, features = ["std"] }

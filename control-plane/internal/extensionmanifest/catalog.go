@@ -242,6 +242,21 @@ func validateValue(schema map[string]any, value any, path string) error {
 		for key, child := range object {
 			rawProperty, exists := properties[key]
 			if !exists {
+				if path == "config" && key == "profiles" {
+					profilesMap, ok := child.(map[string]any)
+					if !ok {
+						return fmt.Errorf("config.profiles must be an object")
+					}
+					for profName, profVal := range profilesMap {
+						if strings.TrimSpace(profName) == "" {
+							return fmt.Errorf("config.profiles key must not be empty")
+						}
+						if _, ok := profVal.(map[string]any); !ok {
+							return fmt.Errorf("config.profiles.%s must be an object", profName)
+						}
+					}
+					continue
+				}
 				if !additional {
 					return fmt.Errorf("%s.%s is not supported", path, key)
 				}

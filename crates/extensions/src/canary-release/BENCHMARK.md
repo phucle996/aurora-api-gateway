@@ -11,9 +11,26 @@ Tài liệu so sánh trực tiếp hiệu năng giữa:
 
 ---
 
-## 1. Tóm Tắt Điều Hành & So Sánh Trực Tiếp Với Raw Proxy
+## 1. Tóm Tắt Điều Hành & Đối Sánh Thực Tế (Live Azure Production Benchmark)
 
-### 1.1 Mức Độ Suy Hao (Overhead) So Với Raw Proxy Baseline
+### 1.1 Bảng Đối Sánh Trực Tiếp Đa Nền Tảng (Multi-Gateway Comparison Matrix)
+*Môi trường đo: Azure VM1 (Gateway - 4 vCPU) & Azure VM2 (wrk Generator - 4 vCPU) qua private VNet peering. Cấu hình: `wrk -t4 -c100 -d15s --latency`.*
+
+| Tiêu chí | **Aurora Gateway (Baseline Path)** | **Aurora Gateway (Canary Matched)** | **Aurora Gateway (50% Rollout)** | **Native NGINX (Direct Proxy)** | **Kong 3.9.0 (LuaJIT)** | **Envoy Proxy (C++)** |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Port phục vụ** | `:80` | `:80` | `:80` | `:8088` | `:8000` | `:8090` |
+| **Đặc tả kịch bản** | Header mismatch / Fallback Baseline | Header `x-canary: beta` (Zero-Regex) | FNV-1a SWAR Hash 50/50 | Native upstream, không qua Rust | Kong Proxy Router | Envoy Route Table |
+| **Throughput (Req/s)** | **41,690.69** | **41,067.94** | **41,044.14** | **41,213.40** | **36,828.23** | **25,622.31** |
+| **Latency P50** | **2.37 ms** | **2.36 ms** | **2.41 ms** | 2.40 ms | 2.69 ms | 3.84 ms |
+| **Latency P75** | **2.72 ms** | **2.89 ms** | **2.74 ms** | 2.67 ms | 3.14 ms | 4.24 ms |
+| **Latency P90** | **3.11 ms** | **3.32 ms** | **3.13 ms** | 3.03 ms | 3.63 ms | 4.50 ms |
+| **Latency P99** | **5.76 ms** | **5.95 ms** | **5.75 ms** | 5.49 ms | 5.29 ms | 5.93 ms |
+| **Tỉ lệ so với Native NGINX** | **+1.16%** | **-0.35%** | **-0.41%** | *Baseline 100%* | -10.6% | -37.8% |
+| **Tỉ lệ so với Kong 3.9.0** | **+13.2%** | **+11.5%** | **+11.4%** | +11.9% | *Baseline 100%* | -30.4% |
+| **Tỉ lệ so với Envoy Proxy** | **+62.7%** | **+60.3%** | **+60.2%** | +60.8% | +43.7% | *Baseline 100%* |
+| **Lỗi (Socket/HTTP Drop)** | **0 (0.00%)** | **0 (0.00%)** | **0 (0.00%)** | 0 (0.00%) | 0 (0.00%) | 0 (0.00%) |
+
+### 1.2 Mức Độ Suy Hao (Overhead) So Với Raw Proxy Baseline
 - **Khi Kích Hoạt Khớp Header Regex Canary (`X-Canary: beta`)**:
   - Thông lượng Raw Proxy Baseline: **16,898.17 RPS** (Mean Latency: 12.23 ms, P50: 12.32 ms).
   - Thông lượng khi kích hoạt `canary-release`: **16,915.67 RPS** (Mean Latency: 12.21 ms, P50: 12.30 ms).

@@ -17,6 +17,7 @@ pub const AURORA_ACTION_DENY: u32 = 1;
 
 pub const AURORA_FLAG_WWW_AUTH: u32 = 1 << 0;
 pub const AURORA_FLAG_HAS_RELEASE_TOKEN: u32 = 1 << 1;
+pub const AURORA_FLAG_CACHE_PINNED: u32 = 1 << 2;
 
 pub const AURORA_MAX_FORWARD_HEADERS: usize = 16;
 
@@ -107,7 +108,7 @@ pub struct AuroraAccessOutcome {
     pub target_upstream_len: u32,
     pub body_len: u32,
     pub content_type_len: u32,
-    pub _reserved: u32,
+    pub route_mask: u32,
 
     pub rate_limit_bytes_per_sec: u64,
 
@@ -128,7 +129,7 @@ impl Default for AuroraAccessOutcome {
             target_upstream_len: 0,
             body_len: 0,
             content_type_len: 0,
-            _reserved: 0,
+            route_mask: u32::MAX,
             rate_limit_bytes_per_sec: 0,
             release_token: AuroraReleaseToken::default(),
         }
@@ -177,7 +178,6 @@ unsafe fn populate_allow_outcome(
     outcome.body_len = 0;
     outcome.content_type = ptr::null();
     outcome.content_type_len = 0;
-    outcome._reserved = 0;
     let mut flags = 0u32;
 
     let h_count = forwarded_headers.len().min(AURORA_MAX_FORWARD_HEADERS);
@@ -282,7 +282,6 @@ unsafe fn populate_deny_outcome(
     outcome.target_upstream_len = 0;
     outcome.rate_limit_bytes_per_sec = 0;
     outcome.release_token.opaque[0] = 0;
-    outcome._reserved = 0;
 
     if let Some(ct) = content_type {
         let b = ct.as_bytes();
@@ -323,6 +322,86 @@ unsafe fn populate_deny_outcome(
     Ok(())
 }
 
+#[inline]
+unsafe fn populate_cache_hit_outcome(
+    outcome: &mut AuroraAccessOutcome,
+    hit: aurora_extensions::response_cache::CacheHitOutcome,
+    alloc_ctx: *mut std::ffi::c_void,
+    alloc_fn: Option<AuroraAllocFn>,
+) -> u32 {
+    outcome.action = AURORA_ACTION_DENY;
+    outcome.status_code = hit.status as u32;
+    outcome.flags = AURORA_FLAG_CACHE_PINNED;
+    outcome.target_upstream = ptr::null();
+    outcome.target_upstream_len = 0;
+    outcome.rate_limit_bytes_per_sec = 0;
+
+    let ct_bytes = hit.content_type.as_bytes();
+    let ct_len = ct_bytes.len().min(256);
+    if let Some(allocate) = alloc_fn {
+        let buf = unsafe { allocate(alloc_ctx, ct_len) };
+        if buf.is_null() {
+            return 1;
+        }
+        unsafe { ptr::copy_nonoverlapping(ct_bytes.as_ptr(), buf, ct_len) };
+        outcome.content_type = buf;
+    } else {
+        outcome.content_type = ct_bytes.as_ptr();
+    }
+    outcome.content_type_len = ct_len as u32;
+
+    // Zero-copy body pointer handover with pinned Arc
+    let raw_arc = std::sync::Arc::into_raw(hit.body);
+    outcome.body = unsafe { (*raw_arc).as_ptr() };
+    outcome.body_len = unsafe { (*raw_arc).len() } as u32;
+
+    let ptr_val = raw_arc as usize;
+    outcome.release_token.opaque[..std::mem::size_of::<usize>()]
+        .copy_from_slice(&ptr_val.to_ne_bytes());
+
+    let h_count = hit.headers.len().min(AURORA_MAX_FORWARD_HEADERS);
+    outcome.headers_count = h_count as u32;
+    for (i, (name, val)) in hit.headers.iter().take(h_count).enumerate() {
+        let n_bytes = name.as_bytes();
+        let v_bytes = val.as_bytes();
+        let n_len = n_bytes.len().min(256);
+        let v_len = v_bytes.len().min(4096);
+
+        if let Some(allocate) = alloc_fn {
+            let total = n_len + v_len + n_len;
+            let buf = unsafe { allocate(alloc_ctx, total) };
+            if buf.is_null() {
+                unsafe { drop(std::sync::Arc::from_raw(raw_arc)) };
+                return 1;
+            }
+            unsafe {
+                ptr::copy_nonoverlapping(n_bytes.as_ptr(), buf, n_len);
+                outcome.headers[i].name = buf;
+                outcome.headers[i].name_len = n_len as u32;
+
+                let val_buf = buf.add(n_len);
+                ptr::copy_nonoverlapping(v_bytes.as_ptr(), val_buf, v_len);
+                outcome.headers[i].value = val_buf;
+                outcome.headers[i].value_len = v_len as u32;
+
+                let low_buf = val_buf.add(v_len);
+                for (j, &b) in n_bytes.iter().take(n_len).enumerate() {
+                    *low_buf.add(j) = b.to_ascii_lowercase();
+                }
+                outcome.headers[i].lowcase_name = low_buf;
+            }
+        } else {
+            outcome.headers[i].name = n_bytes.as_ptr();
+            outcome.headers[i].name_len = n_len as u32;
+            outcome.headers[i].value = v_bytes.as_ptr();
+            outcome.headers[i].value_len = v_len as u32;
+            outcome.headers[i].lowcase_name = n_bytes.as_ptr();
+        }
+    }
+
+    0
+}
+
 /// Evaluates Phase 1: HTTP Access Phase for incoming request.
 ///
 /// Executes Gateway Phase 1: HTTP Access Phase.
@@ -357,7 +436,7 @@ pub unsafe extern "C" fn aurora_gateway_phase_access(
             out.body_len = 0;
             out.content_type = ptr::null();
             out.content_type_len = 0;
-            out._reserved = 0;
+            out.route_mask = u32::MAX;
             out.release_token.opaque[0] = 0;
         }
         return 0;
@@ -388,32 +467,55 @@ pub unsafe extern "C" fn aurora_gateway_phase_access(
             }
         };
 
-        let space_engines = match crate::lifecycle::get_active_space() {
-            Some(space) => space.build_phase_engines(ctx.path),
-            None => AccessPhaseEngines::default(),
+        let active_space_opt = crate::lifecycle::get_active_space();
+        let (route_mask, space_engines) = match active_space_opt.as_ref() {
+            Some(space) => (
+                space.resolve_route_mask(ctx.path),
+                space.build_phase_engines(ctx.path),
+            ),
+            None => (u32::MAX, AccessPhaseEngines::default()),
         };
 
         let space = AccessPhaseSpace::new(space_engines);
         let decision = space.evaluate(&ctx, header_lookup);
 
         let out = unsafe { &mut *out_outcome };
+        out.route_mask = route_mask;
         let res = match decision {
             AccessDecision::Allow {
                 forwarded_headers,
                 target_upstream,
                 rate_limit_bytes_per_sec,
                 conn_token,
-            } => unsafe {
-                populate_allow_outcome(
-                    out,
-                    forwarded_headers.as_deref().unwrap_or(&[]),
-                    target_upstream,
-                    rate_limit_bytes_per_sec,
-                    conn_token,
-                    lookup_ctx,
-                    alloc_fn,
-                )
-            },
+            } => {
+                // If admission/security passed and route enables Response Cache, check in-memory cache
+                if (route_mask & (1 << crate::lifecycle::AURORA_EXT_RESPONSE_CACHE)) != 0
+                    && let Some(active_space) = active_space_opt.as_ref()
+                    && let Some(cache) = active_space.response_cache.as_deref()
+                {
+                    let ae = header_lookup("accept-encoding");
+                    let cc = header_lookup("cache-control");
+                    if let aurora_extensions::response_cache::CacheLookupResult::Hit(hit) =
+                        cache.evaluate_access(&ctx, ae, cc)
+                    {
+                        return unsafe {
+                            populate_cache_hit_outcome(out, hit, lookup_ctx, alloc_fn)
+                        };
+                    }
+                }
+
+                unsafe {
+                    populate_allow_outcome(
+                        out,
+                        forwarded_headers.as_deref().unwrap_or(&[]),
+                        target_upstream,
+                        rate_limit_bytes_per_sec,
+                        conn_token,
+                        lookup_ctx,
+                        alloc_fn,
+                    )
+                }
+            }
             AccessDecision::Deny {
                 status,
                 www_authenticate,
@@ -529,6 +631,37 @@ mod tests {
             let up = slice::from_raw_parts(outcome.target_upstream, outcome.target_upstream_len as usize);
             assert_eq!(up, b"upstream-cluster-a");
         }
+    }
+
+    #[test]
+    fn test_per_route_extension_bitmask_isolation() {
+        let mut trie = aurora_engine::PathRadixTree::new();
+        let global_mask = (1 << crate::lifecycle::AURORA_EXT_IP_RESTRICTION)
+            | (1 << crate::lifecycle::AURORA_EXT_RESPONSE_COMPRESSION)
+            | (1 << crate::lifecycle::AURORA_EXT_RESPONSE_CACHE);
+
+        trie.insert(b"/", global_mask);
+        // Route /api/v1/public: explicit cache + compression only (no IP restriction)
+        trie.insert(
+            b"/api/v1/public",
+            (1 << crate::lifecycle::AURORA_EXT_RESPONSE_COMPRESSION)
+                | (1 << crate::lifecycle::AURORA_EXT_RESPONSE_CACHE),
+        );
+        // Route /api/v1/raw: explicit passthrough (0 extensions)
+        trie.insert(b"/api/v1/raw", 0);
+
+        let space = crate::lifecycle::GatewayActiveSpace {
+            route_trie: trie,
+            ..Default::default()
+        };
+
+        assert_eq!(space.resolve_route_mask(b"/other"), global_mask);
+        assert_eq!(
+            space.resolve_route_mask(b"/api/v1/public/items"),
+            (1 << crate::lifecycle::AURORA_EXT_RESPONSE_COMPRESSION)
+                | (1 << crate::lifecycle::AURORA_EXT_RESPONSE_CACHE)
+        );
+        assert_eq!(space.resolve_route_mask(b"/api/v1/raw/webhook"), 0);
     }
 }
 

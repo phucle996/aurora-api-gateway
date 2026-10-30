@@ -7,6 +7,9 @@ static char *ngx_http_gateway_merge_conf(ngx_conf_t *cf, void *parent,
 static ngx_int_t ngx_http_gateway_init_process(ngx_cycle_t *cycle);
 static void ngx_http_gateway_exit_process(ngx_cycle_t *cycle);
 
+ngx_http_output_header_filter_pt ngx_http_next_header_filter;
+ngx_http_output_body_filter_pt   ngx_http_next_body_filter;
+
 static ngx_command_t ngx_http_gateway_commands[] = {
     /* Gateway Core Directives */
     {ngx_string("gateway"),
@@ -97,6 +100,13 @@ static ngx_int_t ngx_http_gateway_init(ngx_conf_t *cf) {
     return NGX_ERROR;
   }
   *handler = ngx_http_gateway_log_handler;
+
+  /* Đăng ký Header Filter và Body Filter vào NGINX filter chain */
+  ngx_http_next_header_filter = ngx_http_top_header_filter;
+  ngx_http_top_header_filter = ngx_http_gateway_header_filter;
+
+  ngx_http_next_body_filter = ngx_http_top_body_filter;
+  ngx_http_top_body_filter = ngx_http_gateway_body_filter;
 
   return NGX_OK;
 }

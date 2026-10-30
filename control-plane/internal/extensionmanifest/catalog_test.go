@@ -7,8 +7,8 @@ func TestCatalogDefaultsMatchTheirRuntimeSchemas(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load catalog: %v", err)
 	}
-	if len(manifests) != 24 {
-		t.Fatalf("expected 24 packaged manifests, got %d", len(manifests))
+	if len(manifests) != 25 {
+		t.Fatalf("expected 25 packaged manifests, got %d", len(manifests))
 	}
 	digest, err := Digest()
 	if err != nil || len(digest) != 64 {
@@ -313,4 +313,21 @@ func TestRequestHeaderTransformManifestValidation(t *testing.T) {
 		t.Fatal("expected invalid mode to be rejected")
 	}
 }
+
+func TestValidateConfigAllowsNamedProfiles(t *testing.T) {
+	manifest, ok := Find("builtin/response-cache", 1)
+	if !ok {
+		t.Fatal("response-cache manifest not installed")
+	}
+	valid := `{"enabled":true,"default_ttl_secs":300,"profiles":{"short_ttl":{"label":"Short TTL","ttl_secs":30},"long_static":{"label":"Static","ttl_secs":3600}}}`
+	if _, err := ValidateConfig(manifest, valid); err != nil {
+		t.Fatalf("expected valid config with profiles: %v", err)
+	}
+
+	invalidProfiles := `{"enabled":true,"profiles":"not_an_object"}`
+	if _, err := ValidateConfig(manifest, invalidProfiles); err == nil {
+		t.Fatal("expected non-object profiles to be rejected")
+	}
+}
+
 

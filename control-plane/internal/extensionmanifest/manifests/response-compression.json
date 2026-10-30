@@ -1,0 +1,159 @@
+{
+  "key": "builtin/response-compression",
+  "version": 1,
+  "id": "response-compression",
+  "name": "Response Compression",
+  "category": "response_transformation",
+  "description": "Applies hardware-accelerated multi-algorithm SIMD compression (Zstandard, Brotli, Gzip) with zero-copy pointer handover and per-route rules.",
+  "renderer": "response-compression",
+  "builtin": true,
+  "default_config": {
+    "enabled": true,
+    "min_length": 1024,
+    "prefer_algorithms": [
+      "zstd",
+      "br",
+      "gzip"
+    ],
+    "zstd_level": 3,
+    "brotli_level": 4,
+    "gzip_level": 4,
+    "types": [
+      "application/json",
+      "text/plain",
+      "text/css",
+      "application/javascript",
+      "text/xml",
+      "application/xml",
+      "application/xml+rss",
+      "text/javascript",
+      "image/svg+xml",
+      "application/graphql+json"
+    ],
+    "routes_override": []
+  },
+  "ui_schema": {
+    "layout_type": "form",
+    "fields": [
+      {
+        "key": "enabled",
+        "label": "Kích hoạt nén (Enable Compression)",
+        "type": "boolean",
+        "description": "Bật hoặc tắt tính năng nén phản hồi HTTP trên Gateway Egress"
+      },
+      {
+        "key": "prefer_algorithms",
+        "label": "Thứ tự ưu tiên thuật toán (Algorithm Preference)",
+        "type": "array",
+        "item_type": "text",
+        "description": "Thứ tự ưu tiên khi client hỗ trợ nhiều thuật toán (VD: zstd, br, gzip)"
+      },
+      {
+        "key": "min_length",
+        "label": "Độ dài phản hồi tối thiểu (Min Response Length in Bytes)",
+        "type": "number",
+        "description": "Ngưỡng byte tối thiểu để kích hoạt nén (mặc định: 1024 bytes)"
+      },
+      {
+        "key": "zstd_level",
+        "label": "Mức nén Zstandard (1..19)",
+        "type": "number",
+        "description": "Cấp độ nén Zstd (mặc định tối ưu: 3)"
+      },
+      {
+        "key": "brotli_level",
+        "label": "Mức nén Brotli (1..11)",
+        "type": "number",
+        "description": "Cấp độ nén Brotli (mặc định tối ưu: 4)"
+      },
+      {
+        "key": "gzip_level",
+        "label": "Mức nén Gzip (1..9)",
+        "type": "number",
+        "description": "Cấp độ nén Gzip (mặc định tối ưu: 4)"
+      },
+      {
+        "key": "types",
+        "label": "Danh sách MIME Types cho phép nén",
+        "type": "array",
+        "item_type": "text",
+        "description": "Các kiểu nội dung MIME được phép nén"
+      }
+    ]
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "min_length": {
+        "type": "integer",
+        "minimum": 20,
+        "maximum": 10485760
+      },
+      "prefer_algorithms": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "string",
+          "enum": ["zstd", "br", "brotli", "gzip"]
+        }
+      },
+      "zstd_level": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 19
+      },
+      "brotli_level": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 11
+      },
+      "gzip_level": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9
+      },
+      "types": {
+        "type": "array",
+        "maxItems": 64,
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "routes_override": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path_prefix"],
+          "properties": {
+            "path_prefix": {
+              "type": "string",
+              "minLength": 1
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "min_length": {
+              "type": "integer",
+              "minimum": 20,
+              "maximum": 10485760
+            },
+            "prefer_algorithms": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["zstd", "br", "brotli", "gzip"]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -9,12 +9,14 @@
 
 pub mod access;
 pub mod body_filter;
+pub mod cache;
 pub mod content;
 pub mod header_filter;
 pub mod log;
 
 pub use access::*;
 pub use body_filter::*;
+pub use cache::*;
 pub use content::*;
 pub use header_filter::*;
 pub use log::*;

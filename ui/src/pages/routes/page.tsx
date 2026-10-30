@@ -1,10 +1,19 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Plus, RefreshCw, Search, Route, Filter, ChevronDown } from 'lucide-react';
+import {
+  Plus,
+  RefreshCw,
+  Search,
+  Route,
+  ChevronDown,
+  Workflow,
+  Table as TableIcon,
+} from 'lucide-react';
 import type { RouteItem } from './types';
 import { routesApi } from '../../lib/api/routes';
 import { RouteStats } from './sections/RouteStats';
 import { RouteTable } from './sections/RouteTable';
+import { RouteVisualCanvas } from './sections/RouteVisualCanvas';
 import { DeleteRouteDialog } from './sections/DeleteRouteDialog';
 
 export default function RoutesPage() {
@@ -20,9 +29,11 @@ export default function RoutesPage() {
   const [upstreamFilter, setUpstreamFilter] = useState<string>('ALL');
   const [statFilter, setStatFilter] = useState<string | null>(null);
 
-  // Dialogs state
+  // Dialogs & View mode state
+  const [viewMode, setViewMode] = useState<'canvas' | 'table'>('canvas');
   const [deletingRoute, setDeletingRoute] = useState<RouteItem | null>(null);
   const [togglingIds, setTogglingIds] = useState<Record<string, boolean>>({});
+  const [savingRouteIds, setSavingRouteIds] = useState<Record<string, boolean>>({});
 
   const requestSequence = useRef(0);
 
@@ -136,6 +147,42 @@ export default function RoutesPage() {
     }
   };
 
+  // Update Route's Extension Profile assignments directly from the Visual Canvas
+  const handleUpdateRoutePlugins = async (route: RouteItem, nextPluginsJson: string) => {
+    const prevPluginsJson = route.plugins_json;
+    setSavingRouteIds((prev) => ({ ...prev, [route.id]: true }));
+    setRoutes((prev) =>
+      prev.map((r) => (r.id === route.id ? { ...r, plugins_json: nextPluginsJson } : r))
+    );
+
+    try {
+      await routesApi.update(route.id, {
+        name: route.name,
+        host: route.host,
+        path: route.path,
+        upstream_name: route.upstream_name,
+        enabled: route.enabled,
+        strip_path: route.strip_path,
+        websocket: route.websocket,
+        priority: route.priority,
+        plugins_json: nextPluginsJson,
+        description: route.description,
+      });
+    } catch (err: any) {
+      console.error('Failed to update route extension profiles:', err);
+      setError(err?.message || 'Failed to save extension profile assignment');
+      setRoutes((prev) =>
+        prev.map((r) => (r.id === route.id ? { ...r, plugins_json: prevPluginsJson } : r))
+      );
+    } finally {
+      setSavingRouteIds((prev) => {
+        const next = { ...prev };
+        delete next[route.id];
+        return next;
+      });
+    }
+  };
+
   return (
     <div className="p-6 space-y-6 w-full font-sans">
       {/* Page Header */}
@@ -156,7 +203,35 @@ export default function RoutesPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* View Mode Switcher: Visual Canvas vs Table */}
+          <div className="inline-flex items-center p-1 rounded-xl border border-border/80 bg-card/80">
+            <button
+              type="button"
+              onClick={() => setViewMode('canvas')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                viewMode === 'canvas'
+                  ? 'bg-primary text-primary-foreground shadow-2xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Workflow className="w-3.5 h-3.5" />
+              <span>Visual Canvas</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                viewMode === 'table'
+                  ? 'bg-primary text-primary-foreground shadow-2xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <TableIcon className="w-3.5 h-3.5" />
+              <span>Danh sách (Table)</span>
+            </button>
+          </div>
+
           <button
             type="button"
             onClick={() => fetchRoutes(true)}
@@ -266,12 +341,20 @@ export default function RoutesPage() {
         </div>
       )}
 
-      {/* Main Table */}
+      {/* Main View: Visual Canvas or Table */}
       {loading && routes.length === 0 ? (
         <div className="p-12 text-center text-xs text-muted-foreground bg-card/40 border border-border/60 rounded-xl">
           <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-primary" />
           Loading routing table...
         </div>
+      ) : viewMode === 'canvas' ? (
+        <RouteVisualCanvas
+          routes={filteredRoutes}
+          onEditRoute={(r) => navigate(`/routes/${r.id}/edit`)}
+          onToggleRoute={handleToggle}
+          onUpdateRoutePlugins={handleUpdateRoutePlugins}
+          savingRouteIds={savingRouteIds}
+        />
       ) : (
         <RouteTable
           routes={filteredRoutes}

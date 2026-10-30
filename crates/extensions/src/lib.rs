@@ -37,8 +37,10 @@ pub mod traffic_shaper;
 pub mod traffic_split;
 
 // Proxy & Directives Extensions (Self-contained Materializers)
-#[path = "compression-gzip/mod.rs"]
-pub mod compression_gzip;
+#[path = "response-compression/mod.rs"]
+pub mod response_compression;
+#[path = "response-cache/mod.rs"]
+pub mod response_cache;
 #[path = "correlation-id/mod.rs"]
 pub mod correlation_id;
 pub mod cors;
@@ -90,5 +92,7 @@ pub use rate_limit::RateLimitEngine;
 pub use request_mirror::RequestMirrorEngine;
 pub use request_termination::RequestTerminationEngine;
 pub use resource_limit::ResourceLimiter;
+pub use response_cache::ResponseCacheEngine;
+pub use response_compression::ResponseCompressionEngine;
 pub use traffic_shaper::TrafficShaperEngine;
 pub use traffic_split::TrafficSplitEngine;

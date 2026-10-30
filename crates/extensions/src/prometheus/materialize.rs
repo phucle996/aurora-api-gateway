@@ -124,7 +124,7 @@ pub fn materialize(
     }
 
     http.push_str(&format!(
-        "\n    location = {path} {{\n        gateway_metrics;\n    }}\n}}\n"
+        "\n    location = {path} {{\n        gzip off;\n        gateway_metrics;\n    }}\n}}\n"
     ));
 
     *has_http = true;

@@ -1,6 +1,63 @@
 import React from 'react';
 import { Route, Pencil, Trash2, ArrowRightLeft, Zap, Layers, Sparkles } from 'lucide-react';
 import type { RouteItem } from '../types';
+import {
+  ROUTE_EXTENSIONS,
+  getRouteExtensionSelectedProfile,
+} from './RouteExtensionSwitches';
+
+function renderRouteExtensionBadges(pluginsJson?: string) {
+  if (!pluginsJson || pluginsJson.trim() === '' || pluginsJson.trim() === '{}') {
+    return (
+      <span className="font-mono text-[10px] bg-muted/60 text-muted-foreground px-1.5 py-0.5 rounded-sm border border-border/60">
+        Inherit Global
+      </span>
+    );
+  }
+
+  try {
+    const obj = JSON.parse(pluginsJson) as Record<string, any>;
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
+
+    if (obj._profile === 'passthrough' || obj._profile === 'raw') {
+      return (
+        <span className="font-mono text-[10px] bg-violet-500/10 text-violet-400 border border-violet-500/20 px-1.5 py-0.5 rounded-sm">
+          Passthrough (0 Ext)
+        </span>
+      );
+    }
+
+    const activeBadges: { key: string; text: string }[] = [];
+    for (const ext of ROUTE_EXTENSIONS) {
+      const profId = getRouteExtensionSelectedProfile(obj, ext.key, 'default');
+      if (profId !== 'off') {
+        activeBadges.push({
+          key: ext.key,
+          text: `${ext.shortLabel}: ${profId}`,
+        });
+      }
+    }
+
+    if (activeBadges.length > 0) {
+      return activeBadges.map((b) => (
+        <span
+          key={b.key}
+          className="flex items-center gap-1 font-mono text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded-sm"
+        >
+          <Sparkles className="w-2.5 h-2.5" /> {b.text}
+        </span>
+      ));
+    }
+
+    return (
+      <span className="font-mono text-[10px] bg-violet-500/10 text-violet-400 border border-violet-500/20 px-1.5 py-0.5 rounded-sm">
+        Passthrough (0 Ext)
+      </span>
+    );
+  } catch {
+    return null;
+  }
+}
 
 interface RouteTableProps {
   routes: RouteItem[];
@@ -128,11 +185,7 @@ export function RouteTable({
                           <ArrowRightLeft className="w-2.5 h-2.5" /> Strip
                         </span>
                       )}
-                      {route.plugins_json && route.plugins_json !== '{}' && (
-                        <span className="flex items-center gap-1 font-mono text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded-sm">
-                          <Sparkles className="w-2.5 h-2.5" /> Plugins
-                        </span>
-                      )}
+                      {renderRouteExtensionBadges(route.plugins_json)}
                     </div>
                   </td>
 
