@@ -13,7 +13,7 @@ use super::policy::{
 use super::security::{
     extract_cookie_value, extract_query_value, verify_cidr_boundary, verify_preview_secret,
 };
-use super::sheet::{DeploySlot, SlotSheet, SlotUpstreamMeta, empty_blue_green_headers};
+use super::sheet::{DeploySlot, SlotSheet, SlotUpstreamMeta};
 use super::swar::{fnv1a_64, parse_slot_swar, select_slot_branchless};
 
 #[derive(Clone, Copy, Debug)]
@@ -54,13 +54,14 @@ pub struct BlueGreenDecision<'a> {
     pub matched: bool,
     pub rule_id: &'a str,
     pub upstream: &'a str,
-    pub active_slot: &'a str,
+    pub active_slot: &'static str,
     pub is_header_override: bool,
     pub upstream_headers: &'a [(String, String)],
-    pub headers_arc: Arc<[(String, String)]>,
+    pub headers_arc: Option<Arc<[(String, String)]>>,
 }
 
 impl<'a> BlueGreenDecision<'a> {
+    #[inline(always)]
     pub fn unmatched() -> BlueGreenDecision<'static> {
         BlueGreenDecision {
             matched: false,
@@ -69,10 +70,11 @@ impl<'a> BlueGreenDecision<'a> {
             active_slot: "",
             is_header_override: false,
             upstream_headers: &[],
-            headers_arc: empty_blue_green_headers(),
+            headers_arc: None,
         }
     }
 
+    #[inline(always)]
     pub fn matched(
         rule_id: &'a str,
         upstream: &'a str,
@@ -80,14 +82,19 @@ impl<'a> BlueGreenDecision<'a> {
         is_header_override: bool,
         headers_arc: &'a Arc<[(String, String)]>,
     ) -> Self {
+        let (hdrs, arc_opt) = if headers_arc.is_empty() {
+            (&[][..], None)
+        } else {
+            (headers_arc.as_ref(), Some(Arc::clone(headers_arc)))
+        };
         Self {
             matched: true,
             rule_id,
             upstream,
             active_slot,
             is_header_override,
-            upstream_headers: headers_arc.as_ref(),
-            headers_arc: Arc::clone(headers_arc),
+            upstream_headers: hdrs,
+            headers_arc: arc_opt,
         }
     }
 }
@@ -319,13 +326,11 @@ impl BlueGreenEngine {
             let slot_sheet = SlotSheet {
                 upstreams: [
                     SlotUpstreamMeta {
-                        upstream: blue_upstream,
-                        slot_name: "blue",
+                        upstream: blue_upstream.into(),
                         headers: blue_upstream_headers,
                     },
                     SlotUpstreamMeta {
-                        upstream: green_upstream,
-                        slot_name: "green",
+                        upstream: green_upstream.into(),
                         headers: green_upstream_headers,
                     },
                 ],
@@ -424,8 +429,9 @@ impl BlueGreenEngine {
                 candidate_slot = slot;
             }
 
-            // 1c. Query parameter inspection (fallback if header and cookie absent)
+            // 1c. Query parameter inspection (fallback if header and cookie absent, skip if query empty)
             if has_override == 0
+                && !req.query.is_empty()
                 && let Some(ref param_name) = rule.preview_query_param
                 && let Some(val_bytes) = extract_query_value(req.query, param_name)
                 && let Some(slot) = parse_slot_swar(val_bytes)
@@ -460,8 +466,8 @@ impl BlueGreenEngine {
 
             return BlueGreenDecision::matched(
                 rule.id.as_str(),
-                meta.upstream.as_str(),
-                meta.slot_name,
+                meta.upstream.as_ref(),
+                DeploySlot::from_u8(chosen_slot),
                 is_override,
                 &meta.headers,
             );

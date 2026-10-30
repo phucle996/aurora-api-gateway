@@ -13,9 +13,9 @@ pub use security::{
     extract_cookie_value, extract_query_value, verify_cidr_boundary, verify_preview_secret,
 };
 pub use sheet::{
-    DeploySlot, SlotSheet, SlotUpstreamMeta, empty_blue_green_headers,
+    DeploySlot, SLOT_NAMES, SlotSheet, SlotUpstreamMeta,
 };
 pub use swar::{
-    MAGIC_BLUE_MASKED, MAGIC_GREEN_MASKED, MASK_4, MASK_5, SLOT_BLUE, SLOT_GREEN, fnv1a_64,
+    MAGIC_BLUE_U32, MAGIC_GREEN_LOWER_U32, MASK_U32, SLOT_BLUE, SLOT_GREEN, fnv1a_64,
     parse_slot_swar, select_slot_branchless,
 };

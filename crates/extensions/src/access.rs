@@ -224,8 +224,8 @@ impl<'a> AccessPhaseSpace<'a> {
             let decision = bg_eng.evaluate_ctx(ctx, header_lookup);
             if decision.matched && !decision.upstream.is_empty() {
                 target_upstream = Some(decision.upstream);
-                if !decision.headers_arc.is_empty() {
-                    routing_headers = Some(decision.headers_arc);
+                if decision.headers_arc.is_some() {
+                    routing_headers = decision.headers_arc;
                 }
             }
         }

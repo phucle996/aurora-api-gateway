@@ -6,13 +6,9 @@
 pub const SLOT_BLUE: u8 = 0;
 pub const SLOT_GREEN: u8 = 1;
 
-// SWAR 64-bit Bitmask Constants for case-insensitive slot matching
-// "blue"  -> b"blue"  len 4, little-endian: 0x0000_0000_6575_6c62 -> Masked with 0xDF: 0x0000_0000_4555_4c42 ("EULB")
-// "green" -> b"green" len 5, little-endian: 0x0000_006e_6565_7267 -> Masked with 0xDF: 0x0000_004e_4545_5247 ("NEERG")
-pub const MAGIC_BLUE_MASKED: u64 = 0x0000_0000_4555_4C42;
-pub const MAGIC_GREEN_MASKED: u64 = 0x0000_004E_4545_5247;
-pub const MASK_4: u64 = 0x0000_0000_DFDF_DFDF;
-pub const MASK_5: u64 = 0x0000_00DF_DFDF_DFDF;
+pub const MAGIC_BLUE_U32: u32 = 0x4555_4C42;
+pub const MAGIC_GREEN_LOWER_U32: u32 = 0x4545_5247;
+pub const MASK_U32: u32 = 0xDFDF_DFDF;
 
 /// FNV-1a 64-bit integer hash for instant 1-instruction secret comparison in registers.
 #[inline(always)]
@@ -34,8 +30,27 @@ pub const fn fnv1a_64(bytes: &[u8]) -> u64 {
 /// Evaluates "blue" or "green" in 1 bitwise mask instruction without UTF-8 validation.
 #[inline(always)]
 pub fn parse_slot_swar(bytes: &[u8]) -> Option<u8> {
+    // Fast-path: 0 loop iterations, direct 32-bit register load for untrimmed headers (99.9% of requests)
+    if bytes.len() == 4 {
+        let val = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        if (val & MASK_U32) == MAGIC_BLUE_U32 {
+            return Some(SLOT_BLUE);
+        }
+    } else if bytes.len() == 5 {
+        let val = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        if (val & MASK_U32) == MAGIC_GREEN_LOWER_U32 && (bytes[4] & 0xDF) == b'N' {
+            return Some(SLOT_GREEN);
+        }
+    }
+
+    // Slow-path fallback: Trim ASCII whitespace only when length doesn't directly match
     let mut start = 0;
-    while start < bytes.len() && (bytes[start] == b' ' || bytes[start] == b'\t') {
+    while start < bytes.len()
+        && (bytes[start] == b' '
+            || bytes[start] == b'\t'
+            || bytes[start] == b'\r'
+            || bytes[start] == b'\n')
+    {
         start += 1;
     }
     let mut end = bytes.len();
@@ -50,17 +65,13 @@ pub fn parse_slot_swar(bytes: &[u8]) -> Option<u8> {
     let trimmed = &bytes[start..end];
 
     if trimmed.len() == 4 {
-        let mut buf = [0u8; 8];
-        buf[..4].copy_from_slice(trimmed);
-        let val = u64::from_le_bytes(buf);
-        if (val & MASK_4) == MAGIC_BLUE_MASKED {
+        let val = u32::from_le_bytes([trimmed[0], trimmed[1], trimmed[2], trimmed[3]]);
+        if (val & MASK_U32) == MAGIC_BLUE_U32 {
             return Some(SLOT_BLUE);
         }
     } else if trimmed.len() == 5 {
-        let mut buf = [0u8; 8];
-        buf[..5].copy_from_slice(trimmed);
-        let val = u64::from_le_bytes(buf);
-        if (val & MASK_5) == MAGIC_GREEN_MASKED {
+        let val = u32::from_le_bytes([trimmed[0], trimmed[1], trimmed[2], trimmed[3]]);
+        if (val & MASK_U32) == MAGIC_GREEN_LOWER_U32 && (trimmed[4] & 0xDF) == b'N' {
             return Some(SLOT_GREEN);
         }
     }

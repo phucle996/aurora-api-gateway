@@ -3,7 +3,7 @@
 //! Enforces 64-byte hardware cacheline alignment (`#[repr(C, align(64))]`) so all
 //! upstream metadata and precompiled headers reside in a single L1 data cacheline.
 
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use super::swar::{SLOT_BLUE, SLOT_GREEN};
 
@@ -15,6 +15,8 @@ pub enum DeploySlot {
     Blue = 0,
     Green = 1,
 }
+
+pub const SLOT_NAMES: [&str; 2] = ["blue", "green"];
 
 impl DeploySlot {
     #[inline(always)]
@@ -33,6 +35,14 @@ impl DeploySlot {
         }
     }
 
+    #[inline(always)]
+    pub const fn from_u8(slot: u8) -> &'static str {
+        match slot {
+            SLOT_GREEN => "green",
+            _ => "blue",
+        }
+    }
+
     pub fn from_str_ignore_case(s: &str) -> Option<Self> {
         let trimmed = s.trim();
         if trimmed.eq_ignore_ascii_case("blue") {
@@ -45,25 +55,31 @@ impl DeploySlot {
     }
 }
 
-/// Metadata and precompiled headers for a single deployment slot.
+/// Metadata and precompiled headers for a single deployment slot (exactly 32 bytes).
+/// 2 slots = 64 bytes, perfectly fitting inside a single 64-byte L1 CPU cacheline.
 #[repr(C)]
 #[derive(Clone, Debug)]
 pub struct SlotUpstreamMeta {
-    pub upstream: String,
-    pub slot_name: &'static str,
+    pub upstream: Arc<str>,
     pub headers: Arc<[(String, String)]>,
 }
 
 /// Contiguous 64-byte aligned slot sheet: [0] = Blue, [1] = Green.
+/// Resides 100% in a single L1 data cacheline with 0 boundary crossings.
 #[repr(C, align(64))]
 #[derive(Clone, Debug)]
 pub struct SlotSheet {
     pub upstreams: [SlotUpstreamMeta; 2],
 }
 
-/// Global static empty headers singleton eliminating dynamic heap allocations for unmatched requests.
-#[inline]
-pub fn empty_blue_green_headers() -> Arc<[(String, String)]> {
-    static EMPTY: OnceLock<Arc<[(String, String)]>> = OnceLock::new();
-    Arc::clone(EMPTY.get_or_init(|| Arc::from([])))
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_slot_sheet_cacheline_size() {
+        assert_eq!(std::mem::size_of::<SlotUpstreamMeta>(), 32);
+        assert_eq!(std::mem::size_of::<SlotSheet>(), 64);
+        assert_eq!(std::mem::align_of::<SlotSheet>(), 64);
+    }
 }
