@@ -1,14 +1,37 @@
 //! Cross-Origin Resource Sharing (CORS) extension materializer.
+//!
+//! Generates NGINX `add_header Access-Control-*` directives directly into the server block.
 
-use super::common::{boolean, nginx_quoted, strings, unsigned_or};
 use serde_json::{Map, Value};
+
+#[inline]
+fn nginx_quoted(value: &str, field: &str) -> Result<String, String> {
+    if value.contains(['\r', '\n', '\0']) {
+        return Err(format!("{field} contains a prohibited control character"));
+    }
+    Ok(format!(
+        "\"{}\"",
+        value.replace('\\', "\\\\").replace('"', "\\\"")
+    ))
+}
+
+#[inline]
+fn strings(config: &Map<String, Value>, field: &str) -> Option<Vec<String>> {
+    config.get(field).and_then(Value::as_array).map(|items| {
+        items
+            .iter()
+            .filter_map(Value::as_str)
+            .map(ToString::to_string)
+            .collect()
+    })
+}
 
 pub fn materialize(
     config: &Map<String, Value>,
     server: &mut String,
     has_server: &mut bool,
 ) -> Result<(), String> {
-    let allow_credentials = boolean(config, "allow_credentials").unwrap_or(false);
+    let allow_credentials = config.get("allow_credentials").and_then(Value::as_bool).unwrap_or(false);
     let origin = if allow_credentials {
         "$http_origin".to_string()
     } else {
@@ -37,7 +60,7 @@ pub fn materialize(
     ));
     server.push_str(&format!(
         "add_header Access-Control-Max-Age {} always;\n",
-        unsigned_or(config, "max_age", 86400)
+        config.get("max_age").and_then(Value::as_u64).unwrap_or(86400)
     ));
     if allow_credentials {
         server.push_str("add_header Access-Control-Allow-Credentials \"true\" always;\n");
@@ -54,4 +77,24 @@ pub fn materialize(
     *has_server = true;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cors_materialize() {
+        let mut server = String::new();
+        let mut has_server = false;
+        let config: Map<String, Value> = serde_json::from_str(r#"{
+            "allow_origins": ["https://example.com"],
+            "allow_credentials": true
+        }"#).unwrap();
+
+        materialize(&config, &mut server, &mut has_server).unwrap();
+        assert!(has_server);
+        assert!(server.contains("add_header Access-Control-Allow-Origin \"$http_origin\" always;"));
+        assert!(server.contains("add_header Access-Control-Allow-Credentials \"true\" always;"));
+    }
 }

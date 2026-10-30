@@ -36,6 +36,22 @@ pub mod traffic_shaper;
 #[path = "traffic-split/mod.rs"]
 pub mod traffic_split;
 
+// Proxy & Directives Extensions (Self-contained Materializers)
+#[path = "compression-gzip/mod.rs"]
+pub mod compression_gzip;
+#[path = "correlation-id/mod.rs"]
+pub mod correlation_id;
+pub mod cors;
+pub mod maintenance;
+#[path = "request-header-transform/mod.rs"]
+pub mod request_header_transform;
+#[path = "response-buffering/mod.rs"]
+pub mod response_buffering;
+#[path = "response-header-transform/mod.rs"]
+pub mod response_header_transform;
+#[path = "timeout-policy/mod.rs"]
+pub mod timeout_policy;
+
 // Egress & Background Phase Plugins (Exporters & Telemetry Plugins)
 #[path = "std-log/mod.rs"]
 pub mod std_log;

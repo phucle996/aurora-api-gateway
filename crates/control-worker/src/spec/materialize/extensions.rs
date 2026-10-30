@@ -1,31 +1,16 @@
-//! Extension Materialization Subsystem
+//! Extension Materialization Dispatcher.
 //!
-//! Translates high-level declarative extension specifications into concrete runtime configuration.
-//! Native proxy extensions compile directly into NGINX directive blocks (`active-extensions.conf`
-//! and `active-extensions-http.conf`), while dataplane extensions pass their raw configuration
-//! directly into Aurora's Shared Memory (SHM) policy slots, where each extension engine parses
-//! and validates its own snapshot natively.
+//! Delegates proxy directive generation to each respective extension in `aurora_extensions`,
+//! and routes dataplane extensions directly to their Shared Memory (SHM) policy slots.
 
+use aurora_engine::shm::{
+    AURORA_EXT_BLUE_GREEN, AURORA_EXT_CANARY_RELEASE, AURORA_EXT_CONN_LIMIT,
+    AURORA_EXT_IP_RESTRICTION, AURORA_EXT_JWT, AURORA_EXT_RATE_LIMIT, AURORA_EXT_REQUEST_MIRROR,
+    AURORA_EXT_REQUEST_TERMINATION, AURORA_EXT_RESOURCE_LIMIT, AURORA_EXT_TRAFFIC_SHAPER,
+    AURORA_EXT_TRAFFIC_SPLIT,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
-pub mod common;
-pub mod compression_gzip;
-pub mod correlation_id;
-pub mod cors;
-pub mod dataplane;
-pub mod maintenance;
-pub mod prometheus;
-pub mod request_header_transform;
-pub mod response_buffering;
-pub mod response_header_transform;
-pub mod std_log;
-pub mod timeout_policy;
-
-#[cfg(test)]
-mod tests;
-
-pub use dataplane::resolve_dataplane_shm_slot;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -59,6 +44,23 @@ impl RenderedExtensions {
     pub fn get_shm_slot_json(&self, slot_id: u32) -> Option<Value> {
         self.get_shm_slot(slot_id)
             .and_then(|bytes| serde_json::from_slice(bytes).ok())
+    }
+}
+
+pub fn resolve_dataplane_shm_slot(renderer: &str) -> Option<u32> {
+    match renderer {
+        "ip-restriction" => Some(AURORA_EXT_IP_RESTRICTION),
+        "engine-jwt-rs256" => Some(AURORA_EXT_JWT),
+        "rate-limit" => Some(AURORA_EXT_RATE_LIMIT),
+        "connection-limit" => Some(AURORA_EXT_CONN_LIMIT),
+        "traffic-shaper" => Some(AURORA_EXT_TRAFFIC_SHAPER),
+        "resource-limit" => Some(AURORA_EXT_RESOURCE_LIMIT),
+        "traffic-split" => Some(AURORA_EXT_TRAFFIC_SPLIT),
+        "canary-release" => Some(AURORA_EXT_CANARY_RELEASE),
+        "blue-green" => Some(AURORA_EXT_BLUE_GREEN),
+        "request-mirror" => Some(AURORA_EXT_REQUEST_MIRROR),
+        "request-termination" => Some(AURORA_EXT_REQUEST_TERMINATION),
+        _ => None,
     }
 }
 
@@ -98,7 +100,6 @@ pub fn render_extensions(
                 ));
             }
 
-            // Quick syntactic validation that config_json is a valid JSON object
             let val: Value = serde_json::from_str(&instance.config_json).map_err(|error| {
                 format!(
                     "decode extension instance {} config: {error}",
@@ -112,12 +113,11 @@ pub fn render_extensions(
                 ));
             }
 
-            // Raw config_json bytes pass straight through to Dataplane SHM
             shm_slots.push((slot_id, instance.config_json.as_bytes().to_vec()));
             continue;
         }
 
-        // 2. NGINX-level Extensions
+        // 2. NGINX-level Extensions (delegated directly to each extension's own materialize)
         let config = serde_json::from_str::<Value>(&instance.config_json)
             .map_err(|error| {
                 format!(
@@ -136,8 +136,8 @@ pub fn render_extensions(
 
         match instance.renderer.as_str() {
             "agent-metrics" | "prometheus" => {
-                prometheus::materialize(
-                    instance,
+                aurora_extensions::prometheus::materialize::materialize(
+                    &instance.instance_id,
                     &config,
                     &mut http,
                     &mut has_http,
@@ -175,40 +175,38 @@ pub fn render_extensions(
                 if std_log_instances > 1 {
                     return Err("NodeSpec contains more than one std-log extension".to_string());
                 }
-                std_log::materialize(
+                aurora_extensions::std_log::materialize::materialize(
                     &config,
                     &mut regular_server,
                     &mut has_server,
                 )?;
             }
             "correlation-id" => {
-                correlation_id::materialize(&config, &mut regular_server, &mut has_server)?
+                aurora_extensions::correlation_id::materialize(&config, &mut regular_server, &mut has_server)?
             }
-            "cors" => cors::materialize(&config, &mut regular_server, &mut has_server)?,
-            "request-header-transform" => request_header_transform::materialize(
+            "cors" => aurora_extensions::cors::materialize(&config, &mut regular_server, &mut has_server)?,
+            "request-header-transform" => aurora_extensions::request_header_transform::materialize(
                 &config,
                 &mut ingress_server,
                 &mut has_server,
             )?,
-            "response-header-transform" => response_header_transform::materialize(
+            "response-header-transform" => aurora_extensions::response_header_transform::materialize(
                 &config,
                 &mut regular_server,
                 &mut has_server,
             )?,
             "compression-gzip" => {
-                compression_gzip::materialize(&config, &mut regular_server, &mut has_server)?
+                aurora_extensions::compression_gzip::materialize(&config, &mut regular_server, &mut has_server)?
             }
-            "uri-rewrite" => {
-                // Route-scoped extension: configured and evaluated on routes via location plugins
-            }
+            "uri-rewrite" => {}
             "response-buffering" => {
-                response_buffering::materialize(&mut regular_server, &mut has_server)?
+                aurora_extensions::response_buffering::materialize(&mut regular_server, &mut has_server)?
             }
             "timeout-policy" => {
-                timeout_policy::materialize(&config, &mut regular_server, &mut has_server)?
+                aurora_extensions::timeout_policy::materialize(&config, &mut regular_server, &mut has_server)?
             }
             "maintenance" => {
-                maintenance::materialize(&config, &mut regular_server, &mut has_server)?
+                aurora_extensions::maintenance::materialize(&config, &mut regular_server, &mut has_server)?
             }
             renderer => {
                 return Err(format!(
@@ -237,4 +235,65 @@ pub fn render_extensions(
         server_conf: server,
         shm_slots,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_render_extensions_correlation_id() {
+        let instances = vec![ExtensionInstanceSpec {
+            instance_id: "corr-1".to_string(),
+            key: "builtin/correlation-id".to_string(),
+            version: 1,
+            renderer: "correlation-id".to_string(),
+            manifest_digest: String::new(),
+            config_json: serde_json::json!({
+                "request_id": {
+                    "enabled": true,
+                    "header_name": "X-Request-ID",
+                    "send_in_response": true,
+                    "include_in_access_log": true
+                },
+                "trace_id": {
+                    "enabled": true,
+                    "header_name": "traceparent",
+                    "send_in_response": false,
+                    "include_in_access_log": true
+                }
+            })
+            .to_string(),
+        }];
+
+        let rendered = render_extensions(&instances).expect("render must succeed");
+        assert!(rendered.server_conf.contains("set $aurora_req_id $request_id;"));
+        assert!(rendered.server_conf.contains("proxy_set_header X-Request-ID $request_id;"));
+        assert!(rendered.server_conf.contains("add_header X-Request-ID $request_id always;"));
+        assert!(rendered.server_conf.contains("proxy_set_header traceparent \"00-$request_id-$aurora_span_id-01\";"));
+    }
+
+    #[test]
+    fn test_render_extensions_prometheus_dynamic_port_and_allowlist() {
+        let instances = vec![ExtensionInstanceSpec {
+            instance_id: "prom-1".to_string(),
+            key: "builtin/prometheus".to_string(),
+            version: 1,
+            renderer: "agent-metrics".to_string(),
+            manifest_digest: String::new(),
+            config_json: serde_json::json!({
+                "port": 9145,
+                "allowlist": ["127.0.0.1", "10.0.0.0/8"]
+            })
+            .to_string(),
+        }];
+
+        let rendered = render_extensions(&instances).expect("render must succeed");
+        assert!(rendered.http_conf.contains("listen 9145;"));
+        assert!(rendered.http_conf.contains("allow 10.0.0.0/8;"));
+        assert!(rendered.http_conf.contains("allow 127.0.0.1;"));
+        assert!(rendered.http_conf.contains("deny all;"));
+        assert!(rendered.http_conf.contains("location = /metrics {"));
+        assert!(rendered.http_conf.contains("gateway_metrics;"));
+    }
 }
