@@ -303,10 +303,11 @@ results["10_sustained_soak_300s"] = run_scenario(
     f"wrk -t4 -c200 -d300s -H \"Authorization: Bearer {valid_token}\" --latency http://{GATEWAY_IP}/api/v1/echo"
 )
 
-with open("jwt_azure_benchmark_results.json", "w") as f:
+out_file = "/home/phucle/Desktop/aurora-api-gateway/crates/extensions/benches/results/jwt_azure_benchmark_results.json"
+with open(out_file, "w") as f:
     json.dump(results, f, indent=2)
 
 print("\n==================================================================", flush=True)
 print("  ALL AZURE BENCHMARK SCENARIOS COMPLETED SUCCESSFULLY!           ", flush=True)
-print("  Summary saved to jwt_azure_benchmark_results.json               ", flush=True)
+print(f"  Summary saved to {out_file}               ", flush=True)
 print("==================================================================", flush=True)

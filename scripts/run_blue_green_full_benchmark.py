@@ -259,7 +259,7 @@ end
         "KB03_Kong_Chaos_Port8000", 8000, lua_script="/tmp/bg_chaos.lua", proc_name="nginx"
     )
 
-    out_file = "/home/phucle/Desktop/aurora-api-gateway/crates/extensions/src/blue-green/blue_green_full_benchmark_results.json"
+    out_file = "/home/phucle/Desktop/aurora-api-gateway/crates/extensions/benches/results/blue_green_azure_benchmark_results.json"
     with open(out_file, "w") as f:
         json.dump(all_results, f, indent=2)
 
