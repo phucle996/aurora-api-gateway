@@ -431,3 +431,14 @@ fn test_canary_invalid_policy_rejections() {
     }"#;
     assert!(CanaryReleaseEngine::from_snapshot(crlf_header.as_bytes()).is_err());
 }
+
+#[test]
+fn test_canary_struct_sizes_and_alignments() {
+    assert_eq!(std::mem::size_of::<policy::CompiledCanaryRule>(), 256);
+    assert_eq!(std::mem::align_of::<policy::CompiledCanaryRule>(), 64);
+    assert_eq!(std::mem::size_of::<CanarySlotSheet>(), 64);
+    assert_eq!(std::mem::align_of::<CanarySlotSheet>(), 64);
+    assert_eq!(std::mem::size_of::<CanarySlotMeta>(), 32);
+    assert_eq!(std::mem::size_of::<policy::CompiledMatchCondition>(), 64);
+    assert_eq!(std::mem::size_of::<ByteMatcher>(), 32);
+}

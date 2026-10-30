@@ -96,7 +96,10 @@ impl ByteMatcher {
                 (val & *mask) == *expected
             }
             ByteMatcher::Exact(target) => input == target.as_slice(),
-            ByteMatcher::OneOf(targets) => targets.iter().any(|t| input == t.as_slice()),
+            ByteMatcher::OneOf(targets) => {
+                let in_len = input.len();
+                targets.iter().any(|t| t.len() == in_len && input == t.as_slice())
+            }
             ByteMatcher::Prefix(prefix) => input.starts_with(prefix.as_slice()),
             ByteMatcher::Suffix(suffix) => input.ends_with(suffix.as_slice()),
             ByteMatcher::Contains(sub) => memchr::memmem::find(input, sub.as_slice()).is_some(),
@@ -405,23 +408,31 @@ pub struct CanarySlotSheet {
 #[derive(Clone, Debug)]
 pub struct CompiledMatchCondition {
     pub target: MatchTarget,
-    pub key: Option<String>,
+    pub key: String,
     pub matcher: ByteMatcher,
 }
 
 #[derive(Clone, Debug)]
 pub struct CompiledCanaryRule {
-    pub id: String,
-    pub is_wildcard_origin: bool,
+    // --- Cacheline 0: 64 bytes (Hot route matching fields) ---
     pub origin_bytes: Vec<u8>,
     pub path_prefix_bytes: Vec<u8>,
+    pub is_wildcard_origin: bool,
+    pub is_root_path: bool,
     pub path_prefix_ends_with_slash: bool,
-    pub slot_sheet: CanarySlotSheet,
-    pub match_conditions: Vec<CompiledMatchCondition>,
-    pub weight_percentage: u32,
     pub split_by: SplitBy,
+    pub weight_percentage: u32,
+    pub has_conditions: bool,
+    pub _pad: [u8; 7],
+
+    // --- Cacheline 1: 64 bytes (SlotSheet) ---
+    pub slot_sheet: CanarySlotSheet,
+
+    // --- Cacheline 2 & 3: Post-match metadata ---
+    pub id: String,
     pub header_name: Option<String>,
     pub cookie_name: Option<Vec<u8>>,
+    pub match_conditions: Vec<CompiledMatchCondition>,
 }
 
 #[derive(Clone, Copy, Debug)]
