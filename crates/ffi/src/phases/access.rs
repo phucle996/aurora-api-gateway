@@ -294,7 +294,7 @@ pub unsafe extern "C" fn aurora_gateway_phase_access(
             } => {
                 populate_allow_outcome(
                     &mut outcome,
-                    &forwarded_headers,
+                    forwarded_headers.as_deref().unwrap_or(&[]),
                     target_upstream,
                     rate_limit_bytes_per_sec,
                     conn_token,

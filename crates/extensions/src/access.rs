@@ -22,6 +22,9 @@ use crate::{
     traffic_split::TrafficSplitEngine,
 };
 
+/// Type alias for pre-rendered HTTP headers wrapped in an atomic reference counter.
+pub type HeaderListArc = Arc<[(String, String)]>;
+
 /// The collection of active engines available for this route/location in the Access Phase.
 #[derive(Default)]
 pub struct AccessPhaseEngines<'a> {
@@ -100,12 +103,18 @@ impl<'a> AccessPhaseSpace<'a> {
         &self,
         ctx: &AccessRequestContext<'a>,
         header_lookup: &impl Fn(&str) -> Option<&'a [u8]>,
-    ) -> Result<Arc<[(String, String)]>, AccessDenial<'a>> {
+    ) -> Result<Option<HeaderListArc>, AccessDenial<'a>> {
         if let Some(jwt_eng) = self.engines.jwt {
             match jwt_eng.evaluate_ctx(ctx, header_lookup) {
                 Ok(JwtDecision::Allow {
                     forwarded_headers: fwd,
-                }) => Ok(fwd),
+                }) => {
+                    if fwd.is_empty() {
+                        Ok(None)
+                    } else {
+                        Ok(Some(fwd))
+                    }
+                }
                 Ok(JwtDecision::Unauthorized) => Err(AccessDenial {
                     status: 401,
                     www_authenticate: true,
@@ -120,7 +129,7 @@ impl<'a> AccessPhaseSpace<'a> {
                 }),
             }
         } else {
-            Ok(crate::jwt::empty_forwarded_headers())
+            Ok(None)
         }
     }
 
@@ -202,7 +211,7 @@ impl<'a> AccessPhaseSpace<'a> {
         &self,
         ctx: &AccessRequestContext<'a>,
         header_lookup: &impl Fn(&str) -> Option<&'a [u8]>,
-    ) -> (Option<&'a str>, Option<Arc<[(String, String)]>>) {
+    ) -> (Option<&'a str>, Option<HeaderListArc>) {
         let mut target_upstream = None;
         let mut routing_headers = None;
 
@@ -252,7 +261,7 @@ impl<'a> AccessPhaseSpace<'a> {
             return denial.into();
         }
 
-        let forwarded_headers = match self.check_authentication(ctx, &header_lookup) {
+        let auth_headers = match self.check_authentication(ctx, &header_lookup) {
             Ok(headers) => headers,
             Err(denial) => return denial.into(),
         };
@@ -265,15 +274,16 @@ impl<'a> AccessPhaseSpace<'a> {
 
         let (target_upstream, routing_headers) = self.resolve_routing(ctx, &header_lookup);
 
-        let forwarded_headers = match (forwarded_headers.is_empty(), routing_headers) {
-            (true, Some(rh)) => rh,
-            (false, Some(rh)) => {
-                let mut combined = Vec::with_capacity(forwarded_headers.len() + rh.len());
-                combined.extend_from_slice(&forwarded_headers);
+        let forwarded_headers = match (auth_headers, routing_headers) {
+            (Some(ah), Some(rh)) => {
+                let mut combined = Vec::with_capacity(ah.len() + rh.len());
+                combined.extend_from_slice(&ah);
                 combined.extend_from_slice(&rh);
-                Arc::from(combined)
+                Some(Arc::from(combined))
             }
-            _ => forwarded_headers,
+            (Some(ah), None) => Some(ah),
+            (None, Some(rh)) => Some(rh),
+            (None, None) => None,
         };
 
         AccessDecision::Allow {
@@ -281,6 +291,94 @@ impl<'a> AccessPhaseSpace<'a> {
             target_upstream,
             rate_limit_bytes_per_sec,
             conn_token,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_empty_headers_zero_alloc() {
+        let engines = AccessPhaseEngines::default();
+        let space = AccessPhaseSpace::new(engines);
+        let ctx = AccessRequestContext {
+            host: b"example.com",
+            path: b"/api/test",
+            method: b"GET",
+            query: b"",
+            client_ip: b"127.0.0.1",
+            content_length: 0,
+            header_length: 0,
+            random_seed: 42,
+            now_ms: 1000,
+        };
+
+        let decision = space.evaluate(&ctx, |_| None);
+        match decision {
+            AccessDecision::Allow {
+                forwarded_headers,
+                target_upstream,
+                rate_limit_bytes_per_sec,
+                conn_token,
+            } => {
+                assert!(forwarded_headers.is_none(), "Must be None to avoid atomic bus locks on empty headers");
+                assert_eq!(target_upstream, None);
+                assert_eq!(rate_limit_bytes_per_sec, 0);
+                assert!(conn_token.is_none());
+            }
+            AccessDecision::Deny { .. } => panic!("Expected Allow"),
+        }
+    }
+
+    #[test]
+    fn test_blue_green_routing_headers_propagation() {
+        let policy = serde_json::json!({
+            "schema_version": 1,
+            "generation": 1,
+            "active_slot": "blue",
+            "blue_upstream": "blue_backend",
+            "green_upstream": "green_backend",
+            "blue_upstream_headers": [
+                {"name": "x-version", "value": "v1.0"}
+            ]
+        });
+
+        let bg_eng = crate::blue_green::BlueGreenEngine::from_snapshot(
+            policy.to_string().as_bytes()
+        ).expect("Valid policy");
+
+        let engines = AccessPhaseEngines {
+            blue_green: Some(&bg_eng),
+            ..Default::default()
+        };
+        let space = AccessPhaseSpace::new(engines);
+
+        let ctx = AccessRequestContext {
+            host: b"example.com",
+            path: b"/api/test",
+            method: b"GET",
+            query: b"",
+            client_ip: b"127.0.0.1",
+            content_length: 0,
+            header_length: 0,
+            random_seed: 42,
+            now_ms: 1000,
+        };
+
+        let decision = space.evaluate(&ctx, |_| None);
+        match decision {
+            AccessDecision::Allow {
+                forwarded_headers,
+                target_upstream,
+                ..
+            } => {
+                assert_eq!(target_upstream, Some("blue_backend"));
+                let headers = forwarded_headers.expect("Must have forwarded headers from blue-green");
+                assert_eq!(headers.as_ref(), &[("x-version".to_string(), "v1.0".to_string())]);
+            }
+            AccessDecision::Deny { .. } => panic!("Expected Allow"),
         }
     }
 }

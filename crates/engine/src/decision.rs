@@ -40,7 +40,7 @@ pub struct ConnectionToken {
 #[derive(Debug, PartialEq, Eq)]
 pub enum AccessDecision<'a> {
     Allow {
-        forwarded_headers: Arc<[(String, String)]>,
+        forwarded_headers: Option<Arc<[(String, String)]>>,
         target_upstream: Option<&'a str>,
         rate_limit_bytes_per_sec: u64,
         conn_token: Option<ConnectionToken>,
