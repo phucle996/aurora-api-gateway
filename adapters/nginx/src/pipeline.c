@@ -86,9 +86,18 @@ uint32_t ngx_http_gateway_header_lookup(void *ctx, const uint8_t *name,
   return 1;
 }
 
+static uint8_t *ngx_http_gateway_alloc(void *ctx, size_t size) {
+  ngx_http_request_t *r = (ngx_http_request_t *)ctx;
+  if (__builtin_expect(r == NULL || r->pool == NULL, 0)) {
+    return NULL;
+  }
+  return (uint8_t *)ngx_pnalloc(r->pool, size);
+}
+
 /*
  * Thi hành quyết định Từ chối (DENY) từ Gateway Access Phase.
  * Khử hoàn toàn rẽ nhánh theo từng mã HTTP; trực tiếp trả về status code hoặc custom body.
+ * Zero-copy: Content-Type và Body đã được Rust ghi trực tiếp vào request pool memory.
  */
 static ngx_int_t ngx_http_gateway_execute_deny(ngx_http_request_t *r,
                                                const AuroraAccessOutcome *out) {
@@ -101,7 +110,7 @@ static ngx_int_t ngx_http_gateway_execute_deny(ngx_http_request_t *r,
     }
   }
 
-  if (out->body_len == 0) {
+  if (out->body_len == 0 || out->body == NULL) {
     return (ngx_int_t)out->status_code;
   }
 
@@ -110,14 +119,9 @@ static ngx_int_t ngx_http_gateway_execute_deny(ngx_http_request_t *r,
                               : NGX_HTTP_SERVICE_UNAVAILABLE;
   r->headers_out.content_length_n = out->body_len;
 
-  if (out->content_type_len > 0) {
-    u_char *ct = ngx_pnalloc(r->pool, out->content_type_len);
-    if (__builtin_expect(ct == NULL, 0)) {
-      return NGX_HTTP_INTERNAL_SERVER_ERROR;
-    }
-    ngx_memcpy(ct, out->content_type, out->content_type_len);
+  if (out->content_type_len > 0 && out->content_type != NULL) {
     r->headers_out.content_type.len = out->content_type_len;
-    r->headers_out.content_type.data = ct;
+    r->headers_out.content_type.data = (u_char *)out->content_type;
   } else {
     ngx_str_set(&r->headers_out.content_type, "text/plain; charset=utf-8");
   }
@@ -130,12 +134,13 @@ static ngx_int_t ngx_http_gateway_execute_deny(ngx_http_request_t *r,
     return NGX_DONE;
   }
 
-  ngx_buf_t *b = ngx_create_temp_buf(r->pool, out->body_len);
-  if (b == NULL) {
+  ngx_buf_t *b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
+  if (__builtin_expect(b == NULL, 0)) {
     return NGX_HTTP_INTERNAL_SERVER_ERROR;
   }
-  ngx_memcpy(b->pos, out->body, out->body_len);
-  b->last = b->pos + out->body_len;
+  b->pos = (u_char *)out->body;
+  b->last = (u_char *)out->body + out->body_len;
+  b->memory = 1;
   b->last_buf = (r == r->main) ? 1 : 0;
   b->last_in_chain = 1;
 
@@ -170,7 +175,7 @@ static ngx_int_t ngx_http_gateway_execute_allow(
                        ? out->headers_count
                        : AURORA_MAX_FORWARD_HEADERS;
   for (uint32_t i = 0; i < count; i++) {
-    if (out->headers[i].name_len == 0) {
+    if (out->headers[i].name_len == 0 || out->headers[i].name == NULL) {
       continue;
     }
 
@@ -178,6 +183,7 @@ static ngx_int_t ngx_http_gateway_execute_allow(
     size_t vlen = out->headers[i].value_len;
     const u_char *kname = out->headers[i].name;
     const u_char *kval = out->headers[i].value;
+    const u_char *klow = out->headers[i].lowcase_name;
 
     ngx_table_elt_t *h = NULL;
 
@@ -207,15 +213,11 @@ static ngx_int_t ngx_http_gateway_execute_allow(
     }
 
     if (h != NULL) {
-      /* Ghi đè giá trị lên header đã được setup để forward */
+      /* Ghi đè giá trị lên header đã tồn tại: Zero-copy trỏ thẳng vào memory pool */
       h->value.len = vlen;
-      h->value.data = ngx_pnalloc(r->pool, vlen);
-      if (__builtin_expect(h->value.data == NULL, 0)) {
-        return NGX_HTTP_INTERNAL_SERVER_ERROR;
-      }
-      ngx_memcpy(h->value.data, kval, vlen);
+      h->value.data = (u_char *)kval;
     } else {
-      /* Header chưa có thì chèn mới vào list */
+      /* Header chưa có thì chèn mới vào list: Zero-copy trỏ thẳng vào memory pool */
       h = ngx_list_push(&r->headers_in.headers);
       if (__builtin_expect(h == NULL, 0)) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
@@ -223,35 +225,20 @@ static ngx_int_t ngx_http_gateway_execute_allow(
       ngx_memzero(h, sizeof(ngx_table_elt_t));
       h->hash = 1;
 
-      /* Single-bump arena: Cấp phát liền mạch đúng 1 lần cho (key + value + lowcase_key)
-       * trong cùng một L1 CPU cacheline (64 bytes), loại bỏ phân mảnh và 2 lần syscall ngx_pnalloc */
-      size_t total_alloc = (klen << 1) + vlen;
-      u_char *buf = ngx_pnalloc(r->pool, total_alloc);
-      if (__builtin_expect(buf == NULL, 0)) {
-        return NGX_HTTP_INTERNAL_SERVER_ERROR;
-      }
-
       h->key.len = klen;
-      h->key.data = buf;
-      ngx_memcpy(buf, kname, klen);
+      h->key.data = (u_char *)kname;
 
       h->value.len = vlen;
-      h->value.data = buf + klen;
-      ngx_memcpy(buf + klen, kval, vlen);
+      h->value.data = (u_char *)kval;
 
-      h->lowcase_key = buf + klen + vlen;
-      ngx_strlow(h->lowcase_key, buf, klen);
+      h->lowcase_key = (u_char *)klow;
     }
   }
 
-  /* 2. Target upstream routing */
-  if (out->target_upstream_len > 0) {
-    u_char *up = ngx_pnalloc(r->pool, out->target_upstream_len);
-    if (up != NULL) {
-      ngx_memcpy(up, out->target_upstream, out->target_upstream_len);
-      ctx->target_upstream.data = up;
-      ctx->target_upstream.len = out->target_upstream_len;
-    }
+  /* 2. Target upstream routing: Zero-copy trỏ thẳng vào memory pool */
+  if (out->target_upstream_len > 0 && out->target_upstream != NULL) {
+    ctx->target_upstream.data = (u_char *)out->target_upstream;
+    ctx->target_upstream.len = out->target_upstream_len;
   }
 
   /* 3. In-flight token release hook */
@@ -343,7 +330,7 @@ ngx_int_t ngx_http_gateway_handler(ngx_http_request_t *r) {
   AuroraAccessOutcome outcome;
 
   if (aurora_gateway_phase_access(&input, r, ngx_http_gateway_header_lookup,
-                                  &outcome) != 0) {
+                                  ngx_http_gateway_alloc, &outcome) != 0) {
     return NGX_HTTP_INTERNAL_SERVER_ERROR;
   }
 

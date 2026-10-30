@@ -43,16 +43,19 @@ uint32_t aurora_gateway_policy_writer_clear(uint32_t slot_id, uint64_t generatio
 #define AURORA_MAX_FORWARD_HEADERS 16
 
 typedef struct {
+  const uint8_t *name;
+  const uint8_t *value;
+  const uint8_t *lowcase_name;
   uint32_t name_len;
   uint32_t value_len;
-  uint8_t name[64];
-  uint8_t value[256];
 } AuroraHeader;
 
 typedef uint32_t (*aurora_header_lookup_fn)(void *ctx, const uint8_t *name,
                                             size_t name_len,
                                             const uint8_t **out_val,
                                             size_t *out_val_len);
+
+typedef uint8_t *(*aurora_alloc_fn)(void *ctx, size_t size);
 
 typedef struct {
   uint8_t opaque[64];
@@ -79,27 +82,29 @@ typedef struct {
   uint32_t action;
   uint32_t status_code;
   uint32_t flags;
-
   uint32_t headers_count;
+
   AuroraHeader headers[AURORA_MAX_FORWARD_HEADERS];
 
+  const uint8_t *target_upstream;
+  const uint8_t *body;
+  const uint8_t *content_type;
+
   uint32_t target_upstream_len;
-  char target_upstream[128];
+  uint32_t body_len;
+  uint32_t content_type_len;
+  uint32_t _reserved;
 
   uint64_t rate_limit_bytes_per_sec;
 
   AuroraReleaseToken release_token;
-
-  uint32_t body_len;
-  char body[4096];
-  uint32_t content_type_len;
-  char content_type[64];
 } AuroraAccessOutcome;
 
 uint32_t aurora_gateway_phase_access(
     const AuroraAccessInput *input,
     void *lookup_ctx,
     aurora_header_lookup_fn lookup_fn,
+    aurora_alloc_fn alloc_fn,
     AuroraAccessOutcome *out_outcome);
 
 void aurora_gateway_connection_release(const AuroraReleaseToken *token);

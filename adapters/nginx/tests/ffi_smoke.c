@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include "ffi.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <assert.h>
 #include <string.h>
 #include <stdatomic.h>
@@ -8,6 +9,11 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <time.h>
+
+static uint8_t *smoke_alloc(void *ctx, size_t size) {
+    (void)ctx;
+    return (uint8_t *)malloc(size);
+}
 
 int main(void) {
     // 1. ABI Version Validation
@@ -46,7 +52,7 @@ int main(void) {
             .now_ms = 1000,
         };
         AuroraAccessOutcome outcome_blocked;
-        assert(aurora_gateway_phase_access(&in_blocked, NULL, NULL, &outcome_blocked) == 0);
+        assert(aurora_gateway_phase_access(&in_blocked, NULL, NULL, smoke_alloc, &outcome_blocked) == 0);
         assert(outcome_blocked.action == AURORA_ACTION_DENY);
         assert(outcome_blocked.status_code == 403);
 
@@ -68,7 +74,7 @@ int main(void) {
             .now_ms = 1000,
         };
         AuroraAccessOutcome outcome_allowed;
-        assert(aurora_gateway_phase_access(&in_allowed, NULL, NULL, &outcome_allowed) == 0);
+        assert(aurora_gateway_phase_access(&in_allowed, NULL, NULL, smoke_alloc, &outcome_allowed) == 0);
         assert(outcome_allowed.action == AURORA_ACTION_ALLOW);
         assert(outcome_allowed.status_code == 200);
 
