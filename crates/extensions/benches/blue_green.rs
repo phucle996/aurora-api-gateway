@@ -1,4 +1,4 @@
-//! Run with `cargo bench -p aurora-engine --bench blue_green`.
+//! Run with `cargo bench -p aurora-extensions --bench blue_green`.
 //! Single-thread engine measurements, not HTTP latency or gateway throughput.
 use aurora_extensions::blue_green::{BlueGreenEngine, BlueGreenEvalRequest};
 use std::alloc::{GlobalAlloc, Layout, System};
@@ -38,14 +38,23 @@ fn main() {
     let require_zero = std::env::args().any(|arg| arg == "--assert-zero-warm-allocations");
     println!("scenario,rules,median_ns_per_eval,allocations_per_eval");
 
-    for (scenario, rule_count, iterations) in [
+    let scenarios = [
         ("default_blue_slot", 1, 100_000),
         ("default_green_slot", 1, 100_000),
-        ("header_override_match", 1, 100_000),
+        ("header_override_swar_exact", 1, 100_000),
+        ("header_override_swar_uppercase", 1, 100_000),
+        ("cookie_override_swar", 1, 100_000),
+        ("query_override_swar", 1, 100_000),
+        ("preview_secret_guard_pass", 1, 100_000),
+        ("preview_secret_guard_blocked", 1, 100_000),
+        ("cidr_guard_pass", 1, 100_000),
+        ("cidr_guard_blocked", 1, 100_000),
         ("multi_rule_sequential_eval", 8, 100_000),
         ("host_scoped_eval", 1, 100_000),
         ("no_match_fallback", 8, 100_000),
-    ] {
+    ];
+
+    for (scenario, rule_count, iterations) in scenarios {
         let active_slot = if scenario == "default_green_slot" {
             "green"
         } else {
@@ -58,9 +67,12 @@ fn main() {
             "*"
         };
 
+        let is_secret_scenario = scenario.starts_with("preview_secret_guard");
+        let is_cidr_scenario = scenario.starts_with("cidr_guard");
+
         let rules: Vec<_> = (0..rule_count)
             .map(|idx| {
-                serde_json::json!({
+                let mut rule_json = serde_json::json!({
                     "id": format!("bg-rule-{idx:02}"),
                     "priority": idx + 1,
                     "origin": origin,
@@ -69,13 +81,26 @@ fn main() {
                     "blue_upstream": "app_blue",
                     "green_upstream": "app_green",
                     "switch_header": "x-deploy-slot",
+                    "preview_cookie": "deploy_slot",
+                    "preview_query_param": "deploy_slot",
                     "blue_upstream_headers": [
                         { "name": "x-aurora-slot", "value": "blue" }
                     ],
                     "green_upstream_headers": [
                         { "name": "x-aurora-slot", "value": "green" }
                     ]
-                })
+                });
+
+                if is_secret_scenario {
+                    rule_json["preview_secret"] = serde_json::json!("super-secret-token");
+                    rule_json["preview_secret_header"] = serde_json::json!("x-preview-secret");
+                }
+
+                if is_cidr_scenario {
+                    rule_json["allowed_cidrs"] = serde_json::json!(["10.0.0.0/8", "192.168.0.0/16"]);
+                }
+
+                rule_json
             })
             .collect();
 
@@ -95,16 +120,76 @@ fn main() {
             b"/api/v1/users"
         };
 
-        let req = BlueGreenEvalRequest {
-            origin: req_origin,
-            path: req_path,
+        let req_client_ip: &[u8] = if scenario == "cidr_guard_pass" {
+            b"10.240.0.1"
+        } else if scenario == "cidr_guard_blocked" {
+            b"203.0.113.195"
+        } else {
+            b"127.0.0.1"
         };
 
+        let req_query: &[u8] = if scenario == "query_override_swar" {
+            b"q=search&deploy_slot=green&limit=50"
+        } else {
+            b""
+        };
+
+        let req = BlueGreenEvalRequest::with_details(
+            req_origin,
+            req_path,
+            req_client_ip,
+            req_query,
+        );
+
         let header_lookup = |name: &str| -> Option<&'static [u8]> {
-            if scenario == "header_override_match" && name == "x-deploy-slot" {
-                Some(b"green")
-            } else {
-                None
+            match scenario {
+                "header_override_swar_exact" => {
+                    if name == "x-deploy-slot" {
+                        Some(b"green")
+                    } else {
+                        None
+                    }
+                }
+                "header_override_swar_uppercase" => {
+                    if name == "x-deploy-slot" {
+                        Some(b"GREEN")
+                    } else {
+                        None
+                    }
+                }
+                "cookie_override_swar" => {
+                    if name == "cookie" {
+                        Some(b"session_id=abc123xyz; deploy_slot=green; tracking=off")
+                    } else {
+                        None
+                    }
+                }
+                "preview_secret_guard_pass" => {
+                    if name == "x-deploy-slot" {
+                        Some(b"green")
+                    } else if name == "x-preview-secret" {
+                        Some(b"super-secret-token")
+                    } else {
+                        None
+                    }
+                }
+                "preview_secret_guard_blocked" => {
+                    if name == "x-deploy-slot" {
+                        Some(b"green")
+                    } else if name == "x-preview-secret" {
+                        Some(b"forged-token-attempt")
+                    } else {
+                        None
+                    }
+                }
+                "cidr_guard_pass" | "cidr_guard_blocked" => {
+                    if name == "x-deploy-slot" {
+                        Some(b"green")
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
             }
         };
 

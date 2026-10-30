@@ -251,9 +251,15 @@ pub fn render_locations_into(
             }
         }
 
+        let target_upstream = if loc.upstream == "gateway_upstream" {
+            "$gateway_upstream"
+        } else {
+            loc.upstream.as_str()
+        };
+
         buf.push_str(&format!(
             "        proxy_pass {}://{};\n        proxy_next_upstream error timeout http_502 http_503;\n    }}\n",
-            scheme, loc.upstream
+            scheme, target_upstream
         ));
     }
 }

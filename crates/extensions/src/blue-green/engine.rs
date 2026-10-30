@@ -1,8 +1,96 @@
-use super::types::{
-    BlueGreenDecision, BlueGreenEvalRequest, BlueGreenRuleInput, BlueGreenSnapshot,
-    CompiledBlueGreenRule, DeploySlot, MAX_BLUE_GREEN_POLICY_BYTES, MAX_BLUE_GREEN_RULES,
-};
+//! Dataplane Router Core Engine
+//!
+//! Orchestrates high-speed Access Phase route matching, SWAR slot parsing,
+//! arithmetic security verification, and branchless L1 slot sheet retrieval.
+
+use std::sync::Arc;
 use crate::{Error, MAX_PATH_BYTES, host_matches, host_specificity};
+
+use super::policy::{
+    BlueGreenRuleInput, BlueGreenSnapshot, CompiledBlueGreenRule, MAX_BLUE_GREEN_POLICY_BYTES,
+    MAX_BLUE_GREEN_RULES,
+};
+use super::security::{
+    extract_cookie_value, extract_query_value, verify_cidr_boundary, verify_preview_secret,
+};
+use super::sheet::{DeploySlot, SlotSheet, SlotUpstreamMeta, empty_blue_green_headers};
+use super::swar::{fnv1a_64, parse_slot_swar, select_slot_branchless};
+
+#[derive(Clone, Copy, Debug)]
+pub struct BlueGreenEvalRequest<'a> {
+    pub origin: &'a [u8],
+    pub path: &'a [u8],
+    pub client_ip: &'a [u8],
+    pub query: &'a [u8],
+}
+
+impl<'a> BlueGreenEvalRequest<'a> {
+    pub const fn new(origin: &'a [u8], path: &'a [u8]) -> Self {
+        Self {
+            origin,
+            path,
+            client_ip: b"",
+            query: b"",
+        }
+    }
+
+    pub const fn with_details(
+        origin: &'a [u8],
+        path: &'a [u8],
+        client_ip: &'a [u8],
+        query: &'a [u8],
+    ) -> Self {
+        Self {
+            origin,
+            path,
+            client_ip,
+            query,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BlueGreenDecision<'a> {
+    pub matched: bool,
+    pub rule_id: &'a str,
+    pub upstream: &'a str,
+    pub active_slot: &'a str,
+    pub is_header_override: bool,
+    pub upstream_headers: &'a [(String, String)],
+    pub headers_arc: Arc<[(String, String)]>,
+}
+
+impl<'a> BlueGreenDecision<'a> {
+    pub fn unmatched() -> BlueGreenDecision<'static> {
+        BlueGreenDecision {
+            matched: false,
+            rule_id: "",
+            upstream: "",
+            active_slot: "",
+            is_header_override: false,
+            upstream_headers: &[],
+            headers_arc: empty_blue_green_headers(),
+        }
+    }
+
+    pub fn matched(
+        rule_id: &'a str,
+        upstream: &'a str,
+        active_slot: &'static str,
+        is_header_override: bool,
+        headers_arc: &'a Arc<[(String, String)]>,
+    ) -> Self {
+        Self {
+            matched: true,
+            rule_id,
+            upstream,
+            active_slot,
+            is_header_override,
+            upstream_headers: headers_arc.as_ref(),
+            headers_arc: Arc::clone(headers_arc),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct BlueGreenEngine {
@@ -46,6 +134,11 @@ impl BlueGreenEngine {
                     blue_upstream: blue,
                     green_upstream: green,
                     switch_header: snapshot.switch_header.take(),
+                    preview_cookie: snapshot.preview_cookie.take(),
+                    preview_query_param: snapshot.preview_query_param.take(),
+                    preview_secret: snapshot.preview_secret.take(),
+                    preview_secret_header: snapshot.preview_secret_header.take(),
+                    allowed_cidrs: snapshot.allowed_cidrs,
                     blue_upstream_headers: snapshot.blue_upstream_headers,
                     green_upstream_headers: snapshot.green_upstream_headers,
                 });
@@ -119,17 +212,71 @@ impl BlueGreenEngine {
                 return Err(Error::InvalidPolicy);
             }
 
-            let blue_upstream_headers = rule
+            let preview_cookie = rule
+                .preview_cookie
+                .as_ref()
+                .map(|s| s.trim().to_ascii_lowercase().into_bytes())
+                .filter(|b| !b.is_empty());
+
+            let preview_query_param = rule
+                .preview_query_param
+                .as_ref()
+                .map(|s| s.trim().to_ascii_lowercase().into_bytes())
+                .filter(|b| !b.is_empty());
+
+            let secret_header = rule
+                .preview_secret_header
+                .as_ref()
+                .map(|s| s.trim().to_ascii_lowercase())
+                .filter(|s| !s.is_empty());
+
+            let secret_hash = if let Some(ref sec) = rule.preview_secret {
+                if !sec.is_empty() {
+                    fnv1a_64(sec.as_bytes())
+                } else {
+                    0
+                }
+            } else {
+                0
+            };
+
+            let mut allowed_cidrs = Vec::with_capacity(rule.allowed_cidrs.len());
+            for cidr_str in &rule.allowed_cidrs {
+                if let Some((net, mask, _prefix)) =
+                    crate::ip_restriction::ip::parse_ipv4_cidr(cidr_str)
+                {
+                    allowed_cidrs.push((net, mask));
+                } else {
+                    return Err(Error::InvalidPolicy);
+                }
+            }
+
+            let blue_upstream_headers: Arc<[(String, String)]> = rule
                 .blue_upstream_headers
                 .into_iter()
                 .map(|h| (h.name, h.value))
                 .collect();
 
-            let green_upstream_headers = rule
+            let green_upstream_headers: Arc<[(String, String)]> = rule
                 .green_upstream_headers
                 .into_iter()
                 .map(|h| (h.name, h.value))
                 .collect();
+
+            let slot_sheet = SlotSheet {
+                upstreams: [
+                    SlotUpstreamMeta {
+                        upstream: rule.blue_upstream,
+                        slot_name: "blue",
+                        headers: blue_upstream_headers,
+                    },
+                    SlotUpstreamMeta {
+                        upstream: rule.green_upstream,
+                        slot_name: "green",
+                        headers: green_upstream_headers,
+                    },
+                ],
+            };
 
             let is_wildcard_origin = rule.origin == "*";
             let origin_bytes = rule.origin.into_bytes();
@@ -142,12 +289,14 @@ impl BlueGreenEngine {
                 origin_bytes,
                 path_prefix_bytes,
                 path_prefix_ends_with_slash,
-                active_slot,
-                blue_upstream: rule.blue_upstream,
-                green_upstream: rule.green_upstream,
+                active_slot: active_slot.to_u8(),
+                slot_sheet,
                 switch_header,
-                blue_upstream_headers,
-                green_upstream_headers,
+                preview_cookie,
+                preview_query_param,
+                secret_header,
+                secret_hash,
+                allowed_cidrs,
             });
         }
 
@@ -166,6 +315,8 @@ impl BlueGreenEngine {
         let req = BlueGreenEvalRequest {
             origin: ctx.host,
             path: ctx.path,
+            client_ip: ctx.client_ip,
+            query: ctx.query,
         };
         self.evaluate(&req, header_lookup)
     }
@@ -196,47 +347,71 @@ impl BlueGreenEngine {
                 continue;
             }
 
-            // Check switch header override
+            // Step 1: Zero-alloc SWAR Candidate Slot Resolution
+            let mut has_override = 0u8;
+            let mut candidate_slot = 0u8;
+
+            // 1a. Header inspection
             if let Some(ref header_name) = rule.switch_header
                 && let Some(val_bytes) = header_lookup(header_name)
-                && let Ok(val_str) = std::str::from_utf8(val_bytes)
-                && let Some(override_slot) = DeploySlot::from_str_ignore_case(val_str)
+                && let Some(slot) = parse_slot_swar(val_bytes)
             {
-                return match override_slot {
-                    DeploySlot::Blue => BlueGreenDecision::matched(
-                        rule.id.as_str(),
-                        rule.blue_upstream.as_str(),
-                        "blue",
-                        true,
-                        &rule.blue_upstream_headers,
-                    ),
-                    DeploySlot::Green => BlueGreenDecision::matched(
-                        rule.id.as_str(),
-                        rule.green_upstream.as_str(),
-                        "green",
-                        true,
-                        &rule.green_upstream_headers,
-                    ),
-                };
+                has_override = 1;
+                candidate_slot = slot;
             }
 
-            // Default to active slot
-            return match rule.active_slot {
-                DeploySlot::Blue => BlueGreenDecision::matched(
-                    rule.id.as_str(),
-                    rule.blue_upstream.as_str(),
-                    "blue",
-                    false,
-                    &rule.blue_upstream_headers,
-                ),
-                DeploySlot::Green => BlueGreenDecision::matched(
-                    rule.id.as_str(),
-                    rule.green_upstream.as_str(),
-                    "green",
-                    false,
-                    &rule.green_upstream_headers,
-                ),
-            };
+            // 1b. Cookie inspection (fallback if header absent)
+            if has_override == 0
+                && let Some(ref cookie_name) = rule.preview_cookie
+                && let Some(cookie_hdr) = header_lookup("cookie")
+                && let Some(val_bytes) = extract_cookie_value(cookie_hdr, cookie_name)
+                && let Some(slot) = parse_slot_swar(val_bytes)
+            {
+                has_override = 1;
+                candidate_slot = slot;
+            }
+
+            // 1c. Query parameter inspection (fallback if header and cookie absent)
+            if has_override == 0
+                && let Some(ref param_name) = rule.preview_query_param
+                && let Some(val_bytes) = extract_query_value(req.query, param_name)
+                && let Some(slot) = parse_slot_swar(val_bytes)
+            {
+                has_override = 1;
+                candidate_slot = slot;
+            }
+
+            // Step 2: Arithmetic Security Guard (Preview Secret & CIDR Boundary)
+            let mut secret_ok = 1u8;
+            let mut cidr_ok = 1u8;
+
+            if has_override == 1 {
+                // 2a. Pre-shared Secret Key validation in 1 integer register comparison
+                secret_ok = verify_preview_secret(
+                    rule.secret_hash,
+                    rule.secret_header.as_deref(),
+                    req.query,
+                    &header_lookup,
+                );
+
+                // 2b. CIDR Bitwise Boundary validation
+                cidr_ok = verify_cidr_boundary(&rule.allowed_cidrs, req.client_ip);
+            }
+
+            // Step 3: Branchless Arithmetic Selection Formula
+            let valid_override = has_override & secret_ok & cidr_ok;
+            let chosen_slot = select_slot_branchless(valid_override, candidate_slot, rule.active_slot);
+
+            let meta = &rule.slot_sheet.upstreams[chosen_slot as usize];
+            let is_override = valid_override != 0;
+
+            return BlueGreenDecision::matched(
+                rule.id.as_str(),
+                meta.upstream.as_str(),
+                meta.slot_name,
+                is_override,
+                &meta.headers,
+            );
         }
 
         BlueGreenDecision::unmatched()

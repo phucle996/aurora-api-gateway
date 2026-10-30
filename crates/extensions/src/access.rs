@@ -202,8 +202,9 @@ impl<'a> AccessPhaseSpace<'a> {
         &self,
         ctx: &AccessRequestContext<'a>,
         header_lookup: &impl Fn(&str) -> Option<&'a [u8]>,
-    ) -> Option<&'a str> {
+    ) -> (Option<&'a str>, Option<Arc<[(String, String)]>>) {
         let mut target_upstream = None;
+        let mut routing_headers = None;
 
         if let Some(ts_eng) = self.engines.traffic_split {
             let decision = ts_eng.evaluate_ctx(ctx, header_lookup);
@@ -223,6 +224,9 @@ impl<'a> AccessPhaseSpace<'a> {
             let decision = bg_eng.evaluate_ctx(ctx, header_lookup);
             if decision.matched && !decision.upstream.is_empty() {
                 target_upstream = Some(decision.upstream);
+                if !decision.headers_arc.is_empty() {
+                    routing_headers = Some(decision.headers_arc);
+                }
             }
         }
 
@@ -235,7 +239,7 @@ impl<'a> AccessPhaseSpace<'a> {
             }
         }
 
-        target_upstream
+        (target_upstream, routing_headers)
     }
 
     /// Executes the entire Access Phase across Admission, Authentication, Limiting, and Routing.
@@ -259,7 +263,18 @@ impl<'a> AccessPhaseSpace<'a> {
                 Err(denial) => return denial.into(),
             };
 
-        let target_upstream = self.resolve_routing(ctx, &header_lookup);
+        let (target_upstream, routing_headers) = self.resolve_routing(ctx, &header_lookup);
+
+        let forwarded_headers = match (forwarded_headers.is_empty(), routing_headers) {
+            (true, Some(rh)) => rh,
+            (false, Some(rh)) => {
+                let mut combined = Vec::with_capacity(forwarded_headers.len() + rh.len());
+                combined.extend_from_slice(&forwarded_headers);
+                combined.extend_from_slice(&rh);
+                Arc::from(combined)
+            }
+            _ => forwarded_headers,
+        };
 
         AccessDecision::Allow {
             forwarded_headers,

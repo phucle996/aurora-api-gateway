@@ -1,35 +1,13 @@
-use serde::{Deserialize, Serialize};
+//! Declarative Snapshot Schema & Precompiled Blue-Green Policy Rules
+//!
+//! Handles JSON deserialization, validation, priority sorting, and precompilation
+//! of network CIDRs, FNV-1a secret hashes, and L1 cacheline slot sheets.
+
+use serde::Deserialize;
+use super::sheet::SlotSheet;
 
 pub const MAX_BLUE_GREEN_RULES: usize = 64;
 pub const MAX_BLUE_GREEN_POLICY_BYTES: usize = 131_072; // 128KB
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum DeploySlot {
-    #[default]
-    Blue,
-    Green,
-}
-
-impl DeploySlot {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            DeploySlot::Blue => "blue",
-            DeploySlot::Green => "green",
-        }
-    }
-
-    pub fn from_str_ignore_case(s: &str) -> Option<Self> {
-        let trimmed = s.trim();
-        if trimmed.eq_ignore_ascii_case("blue") {
-            Some(DeploySlot::Blue)
-        } else if trimmed.eq_ignore_ascii_case("green") {
-            Some(DeploySlot::Green)
-        } else {
-            None
-        }
-    }
-}
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct UpstreamHeaderInput {
@@ -54,6 +32,16 @@ pub struct BlueGreenRuleInput {
     #[serde(default = "default_switch_header")]
     pub switch_header: Option<String>,
     #[serde(default)]
+    pub preview_cookie: Option<String>,
+    #[serde(default)]
+    pub preview_query_param: Option<String>,
+    #[serde(default)]
+    pub preview_secret: Option<String>,
+    #[serde(default = "default_secret_header")]
+    pub preview_secret_header: Option<String>,
+    #[serde(default)]
+    pub allowed_cidrs: Vec<String>,
+    #[serde(default)]
     pub blue_upstream_headers: Vec<UpstreamHeaderInput>,
     #[serde(default)]
     pub green_upstream_headers: Vec<UpstreamHeaderInput>,
@@ -73,6 +61,9 @@ fn default_path_prefix() -> String {
 }
 fn default_switch_header() -> Option<String> {
     Some("x-deploy-slot".to_string())
+}
+fn default_secret_header() -> Option<String> {
+    Some("x-preview-secret".to_string())
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -94,6 +85,16 @@ pub struct BlueGreenSnapshot {
     #[serde(default)]
     pub switch_header: Option<String>,
     #[serde(default)]
+    pub preview_cookie: Option<String>,
+    #[serde(default)]
+    pub preview_query_param: Option<String>,
+    #[serde(default)]
+    pub preview_secret: Option<String>,
+    #[serde(default = "default_secret_header")]
+    pub preview_secret_header: Option<String>,
+    #[serde(default)]
+    pub allowed_cidrs: Vec<String>,
+    #[serde(default)]
     pub blue_upstream_headers: Vec<UpstreamHeaderInput>,
     #[serde(default)]
     pub green_upstream_headers: Vec<UpstreamHeaderInput>,
@@ -103,6 +104,7 @@ fn default_schema_version() -> u32 {
     1
 }
 
+/// Fully compiled, zero-allocation internal rule representation.
 #[derive(Clone, Debug)]
 pub(crate) struct CompiledBlueGreenRule {
     pub id: String,
@@ -110,56 +112,12 @@ pub(crate) struct CompiledBlueGreenRule {
     pub origin_bytes: Vec<u8>,
     pub path_prefix_bytes: Vec<u8>,
     pub path_prefix_ends_with_slash: bool,
-    pub active_slot: DeploySlot,
-    pub blue_upstream: String,
-    pub green_upstream: String,
+    pub active_slot: u8,
+    pub slot_sheet: SlotSheet,
     pub switch_header: Option<String>,
-    pub blue_upstream_headers: Vec<(String, String)>,
-    pub green_upstream_headers: Vec<(String, String)>,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct BlueGreenEvalRequest<'a> {
-    pub origin: &'a [u8],
-    pub path: &'a [u8],
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct BlueGreenDecision<'a> {
-    pub matched: bool,
-    pub rule_id: &'a str,
-    pub upstream: &'a str,
-    pub active_slot: &'a str,
-    pub is_header_override: bool,
-    pub upstream_headers: &'a [(String, String)],
-}
-
-impl<'a> BlueGreenDecision<'a> {
-    pub const fn unmatched() -> BlueGreenDecision<'static> {
-        BlueGreenDecision {
-            matched: false,
-            rule_id: "",
-            upstream: "",
-            active_slot: "",
-            is_header_override: false,
-            upstream_headers: &[],
-        }
-    }
-
-    pub const fn matched(
-        rule_id: &'a str,
-        upstream: &'a str,
-        active_slot: &'a str,
-        is_header_override: bool,
-        upstream_headers: &'a [(String, String)],
-    ) -> Self {
-        Self {
-            matched: true,
-            rule_id,
-            upstream,
-            active_slot,
-            is_header_override,
-            upstream_headers,
-        }
-    }
+    pub preview_cookie: Option<Vec<u8>>,
+    pub preview_query_param: Option<Vec<u8>>,
+    pub secret_header: Option<String>,
+    pub secret_hash: u64,
+    pub allowed_cidrs: Vec<(u32, u32)>,
 }

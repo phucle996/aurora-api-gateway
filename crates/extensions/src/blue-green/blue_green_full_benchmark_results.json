@@ -1,0 +1,828 @@
+{
+  "kb01_raw_nginx": {
+    "step_name": "KB01_Raw_NGINX_Port8088",
+    "target_port": 8088,
+    "wrk": {
+      "rps": 40529.71,
+      "bandwidth_mb_s": 5.84,
+      "latency_mean_ms": 4.88,
+      "latency_stdev_ms": 1.28,
+      "latency_max_ms": 34.27,
+      "p50_ms": 4.93,
+      "p75_ms": 5.58,
+      "p90_ms": 6.12,
+      "p99_ms": 8.22,
+      "total_requests": 406490,
+      "duration_s": 10.03,
+      "non_2xx_responses": 0
+    },
+    "cpu": {
+      "cores": {
+        "core_0": {
+          "total": 55.37,
+          "usr": 13.92,
+          "sys": 26.25,
+          "soft": 15.2,
+          "idle": 44.63
+        },
+        "core_1": {
+          "total": 50.96,
+          "usr": 11.78,
+          "sys": 23.46,
+          "soft": 15.71,
+          "idle": 49.04
+        },
+        "core_2": {
+          "total": 41.52,
+          "usr": 8.91,
+          "sys": 17.49,
+          "soft": 15.02,
+          "idle": 58.48
+        },
+        "core_3": {
+          "total": 42.78,
+          "usr": 9.52,
+          "sys": 19.14,
+          "soft": 14.12,
+          "idle": 57.22
+        }
+      },
+      "cpu_total": 47.68,
+      "cpu_usr": 11.04,
+      "cpu_sys": 21.6,
+      "cpu_soft": 15.01,
+      "cpu_idle": 52.32
+    },
+    "process": {
+      "peak_rss_mb": 0.0,
+      "cswch_per_s": 243663.1
+    }
+  },
+  "kb01_raw_aurora": {
+    "step_name": "KB01_Raw_Aurora_Port80",
+    "target_port": 80,
+    "wrk": {
+      "rps": 40854.79,
+      "bandwidth_mb_s": 5.88,
+      "latency_mean_ms": 4.83,
+      "latency_stdev_ms": 1.22,
+      "latency_max_ms": 16.13,
+      "p50_ms": 4.89,
+      "p75_ms": 5.46,
+      "p90_ms": 6.16,
+      "p99_ms": 8.23,
+      "total_requests": 409663,
+      "duration_s": 10.03,
+      "non_2xx_responses": 0
+    },
+    "cpu": {
+      "cores": {
+        "core_0": {
+          "total": 52.88,
+          "usr": 14.82,
+          "sys": 23.35,
+          "soft": 14.71,
+          "idle": 47.12
+        },
+        "core_1": {
+          "total": 50.21,
+          "usr": 13.68,
+          "sys": 21.79,
+          "soft": 14.74,
+          "idle": 49.79
+        },
+        "core_2": {
+          "total": 44.66,
+          "usr": 11.65,
+          "sys": 18.91,
+          "soft": 14.1,
+          "idle": 55.34
+        },
+        "core_3": {
+          "total": 38.27,
+          "usr": 9.28,
+          "sys": 14.5,
+          "soft": 14.5,
+          "idle": 61.73
+        }
+      },
+      "cpu_total": 46.5,
+      "cpu_usr": 12.35,
+      "cpu_sys": 19.64,
+      "cpu_soft": 14.51,
+      "cpu_idle": 53.5
+    },
+    "process": {
+      "peak_rss_mb": 0.0,
+      "cswch_per_s": 222146.0
+    }
+  },
+  "kb01_raw_envoy": {
+    "step_name": "KB01_Raw_Envoy_Port8090",
+    "target_port": 8090,
+    "wrk": {
+      "rps": 27207.94,
+      "bandwidth_mb_s": 4.0,
+      "latency_mean_ms": 7.32,
+      "latency_stdev_ms": 1.25,
+      "latency_max_ms": 23.54,
+      "p50_ms": 7.21,
+      "p75_ms": 8.06,
+      "p90_ms": 8.61,
+      "p99_ms": 10.76,
+      "total_requests": 272385,
+      "duration_s": 10.01,
+      "non_2xx_responses": 0
+    },
+    "cpu": {
+      "cores": {
+        "core_0": {
+          "total": 77.56,
+          "usr": 53.41,
+          "sys": 13.33,
+          "soft": 10.82,
+          "idle": 22.44
+        },
+        "core_1": {
+          "total": 77.38,
+          "usr": 53.15,
+          "sys": 12.91,
+          "soft": 11.31,
+          "idle": 22.62
+        },
+        "core_2": {
+          "total": 77.86,
+          "usr": 52.51,
+          "sys": 14.03,
+          "soft": 11.32,
+          "idle": 22.14
+        },
+        "core_3": {
+          "total": 77.58,
+          "usr": 54.25,
+          "sys": 12.91,
+          "soft": 10.41,
+          "idle": 22.42
+        }
+      },
+      "cpu_total": 77.59,
+      "cpu_usr": 53.33,
+      "cpu_sys": 13.29,
+      "cpu_soft": 10.97,
+      "cpu_idle": 22.41
+    },
+    "process": {
+      "peak_rss_mb": 0.0,
+      "cswch_per_s": 216.5
+    }
+  },
+  "kb01_raw_kong": {
+    "step_name": "KB01_Raw_Kong_Port8000",
+    "target_port": 8000,
+    "wrk": {
+      "rps": 36812.97,
+      "bandwidth_mb_s": 10.6,
+      "latency_mean_ms": 5.41,
+      "latency_stdev_ms": 1.35,
+      "latency_max_ms": 26.46,
+      "p50_ms": 5.39,
+      "p75_ms": 5.97,
+      "p90_ms": 6.69,
+      "p99_ms": 9.23,
+      "total_requests": 368576,
+      "duration_s": 10.01,
+      "non_2xx_responses": 0
+    },
+    "cpu": {
+      "cores": {
+        "core_0": {
+          "total": 75.9,
+          "usr": 40.86,
+          "sys": 19.88,
+          "soft": 15.16,
+          "idle": 24.1
+        },
+        "core_1": {
+          "total": 76.2,
+          "usr": 40.46,
+          "sys": 19.48,
+          "soft": 16.27,
+          "idle": 23.8
+        },
+        "core_2": {
+          "total": 76.81,
+          "usr": 41.16,
+          "sys": 19.68,
+          "soft": 15.96,
+          "idle": 23.19
+        },
+        "core_3": {
+          "total": 76.28,
+          "usr": 39.8,
+          "sys": 19.5,
+          "soft": 16.98,
+          "idle": 23.72
+        }
+      },
+      "cpu_total": 76.3,
+      "cpu_usr": 40.57,
+      "cpu_sys": 19.63,
+      "cpu_soft": 16.09,
+      "cpu_idle": 23.7
+    },
+    "process": {
+      "peak_rss_mb": 0.0,
+      "cswch_per_s": 48643.1
+    }
+  },
+  "kb02_nginx_map_default": {
+    "step_name": "KB02_NGINX_Map_Default_Port8089",
+    "target_port": 8089,
+    "wrk": {
+      "rps": 41086.27,
+      "bandwidth_mb_s": 5.92,
+      "latency_mean_ms": 4.86,
+      "latency_stdev_ms": 1.81,
+      "latency_max_ms": 48.7,
+      "p50_ms": 4.93,
+      "p75_ms": 5.29,
+      "p90_ms": 5.72,
+      "p99_ms": 9.53,
+      "total_requests": 411905,
+      "duration_s": 10.03,
+      "non_2xx_responses": 0
+    },
+    "cpu": {
+      "cores": {
+        "core_0": {
+          "total": 54.73,
+          "usr": 12.82,
+          "sys": 24.21,
+          "soft": 17.7,
+          "idle": 45.27
+        },
+        "core_1": {
+          "total": 54.1,
+          "usr": 13.42,
+          "sys": 22.95,
+          "soft": 17.73,
+          "idle": 45.9
+        },
+        "core_2": {
+          "total": 45.04,
+          "usr": 10.34,
+          "sys": 18.01,
+          "soft": 16.68,
+          "idle": 54.96
+        },
+        "core_3": {
+          "total": 40.12,
+          "usr": 8.5,
+          "sys": 14.64,
+          "soft": 16.99,
+          "idle": 59.88
+        }
+      },
+      "cpu_total": 48.5,
+      "cpu_usr": 11.27,
+      "cpu_sys": 19.96,
+      "cpu_soft": 17.28,
+      "cpu_idle": 51.5
+    },
+    "process": {
+      "peak_rss_mb": 0.0,
+      "cswch_per_s": 229488.6
+    }
+  },
+  "kb02_nginx_map_override": {
+    "step_name": "KB02_NGINX_Map_OverrideGreen_Port8089",
+    "target_port": 8089,
+    "wrk": {
+      "rps": 40684.82,
+      "bandwidth_mb_s": 5.86,
+      "latency_mean_ms": 4.91,
+      "latency_stdev_ms": 1.97,
+      "latency_max_ms": 46.92,
+      "p50_ms": 4.9,
+      "p75_ms": 5.63,
+      "p90_ms": 6.45,
+      "p99_ms": 9.57,
+      "total_requests": 407573,
+      "duration_s": 10.02,
+      "non_2xx_responses": 0
+    },
+    "cpu": {
+      "cores": {
+        "core_0": {
+          "total": 58.76,
+          "usr": 15.38,
+          "sys": 25.56,
+          "soft": 17.82,
+          "idle": 41.24
+        },
+        "core_1": {
+          "total": 56.5,
+          "usr": 14.33,
+          "sys": 23.95,
+          "soft": 18.22,
+          "idle": 43.5
+        },
+        "core_2": {
+          "total": 47.75,
+          "usr": 11.58,
+          "sys": 18.85,
+          "soft": 17.32,
+          "idle": 52.25
+        },
+        "core_3": {
+          "total": 42.23,
+          "usr": 8.69,
+          "sys": 15.13,
+          "soft": 18.4,
+          "idle": 57.77
+        }
+      },
+      "cpu_total": 51.32,
+      "cpu_usr": 12.5,
+      "cpu_sys": 20.88,
+      "cpu_soft": 17.94,
+      "cpu_idle": 48.68
+    },
+    "process": {
+      "peak_rss_mb": 0.0,
+      "cswch_per_s": 223981.8
+    }
+  },
+  "kb02_aurora_blue_active": {
+    "step_name": "KB02_Aurora_BlueActive_Port80",
+    "target_port": 80,
+    "wrk": {
+      "rps": 40619.73,
+      "bandwidth_mb_s": 5.85,
+      "latency_mean_ms": 4.92,
+      "latency_stdev_ms": 1.65,
+      "latency_max_ms": 47.18,
+      "p50_ms": 4.98,
+      "p75_ms": 5.3,
+      "p90_ms": 5.64,
+      "p99_ms": 8.72,
+      "total_requests": 406752,
+      "duration_s": 10.01,
+      "non_2xx_responses": 0
+    },
+    "cpu": {
+      "cores": {
+        "core_0": {
+          "total": 60.37,
+          "usr": 15.85,
+          "sys": 25.51,
+          "soft": 19.0,
+          "idle": 39.63
+        },
+        "core_1": {
+          "total": 56.0,
+          "usr": 14.97,
+          "sys": 23.79,
+          "soft": 17.23,
+          "idle": 44.0
+        },
+        "core_2": {
+          "total": 47.59,
+          "usr": 11.87,
+          "sys": 18.73,
+          "soft": 16.99,
+          "idle": 52.41
+        },
+        "core_3": {
+          "total": 44.59,
+          "usr": 10.92,
+          "sys": 15.51,
+          "soft": 18.16,
+          "idle": 55.41
+        }
+      },
+      "cpu_total": 52.15,
+      "cpu_usr": 13.41,
+      "cpu_sys": 20.89,
+      "cpu_soft": 17.85,
+      "cpu_idle": 47.85
+    },
+    "process": {
+      "peak_rss_mb": 0.0,
+      "cswch_per_s": 220495.1
+    }
+  },
+  "kb02_aurora_green_authorized": {
+    "step_name": "KB02_Aurora_GreenAuthorized_Port80",
+    "target_port": 80,
+    "wrk": {
+      "rps": 40408.06,
+      "bandwidth_mb_s": 5.82,
+      "latency_mean_ms": 4.91,
+      "latency_stdev_ms": 1.39,
+      "latency_max_ms": 35.49,
+      "p50_ms": 5.01,
+      "p75_ms": 5.45,
+      "p90_ms": 6.19,
+      "p99_ms": 8.69,
+      "total_requests": 405161,
+      "duration_s": 10.03,
+      "non_2xx_responses": 0
+    },
+    "cpu": {
+      "cores": {
+        "core_0": {
+          "total": 56.41,
+          "usr": 16.48,
+          "sys": 23.25,
+          "soft": 16.68,
+          "idle": 43.59
+        },
+        "core_1": {
+          "total": 52.58,
+          "usr": 14.33,
+          "sys": 21.24,
+          "soft": 17.01,
+          "idle": 47.42
+        },
+        "core_2": {
+          "total": 51.51,
+          "usr": 14.29,
+          "sys": 21.69,
+          "soft": 15.54,
+          "idle": 48.49
+        },
+        "core_3": {
+          "total": 48.26,
+          "usr": 13.17,
+          "sys": 19.39,
+          "soft": 15.7,
+          "idle": 51.74
+        }
+      },
+      "cpu_total": 52.2,
+      "cpu_usr": 14.57,
+      "cpu_sys": 21.4,
+      "cpu_soft": 16.24,
+      "cpu_idle": 47.8
+    },
+    "process": {
+      "peak_rss_mb": 0.0,
+      "cswch_per_s": 228609.0
+    }
+  },
+  "kb02_envoy_dynamic_slot": {
+    "step_name": "KB02_Envoy_DynamicSlot_Port8090",
+    "target_port": 8090,
+    "wrk": {
+      "rps": 26803.19,
+      "bandwidth_mb_s": 3.94,
+      "latency_mean_ms": 7.65,
+      "latency_stdev_ms": 5.8,
+      "latency_max_ms": 231.59,
+      "p50_ms": 7.36,
+      "p75_ms": 7.88,
+      "p90_ms": 8.43,
+      "p99_ms": 11.83,
+      "total_requests": 268370,
+      "duration_s": 10.01,
+      "non_2xx_responses": 0
+    },
+    "cpu": {
+      "cores": {
+        "core_0": {
+          "total": 77.58,
+          "usr": 53.05,
+          "sys": 12.91,
+          "soft": 11.61,
+          "idle": 22.42
+        },
+        "core_1": {
+          "total": 77.45,
+          "usr": 53.01,
+          "sys": 13.13,
+          "soft": 11.32,
+          "idle": 22.55
+        },
+        "core_2": {
+          "total": 77.86,
+          "usr": 52.1,
+          "sys": 13.83,
+          "soft": 11.92,
+          "idle": 22.14
+        },
+        "core_3": {
+          "total": 77.48,
+          "usr": 52.65,
+          "sys": 12.71,
+          "soft": 12.11,
+          "idle": 22.52
+        }
+      },
+      "cpu_total": 77.59,
+      "cpu_usr": 52.7,
+      "cpu_sys": 13.14,
+      "cpu_soft": 11.74,
+      "cpu_idle": 22.41
+    },
+    "process": {
+      "peak_rss_mb": 0.0,
+      "cswch_per_s": 194.5
+    }
+  },
+  "kb02_kong_routing": {
+    "step_name": "KB02_Kong_Routing_Port8000",
+    "target_port": 8000,
+    "wrk": {
+      "rps": 35679.3,
+      "bandwidth_mb_s": 10.28,
+      "latency_mean_ms": 5.58,
+      "latency_stdev_ms": 1.72,
+      "latency_max_ms": 26.04,
+      "p50_ms": 5.35,
+      "p75_ms": 6.66,
+      "p90_ms": 7.58,
+      "p99_ms": 10.89,
+      "total_requests": 357095,
+      "duration_s": 10.01,
+      "non_2xx_responses": 0
+    },
+    "cpu": {
+      "cores": {
+        "core_0": {
+          "total": 77.23,
+          "usr": 42.93,
+          "sys": 19.06,
+          "soft": 15.25,
+          "idle": 22.77
+        },
+        "core_1": {
+          "total": 76.91,
+          "usr": 42.57,
+          "sys": 18.37,
+          "soft": 15.96,
+          "idle": 23.09
+        },
+        "core_2": {
+          "total": 77.86,
+          "usr": 43.49,
+          "sys": 18.64,
+          "soft": 15.63,
+          "idle": 22.14
+        },
+        "core_3": {
+          "total": 77.15,
+          "usr": 41.78,
+          "sys": 19.64,
+          "soft": 15.73,
+          "idle": 22.85
+        }
+      },
+      "cpu_total": 77.29,
+      "cpu_usr": 42.69,
+      "cpu_sys": 18.93,
+      "cpu_soft": 15.64,
+      "cpu_idle": 22.71
+    },
+    "process": {
+      "peak_rss_mb": 0.0,
+      "cswch_per_s": 19470.3
+    }
+  },
+  "kb03_aurora_chaos_storm": {
+    "step_name": "KB03_Aurora_ChaosStorm_Port80",
+    "target_port": 80,
+    "wrk": {
+      "rps": 39286.26,
+      "bandwidth_mb_s": 5.66,
+      "latency_mean_ms": 4.84,
+      "latency_stdev_ms": 1.65,
+      "latency_max_ms": 23.78,
+      "p50_ms": 4.93,
+      "p75_ms": 5.78,
+      "p90_ms": 6.62,
+      "p99_ms": 9.41,
+      "total_requests": 395149,
+      "duration_s": 10.06,
+      "non_2xx_responses": 0
+    },
+    "cpu": {
+      "cores": {
+        "core_0": {
+          "total": 59.87,
+          "usr": 17.23,
+          "sys": 25.3,
+          "soft": 17.34,
+          "idle": 40.13
+        },
+        "core_1": {
+          "total": 48.62,
+          "usr": 11.52,
+          "sys": 17.61,
+          "soft": 19.49,
+          "idle": 51.38
+        },
+        "core_2": {
+          "total": 46.37,
+          "usr": 10.99,
+          "sys": 17.69,
+          "soft": 17.69,
+          "idle": 53.63
+        },
+        "core_3": {
+          "total": 34.03,
+          "usr": 6.89,
+          "sys": 10.72,
+          "soft": 16.41,
+          "idle": 65.97
+        }
+      },
+      "cpu_total": 47.23,
+      "cpu_usr": 11.66,
+      "cpu_sys": 17.84,
+      "cpu_soft": 17.73,
+      "cpu_idle": 52.77
+    },
+    "process": {
+      "peak_rss_mb": 0.0,
+      "cswch_per_s": 204076.9
+    }
+  },
+  "kb03_nginx_map_chaos": {
+    "step_name": "KB03_NGINX_Map_Chaos_Port8089",
+    "target_port": 8089,
+    "wrk": {
+      "rps": 39021.99,
+      "bandwidth_mb_s": 5.62,
+      "latency_mean_ms": 4.93,
+      "latency_stdev_ms": 1.84,
+      "latency_max_ms": 64.46,
+      "p50_ms": 5.02,
+      "p75_ms": 5.82,
+      "p90_ms": 6.54,
+      "p99_ms": 8.9,
+      "total_requests": 392106,
+      "duration_s": 10.05,
+      "non_2xx_responses": 0
+    },
+    "cpu": {
+      "cores": {
+        "core_0": {
+          "total": 57.61,
+          "usr": 15.33,
+          "sys": 27.26,
+          "soft": 14.92,
+          "idle": 42.39
+        },
+        "core_1": {
+          "total": 52.69,
+          "usr": 13.77,
+          "sys": 23.4,
+          "soft": 15.42,
+          "idle": 47.31
+        },
+        "core_2": {
+          "total": 41.75,
+          "usr": 10.2,
+          "sys": 17.35,
+          "soft": 14.2,
+          "idle": 58.25
+        },
+        "core_3": {
+          "total": 41.12,
+          "usr": 9.35,
+          "sys": 16.82,
+          "soft": 14.95,
+          "idle": 58.88
+        }
+      },
+      "cpu_total": 48.34,
+      "cpu_usr": 12.18,
+      "cpu_sys": 21.24,
+      "cpu_soft": 14.88,
+      "cpu_idle": 51.66
+    },
+    "process": {
+      "peak_rss_mb": 0.0,
+      "cswch_per_s": 224643.9
+    }
+  },
+  "kb03_envoy_chaos": {
+    "step_name": "KB03_Envoy_Chaos_Port8090",
+    "target_port": 8090,
+    "wrk": {
+      "rps": 26304.69,
+      "bandwidth_mb_s": 3.86,
+      "latency_mean_ms": 7.55,
+      "latency_stdev_ms": 1.2,
+      "latency_max_ms": 25.6,
+      "p50_ms": 7.51,
+      "p75_ms": 8.21,
+      "p90_ms": 8.83,
+      "p99_ms": 11.02,
+      "total_requests": 263401,
+      "duration_s": 10.01,
+      "non_2xx_responses": 0
+    },
+    "cpu": {
+      "cores": {
+        "core_0": {
+          "total": 77.58,
+          "usr": 52.75,
+          "sys": 13.91,
+          "soft": 10.91,
+          "idle": 22.42
+        },
+        "core_1": {
+          "total": 77.35,
+          "usr": 52.71,
+          "sys": 12.73,
+          "soft": 11.92,
+          "idle": 22.65
+        },
+        "core_2": {
+          "total": 77.48,
+          "usr": 54.45,
+          "sys": 13.11,
+          "soft": 9.91,
+          "idle": 22.52
+        },
+        "core_3": {
+          "total": 77.28,
+          "usr": 53.35,
+          "sys": 13.21,
+          "soft": 10.71,
+          "idle": 22.72
+        }
+      },
+      "cpu_total": 77.42,
+      "cpu_usr": 53.32,
+      "cpu_sys": 13.24,
+      "cpu_soft": 10.86,
+      "cpu_idle": 22.58
+    },
+    "process": {
+      "peak_rss_mb": 0.0,
+      "cswch_per_s": 822.6
+    }
+  },
+  "kb03_kong_chaos": {
+    "step_name": "KB03_Kong_Chaos_Port8000",
+    "target_port": 8000,
+    "wrk": {
+      "rps": 35660.59,
+      "bandwidth_mb_s": 10.27,
+      "latency_mean_ms": 5.52,
+      "latency_stdev_ms": 1.59,
+      "latency_max_ms": 29.69,
+      "p50_ms": 5.33,
+      "p75_ms": 6.32,
+      "p90_ms": 7.25,
+      "p99_ms": 10.4,
+      "total_requests": 357518,
+      "duration_s": 10.03,
+      "non_2xx_responses": 0
+    },
+    "cpu": {
+      "cores": {
+        "core_0": {
+          "total": 76.33,
+          "usr": 44.23,
+          "sys": 19.36,
+          "soft": 12.74,
+          "idle": 23.67
+        },
+        "core_1": {
+          "total": 76.64,
+          "usr": 44.01,
+          "sys": 20.24,
+          "soft": 12.39,
+          "idle": 23.36
+        },
+        "core_2": {
+          "total": 75.93,
+          "usr": 44.23,
+          "sys": 19.86,
+          "soft": 11.84,
+          "idle": 24.07
+        },
+        "core_3": {
+          "total": 76.18,
+          "usr": 44.52,
+          "sys": 19.2,
+          "soft": 12.46,
+          "idle": 23.82
+        }
+      },
+      "cpu_total": 76.27,
+      "cpu_usr": 44.25,
+      "cpu_sys": 19.66,
+      "cpu_soft": 12.36,
+      "cpu_idle": 23.73
+    },
+    "process": {
+      "peak_rss_mb": 0.0,
+      "cswch_per_s": 23064.8
+    }
+  }
+}
