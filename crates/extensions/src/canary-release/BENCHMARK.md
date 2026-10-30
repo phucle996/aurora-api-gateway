@@ -4,7 +4,7 @@ Tài liệu này ghi nhận phương pháp luận kiểm thử, bộ số liệu
 
 Tài liệu so sánh trực tiếp hiệu năng giữa:
 - **Raw Proxy Baseline (Chuẩn Gốc)**: NGINX Gateway chuyển tiếp trực tiếp vào 1 upstream đơn lẻ (không qua logic kiểm tra canary).
-- **Aurora API Gateway (`canary-release`)**: Rust FFI với kiến trúc 2 tầng (Layer 1: Header/URI/Query Regex matching; Layer 2: Percentage Rollout với FNV-1a Client IP stickiness), tiền tính toán wildcard flags & byte slices, 0 heap allocations, tốc độ đánh giá 9.60 ns.
+- **Aurora API Gateway (`canary-release`)**: Rust FFI với kiến trúc 2 tầng (Layer 1: Zero-Regex ByteMatcher với SWAR 1-cycle + SIMD Prefix/Suffix/Contains/Glob; Layer 2: Percentage Rollout với FNV-1a Client IP / Cookie stickiness), 64-byte L1 Cacheline CanarySlotSheet, 0 heap allocations, tốc độ đánh giá 19.2 - 23.0 ns.
 - **NGINX Native / OpenResty (`ngx_http_lua_module` canary)**: Lua script kiểm tra headers/regex và chọn upstream block qua `balancer_by_lua`.
 - **Kong Gateway (`kong.plugins.canary`)**: Plugin Canary chính thức của Kong Enterprise / Community.
 - **Envoy Proxy (`RouteAction.weighted_clusters` + `HeaderMatcher`)**: C++ Route Action kết hợp Regex Header Matcher.
@@ -87,8 +87,10 @@ OpenResty / Kong (Lua balancer canary)       ─── [12,705.20 RPS] ───
 
 ## 4. Giải Mã Kiến Trúc Vi Mô: Tại Sao Canary Của Aurora Nhanh Hơn Kong?
 
-1. **Kiến Trúc Đánh Giá 2 Tầng Zero-Allocation**:
+1. **Kiến Trúc Đánh Giá 2 Tầng Zero-Allocation & Zero-Regex**:
    - Ở Kong/OpenResty, plugin Canary thực hiện tạo nhiều bảng tạm Lua (`tables`), regex capture nhóm và gọi `ngx.balancer` gây áp lực cấp phát rác (Garbage Collector Pressure) liên tục trên mỗi kết nối.
-   - Aurora sử dụng compiled regex engine của Rust kết hợp với `AuroraHeaderLookupFn` (callback con trỏ C truy xuất trực tiếp bảng header của NGINX mà không cần copy chuỗi sang Rust).
-2. **Hashing Nhẹ Nhàng FNV-1a Cho Client IP Stickiness**:
-   - Để giữ tính dính kết (Stickiness) theo Client IP, Aurora băm Client IP bằng biến thể FNV-1a chỉ tốn **13.81 nano-giây**, chia 100 bucket modulo ngay lập tức với **0 lần cấp phát bộ nhớ động**.
+   - Aurora sử dụng bộ đối sánh Byte nguyên thủy (SWAR single-register cho chuỗi <= 8 bytes, memchr SIMD cho Prefix/Suffix/Contains, O(N) linear glob) không hề dùng DFA Regex engine, kết hợp với `AuroraHeaderLookupFn` (callback con trỏ C truy xuất trực tiếp bảng header của NGINX mà không cần copy chuỗi sang Rust).
+2. **Cấu Trúc L1 Cacheline CanarySlotSheet (64 Bytes)**:
+   - Toàn bộ metadata và danh sách precompiled headers của Baseline và Canary được đóng gói trong một `CanarySlotSheet` 64 bytes (`#[repr(C, align(64))]`), vừa khít 1 cacheline duy nhất. Truy xuất upstream và headers là branchless và không phát sinh bất kỳ cacheline crossing nào.
+3. **Hashing Nhẹ Nhàng FNV-1a Cho Client IP / Cookie Stickiness**:
+   - Để giữ tính dính kết (Stickiness) theo Client IP hoặc Cookie, Aurora băm bằng biến thể FNV-1a 4-byte unrolled chỉ tốn **19.2 - 24.6 nano-giây**, chia 100 bucket modulo ngay lập tức với **0 lần cấp phát bộ nhớ động**.
