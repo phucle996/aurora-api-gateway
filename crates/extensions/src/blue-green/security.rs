@@ -5,12 +5,38 @@
 
 use super::swar::fnv1a_64;
 
+#[inline(always)]
+fn trim_ascii(bytes: &[u8]) -> &[u8] {
+    let mut start = 0;
+    while start < bytes.len()
+        && (bytes[start] == b' '
+            || bytes[start] == b'\t'
+            || bytes[start] == b'\r'
+            || bytes[start] == b'\n')
+    {
+        start += 1;
+    }
+    let mut end = bytes.len();
+    while end > start
+        && (bytes[end - 1] == b' '
+            || bytes[end - 1] == b'\t'
+            || bytes[end - 1] == b'\r'
+            || bytes[end - 1] == b'\n')
+    {
+        end -= 1;
+    }
+    &bytes[start..end]
+}
+
 /// Zero-allocation RFC 6265 Cookie value extractor.
 #[inline]
 pub fn extract_cookie_value<'a>(
     cookie_header: &'a [u8],
     target_name: &[u8],
 ) -> Option<&'a [u8]> {
+    if target_name.is_empty() {
+        return None;
+    }
     let mut rest = cookie_header;
     while !rest.is_empty() {
         let (segment, next_rest) = match memchr::memchr(b';', rest) {
@@ -19,23 +45,12 @@ pub fn extract_cookie_value<'a>(
         };
         rest = next_rest;
 
-        let mut start = 0;
-        while start < segment.len() && (segment[start] == b' ' || segment[start] == b'\t') {
-            start += 1;
-        }
-        let trimmed = &segment[start..];
-
-        if let Some(after) = trimmed.strip_prefix(target_name)
-            && after.starts_with(b"=")
+        let trimmed = trim_ascii(segment);
+        if trimmed.len() > target_name.len()
+            && trimmed[target_name.len()] == b'='
+            && trimmed[..target_name.len()].eq_ignore_ascii_case(target_name)
         {
-            let mut val = &after[1..];
-            while let Some((&last, rem)) = val.split_last() {
-                if last == b' ' || last == b'\t' {
-                    val = rem;
-                } else {
-                    break;
-                }
-            }
+            let mut val = trim_ascii(&trimmed[target_name.len() + 1..]);
             if val.len() >= 2 && val.starts_with(b"\"") && val.ends_with(b"\"") {
                 val = &val[1..val.len() - 1];
             }
@@ -48,6 +63,9 @@ pub fn extract_cookie_value<'a>(
 /// Zero-allocation query parameter extractor from raw query byte slice.
 #[inline]
 pub fn extract_query_value<'a>(query: &'a [u8], param_name: &[u8]) -> Option<&'a [u8]> {
+    if param_name.is_empty() {
+        return None;
+    }
     let mut rest = query;
     if rest.starts_with(b"?") {
         rest = &rest[1..];
@@ -59,16 +77,18 @@ pub fn extract_query_value<'a>(query: &'a [u8], param_name: &[u8]) -> Option<&'a
         };
         rest = next_rest;
 
-        if let Some(val) = param.strip_prefix(param_name) {
-            if val.starts_with(b"=") {
-                return Some(&val[1..]);
-            }
+        if param.len() > param_name.len()
+            && param[param_name.len()] == b'='
+            && param[..param_name.len()].eq_ignore_ascii_case(param_name)
+        {
+            return Some(trim_ascii(&param[param_name.len() + 1..]));
         }
     }
     None
 }
 
-/// Verifies pre-shared preview secret token. Returns 1 if valid or unconstrained, 0 if unauthorized.
+/// Verifies pre-shared preview secret token across Header, Cookie, and Query.
+/// Returns 1 if valid or unconstrained, 0 if unauthorized.
 #[inline]
 pub fn verify_preview_secret<'h>(
     secret_hash: u64,
@@ -81,12 +101,26 @@ pub fn verify_preview_secret<'h>(
     }
     let sec_hdr = secret_header.unwrap_or("x-preview-secret");
     if let Some(token_bytes) = header_lookup(sec_hdr) {
-        let token_hash = fnv1a_64(token_bytes);
-        return (token_hash == secret_hash) as u8;
+        let trimmed = trim_ascii(token_bytes);
+        if !trimmed.is_empty() && fnv1a_64(trimmed) == secret_hash {
+            return 1;
+        }
     }
-    if let Some(token_bytes) = extract_query_value(query, b"preview_secret") {
-        let token_hash = fnv1a_64(token_bytes);
-        return (token_hash == secret_hash) as u8;
+    if let Some(cookie_hdr) = header_lookup("cookie") {
+        if let Some(token_bytes) = extract_cookie_value(cookie_hdr, b"preview_secret")
+            .or_else(|| extract_cookie_value(cookie_hdr, sec_hdr.as_bytes()))
+        {
+            if !token_bytes.is_empty() && fnv1a_64(token_bytes) == secret_hash {
+                return 1;
+            }
+        }
+    }
+    if let Some(token_bytes) = extract_query_value(query, b"preview_secret")
+        .or_else(|| extract_query_value(query, sec_hdr.as_bytes()))
+    {
+        if !token_bytes.is_empty() && fnv1a_64(token_bytes) == secret_hash {
+            return 1;
+        }
     }
     0
 }

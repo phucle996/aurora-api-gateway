@@ -82,7 +82,7 @@ pub struct BlueGreenSnapshot {
     pub blue_upstream: Option<String>,
     #[serde(default)]
     pub green_upstream: Option<String>,
-    #[serde(default)]
+    #[serde(default = "default_switch_header")]
     pub switch_header: Option<String>,
     #[serde(default)]
     pub preview_cookie: Option<String>,

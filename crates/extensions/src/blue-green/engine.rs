@@ -158,9 +158,14 @@ impl BlueGreenEngine {
             }
         }
 
-        snapshot
-            .rules
-            .sort_by_key(|r| (r.priority, host_specificity(&r.origin), r.id.clone()));
+        snapshot.rules.sort_by_key(|r| {
+            (
+                r.priority,
+                host_specificity(&r.origin),
+                std::cmp::Reverse(r.path_prefix.len()),
+                r.id.clone(),
+            )
+        });
 
         let mut rules = Vec::with_capacity(snapshot.rules.len());
         for rule in snapshot.rules {
@@ -177,16 +182,25 @@ impl BlueGreenEngine {
                     .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
             };
 
+            let blue_upstream = rule.blue_upstream.trim().to_string();
+            let green_upstream = rule.green_upstream.trim().to_string();
+            let is_valid_upstream = |u: &str| {
+                !u.is_empty()
+                    && u.len() <= 128
+                    && u.bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b'.')
+            };
+
             if !origin_valid
                 || rule.origin.is_empty()
                 || rule.origin.len() > 253
                 || !rule.path_prefix.starts_with('/')
                 || rule.path_prefix.len() > MAX_PATH_BYTES
-                || rule.blue_upstream.trim().is_empty()
-                || rule.blue_upstream.len() > 128
-                || rule.green_upstream.trim().is_empty()
-                || rule.green_upstream.len() > 128
-                || rule.blue_upstream == rule.green_upstream
+                || !is_valid_upstream(&blue_upstream)
+                || !is_valid_upstream(&green_upstream)
+                || blue_upstream == green_upstream
+                || rule.blue_upstream_headers.len() > 16
+                || rule.green_upstream_headers.len() > 16
             {
                 return Err(Error::InvalidPolicy);
             }
@@ -197,6 +211,13 @@ impl BlueGreenEngine {
                 DeploySlot::Blue
             };
 
+            let is_valid_token_key = |k: &[u8]| {
+                !k.is_empty()
+                    && k.len() <= 64
+                    && k.iter()
+                        .all(|&b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b'.')
+            };
+
             let switch_header = rule
                 .switch_header
                 .as_ref()
@@ -204,10 +225,7 @@ impl BlueGreenEngine {
                 .filter(|s| !s.is_empty());
 
             if let Some(ref h) = switch_header
-                && (h.len() > 64
-                    || !h
-                        .bytes()
-                        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'))
+                && !is_valid_token_key(h.as_bytes())
             {
                 return Err(Error::InvalidPolicy);
             }
@@ -218,11 +236,23 @@ impl BlueGreenEngine {
                 .map(|s| s.trim().to_ascii_lowercase().into_bytes())
                 .filter(|b| !b.is_empty());
 
+            if let Some(ref c) = preview_cookie
+                && !is_valid_token_key(c)
+            {
+                return Err(Error::InvalidPolicy);
+            }
+
             let preview_query_param = rule
                 .preview_query_param
                 .as_ref()
                 .map(|s| s.trim().to_ascii_lowercase().into_bytes())
                 .filter(|b| !b.is_empty());
+
+            if let Some(ref q) = preview_query_param
+                && !is_valid_token_key(q)
+            {
+                return Err(Error::InvalidPolicy);
+            }
 
             let secret_header = rule
                 .preview_secret_header
@@ -230,9 +260,21 @@ impl BlueGreenEngine {
                 .map(|s| s.trim().to_ascii_lowercase())
                 .filter(|s| !s.is_empty());
 
+            if let Some(ref sh) = secret_header
+                && !is_valid_token_key(sh.as_bytes())
+            {
+                return Err(Error::InvalidPolicy);
+            }
+
             let secret_hash = if let Some(ref sec) = rule.preview_secret {
-                if !sec.is_empty() {
-                    fnv1a_64(sec.as_bytes())
+                let trimmed_sec = sec.trim();
+                if trimmed_sec.len() > 256
+                    || trimmed_sec.bytes().any(|b| b == b'\r' || b == b'\n' || b == 0)
+                {
+                    return Err(Error::InvalidPolicy);
+                }
+                if !trimmed_sec.is_empty() {
+                    fnv1a_64(trimmed_sec.as_bytes())
                 } else {
                     0
                 }
@@ -241,6 +283,9 @@ impl BlueGreenEngine {
             };
 
             let mut allowed_cidrs = Vec::with_capacity(rule.allowed_cidrs.len());
+            if rule.allowed_cidrs.len() > 32 {
+                return Err(Error::InvalidPolicy);
+            }
             for cidr_str in &rule.allowed_cidrs {
                 if let Some((net, mask, _prefix)) =
                     crate::ip_restriction::ip::parse_ipv4_cidr(cidr_str)
@@ -251,27 +296,35 @@ impl BlueGreenEngine {
                 }
             }
 
-            let blue_upstream_headers: Arc<[(String, String)]> = rule
-                .blue_upstream_headers
-                .into_iter()
-                .map(|h| (h.name, h.value))
-                .collect();
+            let validate_headers =
+                |hdrs: Vec<super::policy::UpstreamHeaderInput>| -> Result<Arc<[(String, String)]>, Error> {
+                    let mut out = Vec::with_capacity(hdrs.len());
+                    for h in hdrs {
+                        let name = h.name.trim().to_string();
+                        let value = h.value.trim().to_string();
+                        if !is_valid_token_key(name.as_bytes())
+                            || value.len() > 256
+                            || value.bytes().any(|b| b == b'\r' || b == b'\n' || b == 0)
+                        {
+                            return Err(Error::InvalidPolicy);
+                        }
+                        out.push((name, value));
+                    }
+                    Ok(Arc::from(out))
+                };
 
-            let green_upstream_headers: Arc<[(String, String)]> = rule
-                .green_upstream_headers
-                .into_iter()
-                .map(|h| (h.name, h.value))
-                .collect();
+            let blue_upstream_headers = validate_headers(rule.blue_upstream_headers)?;
+            let green_upstream_headers = validate_headers(rule.green_upstream_headers)?;
 
             let slot_sheet = SlotSheet {
                 upstreams: [
                     SlotUpstreamMeta {
-                        upstream: rule.blue_upstream,
+                        upstream: blue_upstream,
                         slot_name: "blue",
                         headers: blue_upstream_headers,
                     },
                     SlotUpstreamMeta {
-                        upstream: rule.green_upstream,
+                        upstream: green_upstream,
                         slot_name: "green",
                         headers: green_upstream_headers,
                     },

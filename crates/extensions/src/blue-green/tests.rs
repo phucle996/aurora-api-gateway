@@ -548,4 +548,157 @@ fn test_invalid_policy_rejections() {
         ]
     }"#;
     assert!(BlueGreenEngine::from_snapshot(bad_cidr.as_bytes()).is_err());
+
+    // 5. Trimmed duplicate upstreams ("app_blue" vs " app_blue ")
+    let trimmed_same = r#"{
+        "schema_version": 1,
+        "rules": [
+            {
+                "id": "r4",
+                "blue_upstream": "app_blue",
+                "green_upstream": "  app_blue  "
+            }
+        ]
+    }"#;
+    assert!(BlueGreenEngine::from_snapshot(trimmed_same.as_bytes()).is_err());
+
+    // 6. CRLF header injection in upstream_headers
+    let crlf_hdr = r#"{
+        "schema_version": 1,
+        "rules": [
+            {
+                "id": "r5",
+                "blue_upstream": "app_blue",
+                "green_upstream": "app_green",
+                "blue_upstream_headers": [
+                    { "name": "x-slot", "value": "blue\r\nX-Injected: pwned" }
+                ]
+            }
+        ]
+    }"#;
+    assert!(BlueGreenEngine::from_snapshot(crlf_hdr.as_bytes()).is_err());
+
+    // 7. Invalid characters in secret_header or preview_cookie
+    let bad_secret_hdr = r#"{
+        "schema_version": 1,
+        "rules": [
+            {
+                "id": "r6",
+                "blue_upstream": "app_blue",
+                "green_upstream": "app_green",
+                "preview_secret_header": "invalid header name!"
+            }
+        ]
+    }"#;
+    assert!(BlueGreenEngine::from_snapshot(bad_secret_hdr.as_bytes()).is_err());
+}
+
+#[test]
+fn test_flat_format_default_switch_header_works() {
+    let policy = r#"{
+        "schema_version": 1,
+        "generation": 1,
+        "active_slot": "blue",
+        "blue_upstream": "app_blue",
+        "green_upstream": "app_green"
+    }"#;
+
+    let engine = BlueGreenEngine::from_snapshot(policy.as_bytes()).unwrap();
+    let req = eval_req(b"example.com", b"/api/v1/items");
+
+    // Default x-deploy-slot must work even when omitted in flat format
+    let d = engine.evaluate(&req, |k| {
+        if k == "x-deploy-slot" {
+            Some(b"green")
+        } else {
+            None
+        }
+    });
+    assert!(d.matched);
+    assert_eq!(d.upstream, "app_green");
+    assert!(d.is_header_override);
+}
+
+#[test]
+fn test_mixed_case_cookie_and_query_param_and_cookie_secret() {
+    let policy = r#"{
+        "schema_version": 1,
+        "generation": 1,
+        "rules": [
+            {
+                "id": "bg-mixed-case",
+                "priority": 10,
+                "origin": "*",
+                "path_prefix": "/",
+                "active_slot": "blue",
+                "blue_upstream": "app_blue",
+                "green_upstream": "app_green",
+                "preview_cookie": "X_Deploy_Slot",
+                "preview_query_param": "deploySlot",
+                "preview_secret": "  stage-secret-2026  "
+            }
+        ]
+    }"#;
+
+    let engine = BlueGreenEngine::from_snapshot(policy.as_bytes()).unwrap();
+    let req = eval_req(b"example.com", b"/home");
+
+    // 1. Cookie with mixed-case name + cookie-supplied preview_secret
+    let d_cookie = engine.evaluate(&req, |k| {
+        if k == "cookie" {
+            Some(b"X_Deploy_Slot=green; preview_secret=stage-secret-2026")
+        } else {
+            None
+        }
+    });
+    assert!(d_cookie.matched);
+    assert_eq!(d_cookie.upstream, "app_green");
+    assert!(d_cookie.is_header_override);
+
+    // 2. Query param with mixed-case name + query-supplied preview_secret
+    let req_query = eval_req_full(
+        b"example.com",
+        b"/home",
+        b"127.0.0.1",
+        b"deploySlot=GREEN&preview_secret=stage-secret-2026",
+    );
+    let d_query = engine.evaluate(&req_query, |_| None);
+    assert!(d_query.matched);
+    assert_eq!(d_query.upstream, "app_green");
+    assert!(d_query.is_header_override);
+}
+
+#[test]
+fn test_longest_path_prefix_specificity_sorting() {
+    let policy = r#"{
+        "schema_version": 1,
+        "generation": 1,
+        "rules": [
+            {
+                "id": "a-root-catchall",
+                "priority": 100,
+                "origin": "*",
+                "path_prefix": "/",
+                "active_slot": "blue",
+                "blue_upstream": "root_blue",
+                "green_upstream": "root_green"
+            },
+            {
+                "id": "z-checkout-specific",
+                "priority": 100,
+                "origin": "*",
+                "path_prefix": "/api/v1/checkout",
+                "active_slot": "green",
+                "blue_upstream": "checkout_blue",
+                "green_upstream": "checkout_green"
+            }
+        ]
+    }"#;
+
+    let engine = BlueGreenEngine::from_snapshot(policy.as_bytes()).unwrap();
+    let req_checkout = eval_req(b"example.com", b"/api/v1/checkout/pay");
+    let d = engine.evaluate(&req_checkout, |_| None);
+    assert!(d.matched);
+    assert_eq!(d.rule_id, "z-checkout-specific");
+    assert_eq!(d.upstream, "checkout_green");
 }
