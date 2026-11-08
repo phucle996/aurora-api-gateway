@@ -31,7 +31,10 @@ pub fn materialize(
     server: &mut String,
     has_server: &mut bool,
 ) -> Result<(), String> {
-    let allow_credentials = config.get("allow_credentials").and_then(Value::as_bool).unwrap_or(false);
+    let allow_credentials = config
+        .get("allow_credentials")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let origin = if allow_credentials {
         "$http_origin".to_string()
     } else {
@@ -60,7 +63,10 @@ pub fn materialize(
     ));
     server.push_str(&format!(
         "add_header Access-Control-Max-Age {} always;\n",
-        config.get("max_age").and_then(Value::as_u64).unwrap_or(86400)
+        config
+            .get("max_age")
+            .and_then(Value::as_u64)
+            .unwrap_or(86400)
     ));
     if allow_credentials {
         server.push_str("add_header Access-Control-Allow-Credentials \"true\" always;\n");
@@ -87,10 +93,13 @@ mod tests {
     fn test_cors_materialize() {
         let mut server = String::new();
         let mut has_server = false;
-        let config: Map<String, Value> = serde_json::from_str(r#"{
+        let config: Map<String, Value> = serde_json::from_str(
+            r#"{
             "allow_origins": ["https://example.com"],
             "allow_credentials": true
-        }"#).unwrap();
+        }"#,
+        )
+        .unwrap();
 
         materialize(&config, &mut server, &mut has_server).unwrap();
         assert!(has_server);

@@ -6,6 +6,10 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
+// ============================================================================
+// 1. Configuration Structures
+// ============================================================================
+
 /// Individual route override rule.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RouteCompressionOverride {
@@ -21,6 +25,12 @@ pub struct RouteCompressionOverride {
 /// Global configuration for response compression.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResponseCompressionConfig {
+    #[serde(default = "default_schema_version")]
+    pub schema_version: u32,
+
+    #[serde(default = "default_generation")]
+    pub generation: u64,
+
     #[serde(default = "default_enabled")]
     pub enabled: bool,
 
@@ -44,6 +54,18 @@ pub struct ResponseCompressionConfig {
 
     #[serde(default)]
     pub routes_override: Vec<RouteCompressionOverride>,
+}
+
+// ============================================================================
+// 2. Default Configuration Values
+// ============================================================================
+
+fn default_schema_version() -> u32 {
+    1
+}
+
+fn default_generation() -> u64 {
+    1
 }
 
 fn default_enabled() -> bool {
@@ -88,6 +110,8 @@ pub fn default_types() -> Vec<String> {
 impl Default for ResponseCompressionConfig {
     fn default() -> Self {
         Self {
+            schema_version: default_schema_version(),
+            generation: default_generation(),
             enabled: default_enabled(),
             min_length: default_min_length(),
             prefer_algorithms: default_prefer_algorithms(),
@@ -99,6 +123,10 @@ impl Default for ResponseCompressionConfig {
         }
     }
 }
+
+// ============================================================================
+// 3. RFC 6838 MIME Sanitization & Validation
+// ============================================================================
 
 /// Validates whether a character is an RFC 6838 restricted-name-first / restricted-name-subsequent char.
 #[inline(always)]
@@ -117,7 +145,10 @@ fn is_valid_mime_char(b: u8) -> bool {
 
 /// Strictly validates an individual MIME type against RFC 6838 specification or wildcard `*`.
 pub fn validate_mime_type(mime: &str) -> Result<String, String> {
-    if mime.bytes().any(|b| b == b'\r' || b == b'\n' || b == b'\0' || b == b';' || b == b'{' || b == b'}') {
+    if mime
+        .bytes()
+        .any(|b| b == b'\r' || b == b'\n' || b == b'\0' || b == b';' || b == b'{' || b == b'}')
+    {
         return Err(format!(
             "MIME type '{mime}' contains forbidden control or delimiter characters"
         ));
@@ -131,7 +162,9 @@ pub fn validate_mime_type(mime: &str) -> Result<String, String> {
         return Ok("*".to_string());
     }
     if trimmed.len() > 64 {
-        return Err(format!("MIME type '{trimmed}' exceeds maximum 64 characters"));
+        return Err(format!(
+            "MIME type '{trimmed}' exceeds maximum 64 characters"
+        ));
     }
 
     let bytes = trimmed.as_bytes();
@@ -166,9 +199,20 @@ pub fn validate_mime_type(mime: &str) -> Result<String, String> {
     Ok(trimmed.to_ascii_lowercase())
 }
 
+// ============================================================================
+// 4. Policy Validation & Sanitized Output
+// ============================================================================
+
 impl ResponseCompressionConfig {
     /// Validates all configuration invariants.
     pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 1 {
+            return Err(format!(
+                "schema_version {} is invalid (must be 1)",
+                self.schema_version
+            ));
+        }
+
         if self.min_length < 20 || self.min_length > 10_485_760 {
             return Err(format!(
                 "min_length {} is out of range (must be 20 to 10485760 bytes)",
@@ -195,7 +239,9 @@ impl ResponseCompressionConfig {
         for algo in &self.prefer_algorithms {
             let lower = algo.trim().to_ascii_lowercase();
             if lower != "zstd" && lower != "br" && lower != "brotli" && lower != "gzip" {
-                return Err(format!("unsupported compression algorithm '{algo}' (allowed: zstd, br, gzip)"));
+                return Err(format!(
+                    "unsupported compression algorithm '{algo}' (allowed: zstd, br, gzip)"
+                ));
             }
         }
 
@@ -212,12 +258,17 @@ impl ResponseCompressionConfig {
 
         for route in &self.routes_override {
             if !route.path_prefix.starts_with('/') {
-                return Err(format!("route override path_prefix '{}' must start with '/'", route.path_prefix));
+                return Err(format!(
+                    "route override path_prefix '{}' must start with '/'",
+                    route.path_prefix
+                ));
             }
             if let Some(ml) = route.min_length
                 && !(20..=10_485_760).contains(&ml)
             {
-                return Err(format!("route min_length {ml} out of range (20..=10485760)"));
+                return Err(format!(
+                    "route min_length {ml} out of range (20..=10485760)"
+                ));
             }
             if let Some(algos) = &route.prefer_algorithms {
                 for algo in algos {

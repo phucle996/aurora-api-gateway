@@ -54,10 +54,7 @@ pub type AuroraHeaderLookupFn = unsafe extern "C" fn(
 
 /// Memory allocator provided by C host (e.g. `ngx_pnalloc(r->pool, size)`).
 /// Allocates uninitialized memory owned by the HTTP request lifecycle.
-pub type AuroraAllocFn = unsafe extern "C" fn(
-    ctx: *mut std::ffi::c_void,
-    size: usize,
-) -> *mut u8;
+pub type AuroraAllocFn = unsafe extern "C" fn(ctx: *mut std::ffi::c_void, size: usize) -> *mut u8;
 
 /// Opaque concurrency/rate limiting token passed to NGINX for lifecycle release.
 #[repr(C)]
@@ -247,15 +244,17 @@ unsafe fn populate_allow_outcome(
         flags |= AURORA_FLAG_HAS_RELEASE_TOKEN;
         outcome.release_token.opaque[0] = 1;
         outcome.release_token.opaque[1] = if tok.is_redis { 1 } else { 0 };
+        outcome.release_token.opaque[2..10].copy_from_slice(&tok.key_hash.to_le_bytes());
+
         let r_bytes = tok.rule_id.as_bytes();
-        let r_len = r_bytes.len().min(30);
-        outcome.release_token.opaque[2] = r_len as u8;
-        outcome.release_token.opaque[4..4 + r_len].copy_from_slice(&r_bytes[..r_len]);
+        let r_len = r_bytes.len().min(20);
+        outcome.release_token.opaque[10] = r_len as u8;
+        outcome.release_token.opaque[12..12 + r_len].copy_from_slice(&r_bytes[..r_len]);
 
         let id_bytes = tok.identifier.as_bytes();
         let id_len = id_bytes.len().min(30);
-        outcome.release_token.opaque[3] = id_len as u8;
-        outcome.release_token.opaque[34..34 + id_len].copy_from_slice(&id_bytes[..id_len]);
+        outcome.release_token.opaque[11] = id_len as u8;
+        outcome.release_token.opaque[32..32 + id_len].copy_from_slice(&id_bytes[..id_len]);
     } else {
         outcome.release_token.opaque[0] = 0;
     }
@@ -534,11 +533,7 @@ pub unsafe extern "C" fn aurora_gateway_phase_access(
             },
         };
 
-        if res.is_err() {
-            1
-        } else {
-            0
-        }
+        if res.is_err() { 1 } else { 0 }
     }));
 
     result.unwrap_or(1)
@@ -554,13 +549,28 @@ pub unsafe extern "C" fn aurora_gateway_connection_release(token: *const AuroraR
         return;
     }
     let t = unsafe { &*token };
-    if t.opaque[0] == 0 || t.opaque[1] != 0 {
+    if t.opaque[0] == 0 {
         return;
     }
-    let r_len = (t.opaque[2] as usize).min(30);
-    let id_len = (t.opaque[3] as usize).min(30);
-    let rule_id = std::str::from_utf8(&t.opaque[4..4 + r_len]).unwrap_or("");
-    let identifier = t.opaque[34..34 + id_len].to_vec();
+
+    // Fast-path: Direct numerical 64-bit key_hash release for local & async shadow sync modes (< 5ns)
+    if t.opaque[1] == 0 {
+        let key_hash = u64::from_le_bytes(t.opaque[2..10].try_into().unwrap_or([0; 8]));
+        if key_hash != 0 {
+            if let Some(eng) = crate::lifecycle::get_active_space()
+                .and_then(|space| space.connection_limit.as_ref())
+            {
+                eng.release_hash(key_hash);
+            }
+            return;
+        }
+    }
+
+    // Synchronous Redis release path
+    let r_len = (t.opaque[10] as usize).min(20);
+    let id_len = (t.opaque[11] as usize).min(30);
+    let rule_id = std::str::from_utf8(&t.opaque[12..12 + r_len]).unwrap_or("");
+    let identifier = t.opaque[32..32 + id_len].to_vec();
 
     if let Some(eng) =
         crate::lifecycle::get_active_space().and_then(|space| space.connection_limit.as_ref())
@@ -568,7 +578,8 @@ pub unsafe extern "C" fn aurora_gateway_connection_release(token: *const AuroraR
         let conn_token = aurora_extensions::connection_limit::ConnLimitToken {
             rule_id: rule_id.to_string(),
             identifier,
-            is_redis: false,
+            key_hash: 0,
+            is_redis: true,
         };
         eng.release(&conn_token);
     }
@@ -621,14 +632,26 @@ mod tests {
         assert_eq!(outcome.target_upstream_len, 18);
 
         unsafe {
-            let h0_name = slice::from_raw_parts(outcome.headers[0].name, outcome.headers[0].name_len as usize);
+            let h0_name = slice::from_raw_parts(
+                outcome.headers[0].name,
+                outcome.headers[0].name_len as usize,
+            );
             assert_eq!(h0_name, b"X-Custom-Auth");
-            let h0_val = slice::from_raw_parts(outcome.headers[0].value, outcome.headers[0].value_len as usize);
+            let h0_val = slice::from_raw_parts(
+                outcome.headers[0].value,
+                outcome.headers[0].value_len as usize,
+            );
             assert_eq!(h0_val, b"token-12345");
-            let h0_low = slice::from_raw_parts(outcome.headers[0].lowcase_name, outcome.headers[0].name_len as usize);
+            let h0_low = slice::from_raw_parts(
+                outcome.headers[0].lowcase_name,
+                outcome.headers[0].name_len as usize,
+            );
             assert_eq!(h0_low, b"x-custom-auth");
 
-            let up = slice::from_raw_parts(outcome.target_upstream, outcome.target_upstream_len as usize);
+            let up = slice::from_raw_parts(
+                outcome.target_upstream,
+                outcome.target_upstream_len as usize,
+            );
             assert_eq!(up, b"upstream-cluster-a");
         }
     }
@@ -664,4 +687,3 @@ mod tests {
         assert_eq!(space.resolve_route_mask(b"/api/v1/raw/webhook"), 0);
     }
 }
-

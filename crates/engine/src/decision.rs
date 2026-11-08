@@ -30,6 +30,7 @@ pub struct ConnectionToken {
     pub is_redis: bool,
     pub rule_id: String,
     pub identifier: String,
+    pub key_hash: u64,
 }
 
 /// Consolidated outcome of Gateway Access evaluation with zero-copy borrowed string/buffer slices.

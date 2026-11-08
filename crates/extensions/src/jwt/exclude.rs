@@ -29,7 +29,7 @@
 //! - **Plan 3 (`Multi`)**: >4 paths -> Common Prefix Guard + minimum length guard + flat slice.
 
 use super::crypto::valid_path_prefix;
-use super::types::MAX_EXCLUDE_PATHS_PER_ORIGIN;
+use super::policy::MAX_EXCLUDE_PATHS_PER_ORIGIN;
 use crate::Error;
 
 /// 64-bit Longest Common Prefix (LCP) Register Guard.

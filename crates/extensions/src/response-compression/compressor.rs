@@ -1,9 +1,13 @@
-//! Zero-copy SIMD and Multi-Algorithm Compression Routines
+//! Zero-Copy SIMD and Multi-Algorithm Compression Routines
 //!
 //! Provides hardware-accelerated compression directly into caller-provided
 //! destination memory buffers (e.g. NGINX request memory pool).
 
 use std::io::{Cursor, Write};
+
+// ============================================================================
+// 1. CompressionAlgorithm Enum & Token Parsing
+// ============================================================================
 
 /// Supported response compression algorithms.
 #[repr(u32)]
@@ -27,7 +31,7 @@ impl CompressionAlgorithm {
         }
     }
 
-    /// Parses from string token.
+    /// Parses algorithm from HTTP header token string.
     pub fn from_token(token: &str) -> Option<Self> {
         let t = token.trim();
         if t.eq_ignore_ascii_case("zstd") {
@@ -42,13 +46,17 @@ impl CompressionAlgorithm {
     }
 }
 
-/// Computes upper-bound memory size required to store compressed payload.
+// ============================================================================
+// 2. Buffer Upper-Bound Calculation
+// ============================================================================
+
+/// Computes upper-bound memory size required to safely store compressed payload.
 #[inline(always)]
 pub fn max_compressed_len(algorithm: CompressionAlgorithm, in_len: usize) -> usize {
     match algorithm {
         CompressionAlgorithm::None => in_len,
         CompressionAlgorithm::Zstd => {
-            // zstd safe bound: in_len + (in_len >> 8) + 64
+            // zstd safe bound: in_len + (in_len >> 8) + 128
             in_len + (in_len >> 8) + 128
         }
         CompressionAlgorithm::Brotli => {
@@ -62,10 +70,68 @@ pub fn max_compressed_len(algorithm: CompressionAlgorithm, in_len: usize) -> usi
     }
 }
 
+// ============================================================================
+// 3. Independent Compressor Functions
+// ============================================================================
+
+/// Direct compressor function pointer signature.
+pub type CompressorFn = fn(level: u32, input: &[u8], output: &mut [u8]) -> Result<usize, String>;
+
+#[inline]
+pub fn compress_none(_level: u32, input: &[u8], output: &mut [u8]) -> Result<usize, String> {
+    if output.len() < input.len() {
+        return Err("output buffer too small for passthrough".to_string());
+    }
+    output[..input.len()].copy_from_slice(input);
+    Ok(input.len())
+}
+
+#[inline]
+pub fn compress_zstd(level: u32, input: &[u8], output: &mut [u8]) -> Result<usize, String> {
+    let clamped_level = level.clamp(1, 19) as i32;
+    zstd::bulk::compress_to_buffer(input, output, clamped_level)
+        .map_err(|err| format!("zstd compression error: {err}"))
+}
+
+#[inline]
+pub fn compress_brotli(level: u32, input: &[u8], output: &mut [u8]) -> Result<usize, String> {
+    let params = brotli::enc::BrotliEncoderParams {
+        quality: level.clamp(1, 11) as i32,
+        ..Default::default()
+    };
+    let mut writer = Cursor::new(output);
+    brotli::BrotliCompress(&mut Cursor::new(input), &mut writer, &params)
+        .map_err(|err| format!("brotli compression error: {err}"))?;
+    Ok(writer.position() as usize)
+}
+
+#[inline]
+pub fn compress_gzip(level: u32, input: &[u8], output: &mut [u8]) -> Result<usize, String> {
+    let clamped_level = level.clamp(1, 9);
+    let mut encoder =
+        flate2::write::GzEncoder::new(Cursor::new(output), flate2::Compression::new(clamped_level));
+    encoder
+        .write_all(input)
+        .map_err(|err| format!("gzip write error: {err}"))?;
+    let cursor = encoder
+        .finish()
+        .map_err(|err| format!("gzip finish error: {err}"))?;
+    Ok(cursor.position() as usize)
+}
+
+// ============================================================================
+// 4. Compressor Jump Table & Zero-Copy Dispatch
+// ============================================================================
+
+/// Static indexed jump table of compressor function pointers (zero double-match).
+pub const COMPRESSOR_TABLE: [CompressorFn; 4] =
+    [compress_none, compress_zstd, compress_brotli, compress_gzip];
+
 /// Compresses `input` directly into `output` slice using caller-provided buffer.
 ///
 /// Returns the actual compressed byte length written into `output`.
 /// Zero heap allocations on the hot path.
+#[inline(always)]
 pub fn compress_into(
     algorithm: CompressionAlgorithm,
     level: u32,
@@ -76,45 +142,17 @@ pub fn compress_into(
         return Ok(0);
     }
 
-    match algorithm {
-        CompressionAlgorithm::None => {
-            if output.len() < input.len() {
-                return Err("output buffer too small for passthrough".to_string());
-            }
-            output[..input.len()].copy_from_slice(input);
-            Ok(input.len())
-        }
-        CompressionAlgorithm::Zstd => {
-            let clamped_level = level.clamp(1, 19) as i32;
-            zstd::bulk::compress_to_buffer(input, output, clamped_level)
-                .map_err(|err| format!("zstd compression error: {err}"))
-        }
-        CompressionAlgorithm::Brotli => {
-            let params = brotli::enc::BrotliEncoderParams {
-                quality: level.clamp(1, 11) as i32,
-                ..Default::default()
-            };
-            let mut writer = Cursor::new(output);
-            brotli::BrotliCompress(&mut Cursor::new(input), &mut writer, &params)
-                .map_err(|err| format!("brotli compression error: {err}"))?;
-            Ok(writer.position() as usize)
-        }
-        CompressionAlgorithm::Gzip => {
-            let clamped_level = level.clamp(1, 9);
-            let mut encoder = flate2::write::GzEncoder::new(
-                Cursor::new(output),
-                flate2::Compression::new(clamped_level),
-            );
-            encoder
-                .write_all(input)
-                .map_err(|err| format!("gzip write error: {err}"))?;
-            let cursor = encoder
-                .finish()
-                .map_err(|err| format!("gzip finish error: {err}"))?;
-            Ok(cursor.position() as usize)
-        }
+    let idx = algorithm as usize;
+    if idx < COMPRESSOR_TABLE.len() {
+        (COMPRESSOR_TABLE[idx])(level, input, output)
+    } else {
+        compress_none(level, input, output)
     }
 }
+
+// ============================================================================
+// 5. Unit Tests
+// ============================================================================
 
 #[cfg(test)]
 mod tests {
@@ -126,7 +164,8 @@ mod tests {
     fn test_zstd_compress_into() {
         let max_len = max_compressed_len(CompressionAlgorithm::Zstd, SAMPLE_PAYLOAD.len());
         let mut buf = vec![0u8; max_len];
-        let written = compress_into(CompressionAlgorithm::Zstd, 3, SAMPLE_PAYLOAD, &mut buf).unwrap();
+        let written =
+            compress_into(CompressionAlgorithm::Zstd, 3, SAMPLE_PAYLOAD, &mut buf).unwrap();
         assert!(written > 0 && written < SAMPLE_PAYLOAD.len());
 
         // Decompress to verify integrity
@@ -138,7 +177,8 @@ mod tests {
     fn test_brotli_compress_into() {
         let max_len = max_compressed_len(CompressionAlgorithm::Brotli, SAMPLE_PAYLOAD.len());
         let mut buf = vec![0u8; max_len];
-        let written = compress_into(CompressionAlgorithm::Brotli, 4, SAMPLE_PAYLOAD, &mut buf).unwrap();
+        let written =
+            compress_into(CompressionAlgorithm::Brotli, 4, SAMPLE_PAYLOAD, &mut buf).unwrap();
         assert!(written > 0 && written < SAMPLE_PAYLOAD.len());
 
         // Decompress using brotli-decompressor
@@ -151,7 +191,8 @@ mod tests {
     fn test_gzip_compress_into() {
         let max_len = max_compressed_len(CompressionAlgorithm::Gzip, SAMPLE_PAYLOAD.len());
         let mut buf = vec![0u8; max_len];
-        let written = compress_into(CompressionAlgorithm::Gzip, 4, SAMPLE_PAYLOAD, &mut buf).unwrap();
+        let written =
+            compress_into(CompressionAlgorithm::Gzip, 4, SAMPLE_PAYLOAD, &mut buf).unwrap();
         assert!(written > 0 && written < SAMPLE_PAYLOAD.len());
 
         // Decompress using flate2

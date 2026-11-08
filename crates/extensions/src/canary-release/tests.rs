@@ -290,7 +290,14 @@ fn test_canary_cookie_condition_and_stickiness() {
     let engine = CanaryReleaseEngine::from_snapshot(policy.as_bytes()).unwrap();
 
     // 1. Direct cookie match -> canary
-    let req = eval_req(b"example.com", b"/app/home", b"/app/home", b"", b"127.0.0.1", 0);
+    let req = eval_req(
+        b"example.com",
+        b"/app/home",
+        b"/app/home",
+        b"",
+        b"127.0.0.1",
+        0,
+    );
     let d1 = engine.evaluate(&req, |k| {
         if k == "cookie" {
             Some(b"other=abc; canary_opt_in=1; foo=bar")
@@ -317,7 +324,10 @@ fn test_canary_cookie_condition_and_stickiness() {
         }
     }
     let pct = (canary_count as f64 / 500.0) * 100.0;
-    assert!((40.0..=60.0).contains(&pct), "Expected ~50% cookie rollout, got {pct}%");
+    assert!(
+        (40.0..=60.0).contains(&pct),
+        "Expected ~50% cookie rollout, got {pct}%"
+    );
 }
 
 #[test]
@@ -347,9 +357,19 @@ fn test_canary_longest_prefix_ordering() {
 
     let engine = CanaryReleaseEngine::from_snapshot(policy.as_bytes()).unwrap();
 
-    let req_checkout = eval_req(b"example.com", b"/api/v1/checkout", b"/api/v1/checkout", b"", b"127.0.0.1", 0);
+    let req_checkout = eval_req(
+        b"example.com",
+        b"/api/v1/checkout",
+        b"/api/v1/checkout",
+        b"",
+        b"127.0.0.1",
+        0,
+    );
     let d1 = engine.evaluate(&req_checkout, |_| None);
-    assert_eq!(d1.rule_id, "api-rule", "More specific path prefix must take priority over root '/'");
+    assert_eq!(
+        d1.rule_id, "api-rule",
+        "More specific path prefix must take priority over root '/'"
+    );
     assert_eq!(d1.upstream, "checkout_base");
 
     let req_root = eval_req(b"example.com", b"/other", b"/other", b"", b"127.0.0.1", 0);

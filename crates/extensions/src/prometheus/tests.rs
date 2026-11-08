@@ -31,7 +31,9 @@ fn test_precomputed_prometheus_render() {
     let text = std::str::from_utf8(&scrape).expect("valid utf-8");
 
     assert!(text.contains("gateway_requests_in_flight 42"));
-    assert!(text.contains("aurora_background_dropped_tasks_total{gateway=\"test-gateway\",node=\"node-test\"} 7"));
+    assert!(text.contains(
+        "aurora_background_dropped_tasks_total{gateway=\"test-gateway\",node=\"node-test\"} 7"
+    ));
     assert!(text.contains("status=\"2xx\"} 1000"));
     assert!(text.contains("status=\"5xx\"} 2"));
     assert!(text.contains("direction=\"in\"} 102400"));

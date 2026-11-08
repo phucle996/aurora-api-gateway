@@ -32,19 +32,37 @@ pub fn trim_ascii(bytes: &[u8]) -> &[u8] {
     &bytes[start..end]
 }
 
-/// FNV-1a 64-bit integer hash for instant 1-instruction secret comparison in registers.
+/// FNV-1a 64-bit integer hash with 8-byte SWAR chunks for instant 1-instruction comparison.
 #[inline(always)]
-pub const fn fnv1a_64(bytes: &[u8]) -> u64 {
+pub fn fnv1a_64(bytes: &[u8]) -> u64 {
     const FNV_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
     const FNV_PRIME: u64 = 0x100000001b3;
 
     let mut hash = FNV_OFFSET_BASIS;
+    let len = bytes.len();
     let mut i = 0;
-    while i < bytes.len() {
+
+    // 8-byte SWAR chunks
+    while i + 8 <= len {
+        let chunk = u64::from_ne_bytes(bytes[i..i + 8].try_into().unwrap());
+        hash = (hash ^ chunk).wrapping_mul(FNV_PRIME);
+        i += 8;
+    }
+
+    // 4-byte chunk
+    if i + 4 <= len {
+        let chunk = u32::from_ne_bytes(bytes[i..i + 4].try_into().unwrap()) as u64;
+        hash = (hash ^ chunk).wrapping_mul(FNV_PRIME);
+        i += 4;
+    }
+
+    // Remaining bytes
+    while i < len {
         hash ^= bytes[i] as u64;
         hash = hash.wrapping_mul(FNV_PRIME);
         i += 1;
     }
+
     hash
 }
 
@@ -106,10 +124,7 @@ pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 
 /// Zero-allocation RFC 6265 Cookie value extractor.
 #[inline]
-pub fn extract_cookie_value<'a>(
-    cookie_header: &'a [u8],
-    target_name: &[u8],
-) -> Option<&'a [u8]> {
+pub fn extract_cookie_value<'a>(cookie_header: &'a [u8], target_name: &[u8]) -> Option<&'a [u8]> {
     if target_name.is_empty() {
         return None;
     }

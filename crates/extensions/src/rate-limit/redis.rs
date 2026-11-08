@@ -1,4 +1,4 @@
-use super::types::{
+use super::policy::{
     ActionOnExceeded, CompiledRule, OnErrorAction, RateLimitAlgorithm, RateLimitDecision,
     RedisConfigInput,
 };
@@ -163,7 +163,7 @@ return { allowed, remaining, retry_after, reset_epoch }
 "#;
 
 pub(crate) struct RedisRateLimiter {
-    pool: Arc<RedisConnectionPool>,
+    pub(crate) pool: Arc<RedisConnectionPool>,
     pub on_error: OnErrorAction,
     script: Script,
     algo_tag: &'static str,

@@ -9,6 +9,7 @@ pub enum SplitBy {
     #[default]
     ClientIp,
     Header,
+    Cookie,
     Random,
 }
 
@@ -31,6 +32,8 @@ pub struct TrafficSplitRuleInput {
     pub split_by: String,
     #[serde(default)]
     pub header_name: Option<String>,
+    #[serde(default)]
+    pub cookie_name: Option<String>,
     pub splits: Vec<SplitTargetInput>,
 }
 
@@ -76,6 +79,7 @@ pub(crate) struct CompiledRule {
     pub path_prefix_ends_with_slash: bool,
     pub split_by: SplitBy,
     pub header_name: Option<String>,
+    pub cookie_name: Option<String>,
     pub targets: Vec<CompiledSplitTarget>,
 }
 

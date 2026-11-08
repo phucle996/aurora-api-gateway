@@ -16,13 +16,17 @@ use aurora_engine::{PathRadixTree, RequestContext};
 
 use crate::response_compression::{
     CLIENT_ENCODING_BR, CLIENT_ENCODING_GZIP, CLIENT_ENCODING_ZSTD, CompressionAlgorithm,
-    compress_into, parse_accept_encoding_mask,
+    compress_into, scan_accept_encoding_swar,
 };
 
 use super::{
     policy::{ResponseCacheConfig, RouteCacheOverride},
     storage::{CacheEntry, ShardedLruCache},
 };
+
+// ============================================================================
+// 1. Data Transfer Objects & Outcome Enums
+// ============================================================================
 
 /// Upstream response payload and metadata evaluated for cache storage.
 #[derive(Debug)]
@@ -58,6 +62,10 @@ pub struct CacheHitOutcome {
     pub algorithm: Option<CompressionAlgorithm>,
 }
 
+// ============================================================================
+// 2. Response Cache Engine Lifecycle & Access Evaluation
+// ============================================================================
+
 /// Core evaluation engine for HTTP caching and variant negotiation.
 pub struct ResponseCacheEngine {
     pub config: Arc<ResponseCacheConfig>,
@@ -66,9 +74,9 @@ pub struct ResponseCacheEngine {
 }
 
 impl ResponseCacheEngine {
-    /// Creates a new engine instance.
+    /// Creates and compiles a new engine instance from configuration.
     pub fn new(config: ResponseCacheConfig) -> Result<Self, String> {
-        let config = config.sanitize();
+        config.validate()?;
         let storage = Arc::new(ShardedLruCache::new(config.max_memory_mb));
 
         let mut trie = PathRadixTree::new();
@@ -81,6 +89,11 @@ impl ResponseCacheEngine {
             storage,
             route_trie: trie,
         })
+    }
+
+    #[inline]
+    pub fn generation(&self) -> u64 {
+        self.config.generation
     }
 
     /// Evaluates incoming HTTP request at Access Phase.
@@ -164,17 +177,22 @@ impl ResponseCacheEngine {
         })
     }
 
+    // ========================================================================
+    // 3. Multi-Variant Negotiation & Lazy Compression
+    // ========================================================================
+
     /// Negotiates the best compression variant for client's Accept-Encoding.
     /// Lazily compresses on demand if the requested variant is not yet generated.
     fn negotiate_variant(
         &self,
         entry: &CacheEntry,
         accept_encoding: Option<&[u8]>,
-    ) -> (Arc<Vec<u8>>, Option<CompressionAlgorithm>, Option<&'static str>) {
-        let mask = accept_encoding
-            .and_then(|ae| std::str::from_utf8(ae).ok())
-            .map(parse_accept_encoding_mask)
-            .unwrap_or(0);
+    ) -> (
+        Arc<Vec<u8>>,
+        Option<CompressionAlgorithm>,
+        Option<&'static str>,
+    ) {
+        let mask = accept_encoding.map(scan_accept_encoding_swar).unwrap_or(0);
 
         // Preference order: Zstd > Brotli > Gzip > Identity
         if mask & CLIENT_ENCODING_ZSTD != 0 {
@@ -242,6 +260,10 @@ impl ResponseCacheEngine {
         }
         None
     }
+
+    // ========================================================================
+    // 4. Response Storage & RFC 7234 Ingestion
+    // ========================================================================
 
     /// Stores an upstream HTTP response into cache if eligible under RFC 7234 rules.
     pub fn store_response(&self, record: &UpstreamResponseRecord<'_>) -> bool {
@@ -339,6 +361,10 @@ impl ResponseCacheEngine {
         true
     }
 
+    // ========================================================================
+    // 5. Canonical Cache Key Construction
+    // ========================================================================
+
     /// Computes canonical cache key with sorted, normalized query parameters.
     pub fn compute_cache_key(
         &self,
@@ -347,19 +373,26 @@ impl ResponseCacheEngine {
         path: &[u8],
         query: &[u8],
     ) -> String {
-        let m_str = std::str::from_utf8(method).unwrap_or("GET");
-        let h_str = std::str::from_utf8(host).unwrap_or("localhost");
-        let p_str = std::str::from_utf8(path).unwrap_or("/");
+        let m_len = method.len();
+        let h_len = host.len();
+        let p_len = path.len();
+        let q_len = query.len();
 
-        let mut key =
-            String::with_capacity(m_str.len() + h_str.len() + p_str.len() + query.len() + 4);
-        key.push_str(m_str);
+        let mut key = String::with_capacity(m_len + h_len + p_len + q_len + 4);
+        for &b in method {
+            key.push(b.to_ascii_uppercase() as char);
+        }
         key.push(':');
         for &b in host {
             key.push(b.to_ascii_lowercase() as char);
         }
         key.push(':');
-        key.push_str(p_str);
+        if path.is_empty() || path[0] != b'/' {
+            key.push('/');
+        }
+        for &b in path {
+            key.push(b as char);
+        }
 
         if !query.is_empty()
             && let Ok(q_str) = std::str::from_utf8(query)
@@ -401,6 +434,10 @@ impl ResponseCacheEngine {
         key
     }
 }
+
+// ============================================================================
+// 6. Directive Parsing Helpers
+// ============================================================================
 
 /// Helper: checks if a Cache-Control directive exists (e.g. "no-cache", "no-store", "private").
 fn has_directive(cc: &[u8], directive: &[u8]) -> bool {

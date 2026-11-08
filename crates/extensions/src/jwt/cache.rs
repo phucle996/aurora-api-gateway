@@ -165,7 +165,7 @@ impl JwtCache {
     #[inline]
     pub fn hash_jti(jti: &str) -> u64 {
         let mut hasher = FxHasher::default();
-        hasher.write(b"jti:");
+        hasher.write_u32(0x3a69746a); // u32::from_le_bytes(*b"jti:")
         hasher.write(jti.as_bytes());
         let h = hasher.finish();
         if h == 0 { 1 } else { h }
@@ -265,10 +265,25 @@ impl JwtCache {
 
             if shard.entries.len() >= shard.max_burst_entries {
                 shard.entries.retain(|_, v| v.expire_epoch_secs > now_epoch);
-                if shard.entries.len() >= shard.max_burst_entries
-                    && let Some(&oldest_key) = shard.entries.keys().next()
-                {
-                    shard.entries.remove(&oldest_key);
+                if shard.entries.len() >= shard.max_burst_entries {
+                    // Sample-based Clock Eviction (Power of Random Choices):
+                    // Inspects up to 8 keys to evict the lowest priority (negative row or earliest expiring)
+                    let mut candidate_key = None;
+                    let mut min_prio = u64::MAX;
+                    for (&k, v) in shard.entries.iter().take(8) {
+                        let prio = if v.status == TOKEN_STATUS_NEGATIVE {
+                            0
+                        } else {
+                            v.expire_epoch_secs
+                        };
+                        if prio < min_prio {
+                            min_prio = prio;
+                            candidate_key = Some(k);
+                        }
+                    }
+                    if let Some(k) = candidate_key {
+                        shard.entries.remove(&k);
+                    }
                 }
             }
         }
@@ -331,10 +346,25 @@ impl JwtCache {
 
             if shard.entries.len() >= shard.max_burst_entries {
                 shard.entries.retain(|_, v| v.expire_epoch_secs > now_epoch);
-                if shard.entries.len() >= shard.max_burst_entries
-                    && let Some(&oldest_key) = shard.entries.keys().next()
-                {
-                    shard.entries.remove(&oldest_key);
+                if shard.entries.len() >= shard.max_burst_entries {
+                    // Sample-based Clock Eviction (Power of Random Choices):
+                    // Inspects up to 8 keys to evict the lowest priority (negative row or earliest expiring)
+                    let mut candidate_key = None;
+                    let mut min_prio = u64::MAX;
+                    for (&k, v) in shard.entries.iter().take(8) {
+                        let prio = if v.status == TOKEN_STATUS_NEGATIVE {
+                            0
+                        } else {
+                            v.expire_epoch_secs
+                        };
+                        if prio < min_prio {
+                            min_prio = prio;
+                            candidate_key = Some(k);
+                        }
+                    }
+                    if let Some(k) = candidate_key {
+                        shard.entries.remove(&k);
+                    }
                 }
             }
         }
@@ -373,7 +403,10 @@ mod tests {
     fn test_cache_row_memory_geometry_and_compact_alignment() {
         assert_eq!(std::mem::size_of::<CacheRow>(), 40);
         assert_eq!(std::mem::align_of::<CacheRow>(), 8);
-        assert!(Arc::ptr_eq(&empty_forwarded_headers(), &empty_forwarded_headers()));
+        assert!(Arc::ptr_eq(
+            &empty_forwarded_headers(),
+            &empty_forwarded_headers()
+        ));
     }
 
     #[test]
@@ -482,7 +515,10 @@ mod tests {
             Some(jti_h),
             100,
         );
-        assert!(matches!(cache.lookup(token_hash, 100), CacheLookup::HitAllow(_)));
+        assert!(matches!(
+            cache.lookup(token_hash, 100),
+            CacheLookup::HitAllow(_)
+        ));
 
         // 2. Revoke JTI
         cache.revoke_jti(jti_str, 800, 100);

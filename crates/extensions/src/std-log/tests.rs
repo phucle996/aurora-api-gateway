@@ -54,7 +54,10 @@ fn test_fast_json_log_template_rendering() {
     assert!(rendered.contains("\"host\":\"api.example.com\""));
     assert!(rendered.contains("\"user_agent\":\"curl/8.5.0\""));
     assert!(rendered.contains("\"request_id\":\"req-abc-123\""));
-    assert!(rendered.contains("\"trace_id\":\"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01\""));
+    assert!(
+        rendered
+            .contains("\"trace_id\":\"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01\"")
+    );
     assert!(rendered.contains("\"upstream_status\":201"));
     assert!(rendered.contains("\"upstream_response_ms\":10"));
 }
@@ -153,7 +156,10 @@ fn test_write_u64_and_escaped_str() {
 
     buf.clear();
     write_escaped_bytes(&mut buf, b"null\x00bell\x07backspace\x08unit_sep\x1f");
-    assert_eq!(buf, b"null\\u0000bell\\u0007backspace\\u0008unit_sep\\u001f");
+    assert_eq!(
+        buf,
+        b"null\\u0000bell\\u0007backspace\\u0008unit_sep\\u001f"
+    );
 }
 
 #[test]

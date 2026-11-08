@@ -1,10 +1,10 @@
-# Aurora Response Cache Extension
+# Aurora Response Cache Extension (Slot 12)
 
 High-performance, memory-bounded, multi-variant HTTP response cache with zero-copy pointer handover and SIMD-accelerated content negotiation for Aurora API Gateway.
 
 ---
 
-## Key Features
+## 1. Key Features
 
 1. **Multi-Variant Compression Caching**: Caches uncompressed raw body alongside pre-compressed algorithm variants (`zstd`, `br`, `gzip`).
 2. **Sub-Microsecond Access-Phase Fast Path**: Short-circuits upstream calls at NGINX `NGX_HTTP_ACCESS_PHASE` on Cache Hit, bypassing upstream proxying, socket allocations, and filter chains completely.
@@ -15,10 +15,12 @@ High-performance, memory-bounded, multi-variant HTTP response cache with zero-co
 
 ---
 
-## Configuration Schema
+## 2. Configuration Schema
 
 ```json
 {
+  "schema_version": 1,
+  "generation": 1001,
   "enabled": true,
   "default_ttl_secs": 300,
   "max_memory_mb": 256,
@@ -44,15 +46,17 @@ High-performance, memory-bounded, multi-variant HTTP response cache with zero-co
 
 ### Parameter Reference
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `enabled` | `boolean` | `true` | Master switch to enable or disable in-memory response caching. |
-| `default_ttl_secs` | `integer` | `300` | Default cache retention time in seconds when upstream lacks `max-age`. |
-| `max_memory_mb` | `integer` | `256` | Maximum RAM capacity in megabytes allocated for the striped cache. |
-| `max_body_bytes` | `integer` | `10485760` | Maximum single-response payload size eligible for caching (default 10MB). |
-| `allowed_methods` | `array[string]` | `["GET", "HEAD"]` | HTTP methods permitted for cache storage and retrieval. |
-| `allowed_status_codes` | `array[integer]` | `[200, 203, ...]` | Upstream HTTP response status codes permitted for caching. |
-| `cache_key_query_params` | `array[string]` | `null` | Whitelist of query parameters included in the canonical cache key. |
-| `cache_key_headers` | `array[string]` | `null` | Header names used to partition cache variants (e.g. multi-tenant IDs). |
-| `eager_compression` | `boolean` | `false` | When true, compresses all variants (`zstd`, `br`, `gzip`) upfront upon storage. |
-| `routes_override` | `array[object]` | `[]` | Granular per-prefix caching and TTL overrides. |
+| Parameter | Type | Default | Ranh Giới Hợp Lệ | Description |
+|---|---|---|---|---|
+| `schema_version` | `integer` | `1` | `1` | Schema version identifier. |
+| `generation` | `integer` | `1` | `>= 1` | Monotonically increasing generation counter for atomic RCU swapping. |
+| `enabled` | `boolean` | `true` | `true`, `false` | Master switch to enable or disable in-memory response caching. |
+| `default_ttl_secs` | `integer` | `300` | `1 ..= 864000` | Default cache retention time in seconds when upstream lacks `max-age`. |
+| `max_memory_mb` | `integer` | `256` | `4 ..= 65536` | Maximum RAM capacity in megabytes allocated for the striped cache. |
+| `max_body_bytes` | `integer` | `10485760` | `1024 ..= 104857600` | Maximum single-response payload size eligible for caching (default 10MB). |
+| `allowed_methods` | `array[string]` | `["GET", "HEAD"]` | Valid HTTP methods | HTTP methods permitted for cache storage and retrieval. |
+| `allowed_status_codes` | `array[integer]` | `[200, 203, ...]` | `100 ..= 599` | Upstream HTTP response status codes permitted for caching. |
+| `cache_key_query_params` | `array[string]` | `null` | Query param names | Whitelist of query parameters included in the canonical cache key. |
+| `cache_key_headers` | `array[string]` | `null` | Header names | Header names used to partition cache variants (e.g. multi-tenant IDs). |
+| `eager_compression` | `boolean` | `false` | `true`, `false` | When true, compresses all variants (`zstd`, `br`, `gzip`) upfront upon storage. |
+| `routes_override` | `array[object]` | `[]` | List of rules | Granular per-prefix caching and TTL overrides. |

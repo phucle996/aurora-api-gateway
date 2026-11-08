@@ -36,11 +36,18 @@ pub fn materialize(
     server: &mut String,
     has_server: &mut bool,
 ) -> Result<(), String> {
-    if !config.get("enabled").and_then(Value::as_bool).unwrap_or(true) {
+    if !config
+        .get("enabled")
+        .and_then(Value::as_bool)
+        .unwrap_or(true)
+    {
         return Ok(());
     }
 
-    let mode = config.get("mode").and_then(Value::as_str).unwrap_or("denylist");
+    let mode = config
+        .get("mode")
+        .and_then(Value::as_str)
+        .unwrap_or("denylist");
     if mode == "allowlist" {
         server.push_str("proxy_pass_request_headers off;\n");
         server.push_str("proxy_set_header Host $host;\n");
@@ -52,9 +59,7 @@ pub fn materialize(
                     return Err(format!("header name {name:?} is invalid"));
                 }
                 let variable = format!("$http_{}", name.to_ascii_lowercase().replace('-', "_"));
-                server.push_str(&format!(
-                    "proxy_set_header {name} {variable};\n"
-                ));
+                server.push_str(&format!("proxy_set_header {name} {variable};\n"));
             }
         }
         *has_server = true;
@@ -99,10 +104,13 @@ mod tests {
     fn test_request_header_transform() {
         let mut server = String::new();
         let mut has_server = false;
-        let config: Map<String, Value> = serde_json::from_str(r#"{
+        let config: Map<String, Value> = serde_json::from_str(
+            r#"{
             "remove_headers": ["X-Forwarded-Secret"],
             "add_headers": { "X-Gateway": "Aurora" }
-        }"#).unwrap();
+        }"#,
+        )
+        .unwrap();
 
         materialize(&config, &mut server, &mut has_server).unwrap();
         assert!(has_server);

@@ -129,85 +129,86 @@ impl StdLogTask {
             + raw.request_id_len
             + raw.trace_id_len;
 
-        let (buffer, ip_r, meth_r, uri_r, host_r, ua_r, req_r, trace_r) = if total_len <= INLINE_CAPACITY {
-            let mut data = [0u8; INLINE_CAPACITY];
-            let mut cursor = 0;
+        let (buffer, ip_r, meth_r, uri_r, host_r, ua_r, req_r, trace_r) =
+            if total_len <= INLINE_CAPACITY {
+                let mut data = [0u8; INLINE_CAPACITY];
+                let mut cursor = 0;
 
-            macro_rules! append_raw {
-                ($ptr:expr, $len:expr) => {{
-                    let s = cursor as u32;
-                    let l = $len;
-                    let p = $ptr;
-                    if l > 0 && !p.is_null() {
-                        unsafe {
-                            std::ptr::copy_nonoverlapping(p, data.as_mut_ptr().add(cursor), l);
+                macro_rules! append_raw {
+                    ($ptr:expr, $len:expr) => {{
+                        let s = cursor as u32;
+                        let l = $len;
+                        let p = $ptr;
+                        if l > 0 && !p.is_null() {
+                            unsafe {
+                                std::ptr::copy_nonoverlapping(p, data.as_mut_ptr().add(cursor), l);
+                            }
+                            cursor += l;
                         }
-                        cursor += l;
-                    }
-                    (s, cursor as u32)
-                }};
-            }
+                        (s, cursor as u32)
+                    }};
+                }
 
-            let ip_r = append_raw!(raw.client_ip, raw.client_ip_len);
-            let meth_r = append_raw!(raw.method, raw.method_len);
-            let uri_r = append_raw!(raw.uri, raw.uri_len);
-            let host_r = append_raw!(raw.host, raw.host_len);
-            let ua_r = append_raw!(raw.user_agent, raw.user_agent_len);
-            let req_r = append_raw!(raw.request_id, raw.request_id_len);
-            let trace_r = append_raw!(raw.trace_id, raw.trace_id_len);
+                let ip_r = append_raw!(raw.client_ip, raw.client_ip_len);
+                let meth_r = append_raw!(raw.method, raw.method_len);
+                let uri_r = append_raw!(raw.uri, raw.uri_len);
+                let host_r = append_raw!(raw.host, raw.host_len);
+                let ua_r = append_raw!(raw.user_agent, raw.user_agent_len);
+                let req_r = append_raw!(raw.request_id, raw.request_id_len);
+                let trace_r = append_raw!(raw.trace_id, raw.trace_id_len);
 
-            (
-                InlineStrBuffer::Inline {
-                    data,
-                    len: cursor as u16,
-                },
-                ip_r,
-                meth_r,
-                uri_r,
-                host_r,
-                ua_r,
-                req_r,
-                trace_r,
-            )
-        } else {
-            let mut v = Vec::with_capacity(total_len);
-            let mut cursor: usize = 0;
+                (
+                    InlineStrBuffer::Inline {
+                        data,
+                        len: cursor as u16,
+                    },
+                    ip_r,
+                    meth_r,
+                    uri_r,
+                    host_r,
+                    ua_r,
+                    req_r,
+                    trace_r,
+                )
+            } else {
+                let mut v = Vec::with_capacity(total_len);
+                let mut cursor: usize = 0;
 
-            macro_rules! append_vec_raw {
-                ($ptr:expr, $len:expr) => {{
-                    let s = cursor as u32;
-                    let l = $len;
-                    let p = $ptr;
-                    if l > 0 && !p.is_null() {
-                        unsafe {
-                            let sl = std::slice::from_raw_parts(p, l);
-                            v.extend_from_slice(sl);
+                macro_rules! append_vec_raw {
+                    ($ptr:expr, $len:expr) => {{
+                        let s = cursor as u32;
+                        let l = $len;
+                        let p = $ptr;
+                        if l > 0 && !p.is_null() {
+                            unsafe {
+                                let sl = std::slice::from_raw_parts(p, l);
+                                v.extend_from_slice(sl);
+                            }
+                            cursor += l;
                         }
-                        cursor += l;
-                    }
-                    (s, cursor as u32)
-                }};
-            }
+                        (s, cursor as u32)
+                    }};
+                }
 
-            let ip_r = append_vec_raw!(raw.client_ip, raw.client_ip_len);
-            let meth_r = append_vec_raw!(raw.method, raw.method_len);
-            let uri_r = append_vec_raw!(raw.uri, raw.uri_len);
-            let host_r = append_vec_raw!(raw.host, raw.host_len);
-            let ua_r = append_vec_raw!(raw.user_agent, raw.user_agent_len);
-            let req_r = append_vec_raw!(raw.request_id, raw.request_id_len);
-            let trace_r = append_vec_raw!(raw.trace_id, raw.trace_id_len);
+                let ip_r = append_vec_raw!(raw.client_ip, raw.client_ip_len);
+                let meth_r = append_vec_raw!(raw.method, raw.method_len);
+                let uri_r = append_vec_raw!(raw.uri, raw.uri_len);
+                let host_r = append_vec_raw!(raw.host, raw.host_len);
+                let ua_r = append_vec_raw!(raw.user_agent, raw.user_agent_len);
+                let req_r = append_vec_raw!(raw.request_id, raw.request_id_len);
+                let trace_r = append_vec_raw!(raw.trace_id, raw.trace_id_len);
 
-            (
-                InlineStrBuffer::Spilled(v),
-                ip_r,
-                meth_r,
-                uri_r,
-                host_r,
-                ua_r,
-                req_r,
-                trace_r,
-            )
-        };
+                (
+                    InlineStrBuffer::Spilled(v),
+                    ip_r,
+                    meth_r,
+                    uri_r,
+                    host_r,
+                    ua_r,
+                    req_r,
+                    trace_r,
+                )
+            };
 
         Self {
             buffer,
@@ -237,81 +238,86 @@ impl StdLogTask {
             + slices.request_id.len()
             + slices.trace_id.len();
 
-        let (buffer, ip_r, meth_r, uri_r, host_r, ua_r, req_r, trace_r) = if total_len <= INLINE_CAPACITY {
-            let mut data = [0u8; INLINE_CAPACITY];
-            let mut cursor = 0;
+        let (buffer, ip_r, meth_r, uri_r, host_r, ua_r, req_r, trace_r) =
+            if total_len <= INLINE_CAPACITY {
+                let mut data = [0u8; INLINE_CAPACITY];
+                let mut cursor = 0;
 
-            macro_rules! append_slice {
-                ($slice:expr) => {{
-                    let s = cursor as u32;
-                    let sl = $slice;
-                    let len = sl.len();
-                    if len > 0 {
-                        unsafe {
-                            std::ptr::copy_nonoverlapping(sl.as_ptr(), data.as_mut_ptr().add(cursor), len);
+                macro_rules! append_slice {
+                    ($slice:expr) => {{
+                        let s = cursor as u32;
+                        let sl = $slice;
+                        let len = sl.len();
+                        if len > 0 {
+                            unsafe {
+                                std::ptr::copy_nonoverlapping(
+                                    sl.as_ptr(),
+                                    data.as_mut_ptr().add(cursor),
+                                    len,
+                                );
+                            }
+                            cursor += len;
                         }
-                        cursor += len;
-                    }
-                    (s, cursor as u32)
-                }};
-            }
+                        (s, cursor as u32)
+                    }};
+                }
 
-            let ip_r = append_slice!(slices.client_ip);
-            let meth_r = append_slice!(slices.method);
-            let uri_r = append_slice!(slices.uri);
-            let host_r = append_slice!(slices.host);
-            let ua_r = append_slice!(slices.user_agent);
-            let req_r = append_slice!(slices.request_id);
-            let trace_r = append_slice!(slices.trace_id);
+                let ip_r = append_slice!(slices.client_ip);
+                let meth_r = append_slice!(slices.method);
+                let uri_r = append_slice!(slices.uri);
+                let host_r = append_slice!(slices.host);
+                let ua_r = append_slice!(slices.user_agent);
+                let req_r = append_slice!(slices.request_id);
+                let trace_r = append_slice!(slices.trace_id);
 
-            (
-                InlineStrBuffer::Inline {
-                    data,
-                    len: cursor as u16,
-                },
-                ip_r,
-                meth_r,
-                uri_r,
-                host_r,
-                ua_r,
-                req_r,
-                trace_r,
-            )
-        } else {
-            let mut v = Vec::with_capacity(total_len);
-            let mut cursor: usize = 0;
+                (
+                    InlineStrBuffer::Inline {
+                        data,
+                        len: cursor as u16,
+                    },
+                    ip_r,
+                    meth_r,
+                    uri_r,
+                    host_r,
+                    ua_r,
+                    req_r,
+                    trace_r,
+                )
+            } else {
+                let mut v = Vec::with_capacity(total_len);
+                let mut cursor: usize = 0;
 
-            macro_rules! append_vec {
-                ($slice:expr) => {{
-                    let s = cursor as u32;
-                    let sl = $slice;
-                    if !sl.is_empty() {
-                        v.extend_from_slice(sl);
-                        cursor += sl.len();
-                    }
-                    (s, cursor as u32)
-                }};
-            }
+                macro_rules! append_vec {
+                    ($slice:expr) => {{
+                        let s = cursor as u32;
+                        let sl = $slice;
+                        if !sl.is_empty() {
+                            v.extend_from_slice(sl);
+                            cursor += sl.len();
+                        }
+                        (s, cursor as u32)
+                    }};
+                }
 
-            let ip_r = append_vec!(slices.client_ip);
-            let meth_r = append_vec!(slices.method);
-            let uri_r = append_vec!(slices.uri);
-            let host_r = append_vec!(slices.host);
-            let ua_r = append_vec!(slices.user_agent);
-            let req_r = append_vec!(slices.request_id);
-            let trace_r = append_vec!(slices.trace_id);
+                let ip_r = append_vec!(slices.client_ip);
+                let meth_r = append_vec!(slices.method);
+                let uri_r = append_vec!(slices.uri);
+                let host_r = append_vec!(slices.host);
+                let ua_r = append_vec!(slices.user_agent);
+                let req_r = append_vec!(slices.request_id);
+                let trace_r = append_vec!(slices.trace_id);
 
-            (
-                InlineStrBuffer::Spilled(v),
-                ip_r,
-                meth_r,
-                uri_r,
-                host_r,
-                ua_r,
-                req_r,
-                trace_r,
-            )
-        };
+                (
+                    InlineStrBuffer::Spilled(v),
+                    ip_r,
+                    meth_r,
+                    uri_r,
+                    host_r,
+                    ua_r,
+                    req_r,
+                    trace_r,
+                )
+            };
 
         Self {
             buffer,

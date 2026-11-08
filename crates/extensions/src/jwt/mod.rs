@@ -1,4 +1,4 @@
-//! In-process JWT authorization for the NGINX access phase.
+//! In-process JWT authorization for the NGINX access phase (Slot 1).
 //!
 //! Features:
 //! - Origin-First Scoping: Each Origin (Domain/Host) represents an Upstream Backend.
@@ -14,8 +14,9 @@ pub mod cache;
 pub mod crypto;
 mod engine;
 pub(crate) mod exclude;
+pub mod materialize;
+pub mod policy;
 pub mod redis_sync;
-mod types;
 
 #[cfg(test)]
 mod tests;
@@ -24,12 +25,10 @@ pub use cache::{
     CacheLookup, CacheRow, JwtCache, TOKEN_STATUS_NEGATIVE, TOKEN_STATUS_POSITIVE,
     empty_forwarded_headers,
 };
-pub use crypto::{
-    JwtAlgorithm, VerifiedPayload, VerifierKey, resolve_claim_path_cow, verify_jwt,
-};
+pub use crypto::{JwtAlgorithm, VerifiedPayload, VerifierKey, resolve_claim_path_cow, verify_jwt};
 pub use engine::JwtEngine;
-pub use types::{
-    JwtDecision, MAX_AUTHORIZATION_BYTES, MAX_EXCLUDE_PATHS_PER_ORIGIN,
-    MAX_FORWARD_HEADERS_PER_ORIGIN, MAX_JWT_KEYS_PER_ORIGIN, MAX_JWT_ORIGINS,
-    MAX_JWT_POLICY_BYTES, PayloadFormat, TokenSource,
+pub use policy::{
+    JwtDecision, JwtPolicy, MAX_AUTHORIZATION_BYTES, MAX_EXCLUDE_PATHS_PER_ORIGIN,
+    MAX_FORWARD_HEADERS_PER_ORIGIN, MAX_JWT_KEYS_PER_ORIGIN, MAX_JWT_ORIGINS, MAX_JWT_POLICY_BYTES,
+    OriginPolicyInput, PayloadFormat, TokenLocation,
 };

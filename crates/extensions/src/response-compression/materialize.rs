@@ -31,15 +31,21 @@ mod tests {
     fn test_materialize_keeps_nginx_conf_clean() {
         let mut server = String::new();
         let mut has_server = false;
-        let config: Map<String, Value> = serde_json::from_str(r#"{
+        let config: Map<String, Value> = serde_json::from_str(
+            r#"{
             "enabled": true,
             "min_length": 2048,
             "prefer_algorithms": ["zstd", "br", "gzip"]
-        }"#).unwrap();
+        }"#,
+        )
+        .unwrap();
 
         let cfg = materialize(&config, &mut server, &mut has_server).unwrap();
         assert_eq!(cfg.min_length, 2048);
         assert!(!has_server);
-        assert!(server.is_empty(), "NGINX conf must remain clean without gzip directives");
+        assert!(
+            server.is_empty(),
+            "NGINX conf must remain clean without gzip directives"
+        );
     }
 }

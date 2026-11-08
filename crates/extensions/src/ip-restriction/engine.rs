@@ -1,18 +1,223 @@
 //! IP Restriction Evaluation Engine
 //!
-//! Provides high-performance, flat array-based IP access control with zero-allocation
+//! Provides high-performance, two-tier numerical IP access control ($O(1)$ static IPs
+//! and mask-partitioned branch-and-bound subnets) with zero heap allocations on
 //! hot path evaluation and instant early-exit short-circuiting.
 
-use super::config::{IpRestrictionRequest, IpRestrictionSnapshot, normalize_cidr_string};
 use super::ip::{ParsedIp, parse_client_ip, parse_ipv4_cidr, parse_ipv6_cidr};
-use super::rule::{FlatIpv4Rule, FlatIpv6Rule, HostMatcher, method_to_mask};
+use super::policy::{IpRestrictionPolicy, IpRestrictionRequest, normalize_cidr_string};
+use super::rule::{FlatIpv4Rule, FlatIpv6Rule, HostMatcher, METHOD_ALL, method_to_mask};
 use crate::{AccessRequestContext, Decision, Error, MAX_PATH_BYTES, MAX_POLICY_BYTES};
+use rustc_hash::FxHashMap;
 use std::collections::HashSet;
+
+#[derive(Clone, Debug)]
+pub struct Ipv4MaskPartition {
+    pub mask: u32,
+    pub min_rule_idx: usize,
+    pub network_map: FxHashMap<u32, Vec<usize>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Ipv4Matcher {
+    rules: Vec<FlatIpv4Rule>,
+    partitions: Vec<Ipv4MaskPartition>,
+}
+
+impl Ipv4Matcher {
+    pub fn new(rules: Vec<FlatIpv4Rule>) -> Self {
+        if rules.is_empty() {
+            return Self {
+                rules,
+                partitions: Vec::new(),
+            };
+        }
+
+        let mut partition_map: FxHashMap<u32, FxHashMap<u32, Vec<usize>>> = FxHashMap::default();
+        for (idx, rule) in rules.iter().enumerate() {
+            partition_map
+                .entry(rule.mask)
+                .or_default()
+                .entry(rule.network)
+                .or_default()
+                .push(idx);
+        }
+
+        let mut partitions = Vec::with_capacity(partition_map.len());
+        for (mask, network_map) in partition_map {
+            let mut min_rule_idx = usize::MAX;
+            for indices in network_map.values() {
+                if let Some(&first) = indices.first()
+                    && first < min_rule_idx
+                {
+                    min_rule_idx = first;
+                }
+            }
+            partitions.push(Ipv4MaskPartition {
+                mask,
+                min_rule_idx,
+                network_map,
+            });
+        }
+
+        // Sort partitions by min_rule_idx ascending:
+        // Guarantees that the partition containing the highest priority rule is inspected first.
+        partitions.sort_by_key(|p| p.min_rule_idx);
+
+        Self { rules, partitions }
+    }
+
+    #[inline(always)]
+    pub fn evaluate(
+        &self,
+        ip: u32,
+        req_method_mask: u16,
+        host: &[u8],
+        path: &[u8],
+    ) -> Option<&FlatIpv4Rule> {
+        let mut best_index = usize::MAX;
+
+        for partition in &self.partitions {
+            // Branch-and-bound pruning:
+            // If the best matching rule index found so far is <= the lowest possible rule index
+            // in this partition, this partition and any subsequent partitions CANNOT contain
+            // a better rule!
+            if best_index <= partition.min_rule_idx {
+                break;
+            }
+
+            let net = ip & partition.mask;
+            if let Some(rule_indices) = partition.network_map.get(&net) {
+                for &idx in rule_indices {
+                    if idx >= best_index {
+                        break;
+                    }
+
+                    // SAFETY: idx was collected from 0..self.rules.len() and self.rules is immutable.
+                    let rule = unsafe { self.rules.get_unchecked(idx) };
+                    if rule.matches_request(req_method_mask, host, path) {
+                        best_index = idx;
+                        // Rule index 0 is the absolute top priority rule: nothing can beat it.
+                        if best_index == 0 {
+                            return Some(rule);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        if best_index != usize::MAX {
+            // SAFETY: best_index is a verified index into self.rules.
+            Some(unsafe { self.rules.get_unchecked(best_index) })
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Ipv6MaskPartition {
+    pub mask: u128,
+    pub min_rule_idx: usize,
+    pub network_map: FxHashMap<u128, Vec<usize>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Ipv6Matcher {
+    rules: Vec<FlatIpv6Rule>,
+    partitions: Vec<Ipv6MaskPartition>,
+}
+
+impl Ipv6Matcher {
+    pub fn new(rules: Vec<FlatIpv6Rule>) -> Self {
+        if rules.is_empty() {
+            return Self {
+                rules,
+                partitions: Vec::new(),
+            };
+        }
+
+        let mut partition_map: FxHashMap<u128, FxHashMap<u128, Vec<usize>>> = FxHashMap::default();
+        for (idx, rule) in rules.iter().enumerate() {
+            partition_map
+                .entry(rule.mask)
+                .or_default()
+                .entry(rule.network)
+                .or_default()
+                .push(idx);
+        }
+
+        let mut partitions = Vec::with_capacity(partition_map.len());
+        for (mask, network_map) in partition_map {
+            let mut min_rule_idx = usize::MAX;
+            for indices in network_map.values() {
+                if let Some(&first) = indices.first()
+                    && first < min_rule_idx
+                {
+                    min_rule_idx = first;
+                }
+            }
+            partitions.push(Ipv6MaskPartition {
+                mask,
+                min_rule_idx,
+                network_map,
+            });
+        }
+
+        partitions.sort_by_key(|p| p.min_rule_idx);
+
+        Self { rules, partitions }
+    }
+
+    #[inline(always)]
+    pub fn evaluate(
+        &self,
+        ip: u128,
+        req_method_mask: u16,
+        host: &[u8],
+        path: &[u8],
+    ) -> Option<&FlatIpv6Rule> {
+        let mut best_index = usize::MAX;
+
+        for partition in &self.partitions {
+            if best_index <= partition.min_rule_idx {
+                break;
+            }
+
+            let net = ip & partition.mask;
+            if let Some(rule_indices) = partition.network_map.get(&net) {
+                for &idx in rule_indices {
+                    if idx >= best_index {
+                        break;
+                    }
+
+                    // SAFETY: idx was collected from 0..self.rules.len() and self.rules is immutable.
+                    let rule = unsafe { self.rules.get_unchecked(idx) };
+                    if rule.matches_request(req_method_mask, host, path) {
+                        best_index = idx;
+                        if best_index == 0 {
+                            return Some(rule);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        if best_index != usize::MAX {
+            // SAFETY: best_index is a verified index into self.rules.
+            Some(unsafe { self.rules.get_unchecked(best_index) })
+        } else {
+            None
+        }
+    }
+}
 
 pub struct IpRestrictionEngine {
     generation: u64,
-    rules_v4: Vec<FlatIpv4Rule>,
-    rules_v6: Vec<FlatIpv6Rule>,
+    v4_matcher: Ipv4Matcher,
+    v6_matcher: Ipv6Matcher,
     is_whitelist_strict: bool,
 }
 
@@ -34,12 +239,10 @@ impl IpRestrictionEngine {
             return Err(Error::InvalidPolicy);
         }
 
-        let snap: IpRestrictionSnapshot =
+        let snap: IpRestrictionPolicy =
             serde_json::from_slice(bytes).map_err(|_| Error::InvalidPolicy)?;
 
-        if snap.schema_version != 1 || snap.generation > i64::MAX as u64 {
-            return Err(Error::InvalidPolicy);
-        }
+        snap.validate().map_err(|_| Error::InvalidPolicy)?;
 
         let mut unified_inputs = Vec::new();
         let mut has_declarative_whitelist = false;
@@ -148,7 +351,7 @@ impl IpRestrictionEngine {
             });
         }
 
-        if unified_inputs.len() > 512 {
+        if unified_inputs.len() > 65_536 {
             return Err(Error::InvalidPolicy);
         }
 
@@ -162,7 +365,7 @@ impl IpRestrictionEngine {
             if rule.id == 0
                 || !ids.insert(rule.id)
                 || rule.networks.is_empty()
-                || rule.networks.len() > 4096
+                || rule.networks.len() > 65_536
                 || rule.priority > 1_000_000
                 || rule.host.is_empty()
                 || rule.host.len() > 253
@@ -183,6 +386,10 @@ impl IpRestrictionEngine {
                 return Err(Error::InvalidPolicy);
             }
 
+            let is_pure = (method_mask == METHOD_ALL)
+                && (host_matcher == HostMatcher::Any)
+                && (rule.path_prefix == "/");
+
             for cidr in &rule.networks {
                 if let Some((network, mask, prefix_len)) = parse_ipv4_cidr(cidr) {
                     rules_v4.push(FlatIpv4Rule {
@@ -196,6 +403,7 @@ impl IpRestrictionEngine {
                         host: host_matcher.clone(),
                         path_prefix: rule.path_prefix.as_bytes().to_vec(),
                         log: rule.log,
+                        is_pure,
                     });
                 } else if let Some((network, mask, prefix_len)) = parse_ipv6_cidr(cidr) {
                     rules_v6.push(FlatIpv6Rule {
@@ -209,6 +417,7 @@ impl IpRestrictionEngine {
                         host: host_matcher.clone(),
                         path_prefix: rule.path_prefix.as_bytes().to_vec(),
                         log: rule.log,
+                        is_pure,
                     });
                 } else {
                     return Err(Error::InvalidPolicy);
@@ -223,12 +432,14 @@ impl IpRestrictionEngine {
         rules_v4.sort_by_key(|r| (r.priority, std::cmp::Reverse(r.prefix_len), r.rule_id));
         rules_v6.sort_by_key(|r| (r.priority, std::cmp::Reverse(r.prefix_len), r.rule_id));
 
+        let v4_matcher = Ipv4Matcher::new(rules_v4);
+        let v6_matcher = Ipv6Matcher::new(rules_v6);
         let is_whitelist_strict = has_declarative_whitelist && !has_declarative_blacklist;
 
         Ok(Self {
             generation: snap.generation,
-            rules_v4,
-            rules_v6,
+            v4_matcher,
+            v6_matcher,
             is_whitelist_strict,
         })
     }
@@ -236,6 +447,16 @@ impl IpRestrictionEngine {
     #[inline]
     pub fn generation(&self) -> u64 {
         self.generation
+    }
+
+    #[cfg(test)]
+    pub fn v4_partitions_count(&self) -> usize {
+        self.v4_matcher.partitions.len()
+    }
+
+    #[cfg(test)]
+    pub fn v6_partitions_count(&self) -> usize {
+        self.v6_matcher.partitions.len()
     }
 
     #[inline]
@@ -264,29 +485,31 @@ impl IpRestrictionEngine {
 
         match parsed_ip {
             ParsedIp::V4(ip_v4) => {
-                for rule in &self.rules_v4 {
-                    if rule.matches(ip_v4, req_method_mask, q.host, q.path) {
-                        return Ok(Decision {
-                            rule_id: rule.rule_id,
-                            action: u32::from(rule.is_block),
-                            log_matches: u32::from(rule.log),
-                            generation: self.generation,
-                            ..Default::default()
-                        });
-                    }
+                if let Some(rule) = self
+                    .v4_matcher
+                    .evaluate(ip_v4, req_method_mask, q.host, q.path)
+                {
+                    return Ok(Decision {
+                        rule_id: rule.rule_id,
+                        action: u32::from(rule.is_block),
+                        log_matches: u32::from(rule.log),
+                        generation: self.generation,
+                        ..Default::default()
+                    });
                 }
             }
             ParsedIp::V6(ip_v6) => {
-                for rule in &self.rules_v6 {
-                    if rule.matches(ip_v6, req_method_mask, q.host, q.path) {
-                        return Ok(Decision {
-                            rule_id: rule.rule_id,
-                            action: u32::from(rule.is_block),
-                            log_matches: u32::from(rule.log),
-                            generation: self.generation,
-                            ..Default::default()
-                        });
-                    }
+                if let Some(rule) = self
+                    .v6_matcher
+                    .evaluate(ip_v6, req_method_mask, q.host, q.path)
+                {
+                    return Ok(Decision {
+                        rule_id: rule.rule_id,
+                        action: u32::from(rule.is_block),
+                        log_matches: u32::from(rule.log),
+                        generation: self.generation,
+                        ..Default::default()
+                    });
                 }
             }
         }

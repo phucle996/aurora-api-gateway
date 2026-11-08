@@ -3,14 +3,14 @@
 //! Orchestrates Layer 1 byte pattern condition matching and Layer 2 sticky percentage rollout.
 //! Uses 64-byte L1-aligned CanarySlotSheet for branchless selection and zero heap allocations.
 
-use std::sync::Arc;
 use super::policy::{
     ByteMatcher, CanaryDecision, CanaryReleaseEvalRequest, CanaryReleaseSnapshot, CanarySlotMeta,
-    CanarySlotSheet, CompiledCanaryRule, CompiledMatchCondition, MatchTarget, SplitBy,
-    UpstreamHeaderInput, MAX_CANARY_RELEASE_POLICY_BYTES, MAX_CANARY_RELEASE_RULES,
-    MAX_CONDITIONS_PER_RULE, MAX_HEADERS_PER_SLOT,
+    CanarySlotSheet, CompiledCanaryRule, CompiledMatchCondition, MAX_CANARY_RELEASE_POLICY_BYTES,
+    MAX_CANARY_RELEASE_RULES, MAX_CONDITIONS_PER_RULE, MAX_HEADERS_PER_SLOT, MatchTarget, SplitBy,
+    UpstreamHeaderInput,
 };
 use crate::{Error, MAX_PATH_BYTES, host_matches, host_specificity};
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct CanaryReleaseEngine {
@@ -36,10 +36,7 @@ fn trim_ascii(b: &[u8]) -> &[u8] {
     }
     let mut end = b.len();
     while end > start
-        && (b[end - 1] == b' '
-            || b[end - 1] == b'\t'
-            || b[end - 1] == b'\r'
-            || b[end - 1] == b'\n')
+        && (b[end - 1] == b' ' || b[end - 1] == b'\t' || b[end - 1] == b'\r' || b[end - 1] == b'\n')
     {
         end -= 1;
     }
@@ -199,35 +196,36 @@ impl CanaryReleaseEngine {
                         .all(|&b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
             };
 
-            let (split_by, header_name, cookie_name) = match rule.split_by.trim().to_ascii_lowercase().as_str() {
-                "client_ip" => (SplitBy::ClientIp, None, None),
-                "random" => (SplitBy::Random, None, None),
-                "header" => {
-                    let h_name = rule
-                        .header_name
-                        .as_ref()
-                        .map(|s| s.trim().to_ascii_lowercase())
-                        .filter(|s| !s.is_empty())
-                        .ok_or(Error::InvalidPolicy)?;
-                    if !is_valid_token_key(h_name.as_bytes()) {
-                        return Err(Error::InvalidPolicy);
+            let (split_by, header_name, cookie_name) =
+                match rule.split_by.trim().to_ascii_lowercase().as_str() {
+                    "client_ip" => (SplitBy::ClientIp, None, None),
+                    "random" => (SplitBy::Random, None, None),
+                    "header" => {
+                        let h_name = rule
+                            .header_name
+                            .as_ref()
+                            .map(|s| s.trim().to_ascii_lowercase())
+                            .filter(|s| !s.is_empty())
+                            .ok_or(Error::InvalidPolicy)?;
+                        if !is_valid_token_key(h_name.as_bytes()) {
+                            return Err(Error::InvalidPolicy);
+                        }
+                        (SplitBy::Header, Some(h_name), None)
                     }
-                    (SplitBy::Header, Some(h_name), None)
-                }
-                "cookie" => {
-                    let c_name = rule
-                        .cookie_name
-                        .as_ref()
-                        .map(|s| s.trim().to_ascii_lowercase().into_bytes())
-                        .filter(|s| !s.is_empty())
-                        .ok_or(Error::InvalidPolicy)?;
-                    if !is_valid_token_key(&c_name) {
-                        return Err(Error::InvalidPolicy);
+                    "cookie" => {
+                        let c_name = rule
+                            .cookie_name
+                            .as_ref()
+                            .map(|s| s.trim().to_ascii_lowercase().into_bytes())
+                            .filter(|s| !s.is_empty())
+                            .ok_or(Error::InvalidPolicy)?;
+                        if !is_valid_token_key(&c_name) {
+                            return Err(Error::InvalidPolicy);
+                        }
+                        (SplitBy::Cookie, None, Some(c_name))
                     }
-                    (SplitBy::Cookie, None, Some(c_name))
-                }
-                _ => return Err(Error::InvalidPolicy),
-            };
+                    _ => return Err(Error::InvalidPolicy),
+                };
 
             let mut match_conditions = Vec::with_capacity(rule.match_conditions.len());
             for mc in rule.match_conditions {
@@ -293,24 +291,29 @@ impl CanaryReleaseEngine {
                     return Err(Error::InvalidPolicy);
                 };
 
-                match_conditions.push(CompiledMatchCondition { target, key, matcher });
+                match_conditions.push(CompiledMatchCondition {
+                    target,
+                    key,
+                    matcher,
+                });
             }
 
-            let validate_headers = |hdrs: Vec<UpstreamHeaderInput>| -> Result<Arc<[(String, String)]>, Error> {
-                let mut out = Vec::with_capacity(hdrs.len());
-                for h in hdrs {
-                    let name = h.name.trim().to_string();
-                    let value = h.value.trim().to_string();
-                    if !is_valid_token_key(name.as_bytes())
-                        || value.len() > 256
-                        || value.bytes().any(|b| b == b'\r' || b == b'\n' || b == 0)
-                    {
-                        return Err(Error::InvalidPolicy);
+            let validate_headers =
+                |hdrs: Vec<UpstreamHeaderInput>| -> Result<Arc<[(String, String)]>, Error> {
+                    let mut out = Vec::with_capacity(hdrs.len());
+                    for h in hdrs {
+                        let name = h.name.trim().to_string();
+                        let value = h.value.trim().to_string();
+                        if !is_valid_token_key(name.as_bytes())
+                            || value.len() > 256
+                            || value.bytes().any(|b| b == b'\r' || b == b'\n' || b == 0)
+                        {
+                            return Err(Error::InvalidPolicy);
+                        }
+                        out.push((name, value));
                     }
-                    out.push((name, value));
-                }
-                Ok(Arc::from(out))
-            };
+                    Ok(Arc::from(out))
+                };
 
             let baseline_headers = validate_headers(rule.baseline_upstream_headers)?;
             let canary_headers = validate_headers(rule.canary_upstream_headers)?;
@@ -422,7 +425,9 @@ impl CanaryReleaseEngine {
                         }
                         MatchTarget::Cookie => {
                             if let Some(cookie_hdr) = header_lookup("cookie") {
-                                if let Some(val_bytes) = extract_cookie(cookie_hdr, cond.key.as_bytes()) {
+                                if let Some(val_bytes) =
+                                    extract_cookie(cookie_hdr, cond.key.as_bytes())
+                                {
                                     cond.matcher.is_match(val_bytes)
                                 } else {
                                     false
@@ -434,7 +439,9 @@ impl CanaryReleaseEngine {
                         MatchTarget::Uri | MatchTarget::Path => cond.matcher.is_match(req.path),
                         MatchTarget::Query => {
                             if !cond.key.is_empty() {
-                                if let Some(val) = extract_query_param(req.query_string, cond.key.as_bytes()) {
+                                if let Some(val) =
+                                    extract_query_param(req.query_string, cond.key.as_bytes())
+                                {
                                     cond.matcher.is_match(val)
                                 } else {
                                     false
@@ -460,9 +467,8 @@ impl CanaryReleaseEngine {
                     true
                 } else {
                     let bucket = match rule.split_by {
-                        SplitBy::ClientIp => {
-                            *cached_ip_hash.get_or_insert_with(|| fnv1a_64(req.client_ip) as u32 % 100)
-                        }
+                        SplitBy::ClientIp => *cached_ip_hash
+                            .get_or_insert_with(|| fnv1a_64(req.client_ip) as u32 % 100),
                         SplitBy::Random => req.random_seed % 100,
                         SplitBy::Header => {
                             let val = rule
@@ -473,17 +479,20 @@ impl CanaryReleaseEngine {
                             if let Some(val) = val {
                                 fnv1a_64(val) as u32 % 100
                             } else {
-                                *cached_ip_hash.get_or_insert_with(|| fnv1a_64(req.client_ip) as u32 % 100)
+                                *cached_ip_hash
+                                    .get_or_insert_with(|| fnv1a_64(req.client_ip) as u32 % 100)
                             }
                         }
                         SplitBy::Cookie => {
                             let val = rule.cookie_name.as_deref().and_then(|c_name| {
-                                header_lookup("cookie").and_then(|c_hdr| extract_cookie(c_hdr, c_name))
+                                header_lookup("cookie")
+                                    .and_then(|c_hdr| extract_cookie(c_hdr, c_name))
                             });
                             if let Some(val) = val {
                                 fnv1a_64(val) as u32 % 100
                             } else {
-                                *cached_ip_hash.get_or_insert_with(|| fnv1a_64(req.client_ip) as u32 % 100)
+                                *cached_ip_hash
+                                    .get_or_insert_with(|| fnv1a_64(req.client_ip) as u32 % 100)
                             }
                         }
                     };

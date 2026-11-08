@@ -3,13 +3,13 @@
 //! Orchestrates high-speed Access Phase route matching, SWAR slot parsing,
 //! arithmetic security verification, and branchless L1 slot sheet retrieval.
 
-use std::sync::Arc;
 use crate::{Error, MAX_PATH_BYTES, host_matches, host_specificity};
+use std::sync::Arc;
 
 use super::policy::{
     BlueGreenDecision, BlueGreenEvalRequest, BlueGreenRuleInput, BlueGreenSnapshot,
-    CompiledBlueGreenRule, DeploySlot, SlotSheet, SlotUpstreamMeta, MAX_BLUE_GREEN_POLICY_BYTES,
-    MAX_BLUE_GREEN_RULES,
+    CompiledBlueGreenRule, DeploySlot, MAX_BLUE_GREEN_POLICY_BYTES, MAX_BLUE_GREEN_RULES,
+    SlotSheet, SlotUpstreamMeta,
 };
 use super::security::{
     extract_cookie_value, extract_query_value, fnv1a_64, parse_slot_swar, select_slot_branchless,
@@ -193,7 +193,9 @@ impl BlueGreenEngine {
             let (secret_hash, secret_bytes) = if let Some(ref sec) = rule.preview_secret {
                 let trimmed_sec = sec.trim();
                 if trimmed_sec.len() > 256
-                    || trimmed_sec.bytes().any(|b| b == b'\r' || b == b'\n' || b == 0)
+                    || trimmed_sec
+                        .bytes()
+                        .any(|b| b == b'\r' || b == b'\n' || b == 0)
                 {
                     return Err(Error::InvalidPolicy);
                 }
@@ -382,7 +384,8 @@ impl BlueGreenEngine {
 
             // Step 3: Branchless Arithmetic Selection Formula
             let valid_override = has_override & secret_ok & cidr_ok;
-            let chosen_slot = select_slot_branchless(valid_override, candidate_slot, rule.active_slot);
+            let chosen_slot =
+                select_slot_branchless(valid_override, candidate_slot, rule.active_slot);
 
             let meta = &rule.slot_sheet.upstreams[chosen_slot as usize];
             let is_override = valid_override != 0;

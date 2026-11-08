@@ -10,6 +10,4 @@ mod tests;
 
 pub use engine::*;
 pub use plugin::PrometheusPlugin;
-pub use task::{
-    HttpMetricTask, WorkerHttpMetrics, get_worker_http_metrics, record_http_metrics,
-};
+pub use task::{HttpMetricTask, WorkerHttpMetrics, get_worker_http_metrics, record_http_metrics};

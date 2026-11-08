@@ -6,8 +6,8 @@
 //! - Present & Glob pattern matching
 //! - 64-byte aligned CanarySlotSheet for L1 cache residency
 
-use std::sync::Arc;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 pub const MAX_CANARY_RELEASE_RULES: usize = 64;
 pub const MAX_CANARY_RELEASE_POLICY_BYTES: usize = 131_072; // 128KB
@@ -38,7 +38,11 @@ pub enum MatchTarget {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ByteMatcher {
     /// Exact match with SWAR single-register comparison for strings <= 8 bytes
-    ExactSwar { mask: u64, expected: u64, len: usize },
+    ExactSwar {
+        mask: u64,
+        expected: u64,
+        len: usize,
+    },
     /// Exact byte equality
     Exact(Vec<u8>),
     /// Matches any of the predefined byte sequences
@@ -77,7 +81,11 @@ impl ByteMatcher {
                     !((1u64 << ((8 - len) * 8)) - 1)
                 }
             };
-            ByteMatcher::ExactSwar { mask, expected, len }
+            ByteMatcher::ExactSwar {
+                mask,
+                expected,
+                len,
+            }
         } else {
             ByteMatcher::Exact(bytes.to_vec())
         }
@@ -86,7 +94,11 @@ impl ByteMatcher {
     #[inline(always)]
     pub fn is_match(&self, input: &[u8]) -> bool {
         match self {
-            ByteMatcher::ExactSwar { mask, expected, len } => {
+            ByteMatcher::ExactSwar {
+                mask,
+                expected,
+                len,
+            } => {
                 if input.len() != *len {
                     return false;
                 }
@@ -98,7 +110,9 @@ impl ByteMatcher {
             ByteMatcher::Exact(target) => input == target.as_slice(),
             ByteMatcher::OneOf(targets) => {
                 let in_len = input.len();
-                targets.iter().any(|t| t.len() == in_len && input == t.as_slice())
+                targets
+                    .iter()
+                    .any(|t| t.len() == in_len && input == t.as_slice())
             }
             ByteMatcher::Prefix(prefix) => input.starts_with(prefix.as_slice()),
             ByteMatcher::Suffix(suffix) => input.ends_with(suffix.as_slice()),
@@ -469,11 +483,7 @@ impl<'a> CanaryDecision<'a> {
     }
 
     #[inline(always)]
-    pub fn matched(
-        rule_id: &'a str,
-        is_canary: bool,
-        meta: &'a CanarySlotMeta,
-    ) -> Self {
+    pub fn matched(rule_id: &'a str, is_canary: bool, meta: &'a CanarySlotMeta) -> Self {
         let (hdrs, arc_opt) = if meta.headers.is_empty() {
             (&[][..], None)
         } else {

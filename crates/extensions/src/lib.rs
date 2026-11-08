@@ -35,42 +35,39 @@ pub mod resource_limit;
 pub mod traffic_shaper;
 #[path = "traffic-split/mod.rs"]
 pub mod traffic_split;
+#[path = "waf-lite/mod.rs"]
+pub mod waf_lite;
 
 // Proxy & Directives Extensions (Self-contained Materializers)
-#[path = "response-compression/mod.rs"]
-pub mod response_compression;
-#[path = "response-cache/mod.rs"]
-pub mod response_cache;
 #[path = "correlation-id/mod.rs"]
 pub mod correlation_id;
 pub mod cors;
-pub mod maintenance;
 #[path = "request-header-transform/mod.rs"]
 pub mod request_header_transform;
 #[path = "response-buffering/mod.rs"]
 pub mod response_buffering;
+#[path = "response-cache/mod.rs"]
+pub mod response_cache;
+#[path = "response-compression/mod.rs"]
+pub mod response_compression;
 #[path = "response-header-transform/mod.rs"]
 pub mod response_header_transform;
 #[path = "timeout-policy/mod.rs"]
 pub mod timeout_policy;
 
 // Egress & Background Phase Plugins (Exporters & Telemetry Plugins)
-#[path = "std-log/mod.rs"]
-pub mod std_log;
 #[path = "opentelemetry/mod.rs"]
 pub mod opentelemetry;
 #[path = "prometheus/mod.rs"]
 pub mod prometheus;
+#[path = "std-log/mod.rs"]
+pub mod std_log;
 
 pub mod access;
 pub mod background;
 
 // Top-level re-exports for clean ergonomics:
 pub use access::{AccessPhaseEngines, AccessPhaseSpace};
-pub use std_log::{
-    AuroraLogInput, FastJsonLogTemplate, InlineStrBuffer, StdLogMetadata, StdLogPlugin, StdLogSlices,
-    StdLogTask,
-};
 pub use background::{
     GatewayBackgroundTask, TELEMETRY_SUB_METRICS, TELEMETRY_SUB_STD_LOG, TELEMETRY_SUB_TRACING,
     clear_task_sender, dropped_tasks_count, has_metrics_subscriber, has_std_log_subscriber,
@@ -94,5 +91,10 @@ pub use request_termination::RequestTerminationEngine;
 pub use resource_limit::ResourceLimiter;
 pub use response_cache::ResponseCacheEngine;
 pub use response_compression::ResponseCompressionEngine;
+pub use std_log::{
+    AuroraLogInput, FastJsonLogTemplate, InlineStrBuffer, StdLogMetadata, StdLogPlugin,
+    StdLogSlices, StdLogTask,
+};
 pub use traffic_shaper::TrafficShaperEngine;
 pub use traffic_split::TrafficSplitEngine;
+pub use waf_lite::{WafLiteEngine, WafLiteSnapshot, WafMode};

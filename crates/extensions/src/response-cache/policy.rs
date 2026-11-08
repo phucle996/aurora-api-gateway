@@ -5,6 +5,10 @@
 
 use serde::{Deserialize, Serialize};
 
+// ============================================================================
+// 1. Route Override Rule
+// ============================================================================
+
 /// Per-route cache behavior override.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RouteCacheOverride {
@@ -17,9 +21,19 @@ pub struct RouteCacheOverride {
     pub cache_key_headers: Option<Vec<String>>,
 }
 
+// ============================================================================
+// 2. Global Response Cache Configuration
+// ============================================================================
+
 /// Global response cache configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ResponseCacheConfig {
+    #[serde(default = "default_schema_version")]
+    pub schema_version: u32,
+
+    #[serde(default = "default_generation")]
+    pub generation: u64,
+
     #[serde(default = "default_true")]
     pub enabled: bool,
 
@@ -51,6 +65,18 @@ pub struct ResponseCacheConfig {
     pub routes_override: Vec<RouteCacheOverride>,
 }
 
+// ============================================================================
+// 3. Default Values
+// ============================================================================
+
+const fn default_schema_version() -> u32 {
+    1
+}
+
+const fn default_generation() -> u64 {
+    1
+}
+
 const fn default_true() -> bool {
     true
 }
@@ -78,6 +104,8 @@ fn default_status_codes() -> Vec<u16> {
 impl Default for ResponseCacheConfig {
     fn default() -> Self {
         Self {
+            schema_version: default_schema_version(),
+            generation: default_generation(),
             enabled: default_true(),
             default_ttl_secs: default_ttl(),
             max_memory_mb: default_max_memory_mb(),
@@ -92,19 +120,86 @@ impl Default for ResponseCacheConfig {
     }
 }
 
+// ============================================================================
+// 4. Policy Invariants Validation & Helper Methods
+// ============================================================================
+
 impl ResponseCacheConfig {
-    /// Validates and normalizes policy bounds.
-    pub fn sanitize(mut self) -> Self {
-        if self.max_memory_mb < 4 {
-            self.max_memory_mb = 4;
+    /// Validates all configuration invariants according to RFC specifications.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 1 {
+            return Err(format!(
+                "schema_version {} is invalid (must be 1)",
+                self.schema_version
+            ));
         }
-        if self.default_ttl_secs == 0 {
-            self.default_ttl_secs = 60;
+
+        if self.generation < 1 {
+            return Err(format!(
+                "generation {} is invalid (must be >= 1)",
+                self.generation
+            ));
         }
-        if self.max_body_bytes == 0 {
-            self.max_body_bytes = 1024 * 1024;
+
+        if self.max_memory_mb < 4 || self.max_memory_mb > 65_536 {
+            return Err(format!(
+                "max_memory_mb {} is out of range (must be 4 to 65536 MB)",
+                self.max_memory_mb
+            ));
         }
-        self
+
+        if self.default_ttl_secs == 0 || self.default_ttl_secs > 864_000 {
+            return Err(format!(
+                "default_ttl_secs {} is out of range (must be 1 to 864000 seconds)",
+                self.default_ttl_secs
+            ));
+        }
+
+        if self.max_body_bytes < 1024 || self.max_body_bytes > 104_857_600 {
+            return Err(format!(
+                "max_body_bytes {} is out of range (must be 1024 to 104857600 bytes)",
+                self.max_body_bytes
+            ));
+        }
+
+        if self.allowed_methods.is_empty() {
+            return Err("allowed_methods cannot be empty".to_string());
+        }
+
+        for m in &self.allowed_methods {
+            let m_trim = m.trim();
+            if m_trim.is_empty() || !m_trim.bytes().all(|b| b.is_ascii_alphabetic()) {
+                return Err(format!("invalid HTTP method '{m}' in allowed_methods"));
+            }
+        }
+
+        if self.allowed_status_codes.is_empty() {
+            return Err("allowed_status_codes cannot be empty".to_string());
+        }
+
+        for &sc in &self.allowed_status_codes {
+            if !(100..=599).contains(&sc) {
+                return Err(format!("status code {sc} is out of HTTP range (100..=599)"));
+            }
+        }
+
+        for route in &self.routes_override {
+            if !route.path_prefix.starts_with('/') {
+                return Err(format!(
+                    "route override path_prefix '{}' must start with '/'",
+                    route.path_prefix
+                ));
+            }
+            if let Some(ttl) = route.ttl_secs
+                && (ttl == 0 || ttl > 864_000)
+            {
+                return Err(format!(
+                    "route override ttl_secs {ttl} out of range (1..=864000)"
+                ));
+            }
+        }
+
+        Ok(())
     }
 
     /// Fast-path check if HTTP method is cacheable.

@@ -194,6 +194,7 @@ dependencies = [
 name = "aurora-extensions"
 version = "0.1.0"
 dependencies = [
+ "aho-corasick",
  "aurora-engine",
  "base64",
  "brotli",

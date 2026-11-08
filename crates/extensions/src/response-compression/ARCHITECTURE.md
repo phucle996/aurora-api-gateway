@@ -123,3 +123,21 @@ Client Request (Accept-Encoding: zstd)
    - Extension chỉ nén chiều xuôi (Egress Compression), không giải nén request body của client, loại bỏ hoàn toàn nguy cơ cạn kiệt bộ nhớ do Decompression Bomb.
 3. **Cách Ly Tràn Buffer (Buffer Overrun Defense)**:
    - Hàm [`max_compressed_len`](file:///home/phucle/Desktop/aurora-api-gateway/crates/extensions/src/response-compression/compressor.rs#L46-L65) tính toán chính xác biên an toàn tối đa cho từng thuật toán trước khi cấp phát bộ nhớ.
+
+---
+
+## 6. Tối Ưu Hóa Vi Kiến Trúc & Số Học Thanh Ghi (Micro-Architectural Dispatch)
+
+### 6.1. Packed Integer Arithmetic MIME Matching (Zero Heap Allocations)
+Đánh giá Content-Type trên luồng Egress thường là nguồn gây áp lực phân bổ bộ nhớ ngầm do các lệnh chuyển chữ thường (`to_ascii_lowercase()`) và tra cứu chuỗi (`HashSet<String>`). Extension áp dụng kỹ thuật khớp số học nguyên khối trên thanh ghi:
+- **`u128` Fast Path (16 bytes)**: Đọc nguyên khối chuỗi `"application/json"` vào thanh ghi 128-bit. Dựa trên bất biến bit 5 của bảng mã ASCII (mọi chữ cái tiếng Anh in hoa và in thường chỉ lệch nhau bit `0x20`, trong khi dấu `/` và số đã bật sẵn bit này), áp dụng mặt nạ `| 0x20202020_20202020_20202020_20202020_u128` để chuẩn hóa toàn bộ chữ hoa về chữ thường trong 1 chu kỳ vi xử lý, rồi so sánh đẳng thức trực tiếp với `JSON_U128 = 0x6E6F736A_2F6E6F69_74616369_6C707061` (~0.8 ns).
+- **`u64` Fast Path (8 bytes)**: Khớp song song `"text/css"` và `"text/xml"` bằng thanh ghi 64-bit chuẩn hóa `0x20202020_20202020_u64`.
+- **`u64` + `u16` Fast Path (10 bytes)**: Khớp `"text/plain"` qua 2 nhịp nạp từ thanh ghi.
+- **Allowed Length Bitmask Filter**: Toàn bộ độ dài của các MIME type hợp lệ được tổng hợp thành mặt nạ 64-bit `allowed_len_mask`. Các yêu cầu có độ dài MIME không hợp lệ bị bác bỏ ngay lập tức bằng phép tính `(allowed_len_mask & (1u64 << len)) == 0` trong ~0.3 ns.
+
+### 6.2. Thăm Dò Khả Năng Vector Phần Cứng & Bảng Con Trỏ Hàm Cố Định
+- Trong pha khởi tạo (`ResponseCompressionEngine::new`), engine gọi `aurora_engine::hardware::probe_cpu_capabilities().safe_vector_width_bytes()` để phát hiện độ rộng tập lệnh vector của máy chủ (AVX2 32 bytes, SSE 16 bytes, SWAR 8 bytes).
+- Đóng đinh con trỏ hàm chuyên biệt:
+  - `parse_ae_fn: AcceptEncodingScannerFn` $\to$ quét `Accept-Encoding` không heap allocation.
+  - `match_mime_fn: MimeMatcherFn` $\to$ thẩm định Content-Type số học.
+  - `compressors: [CompressorFn; 4]` $\to$ bảng nhảy tĩnh `COMPRESSOR_TABLE[algorithm as usize]` gọi trực tiếp routine nén SIMD độc lập, loại bỏ hoàn toàn `match` phân nhánh lặp lại trên hot-path.

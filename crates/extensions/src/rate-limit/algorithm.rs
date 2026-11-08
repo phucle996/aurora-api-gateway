@@ -1,13 +1,22 @@
-use super::types::{ActionOnExceeded, CompiledRule, RateLimitAlgorithm, RateLimitDecision};
+//! High-Performance Fixed-Point Rate Limiting Algorithms (Slot 2).
+//!
+//! Replaces floating-point arithmetic (`f64`) with 64-bit Integer Fixed-Point
+//! arithmetic (Milli-tokens, scale factor: 1,000) to eliminate FPU round-trips
+//! and floating-point rounding drift on the hot path.
 
-#[derive(Clone)]
-pub(crate) enum AlgorithmState {
+use super::policy::{ActionOnExceeded, CompiledRule, RateLimitAlgorithm, RateLimitDecision};
+
+/// Fixed-point scaling factor: 1 token = 1,000 milli-tokens.
+pub const FIXED_POINT_SCALE: u64 = 1_000;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AlgorithmState {
     TokenBucket {
-        tokens: f64,
+        tokens_milli: u64,
         last_refill_ms: u64,
     },
     LeakyBucket {
-        water_level: f64,
+        water_level_milli: u64,
         last_leak_ms: u64,
     },
     FixedWindow {
@@ -22,7 +31,8 @@ pub(crate) enum AlgorithmState {
 }
 
 impl AlgorithmState {
-    pub(crate) fn init(
+    #[inline]
+    pub fn init(
         algorithm: RateLimitAlgorithm,
         rule: &CompiledRule,
         now_secs: u64,
@@ -30,11 +40,11 @@ impl AlgorithmState {
     ) -> Self {
         match algorithm {
             RateLimitAlgorithm::TokenBucket => Self::TokenBucket {
-                tokens: rule.burst as f64,
+                tokens_milli: rule.burst.saturating_mul(FIXED_POINT_SCALE),
                 last_refill_ms: now_ms,
             },
             RateLimitAlgorithm::LeakyBucket => Self::LeakyBucket {
-                water_level: 0.0,
+                water_level_milli: 0,
                 last_leak_ms: now_ms,
             },
             RateLimitAlgorithm::FixedWindow => Self::FixedWindow {
@@ -49,7 +59,8 @@ impl AlgorithmState {
         }
     }
 
-    pub(crate) fn advance(
+    #[inline]
+    pub fn advance(
         &mut self,
         rule: &CompiledRule,
         now_secs: u64,
@@ -57,44 +68,75 @@ impl AlgorithmState {
     ) -> RateLimitDecision {
         match self {
             Self::TokenBucket {
-                tokens,
+                tokens_milli,
                 last_refill_ms,
             } => {
-                let capacity = rule.burst as f64;
-                let refill_rate = rule.rate as f64 / rule.period_secs as f64;
-                let elapsed_secs = (now_ms.saturating_sub(*last_refill_ms)) as f64 / 1000.0;
-                *tokens = (*tokens + elapsed_secs * refill_rate).min(capacity);
+                let capacity = rule.burst.saturating_mul(FIXED_POINT_SCALE);
+                let elapsed_ms = now_ms.saturating_sub(*last_refill_ms);
+                let capped_elapsed_ms = elapsed_ms.min(rule.period_secs.saturating_mul(1000));
+
+                // Refill: (capped_elapsed_ms * rule.rate * FIXED_POINT_SCALE) / (rule.period_secs * 1000)
+                let refill_milli = (capped_elapsed_ms.saturating_mul(rule.rate)) / rule.period_secs;
+                *tokens_milli = (*tokens_milli + refill_milli).min(capacity);
                 *last_refill_ms = now_ms;
 
-                if *tokens >= 1.0 {
-                    *tokens -= 1.0;
-                    let remaining = tokens.floor() as u32;
-                    let reset_epoch = now_secs + ((capacity - *tokens) / refill_rate).ceil() as u64;
+                if *tokens_milli >= FIXED_POINT_SCALE {
+                    *tokens_milli -= FIXED_POINT_SCALE;
+                    let remaining = (*tokens_milli / FIXED_POINT_SCALE) as u32;
+                    let needed_milli = capacity.saturating_sub(*tokens_milli);
+                    let refill_rate_per_sec =
+                        (rule.rate.saturating_mul(FIXED_POINT_SCALE)) / rule.period_secs;
+                    let reset_epoch = if refill_rate_per_sec == 0 {
+                        now_secs + rule.period_secs
+                    } else {
+                        now_secs + needed_milli.div_ceil(refill_rate_per_sec)
+                    };
                     RateLimitDecision::allow(remaining, reset_epoch)
                 } else {
-                    let retry_after = ((1.0 - *tokens) / refill_rate).ceil().max(1.0) as u32;
+                    let needed_milli = FIXED_POINT_SCALE.saturating_sub(*tokens_milli);
+                    let rate_scaled = rule.rate.saturating_mul(FIXED_POINT_SCALE);
+                    let ms_needed = (needed_milli
+                        .saturating_mul(rule.period_secs.saturating_mul(1000))
+                        .saturating_add(rate_scaled.saturating_sub(1)))
+                        / rate_scaled.max(1);
+                    let retry_after = ms_needed.div_ceil(1000).max(1) as u32;
                     build_exceeded_decision(rule, retry_after, now_secs + retry_after as u64)
                 }
             }
             Self::LeakyBucket {
-                water_level,
+                water_level_milli,
                 last_leak_ms,
             } => {
-                let capacity = rule.burst as f64;
-                let leak_rate = rule.rate as f64 / rule.period_secs as f64;
-                let elapsed_secs = (now_ms.saturating_sub(*last_leak_ms)) as f64 / 1000.0;
-                *water_level = (*water_level - elapsed_secs * leak_rate).max(0.0);
+                let capacity = rule.burst.saturating_mul(FIXED_POINT_SCALE);
+                let elapsed_ms = now_ms.saturating_sub(*last_leak_ms);
+                let capped_elapsed_ms = elapsed_ms.min(rule.period_secs.saturating_mul(1000));
+
+                // Leak: (capped_elapsed_ms * rule.rate * FIXED_POINT_SCALE) / (rule.period_secs * 1000)
+                let leak_milli = (capped_elapsed_ms.saturating_mul(rule.rate)) / rule.period_secs;
+                *water_level_milli = water_level_milli.saturating_sub(leak_milli);
                 *last_leak_ms = now_ms;
 
-                if *water_level + 1.0 <= capacity {
-                    *water_level += 1.0;
-                    let remaining = (capacity - *water_level).floor() as u32;
-                    let reset_epoch = now_secs + (*water_level / leak_rate).ceil() as u64;
+                if *water_level_milli + FIXED_POINT_SCALE <= capacity {
+                    *water_level_milli += FIXED_POINT_SCALE;
+                    let remaining =
+                        ((capacity.saturating_sub(*water_level_milli)) / FIXED_POINT_SCALE) as u32;
+                    let leak_rate_per_sec =
+                        (rule.rate.saturating_mul(FIXED_POINT_SCALE)) / rule.period_secs;
+                    let reset_epoch = if leak_rate_per_sec == 0 {
+                        now_secs + rule.period_secs
+                    } else {
+                        now_secs + water_level_milli.div_ceil(leak_rate_per_sec)
+                    };
                     RateLimitDecision::allow(remaining, reset_epoch)
                 } else {
-                    let retry_after = ((*water_level + 1.0 - capacity) / leak_rate)
-                        .ceil()
-                        .max(1.0) as u32;
+                    let overflow_milli =
+                        (*water_level_milli + FIXED_POINT_SCALE).saturating_sub(capacity);
+                    let rate_scaled = rule.rate.saturating_mul(FIXED_POINT_SCALE);
+                    let ms_needed = (overflow_milli
+                        .saturating_mul(rule.period_secs.saturating_mul(1000))
+                        .saturating_add(rate_scaled.saturating_sub(1)))
+                        / rate_scaled.max(1);
+                    let retry_after = ms_needed.div_ceil(1000).max(1) as u32;
                     build_exceeded_decision(rule, retry_after, now_secs + retry_after as u64)
                 }
             }
@@ -130,14 +172,24 @@ impl AlgorithmState {
                     *current_count = 0;
                 }
 
-                let time_into_window = (now_secs % rule.period_secs) as f64;
-                let weight = 1.0 - (time_into_window / rule.period_secs as f64);
-                let estimated_count = (*previous_count as f64 * weight) + *current_count as f64;
+                let time_into_window = now_secs % rule.period_secs;
+                // Fixed-point weight scaled by FIXED_POINT_SCALE
+                let weight_scaled = (rule
+                    .period_secs
+                    .saturating_sub(time_into_window)
+                    .saturating_mul(FIXED_POINT_SCALE))
+                    / rule.period_secs;
+
+                let estimated_scaled = (*previous_count).saturating_mul(weight_scaled)
+                    + (*current_count).saturating_mul(FIXED_POINT_SCALE);
+                let capacity_scaled = rule.rate.saturating_mul(FIXED_POINT_SCALE);
                 let reset_epoch = (*window_id + 1) * rule.period_secs;
 
-                if estimated_count + 1.0 <= rule.rate as f64 {
+                if estimated_scaled + FIXED_POINT_SCALE <= capacity_scaled {
                     *current_count += 1;
-                    let remaining = (rule.rate as f64 - estimated_count - 1.0).max(0.0) as u32;
+                    let remaining = ((capacity_scaled
+                        .saturating_sub(estimated_scaled + FIXED_POINT_SCALE))
+                        / FIXED_POINT_SCALE) as u32;
                     RateLimitDecision::allow(remaining, reset_epoch)
                 } else {
                     let retry_after = reset_epoch.saturating_sub(now_secs).max(1) as u32;
@@ -148,7 +200,8 @@ impl AlgorithmState {
     }
 }
 
-pub(crate) fn build_exceeded_decision(
+#[inline]
+pub fn build_exceeded_decision(
     rule: &CompiledRule,
     retry_after: u32,
     reset_epoch: u64,

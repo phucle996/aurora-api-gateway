@@ -10,7 +10,10 @@ pub fn materialize(
     server: &mut String,
     has_server: &mut bool,
 ) -> Result<(), String> {
-    let enabled = config.get("enabled").and_then(Value::as_bool).unwrap_or(true);
+    let enabled = config
+        .get("enabled")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
     if enabled {
         server.push_str("    gateway_std_log on;\n");
         *has_server = true;

@@ -207,6 +207,9 @@ mod tests {
         set_telemetry_subscribers(0);
         let rc2 = unsafe { aurora_gateway_phase_log(&input) };
         assert_eq!(rc2, 0);
-        assert!(rx.try_recv().is_err(), "no tasks should be sent when bypassed");
+        assert!(
+            rx.try_recv().is_err(),
+            "no tasks should be sent when bypassed"
+        );
     }
 }

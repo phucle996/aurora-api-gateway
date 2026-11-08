@@ -24,7 +24,7 @@
 //!    Supports arbitrary dot-notation (`user.profile.id`) and auto-flattening arrays
 //!    (`roles: ["admin", "dev"]` -> `"admin, dev"`).
 
-use super::types::{KeyInput, MAX_JWT_KEYS_PER_ORIGIN, PayloadFormat};
+use super::policy::{KeyInput, MAX_JWT_KEYS_PER_ORIGIN, PayloadFormat};
 use crate::{Error, MAX_PATH_BYTES};
 use base64::prelude::*;
 use ring::hmac;
@@ -139,10 +139,6 @@ impl FromStr for JwtAlgorithm {
     }
 }
 
-pub(crate) fn parse_algorithm(alg: &str) -> Result<JwtAlgorithm, Error> {
-    JwtAlgorithm::from_str(alg)
-}
-
 /// Matches algorithm name branchlessly in 1 CPU cycle using 64-bit SWAR integer comparison.
 #[inline(always)]
 pub(crate) fn matches_algorithm(alg: &str, expected: JwtAlgorithm) -> bool {
@@ -162,6 +158,71 @@ pub struct JoseHeader<'a> {
     pub alg: &'a str,
     #[serde(default)]
     pub kid: Option<&'a str>,
+}
+
+const TAG_ALG_LE: u32 = u32::from_le_bytes(*b"alg\""); // 0x22676c61
+const TAG_KID_LE: u32 = u32::from_le_bytes(*b"kid\""); // 0x2264696b
+
+/// Fast zero-copy, zero-allocation scanner for standard JOSE headers.
+///
+/// Uses 32-bit SWAR integer matching (`TAG_ALG_LE`, `TAG_KID_LE`) on raw bytes.
+#[inline]
+pub fn fast_parse_jose_header<'a>(bytes: &'a [u8]) -> Option<JoseHeader<'a>> {
+    let len = bytes.len();
+    if !(12..=512).contains(&len) {
+        return None;
+    }
+
+    let mut alg: Option<&'a str> = None;
+    let mut kid: Option<&'a str> = None;
+
+    let mut i = 0;
+    while i + 5 <= len {
+        if bytes[i] == b'"' {
+            let tag = u32::from_le_bytes(bytes[i + 1..i + 5].try_into().unwrap());
+            if tag == TAG_ALG_LE {
+                i += 5;
+                while i < len && (bytes[i] == b' ' || bytes[i] == b'\t' || bytes[i] == b':') {
+                    i += 1;
+                }
+                if i < len && bytes[i] == b'"' {
+                    i += 1;
+                    let val_start = i;
+                    while i < len && bytes[i] != b'"' && bytes[i] != b'\\' {
+                        i += 1;
+                    }
+                    if i < len && bytes[i] == b'"' {
+                        alg = std::str::from_utf8(&bytes[val_start..i]).ok();
+                        i += 1;
+                        continue;
+                    }
+                    return None;
+                }
+            } else if tag == TAG_KID_LE {
+                i += 5;
+                while i < len && (bytes[i] == b' ' || bytes[i] == b'\t' || bytes[i] == b':') {
+                    i += 1;
+                }
+                if i < len && bytes[i] == b'"' {
+                    i += 1;
+                    let val_start = i;
+                    while i < len && bytes[i] != b'"' && bytes[i] != b'\\' {
+                        i += 1;
+                    }
+                    if i < len && bytes[i] == b'"' {
+                        kid = std::str::from_utf8(&bytes[val_start..i]).ok();
+                        i += 1;
+                        continue;
+                    }
+                    return None;
+                }
+            }
+        }
+        i += 1;
+    }
+
+    let alg_str = alg?;
+    Some(JoseHeader { alg: alg_str, kid })
 }
 
 /// Pre-compiled cryptographic verifier key with cached geometry.
@@ -375,6 +436,18 @@ impl VerifierKey {
 /// Decodes base64url into a caller-supplied stack slice without heap allocations.
 #[inline]
 pub fn decode_base64url_to_slice<'a>(s: &str, buf: &'a mut [u8]) -> Result<&'a [u8], &'static str> {
+    let bytes = s.as_bytes();
+    if bytes.is_empty() {
+        return Err("Empty base64url input");
+    }
+    // Fast-path: RFC 7519 unpadded base64url (standard for JWT)
+    if bytes[bytes.len() - 1] != b'=' {
+        if let Ok(len) = BASE64_URL_SAFE_NO_PAD.decode_slice(bytes, buf) {
+            return Ok(&buf[..len]);
+        }
+    } else if let Ok(len) = BASE64_URL_SAFE.decode_slice(bytes, buf) {
+        return Ok(&buf[..len]);
+    }
     let s_clean = s.trim();
     if s_clean.is_empty() {
         return Err("Empty base64url input");
@@ -392,7 +465,7 @@ pub fn decode_base64url_to_slice<'a>(s: &str, buf: &'a mut [u8]) -> Result<&'a [
 }
 
 /// Fallback base64url decoder allocating a `Vec<u8>` for arbitrarily large token payloads (>2KB).
-pub fn decode_base64url(s: &str) -> Result<Vec<u8>, &'static str> {
+fn decode_base64url(s: &str) -> Result<Vec<u8>, &'static str> {
     let s_clean = s.trim();
     if s_clean.is_empty() {
         return Err("Empty base64url input");
@@ -409,7 +482,7 @@ pub fn decode_base64url(s: &str) -> Result<Vec<u8>, &'static str> {
 }
 
 /// Parses a PEM-encoded public key into raw DER bytes.
-pub fn parse_pem_to_der(pem_str: &str) -> Result<Vec<u8>, Error> {
+fn parse_pem_to_der(pem_str: &str) -> Result<Vec<u8>, Error> {
     let mut in_key = false;
     let mut b64_lines = String::new();
     for line in pem_str.lines() {
@@ -624,14 +697,20 @@ pub fn verify_jwt(
     // 3. Decode JOSE header into stack buffer (zero heap allocation)
     let mut header_stack_buf = [0u8; 512];
     let header_bytes = decode_base64url_to_slice(header_b64, &mut header_stack_buf)?;
-    let header_json: JoseHeader<'_> =
-        serde_json::from_slice(header_bytes).map_err(|_| "Malformed JOSE header JSON")?;
+    let (header_alg, header_kid) = match fast_parse_jose_header(header_bytes) {
+        Some(fast) => (fast.alg, fast.kid),
+        None => {
+            let header_json: JoseHeader<'_> =
+                serde_json::from_slice(header_bytes).map_err(|_| "Malformed JOSE header JSON")?;
+            (header_json.alg, header_json.kid)
+        }
+    };
 
-    if !matches_algorithm(header_json.alg, config.expected_alg) {
+    if !matches_algorithm(header_alg, config.expected_alg) {
         return Err("Algorithm mismatch");
     }
 
-    let key = match (config.keys_by_kid, header_json.kid) {
+    let key = match (config.keys_by_kid, header_kid) {
         (Some(keys), Some(kid)) => keys.get(kid).unwrap_or(config.primary_key),
         _ => config.primary_key,
     };
@@ -669,7 +748,10 @@ pub fn verify_jwt(
         VerifiedPayload::Json(json) => {
             let exp = json.get("exp").and_then(parse_epoch_secs).unwrap_or(0);
             let nbf = json.get("nbf").and_then(parse_epoch_secs);
-            let jti = json.get("jti").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let jti = json
+                .get("jti")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
             (exp, nbf, jti)
         }
         VerifiedPayload::Raw(_) => (0, None, None),

@@ -1,4 +1,4 @@
-use super::types::{OnErrorAction, RedisConfigInput};
+use super::policy::{OnErrorAction, RedisConfig};
 use crate::Error;
 use crate::redis_pool::{RedisConnectionPool, RedisPoolKey, RedisPoolRegistry};
 use redis::Script;
@@ -34,7 +34,7 @@ end
 "#;
 
 pub(crate) struct RedisConnectionLimiter {
-    pool: Arc<RedisConnectionPool>,
+    pub pool: Arc<RedisConnectionPool>,
     pub on_error: OnErrorAction,
     pub lease_ttl_secs: u32,
     acquire_script: Script,
@@ -42,7 +42,7 @@ pub(crate) struct RedisConnectionLimiter {
 }
 
 impl RedisConnectionLimiter {
-    pub fn new(cfg: &RedisConfigInput) -> Result<Self, Error> {
+    pub fn new(cfg: &RedisConfig) -> Result<Self, Error> {
         let timeout = Duration::from_millis(cfg.timeout_ms.clamp(1, 5000));
         let max_pool_size = cfg.pool_size.clamp(1, 64);
         let lease_ttl_secs = cfg.lease_ttl_secs.clamp(5, 86400);

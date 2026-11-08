@@ -94,10 +94,14 @@ impl WorkerHttpMetrics {
         self.duration_buckets[bucket_idx].fetch_add(1, Ordering::Relaxed);
 
         if task.active_conns > 0 {
-            self.active_conns.store(task.active_conns, Ordering::Relaxed);
-            self.reading_conns.store(task.reading_conns, Ordering::Relaxed);
-            self.writing_conns.store(task.writing_conns, Ordering::Relaxed);
-            self.waiting_conns.store(task.waiting_conns, Ordering::Relaxed);
+            self.active_conns
+                .store(task.active_conns, Ordering::Relaxed);
+            self.reading_conns
+                .store(task.reading_conns, Ordering::Relaxed);
+            self.writing_conns
+                .store(task.writing_conns, Ordering::Relaxed);
+            self.waiting_conns
+                .store(task.waiting_conns, Ordering::Relaxed);
         }
     }
 

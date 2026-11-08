@@ -17,7 +17,7 @@ use aurora_engine::PathRadixTree;
 use aurora_extensions::{
     AccessPhaseEngines, BlueGreenEngine, CanaryReleaseEngine, ConnectionLimitEngine,
     IpRestrictionEngine, JwtEngine, RateLimitEngine, RequestMirrorEngine, RequestTerminationEngine,
-    ResourceLimiter, TrafficShaperEngine, TrafficSplitEngine,
+    ResourceLimiter, TrafficShaperEngine, TrafficSplitEngine, WafLiteEngine,
 };
 
 pub const AURORA_EXT_IP_RESTRICTION: usize = 0;
@@ -33,12 +33,14 @@ pub const AURORA_EXT_REQUEST_MIRROR: usize = 9;
 pub const AURORA_EXT_REQUEST_TERMINATION: usize = 10;
 pub const AURORA_EXT_RESPONSE_COMPRESSION: usize = 11;
 pub const AURORA_EXT_RESPONSE_CACHE: usize = 12;
-pub const AURORA_EXT_COUNT: usize = 13;
+pub const AURORA_EXT_WAF_LITE: usize = 13;
+pub const AURORA_EXT_COUNT: usize = 14;
 
 /// Active policy space holding live engines and route trie.
 #[derive(Default, Clone)]
 pub struct GatewayActiveSpace {
     pub ip_restriction: Option<Arc<IpRestrictionEngine>>,
+    pub waf_lite: Option<Arc<WafLiteEngine>>,
     pub jwt: Option<Arc<JwtEngine>>,
     pub rate_limit: Option<Arc<RateLimitEngine>>,
     pub connection_limit: Option<Arc<ConnectionLimitEngine>>,
@@ -49,7 +51,8 @@ pub struct GatewayActiveSpace {
     pub blue_green: Option<Arc<BlueGreenEngine>>,
     pub request_mirror: Option<Arc<RequestMirrorEngine>>,
     pub request_termination: Option<Arc<RequestTerminationEngine>>,
-    pub response_compression: Option<Arc<aurora_extensions::response_compression::ResponseCompressionEngine>>,
+    pub response_compression:
+        Option<Arc<aurora_extensions::response_compression::ResponseCompressionEngine>>,
     pub response_cache: Option<Arc<aurora_extensions::response_cache::ResponseCacheEngine>>,
     pub generations: [u64; AURORA_EXT_COUNT],
     pub route_masks_gen: u64,
@@ -75,6 +78,9 @@ impl GatewayActiveSpace {
 
         if mask & (1 << AURORA_EXT_IP_RESTRICTION) != 0 {
             engines.ip_restriction = self.ip_restriction.as_deref();
+        }
+        if mask & (1 << AURORA_EXT_WAF_LITE) != 0 {
+            engines.waf_lite = self.waf_lite.as_deref();
         }
         if mask & (1 << AURORA_EXT_JWT) != 0 {
             engines.jwt = self.jwt.as_deref();
@@ -238,17 +244,30 @@ pub extern "C" fn aurora_gateway_policy_sync() {
                     }
                 }
                 AURORA_EXT_RESPONSE_COMPRESSION => {
-                    if let Ok(cfg) = serde_json::from_slice::<aurora_extensions::response_compression::ResponseCompressionConfig>(bytes)
-                        && let Ok(eng) = aurora_extensions::response_compression::ResponseCompressionEngine::new(cfg)
+                    if let Ok(cfg) = serde_json::from_slice::<
+                        aurora_extensions::response_compression::ResponseCompressionConfig,
+                    >(bytes)
+                        && let Ok(eng) =
+                            aurora_extensions::response_compression::ResponseCompressionEngine::new(
+                                cfg,
+                            )
                     {
                         next.response_compression = Some(Arc::new(eng));
                     }
                 }
                 AURORA_EXT_RESPONSE_CACHE => {
-                    if let Ok(cfg) = serde_json::from_slice::<aurora_extensions::response_cache::ResponseCacheConfig>(bytes)
-                        && let Ok(eng) = aurora_extensions::response_cache::ResponseCacheEngine::new(cfg)
+                    if let Ok(cfg) = serde_json::from_slice::<
+                        aurora_extensions::response_cache::ResponseCacheConfig,
+                    >(bytes)
+                        && let Ok(eng) =
+                            aurora_extensions::response_cache::ResponseCacheEngine::new(cfg)
                     {
                         next.response_cache = Some(Arc::new(eng));
+                    }
+                }
+                AURORA_EXT_WAF_LITE => {
+                    if let Ok(eng) = WafLiteEngine::from_snapshot(bytes) {
+                        next.waf_lite = Some(Arc::new(eng));
                     }
                 }
                 _ => {}
@@ -324,6 +343,9 @@ pub extern "C" fn aurora_gateway_policy_sync() {
         }
         if next.response_cache.is_some() {
             active_mask |= 1 << AURORA_EXT_RESPONSE_CACHE;
+        }
+        if next.waf_lite.is_some() {
+            active_mask |= 1 << AURORA_EXT_WAF_LITE;
         }
 
         trie.insert(b"/", active_mask);
@@ -496,9 +518,11 @@ pub unsafe extern "C" fn aurora_gateway_extension_create(
             _ => 1,
         },
         AURORA_EXT_RESPONSE_COMPRESSION => match catch_unwind(AssertUnwindSafe(|| {
-            serde_json::from_slice::<aurora_extensions::response_compression::ResponseCompressionConfig>(bytes)
-                .map_err(|e| format!("parse: {e}"))
-                .and_then(aurora_extensions::response_compression::ResponseCompressionEngine::new)
+            serde_json::from_slice::<
+                aurora_extensions::response_compression::ResponseCompressionConfig,
+            >(bytes)
+            .map_err(|e| format!("parse: {e}"))
+            .and_then(aurora_extensions::response_compression::ResponseCompressionEngine::new)
         })) {
             Ok(Ok(engine)) => {
                 unsafe { *out = Box::into_raw(Box::new(engine)).cast() };

@@ -32,10 +32,13 @@ mod tests {
     fn test_timeout_policy() {
         let mut server = String::new();
         let mut has_server = false;
-        let config: Map<String, Value> = serde_json::from_str(r#"{
+        let config: Map<String, Value> = serde_json::from_str(
+            r#"{
             "connect_timeout_ms": 5000,
             "read_timeout_ms": 30000
-        }"#).unwrap();
+        }"#,
+        )
+        .unwrap();
 
         materialize(&config, &mut server, &mut has_server).unwrap();
         assert!(has_server);

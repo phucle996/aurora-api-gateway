@@ -22,6 +22,10 @@ use crate::response_compression::CompressionAlgorithm;
 
 const NUM_SHARDS: usize = 16;
 
+// ============================================================================
+// 1. CacheEntry & Multi-Variant Storage
+// ============================================================================
+
 /// Single cached HTTP response entry.
 #[derive(Debug)]
 pub struct CacheEntry {
@@ -100,6 +104,10 @@ impl CacheEntry {
     }
 }
 
+// ============================================================================
+// 2. ShardState Internal Data Structures
+// ============================================================================
+
 /// Internal state for a single shard.
 struct ShardState {
     entries: FxHashMap<String, Arc<CacheEntry>>,
@@ -116,6 +124,10 @@ impl ShardState {
         }
     }
 }
+
+// ============================================================================
+// 3. Sharded LRU Cache Management
+// ============================================================================
 
 /// Striped, memory-bounded LRU cache substrate.
 pub struct ShardedLruCache {
@@ -153,7 +165,9 @@ impl ShardedLruCache {
             let r = shard.read();
             let entry = r.entries.get(key)?;
             if !entry.is_expired(now_sec) {
-                entry.last_accessed_epoch_sec.store(now_sec, Ordering::Relaxed);
+                entry
+                    .last_accessed_epoch_sec
+                    .store(now_sec, Ordering::Relaxed);
                 return Some(entry.clone());
             }
         }

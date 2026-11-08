@@ -310,3 +310,115 @@ fn test_split_by_random() {
     };
     assert_eq!(engine.evaluate(&req_high, |_| None).upstream, "cluster_b");
 }
+
+#[test]
+fn test_numeric_user_id_fast_path() {
+    let json = r#"{
+        "schema_version": 1,
+        "rules": [
+            {
+                "id": "user-split",
+                "origin": "*",
+                "path_prefix": "/api",
+                "split_by": "header",
+                "header_name": "x-user-id",
+                "splits": [
+                    { "upstream": "v1_stable", "weight": 70 },
+                    { "upstream": "v2_canary", "weight": 30 }
+                ]
+            }
+        ]
+    }"#;
+    let engine = TrafficSplitEngine::from_snapshot(json.as_bytes()).expect("Valid policy");
+
+    let req = TrafficSplitEvalRequest {
+        origin: b"example.com",
+        path: b"/api/v1/orders",
+        client_ip: b"10.0.0.1",
+        random_seed: 0,
+    };
+
+    // user_id = 100025 -> 100025 % 100 = 25 (< 70) -> v1_stable
+    let d1 = engine.evaluate(&req, |h| {
+        if h == "x-user-id" {
+            Some(b"100025")
+        } else {
+            None
+        }
+    });
+    assert_eq!(d1.upstream, "v1_stable");
+
+    // user_id = 100085 -> 100085 % 100 = 85 (>= 70) -> v2_canary
+    let d2 = engine.evaluate(&req, |h| {
+        if h == "x-user-id" {
+            Some(b"100085")
+        } else {
+            None
+        }
+    });
+    assert_eq!(d2.upstream, "v2_canary");
+
+    // Alphanumeric user_id = "usr_alpha_99" -> deterministic SWAR FNV-1a hash
+    let d3 = engine.evaluate(&req, |h| {
+        if h == "x-user-id" {
+            Some(b"usr_alpha_99")
+        } else {
+            None
+        }
+    });
+    assert!(d3.matched);
+    assert!(d3.upstream == "v1_stable" || d3.upstream == "v2_canary");
+}
+
+#[test]
+fn test_cookie_based_traffic_split() {
+    let json = r#"{
+        "schema_version": 1,
+        "rules": [
+            {
+                "id": "cookie-split",
+                "origin": "*",
+                "path_prefix": "/shop",
+                "split_by": "cookie",
+                "cookie_name": "session_id",
+                "splits": [
+                    { "upstream": "shop_v1", "weight": 50 },
+                    { "upstream": "shop_v2", "weight": 50 }
+                ]
+            }
+        ]
+    }"#;
+    let engine = TrafficSplitEngine::from_snapshot(json.as_bytes()).expect("Valid policy");
+
+    let req = TrafficSplitEvalRequest {
+        origin: b"shop.com",
+        path: b"/shop/checkout",
+        client_ip: b"10.0.0.1",
+        random_seed: 0,
+    };
+
+    // Request with cookie header
+    let d1 = engine.evaluate(&req, |h| {
+        if h == "cookie" {
+            Some(b"theme=dark; session_id=sess_abcdef12345678; lang=vi")
+        } else {
+            None
+        }
+    });
+    assert!(d1.matched);
+    assert_eq!(d1.rule_id, "cookie-split");
+
+    // Replay with same session_id -> must be sticky!
+    let d2 = engine.evaluate(&req, |h| {
+        if h == "cookie" {
+            Some(b"session_id=sess_abcdef12345678")
+        } else {
+            None
+        }
+    });
+    assert_eq!(d1.upstream, d2.upstream, "Cookie stickiness must hold");
+
+    // Missing cookie -> falls back to client_ip
+    let d3 = engine.evaluate(&req, |_| None);
+    assert!(d3.matched);
+}

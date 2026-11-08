@@ -29,6 +29,58 @@ fn make_ctx<'a>(
 }
 
 #[test]
+fn test_policy_schema_and_validation() {
+    let mut config = ResponseCacheConfig::default();
+    assert_eq!(config.schema_version, 1);
+    assert_eq!(config.generation, 1);
+    assert!(config.validate().is_ok());
+
+    // Rejection on bad schema_version
+    config.schema_version = 2;
+    assert!(config.validate().is_err());
+    config.schema_version = 1;
+
+    // Rejection on bad generation
+    config.generation = 0;
+    assert!(config.validate().is_err());
+    config.generation = 1;
+
+    // Rejection on bad max_memory_mb
+    config.max_memory_mb = 2;
+    assert!(config.validate().is_err());
+    config.max_memory_mb = 256;
+
+    // Rejection on bad default_ttl_secs
+    config.default_ttl_secs = 0;
+    assert!(config.validate().is_err());
+    config.default_ttl_secs = 300;
+
+    // Rejection on bad max_body_bytes
+    config.max_body_bytes = 512;
+    assert!(config.validate().is_err());
+    config.max_body_bytes = 10 * 1024 * 1024;
+
+    // Rejection on empty methods
+    config.allowed_methods = vec![];
+    assert!(config.validate().is_err());
+    config.allowed_methods = vec!["GET".into()];
+
+    // Rejection on invalid status codes
+    config.allowed_status_codes = vec![999];
+    assert!(config.validate().is_err());
+    config.allowed_status_codes = vec![200];
+
+    // Rejection on invalid route prefix
+    config.routes_override = vec![RouteCacheOverride {
+        path_prefix: "invalid_no_slash".into(),
+        enabled: Some(true),
+        ttl_secs: None,
+        cache_key_headers: None,
+    }];
+    assert!(config.validate().is_err());
+}
+
+#[test]
 fn test_cache_key_sorting_and_filtering() {
     let config = ResponseCacheConfig {
         cache_key_query_params: Some(vec!["page".to_string(), "limit".to_string()]),
@@ -43,12 +95,7 @@ fn test_cache_key_sorting_and_filtering() {
         b"/users",
         b"utm_source=google&limit=20&page=2&fbclid=xyz",
     );
-    let key2 = engine.compute_cache_key(
-        b"GET",
-        b"api.example.com",
-        b"/users",
-        b"page=2&limit=20",
-    );
+    let key2 = engine.compute_cache_key(b"GET", b"api.example.com", b"/users", b"page=2&limit=20");
 
     assert_eq!(key1, "GET:api.example.com:/users?limit=20&page=2");
     assert_eq!(key1, key2);
@@ -88,9 +135,21 @@ fn test_cache_hit_and_miss_lifecycle() {
             assert_eq!(hit.status, 200);
             assert_eq!(hit.content_type, "application/json");
             assert_eq!(hit.body.as_slice(), body);
-            assert!(hit.headers.iter().any(|(k, v)| k == "X-Cache" && v == "HIT"));
-            assert!(hit.headers.iter().any(|(k, v)| k == "Vary" && v == "Accept-Encoding"));
-            assert!(hit.headers.iter().any(|(k, v)| k == "ETag" && v == "\"v1.0\""));
+            assert!(
+                hit.headers
+                    .iter()
+                    .any(|(k, v)| k == "X-Cache" && v == "HIT")
+            );
+            assert!(
+                hit.headers
+                    .iter()
+                    .any(|(k, v)| k == "Vary" && v == "Accept-Encoding")
+            );
+            assert!(
+                hit.headers
+                    .iter()
+                    .any(|(k, v)| k == "ETag" && v == "\"v1.0\"")
+            );
         }
         _ => panic!("expected Cache Hit"),
     }
@@ -122,7 +181,11 @@ fn test_multi_variant_compression_negotiation() {
     match engine.evaluate_access(&ctx_zstd, Some(b"gzip, deflate, br, zstd"), None) {
         CacheLookupResult::Hit(hit) => {
             assert_eq!(hit.algorithm, Some(CompressionAlgorithm::Zstd));
-            assert!(hit.headers.iter().any(|(k, v)| k == "Content-Encoding" && v == "zstd"));
+            assert!(
+                hit.headers
+                    .iter()
+                    .any(|(k, v)| k == "Content-Encoding" && v == "zstd")
+            );
             assert!(hit.body.len() < body.len());
         }
         _ => panic!("expected Hit with zstd"),
@@ -133,7 +196,11 @@ fn test_multi_variant_compression_negotiation() {
     match engine.evaluate_access(&ctx_br, Some(b"gzip, deflate, br"), None) {
         CacheLookupResult::Hit(hit) => {
             assert_eq!(hit.algorithm, Some(CompressionAlgorithm::Brotli));
-            assert!(hit.headers.iter().any(|(k, v)| k == "Content-Encoding" && v == "br"));
+            assert!(
+                hit.headers
+                    .iter()
+                    .any(|(k, v)| k == "Content-Encoding" && v == "br")
+            );
             assert!(hit.body.len() < body.len());
         }
         _ => panic!("expected Hit with br"),
@@ -144,7 +211,11 @@ fn test_multi_variant_compression_negotiation() {
     match engine.evaluate_access(&ctx_gzip, Some(b"gzip, deflate"), None) {
         CacheLookupResult::Hit(hit) => {
             assert_eq!(hit.algorithm, Some(CompressionAlgorithm::Gzip));
-            assert!(hit.headers.iter().any(|(k, v)| k == "Content-Encoding" && v == "gzip"));
+            assert!(
+                hit.headers
+                    .iter()
+                    .any(|(k, v)| k == "Content-Encoding" && v == "gzip")
+            );
             assert!(hit.body.len() < body.len());
         }
         _ => panic!("expected Hit with gzip"),
@@ -293,7 +364,8 @@ fn test_concurrent_lazy_compression_race_condition() {
     let config = ResponseCacheConfig::default();
     let engine = std::sync::Arc::new(ResponseCacheEngine::new(config).unwrap());
 
-    let payload = r#"{"users":[{"id":1,"name":"Alice"},{"id":2,"name":"Bob"}],"meta":{"total":2,"page":1}}"#;
+    let payload =
+        r#"{"users":[{"id":1,"name":"Alice"},{"id":2,"name":"Bob"}],"meta":{"total":2,"page":1}}"#;
     let body = payload.as_bytes();
 
     let record = UpstreamResponseRecord {

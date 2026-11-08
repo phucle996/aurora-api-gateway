@@ -59,28 +59,27 @@ pub unsafe extern "C" fn aurora_gateway_shadow_start(worker_id: u32) -> u32 {
         || std::env::var("AURORA_STD_LOG").as_deref() == Ok("true")
         || std::env::var("AURORA_STD_LOG_PATH").is_ok()
     {
-        aurora_extensions::register_telemetry_subscriber(
-            aurora_extensions::TELEMETRY_SUB_STD_LOG,
-        );
+        aurora_extensions::register_telemetry_subscriber(aurora_extensions::TELEMETRY_SUB_STD_LOG);
     }
 
     let explicit_path = CUSTOM_LOG_PATH.lock().ok().and_then(|l| l.clone());
-    let writer: Box<dyn std::io::Write + Send + 'static> = match explicit_path.or_else(|| std::env::var("AURORA_STD_LOG_PATH").ok()) {
-        Some(path) if path == "stdout" => Box::new(std::io::stdout()),
-        Some(path) if path == "stderr" => Box::new(std::io::stderr()),
-        Some(path) if !path.is_empty() => match std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-        {
-            Ok(file) => Box::new(file),
-            Err(e) => {
-                eprintln!("Failed to open log path {path}: {e}, falling back to stdout");
-                Box::new(std::io::stdout())
-            }
-        },
-        _ => Box::new(std::io::stdout()),
-    };
+    let writer: Box<dyn std::io::Write + Send + 'static> =
+        match explicit_path.or_else(|| std::env::var("AURORA_STD_LOG_PATH").ok()) {
+            Some(path) if path == "stdout" => Box::new(std::io::stdout()),
+            Some(path) if path == "stderr" => Box::new(std::io::stderr()),
+            Some(path) if !path.is_empty() => match std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+            {
+                Ok(file) => Box::new(file),
+                Err(e) => {
+                    eprintln!("Failed to open log path {path}: {e}, falling back to stdout");
+                    Box::new(std::io::stdout())
+                }
+            },
+            _ => Box::new(std::io::stdout()),
+        };
 
     let std_log_plugin = aurora_extensions::std_log::StdLogPlugin::new(writer, 256);
     let prom_plugin = aurora_extensions::PrometheusPlugin::new();

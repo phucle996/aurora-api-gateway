@@ -91,26 +91,28 @@ pub unsafe extern "C" fn aurora_gateway_phase_header_filter(
                 unsafe { *out_outcome = outcome };
                 return;
             }
-            let content_type = if input_ref.content_type_len > 0 && !input_ref.content_type.is_null() {
-                unsafe {
-                    std::str::from_utf8_unchecked(std::slice::from_raw_parts(
-                        input_ref.content_type,
-                        input_ref.content_type_len,
-                    ))
-                }
-            } else {
-                ""
-            };
-            let accept_encoding = if input_ref.accept_encoding_len > 0 && !input_ref.accept_encoding.is_null() {
-                unsafe {
-                    std::str::from_utf8_unchecked(std::slice::from_raw_parts(
-                        input_ref.accept_encoding,
-                        input_ref.accept_encoding_len,
-                    ))
-                }
-            } else {
-                ""
-            };
+            let content_type =
+                if input_ref.content_type_len > 0 && !input_ref.content_type.is_null() {
+                    unsafe {
+                        std::str::from_utf8_unchecked(std::slice::from_raw_parts(
+                            input_ref.content_type,
+                            input_ref.content_type_len,
+                        ))
+                    }
+                } else {
+                    ""
+                };
+            let accept_encoding =
+                if input_ref.accept_encoding_len > 0 && !input_ref.accept_encoding.is_null() {
+                    unsafe {
+                        std::str::from_utf8_unchecked(std::slice::from_raw_parts(
+                            input_ref.accept_encoding,
+                            input_ref.accept_encoding_len,
+                        ))
+                    }
+                } else {
+                    ""
+                };
 
             let dec = engine.evaluate_header(
                 path,
@@ -120,7 +122,8 @@ pub unsafe extern "C" fn aurora_gateway_phase_header_filter(
                 accept_encoding,
             );
 
-            if dec.action == aurora_extensions::response_compression::HeaderDecisionAction::Compress {
+            if dec.action == aurora_extensions::response_compression::HeaderDecisionAction::Compress
+            {
                 outcome.action = AURORA_FILTER_COMPRESS;
                 outcome.compression_algorithm = dec.algorithm as u32;
                 let enc_bytes = dec.content_encoding.as_bytes();

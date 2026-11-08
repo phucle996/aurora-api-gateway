@@ -22,28 +22,36 @@
 
 use super::cache::{CacheLookup, JwtCache};
 use super::crypto::{
-    JwtValidationConfig, VerifiedPayload, compile_keys, parse_algorithm, resolve_claim_path_cow,
-    valid_host, valid_path_prefix, verify_jwt,
+    JwtAlgorithm, JwtValidationConfig, VerifiedPayload, compile_keys, resolve_claim_path_cow,
+    verify_jwt,
 };
 use super::exclude::ExcludeMatcher;
-use super::types::{
-    CompiledClaimRule, JwtDecision, MAX_AUTHORIZATION_BYTES, MAX_CLAIM_RULES_PER_ORIGIN,
-    MAX_EXCLUDE_PATHS_PER_ORIGIN, MAX_FORWARD_HEADERS_PER_ORIGIN, MAX_JWT_ORIGINS,
-    MAX_JWT_POLICY_BYTES, OriginPolicy, PayloadFormat, Snapshot, TokenLocation,
+use super::policy::{
+    CompiledClaimRule, JwtDecision, JwtPolicy, MAX_AUTHORIZATION_BYTES,
+    MAX_FORWARD_HEADERS_PER_ORIGIN, MAX_JWT_POLICY_BYTES, OriginPolicy, PayloadFormat,
+    TokenLocation, TokenPrefixGuard,
 };
 use crate::radix::PathRadixTree;
 use crate::{Error, MAX_PATH_BYTES, host_matches, host_specificity};
 use regex::Regex;
-use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::SystemTime;
 
+#[cfg(test)]
+const BEARER_PREFIX_MASK: u64 = 0x00FF_FFFF_FFFF_FFFF;
+#[cfg(test)]
+const BEARER_PREFIX_U64: u64 = u64::from_le_bytes([b'B', b'e', b'a', b'r', b'e', b'r', b' ', 0]);
+
 /// Evaluates if an authorization header starts with exact case-sensitive "Bearer " (7 bytes)
-/// and contains non-empty token content within bounds.
+/// and contains non-empty token content within bounds using 1-cycle ALU bitwise comparison.
 #[cfg(test)]
 #[inline(always)]
 pub(crate) fn is_bearer_authorization(auth: &[u8]) -> bool {
-    auth.len() > 7 && auth.len() <= MAX_AUTHORIZATION_BYTES && auth.starts_with(b"Bearer ")
+    if auth.len() <= 7 || auth.len() > MAX_AUTHORIZATION_BYTES {
+        return false;
+    }
+    let chunk = u64::from_le_bytes(auth[..8].try_into().unwrap());
+    (chunk & BEARER_PREFIX_MASK) == BEARER_PREFIX_U64
 }
 
 /// Extracts a specific cookie value from an HTTP `Cookie` header zero-allocation using exact case matching.
@@ -79,7 +87,7 @@ pub(crate) fn extract_cookie_value<'a>(
                     break;
                 }
             }
-            if val.len() >= 2 && val.starts_with(b"\"") && val.ends_with(b"\"") {
+            if val.len() >= 2 && val[0] == b'"' && val[val.len() - 1] == b'"' {
                 val = &val[1..val.len() - 1];
             }
             return Some(val);
@@ -106,25 +114,14 @@ impl JwtEngine {
         if bytes.is_empty() || bytes.len() > MAX_JWT_POLICY_BYTES {
             return Err(Error::InvalidPolicy);
         }
-        let snapshot: Snapshot = serde_json::from_slice(bytes).map_err(|_| Error::InvalidPolicy)?;
-        let mut origins_list = snapshot.origins;
-        if snapshot.schema_version != 1
-            || snapshot.generation > i64::MAX as u64
-            || origins_list.is_empty()
-            || origins_list.len() > MAX_JWT_ORIGINS
-        {
+        let policy: JwtPolicy = serde_json::from_slice(bytes).map_err(|_| Error::InvalidPolicy)?;
+        if policy.generation > i64::MAX as u64 {
             return Err(Error::InvalidPolicy);
         }
+        // Strict invariant validation owned by policy schema
+        policy.validate().map_err(|_| Error::InvalidPolicy)?;
 
-        let mut ids = HashSet::with_capacity(origins_list.len());
-        for origin in &origins_list {
-            if origin.id.trim().is_empty()
-                || origin.id.len() > 128
-                || !ids.insert(origin.id.as_str())
-            {
-                return Err(Error::InvalidPolicy);
-            }
-        }
+        let mut origins_list = policy.origins;
         origins_list.sort_by(|a, b| {
             (a.priority, host_specificity(&a.host), a.id.as_str()).cmp(&(
                 b.priority,
@@ -134,19 +131,9 @@ impl JwtEngine {
         });
 
         let mut origins = PathRadixTree::new();
-        for (rank, mut origin) in origins_list.into_iter().enumerate() {
+        for (rank, origin) in origins_list.into_iter().enumerate() {
             let (token_location, token_prefix) = origin.compile_token_source()?;
             let host_bytes = origin.host.as_bytes().to_vec();
-            if !valid_host(&origin.host)
-                || !valid_path_prefix(&origin.path_prefix)
-                || origin.exclude_paths.len() > MAX_EXCLUDE_PATHS_PER_ORIGIN
-                || origin.issuer.len() > 512
-                || origin.audience.len() > 512
-                || origin.clock_skew_secs > 300
-            {
-                return Err(Error::InvalidPolicy);
-            }
-
             let exclude_matcher = ExcludeMatcher::compile(&origin.exclude_paths)?;
 
             let payload_format = match origin.payload_format.trim() {
@@ -155,13 +142,9 @@ impl JwtEngine {
                 _ => return Err(Error::InvalidPolicy),
             };
 
-            let alg = parse_algorithm(&origin.algorithm)?;
+            let alg = origin.algorithm.parse::<JwtAlgorithm>()?;
             let (primary_key, keys_by_kid) =
                 compile_keys(alg, &origin.secret, &origin.public_key_pem, &origin.keys)?;
-
-            if origin.claim_rules.len() > MAX_CLAIM_RULES_PER_ORIGIN {
-                return Err(Error::InvalidPolicy);
-            }
 
             let mut claim_rules = Vec::with_capacity(origin.claim_rules.len());
             for cr in origin.claim_rules {
@@ -246,8 +229,11 @@ impl JwtEngine {
                         client_key: r_cfg.tls.as_ref().and_then(|t| t.client_key_pem.clone()),
                     };
                     let timeout = std::time::Duration::from_millis(r_cfg.timeout_ms.clamp(5, 5000));
-                    let pool = crate::redis_pool::RedisPoolRegistry::global()
-                        .get_or_create(key, timeout, r_cfg.pool_size)?;
+                    let pool = crate::redis_pool::RedisPoolRegistry::global().get_or_create(
+                        key,
+                        timeout,
+                        r_cfg.pool_size,
+                    )?;
                     Some(pool)
                 } else {
                     None
@@ -289,13 +275,13 @@ impl JwtEngine {
                 claim_rules,
                 cache,
                 token_location,
-                token_prefix,
+                token_prefix: TokenPrefixGuard::compile(&token_prefix),
             };
             origins.insert(&prefix_bytes, IndexedOrigin { rank, policy });
         }
 
         Ok(Self {
-            generation: snapshot.generation,
+            generation: policy.generation,
             origins,
             empty_headers: super::cache::empty_forwarded_headers(),
         })
@@ -434,16 +420,16 @@ impl JwtEngine {
             }
         };
 
-        // Flat, branchless-optimized prefix check and raw token bounds guard
-        let p_bytes = origin.token_prefix.as_ref();
+        // 1-cycle ALU bitwise prefix comparison and raw token bounds guard
+        let p_guard = &origin.token_prefix;
         let raw_len = raw_token_bytes.len();
-        if raw_len <= p_bytes.len()
+        if raw_len <= p_guard.len
             || raw_len > MAX_AUTHORIZATION_BYTES
-            || !raw_token_bytes.starts_with(p_bytes)
+            || !p_guard.matches(raw_token_bytes)
         {
             return Ok(JwtDecision::Unauthorized);
         }
-        let token_bytes = &raw_token_bytes[p_bytes.len()..];
+        let token_bytes = &raw_token_bytes[p_guard.len..];
 
         // SIMD vector scan (AVX2/SSE) for whitespace characters across token slice
         if memchr::memchr3(b' ', b'\t', b'\n', token_bytes).is_some()
@@ -507,7 +493,10 @@ impl JwtEngine {
         // Check if token's JTI is revoked in negative cache
         let jti_hash = verified.jti.as_deref().map(JwtCache::hash_jti);
         if let Some(jti_h) = jti_hash
-            && origin.cache.as_ref().is_some_and(|c| c.is_negative(jti_h, now_epoch))
+            && origin
+                .cache
+                .as_ref()
+                .is_some_and(|c| c.is_negative(jti_h, now_epoch))
         {
             if let (Some(cache), Some(h)) = (&origin.cache, token_hash) {
                 cache.insert_negative(h, now_epoch);
@@ -523,21 +512,18 @@ impl JwtEngine {
         for cr in &origin.claim_rules {
             let extracted_val: Option<std::borrow::Cow<'_, str>> = match &verified.payload {
                 VerifiedPayload::Json(json) => resolve_claim_path_cow(json, &cr.payload_key),
-                VerifiedPayload::Raw(raw_str) => {
-                    cr.raw_extractor.as_ref().and_then(|re| {
-                        re.captures(raw_str).and_then(|caps| {
-                            caps.name("val")
-                                .or_else(|| caps.get(1))
-                                .or_else(|| caps.get(0))
-                                .map(|m| std::borrow::Cow::Borrowed(m.as_str()))
-                        })
+                VerifiedPayload::Raw(raw_str) => cr.raw_extractor.as_ref().and_then(|re| {
+                    re.captures(raw_str).and_then(|caps| {
+                        caps.name("val")
+                            .or_else(|| caps.get(1))
+                            .or_else(|| caps.get(0))
+                            .map(|m| std::borrow::Cow::Borrowed(m.as_str()))
                     })
-                }
+                }),
             };
 
-            let valid_val = extracted_val.filter(|v| {
-                cr.regex.as_ref().is_none_or(|re| re.is_match(v))
-            });
+            let valid_val =
+                extracted_val.filter(|v| cr.regex.as_ref().is_none_or(|re| re.is_match(v)));
 
             match valid_val {
                 Some(val_str) => {

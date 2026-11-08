@@ -59,6 +59,8 @@ crates/extensions/src/response-compression/
 
 | Trường | Kiểu Dữ Liệu | Mặc Định | Ranh Giới Hợp Lệ | Mô Tả Kỹ Thuật |
 | :--- | :--- | :--- | :--- | :--- |
+| `schema_version` | `integer` | `1` | `1` | Phiên bản schema chuẩn hóa của extension. |
+| `generation` | `integer` | `1` | `>= 1` | Thế hệ cấu hình đơn điệu tăng phục vụ hot-swap atomic RCU. |
 | `enabled` | `boolean` | `true` | `true`, `false` | Bật/tắt nén response toàn cục trên Gateway. |
 | `min_length` | `integer` | `1024` | `20 ..= 10485760` | Độ dài phản hồi tối thiểu tính theo byte để kích hoạt nén (tránh phình to payload nhỏ). |
 | `prefer_algorithms` | `array<string>` | `["zstd", "br", "gzip"]` | Token: `zstd`, `br`, `gzip` | Thứ tự ưu tiên thuật toán khi client hỗ trợ nhiều encoding. |
@@ -72,6 +74,8 @@ crates/extensions/src/response-compression/
 
 ```json
 {
+  "schema_version": 1,
+  "generation": 1001,
   "enabled": true,
   "min_length": 1024,
   "prefer_algorithms": ["zstd", "br", "gzip"],

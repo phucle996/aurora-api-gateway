@@ -86,9 +86,8 @@ pub unsafe extern "C" fn aurora_gateway_phase_cache_store(
         let mut headers = Vec::new();
         if !in_ref.etag.is_null()
             && in_ref.etag_len > 0
-            && let Ok(etag_str) = std::str::from_utf8(unsafe {
-                slice::from_raw_parts(in_ref.etag, in_ref.etag_len)
-            })
+            && let Ok(etag_str) =
+                std::str::from_utf8(unsafe { slice::from_raw_parts(in_ref.etag, in_ref.etag_len) })
         {
             headers.push(("ETag".to_string(), etag_str.to_string()));
         }

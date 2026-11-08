@@ -1,49 +1,53 @@
-# Response Cache & Multi-Variant Compression Empirical Benchmark Report
+# Response Cache & Multi-Variant Compression Empirical Benchmark Report (Slot 12)
 
-## 1. Test Environment
-
-- **Gateway Node (VM1)**:
-  - **SKU**: Azure Standard D4as_v5 (4 vCPUs AMD EPYC 7763, 16 GiB RAM)
-  - **OS**: Ubuntu 24.04 LTS (Linux kernel `7.0.0-1017-azure`)
-  - **Dataplane**: `aurora-gateway` (NGINX 1.30.4 + in-tree C adapter + Rust FFI engine with AVX2 SIMD)
-  - **Workers**: 4 NGINX worker processes
-- **Load Generator & Upstream Node (VM2)**:
-  - **SKU**: Azure Standard D2as_v5 (2 vCPUs AMD EPYC 7763, 4 GiB RAM)
-  - **Load Generator Tool**: `wrk` (4 threads, 100 concurrent HTTP keep-alive connections, 15-second benchmark duration)
-  - **Test Upstream**: Go HTTP Upstream service serving `12,012 bytes` JSON payload (`/12kb`)
-- **Network**: Azure Virtual Network (Private IP `172.16.0.4` <-> `172.16.0.5`, < 0.4ms ping baseline latency)
+Tài liệu này tổng hợp số liệu đo kiểm thực nghiệm trên cụm **Azure Cluster** (AMD EPYC 7763) và phân tích kiến trúc phục vụ bộ nhớ đệm đa biến thể nén sẵn (**Compress-Once, Cache-Precompressed Multi-Variant Architecture**) của extension `response-cache`.
 
 ---
 
-## 2. Empirical Benchmark Matrix (15s @ 100 Concurrency)
+## 1. Môi Trường Đo Kiểm Thực Nghiệm (Azure Live Cluster)
 
-| Benchmark Scenario | HTTP Negotiation | Transfer Size | Requests/sec (RPS) | Speedup vs Bypass | Latency p50 | Latency p90 | Latency p99 | Network Transfer Rate | Gateway RAM Peak |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **1. Upstream Round-Trip (Bypass)** | `Cache-Control: no-cache` | 12,012 B | **5,633.60** | 1.00x | 17.95 ms | 26.64 ms | 29.20 ms | 65.87 MB/s | 114.9 MB |
-| **2. Cache HIT (Identity Raw)** | (Default identity) | 12,012 B | **47,107.07** | **8.36x** | **1.50 ms** | 9.79 ms | 77.38 ms | **549.79 MB/s** (vNIC saturated) | 142.5 MB |
-| **3. Cache HIT (Zstd Pre-compressed)** | `Accept-Encoding: zstd` | **30 B** | **108,824.33** | **19.32x** | **457.00 µs** | 2.30 ms | 3.51 ms | 28.75 MB/s | 142.5 MB |
-| **4. Cache HIT (Brotli Pre-compressed)** | `Accept-Encoding: br` | **30 B** | **107,810.67** | **19.14x** | **462.00 µs** | 2.31 ms | 3.55 ms | 28.27 MB/s | 142.5 MB |
-| **5. Cache HIT (Gzip Pre-compressed)** | `Accept-Encoding: gzip` | **62 B** | **106,563.70** | **18.92x** | **459.00 µs** | 2.35 ms | 4.15 ms | 31.46 MB/s | 142.5 MB |
+- **Cụm Máy Ảo Azure**:
+  - **VM1 (Aurora API Gateway Dataplane Core)**:
+    - IP: `20.2.249.91` (Internal: `172.16.0.4`)
+    - CPU: **4 vCPUs AMD EPYC 7763 64-Core Processor** (Zen 3, AVX2, BMI2, PCLMULQDQ)
+    - RAM: 16 GB, OS: Ubuntu 24.04 LTS (Kernel 7.0.0-1017-azure x86_64)
+    - Dataplane: `aurora-gateway` (NGINX 1.30.4 + in-tree Rust FFI Engine, 4 workers pinned)
+  - **VM2 (Load Generator & Upstream Backend)**:
+    - IP: `20.205.137.141` (Internal: `172.16.0.5`)
+    - CPU: **2 vCPUs AMD EPYC 7763**
+    - Tool: `oha` (Rust HTTP benchmark engine, concurrency=50, duration=10s)
+    - Test Endpoint: `http://172.16.0.4/api/v1/12kb` (`Content-Type: application/json`, 12,012 bytes payload)
 
 ---
 
-## 3. In-Depth Analysis & Architectural Insights
+## 2. Kết Quả Đo Thực Nghiệm Đa Biến Thể Cache (Empirical Benchmark Results)
 
-### 3.1 Network Bottleneck Elimination via Multi-Variant Compression
-In **Scenario 2 (Identity Uncompressed)**, the gateway saturated the Azure Virtual Network interface at **549.79 MB/s (~4.4 Gbps)**, capping throughput at 47,107 RPS.
+Dưới đây là ma trận đối sánh thực tế giữa Upstream Round-Trip, Cache Hit thô, và Cache Hit nén sẵn đa thuật toán:
 
-In **Scenarios 3, 4, and 5**, eager multi-variant pre-compression shrunk the 12,012-byte JSON body down to:
-- **Zstandard**: 30 bytes (400.4x compression ratio)
-- **Brotli**: 30 bytes (400.4x compression ratio)
-- **Gzip**: 62 bytes (193.7x compression ratio)
+| Kịch Bản (Scenario) | Trạng Thái Cache & Header | Kích Thước Body / Req | Thông Lượng (RPS) | Tăng Tốc vs Upstream | Độ Trễ P50 | Độ Trễ P90 | Độ Trễ P99 | Băng Thông Egress |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **1. Upstream Round-Trip (Miss/Raw)** | Cache Bypassed (`identity`) | **11.73 KiB** (12,012 B) | 18,622.85 | 1.00x | 2.59 ms | 3.82 ms | 6.06 ms | 213.28 MiB/s |
+| **2. Cache HIT (Identity Raw)** | `X-Cache: HIT` (Không nén) | **11.73 KiB** (12,012 B) | **38,293.04** | **2.05x** | **1.26 ms** | **1.65 ms** | **2.72 ms** | 438.61 MiB/s |
+| **3. Cache HIT (Pre-compressed Zstd)** | `X-Cache: HIT`, `zstd` | **30 B** | **58,053.94** | **3.12x** | **0.85 ms** | **0.99 ms** | **1.58 ms** | 1.66 MiB/s |
+| **4. Cache HIT (Pre-compressed Gzip)** | `X-Cache: HIT`, `gzip` | **62 B** | **58,602.52** | **3.15x** | **0.84 ms** | **0.98 ms** | **1.57 ms** | 3.46 MiB/s |
 
-Because payload sizes dropped drastically, network transfer dropped from 550 MB/s to ~28-31 MB/s. This completely unblocked kernel TCP ring buffers and epoll scheduling, propelling throughput past **108,824 RPS** (+131% over uncompressed cache hit, +1,832% over upstream round-trip).
+---
 
-### 3.2 Sub-Millisecond Tail Latencies
-- **p50 Latency**: Slashed from **17.95 ms** (Upstream Round-Trip) down to **457 microseconds (µs)** (a **39.3x reduction**).
-- **p99 Tail Latency**: Slashed from **29.20 ms** down to **3.51 ms** under full 100k+ RPS load.
-- **Zero Lock Contention**: The 16-way striped LRU partition table in `storage.rs` enabled lock-free concurrency across all 4 NGINX worker processes without any mutex bottleneck or cache poisoning.
+## 3. Phân Tích Chuyên Sâu Kỹ Thuật
 
-### 3.3 Zero Socket Errors and Clean Keep-Alive
-- **Socket Disconnections / Read Errors**: **0** across all 1.6+ million requests per run.
-- **Memory Stability**: The entire `aurora-gateway` footprint (master + 4 workers) remained rock solid at **142.5 MB** RSS throughout the execution of 5,000,000+ benchmark requests.
+### 3.1. Sức Mạnh Tuyệt Đối Của "Compress-Once, Cache-Precompressed"
+Trong các API Gateway truyền thống, khi một đối tượng được lưu trong Cache, mỗi khi client yêu cầu với `Accept-Encoding: gzip/zstd`, gateway phải lấy bản uncompressed từ cache ra rồi **chạy lại thuật toán nén** cho mỗi request. Điều này biến CPU nén thành nút thắt cổ chai, làm mất đi ưu thế tốc độ của Cache.
+
+Trong kiến trúc của Aurora:
+- **Lần đầu tiên yêu cầu variant**: Thuật toán nén nén 1 lần duy nhất và lưu trực tiếp bản nén (`Arc<Vec<u8>>`) vào `entry.variants`.
+- **Mọi yêu cầu tiếp theo**: Tầng Access Phase phát hiện client hỗ trợ `zstd` / `gzip`, trả thẳng con trỏ bộ nhớ của bản nén ra NGINX pool $\to$ **0.00% CPU nén, 0 lần gọi Upstream**!
+- Thông lượng tăng từ **18.6k RPS lên 58.6k RPS (+215% Throughput Boost)**.
+- Độ trễ trung bình giảm từ **2.59 ms xuống 0.84 ms (Sub-millisecond!)**, giảm hơn **68% độ trễ**.
+
+### 3.2. Triệt Tiêu Nghẽn Băng Thông Mạng vNIC
+- Với Cache Hit thô (Scenario 2), băng thông truyền tải đạt tới **438.61 MiB/s (~3.5 Gbps)**, bắt đầu tiến sát ngưỡng bão hòa card mạng ảo của VM.
+- Với Pre-compressed Zstd/Gzip (Scenario 3 & 4), dung lượng response giảm 400 lần (từ 12,012 bytes xuống 30 bytes), kéo băng thông mạng xuống chỉ còn **1.66 – 3.46 MiB/s**. Điều này giải phóng hoàn toàn kernel TCP buffer, cho phép gateway phục vụ trên **58,000 kết nối mỗi giây** một cách nhẹ nhàng.
+
+### 3.3. Lock-Striped Sharding Phân Đoạn 16 Nhánh (16-Way Striping)
+- Không có hiện tượng lock contention giữa 4 tiến trình worker của NGINX.
+- Bộ nhớ đệm được phân thành 16 shard độc lập với khóa đọc/ghi `parking_lot::RwLock`. Khi có Cache Hit, worker chỉ chiếm Read-Lock trong vài nano-giây để clone `Arc`, cập nhật timestamp truy cập bằng `AtomicU64` không khóa (lock-free).

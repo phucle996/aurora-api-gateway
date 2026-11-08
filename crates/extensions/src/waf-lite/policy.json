@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "generation": 1001,
+  "enabled": true,
+  "mode": "block",
+  "inspect_headers": true,
+  "patterns": [
+    "union select",
+    "' or 1=1",
+    "' or '1'='1",
+    "sleep(",
+    "benchmark(",
+    "<script",
+    "javascript:",
+    "onerror=",
+    "onload=",
+    "<svg/onload",
+    "<iframe",
+    "../..",
+    "..\\..\\",
+    "/bin/sh",
+    "/bin/bash",
+    "cmd.exe",
+    "powershell.exe",
+    "${jndi:ldap:",
+    "${jndi:rmi:",
+    "${jndi:dns:",
+    "class.module.classloader",
+    "classloader.resources",
+    "/actuator/heapdump",
+    "/actuator/env",
+    "ognl:",
+    "#_memberAccess",
+    "_ignition/execute-solution",
+    "think\\app/invokefunction",
+    "think\\container/invokefunction",
+    "php-cgi.exe?%add+",
+    "auto_prepend_file",
+    "wp-config.php",
+    "xmlrpc.php",
+    "__proto__",
+    "constructor.prototype",
+    "{{config.items()}}",
+    "__subclasses__()",
+    "/.env",
+    "/.git/config",
+    "/etc/passwd",
+    "/etc/shadow",
+    "169.254.169.254",
+    "metadata.google.internal"
+  ],
+  "rules": [
+    {
+      "pattern": "sqlmap",
+      "description": "SQL injection automated tool"
+    },
+    {
+      "pattern": "nikto",
+      "description": "Web scanner"
+    }
+  ],
+  "whitelist_paths": [
+    "/healthz",
+    "/metrics",
+    "/ready"
+  ]
+}

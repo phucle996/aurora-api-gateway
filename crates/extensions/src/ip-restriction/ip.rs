@@ -14,38 +14,40 @@ pub enum ParsedIp {
 
 /// Parses an ASCII byte slice into a 32-bit big-endian integer representing IPv4.
 /// Returns `None` if the input is not a valid dotted-decimal IPv4 address.
+///
+/// Uses pure CPU register bitwise shifting: `acc = (acc << 8) | octet;`
+/// completely eliminating stack memory stores, array indexing, and bounds checks.
 #[inline(always)]
 pub fn parse_ipv4_u32(bytes: &[u8]) -> Option<u32> {
     if bytes.len() < 7 || bytes.len() > 15 {
         return None;
     }
-    let mut octets = [0u8; 4];
-    let mut octet_idx = 0;
-    let mut val = 0u32;
+    let mut acc = 0u32;
+    let mut octet = 0u32;
+    let mut dots = 0;
     let mut digits = 0;
 
     for &b in bytes {
         if b == b'.' {
-            if digits == 0 || digits > 3 || val > 255 || octet_idx >= 3 {
+            if digits == 0 || digits > 3 || octet > 255 || dots >= 3 {
                 return None;
             }
-            octets[octet_idx] = val as u8;
-            octet_idx += 1;
-            val = 0;
+            acc = (acc << 8) | octet;
+            octet = 0;
             digits = 0;
+            dots += 1;
         } else if b.is_ascii_digit() {
-            val = val * 10 + (b - b'0') as u32;
+            octet = octet * 10 + (b - b'0') as u32;
             digits += 1;
         } else {
             return None;
         }
     }
 
-    if digits == 0 || digits > 3 || val > 255 || octet_idx != 3 {
+    if digits == 0 || digits > 3 || octet > 255 || dots != 3 {
         return None;
     }
-    octets[3] = val as u8;
-    Some(u32::from_be_bytes(octets))
+    Some((acc << 8) | octet)
 }
 
 /// Parses an incoming client IP byte slice into `ParsedIp` (IPv4 `u32` or IPv6 `u128`).
@@ -57,7 +59,14 @@ pub fn parse_client_ip(bytes: &[u8]) -> Option<ParsedIp> {
         return Some(ParsedIp::V4(v4));
     }
 
-    // 2. IPv6 / IPv4-mapped IPv6 parsing
+    // 2. Fast-path: IPv4-mapped IPv6 (e.g. ::ffff:10.5.5.5)
+    if (bytes.starts_with(b"::ffff:") || bytes.starts_with(b"::FFFF:"))
+        && let Some(v4) = parse_ipv4_u32(&bytes[7..])
+    {
+        return Some(ParsedIp::V4(v4));
+    }
+
+    // 3. IPv6 / standard parsing fallback
     let s = std::str::from_utf8(bytes).ok()?;
     match IpAddr::from_str(s).ok()? {
         IpAddr::V4(v4) => Some(ParsedIp::V4(u32::from(v4))),

@@ -41,9 +41,18 @@ fn test_swar_slot_parser() {
 #[test]
 fn test_extract_cookie_value() {
     let cookie = b"session=abc123; Deploy_Slot=green; tracking=xyz";
-    assert_eq!(extract_cookie_value(cookie, b"deploy_slot"), Some(&b"green"[..]));
-    assert_eq!(extract_cookie_value(cookie, b"DEPLOY_SLOT"), Some(&b"green"[..]));
-    assert_eq!(extract_cookie_value(cookie, b"session"), Some(&b"abc123"[..]));
+    assert_eq!(
+        extract_cookie_value(cookie, b"deploy_slot"),
+        Some(&b"green"[..])
+    );
+    assert_eq!(
+        extract_cookie_value(cookie, b"DEPLOY_SLOT"),
+        Some(&b"green"[..])
+    );
+    assert_eq!(
+        extract_cookie_value(cookie, b"session"),
+        Some(&b"abc123"[..])
+    );
     assert_eq!(extract_cookie_value(cookie, b"not_found"), None);
     assert_eq!(extract_cookie_value(cookie, b""), None);
 }
@@ -51,8 +60,14 @@ fn test_extract_cookie_value() {
 #[test]
 fn test_extract_query_value() {
     let query = b"foo=bar&Deploy_Slot=green&baz=123";
-    assert_eq!(extract_query_value(query, b"deploy_slot"), Some(&b"green"[..]));
-    assert_eq!(extract_query_value(query, b"DEPLOY_SLOT"), Some(&b"green"[..]));
+    assert_eq!(
+        extract_query_value(query, b"deploy_slot"),
+        Some(&b"green"[..])
+    );
+    assert_eq!(
+        extract_query_value(query, b"DEPLOY_SLOT"),
+        Some(&b"green"[..])
+    );
     assert_eq!(extract_query_value(query, b"baz"), Some(&b"123"[..]));
     assert_eq!(extract_query_value(query, b"not_found"), None);
 }
@@ -65,17 +80,25 @@ fn test_verify_preview_secret() {
 
     // Header check
     assert_eq!(
-        verify_preview_secret(secret_hash, Some(secret_bytes), Some("x-preview-secret"), b"", &|k| {
-            (k == "x-preview-secret").then_some(b"top-secret-2026")
-        }),
+        verify_preview_secret(
+            secret_hash,
+            Some(secret_bytes),
+            Some("x-preview-secret"),
+            b"",
+            &|k| { (k == "x-preview-secret").then_some(b"top-secret-2026") }
+        ),
         1
     );
 
     // Cookie check
     assert_eq!(
-        verify_preview_secret(secret_hash, Some(secret_bytes), Some("x-preview-secret"), b"", &|k| {
-            (k == "cookie").then_some(b"preview_secret=top-secret-2026")
-        }),
+        verify_preview_secret(
+            secret_hash,
+            Some(secret_bytes),
+            Some("x-preview-secret"),
+            b"",
+            &|k| { (k == "cookie").then_some(b"preview_secret=top-secret-2026") }
+        ),
         1
     );
 
@@ -93,9 +116,13 @@ fn test_verify_preview_secret() {
 
     // Wrong secret -> 0
     assert_eq!(
-        verify_preview_secret(secret_hash, Some(secret_bytes), Some("x-preview-secret"), b"", &|k| {
-            (k == "x-preview-secret").then_some(b"wrong-key")
-        }),
+        verify_preview_secret(
+            secret_hash,
+            Some(secret_bytes),
+            Some("x-preview-secret"),
+            b"",
+            &|k| { (k == "x-preview-secret").then_some(b"wrong-key") }
+        ),
         0
     );
 
@@ -254,7 +281,10 @@ fn test_default_active_blue_slot() {
     assert_eq!(d.upstream, "app_blue");
     assert_eq!(d.active_slot, "blue");
     assert!(!d.is_header_override);
-    assert_eq!(d.upstream_headers, &[("x-slot".to_string(), "blue".to_string())]);
+    assert_eq!(
+        d.upstream_headers,
+        &[("x-slot".to_string(), "blue".to_string())]
+    );
 }
 
 #[test]
@@ -271,7 +301,10 @@ fn test_active_green_slot() {
     assert_eq!(d.upstream, "app_green");
     assert_eq!(d.active_slot, "green");
     assert!(!d.is_header_override);
-    assert_eq!(d.upstream_headers, &[("x-slot".to_string(), "green".to_string())]);
+    assert_eq!(
+        d.upstream_headers,
+        &[("x-slot".to_string(), "green".to_string())]
+    );
 }
 
 #[test]

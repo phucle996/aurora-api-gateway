@@ -25,7 +25,8 @@ pub const AURORA_EXT_REQUEST_MIRROR: u32 = 9;
 pub const AURORA_EXT_REQUEST_TERMINATION: u32 = 10;
 pub const AURORA_EXT_RESPONSE_COMPRESSION: u32 = 11;
 pub const AURORA_EXT_RESPONSE_CACHE: u32 = 12;
-pub const AURORA_EXT_COUNT: usize = 13;
+pub const AURORA_EXT_WAF_LITE: u32 = 13;
+pub const AURORA_EXT_COUNT: usize = 14;
 pub const AURORA_SLOT_ROUTE_MASKS: u32 = 15;
 pub const POLICY_MAX_SLOTS: usize = 16;
 

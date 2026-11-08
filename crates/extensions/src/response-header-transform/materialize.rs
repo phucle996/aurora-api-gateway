@@ -57,9 +57,7 @@ pub fn materialize(
             if !is_valid_header_name(&name) {
                 return Err(format!("header name {name:?} is invalid"));
             }
-            server.push_str(&format!(
-                "proxy_hide_header {name};\n"
-            ));
+            server.push_str(&format!("proxy_hide_header {name};\n"));
             *has_server = true;
         }
     }
@@ -74,10 +72,13 @@ mod tests {
     fn test_response_header_transform() {
         let mut server = String::new();
         let mut has_server = false;
-        let config: Map<String, Value> = serde_json::from_str(r#"{
+        let config: Map<String, Value> = serde_json::from_str(
+            r#"{
             "add_headers": { "X-Frame-Options": "DENY" },
             "remove_headers": ["Server"]
-        }"#).unwrap();
+        }"#,
+        )
+        .unwrap();
 
         materialize(&config, &mut server, &mut has_server).unwrap();
         assert!(has_server);

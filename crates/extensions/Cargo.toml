@@ -6,54 +6,6 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
-[[bench]]
-name = "rate_limit_local"
-harness = false
-
-[[bench]]
-name = "jwt_evaluate"
-harness = false
-
-[[bench]]
-name = "conn_limit_local"
-harness = false
-
-[[bench]]
-name = "resource_limit"
-harness = false
-
-[[bench]]
-name = "traffic_shaper"
-harness = false
-
-[[bench]]
-name = "traffic_split"
-harness = false
-
-[[bench]]
-name = "canary_release"
-harness = false
-
-[[bench]]
-name = "blue_green"
-harness = false
-
-[[bench]]
-name = "request_mirror"
-harness = false
-
-[[bench]]
-name = "request_termination"
-harness = false
-
-[[bench]]
-name = "radix_vs_linear"
-harness = false
-
-[[bench]]
-name = "ip_restriction"
-harness = false
-
 [dependencies]
 aurora-engine = { path = "../engine" }
 tokio = { version = "1", default-features = false, features = ["rt", "sync", "time", "macros"] }
@@ -66,6 +18,7 @@ regex = "1"
 redis = { version = "1.7.0", features = ["tls-rustls"] }
 base64 = "0.22"
 memchr = "2"
+aho-corasick = "1.1"
 rustc-hash = "2.1"
 parking_lot = "0.12"
 ring = "0.17"

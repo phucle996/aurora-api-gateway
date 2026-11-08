@@ -8,7 +8,7 @@ pub mod upstream;
 mod tests;
 
 pub use extensions::{
-    compile_route_masks_into_shm, render_extensions, ExtensionInstanceSpec, RenderedExtensions,
+    ExtensionInstanceSpec, RenderedExtensions, compile_route_masks_into_shm, render_extensions,
 };
 pub use l4::generate_l4_streams_conf;
 pub use route as routing;

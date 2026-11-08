@@ -24,8 +24,15 @@ pub fn materialize(
     }
 
     // Check if enabled (either root 'enabled' or 'prometheus.enabled')
-    let enabled = config.get("enabled").and_then(Value::as_bool)
-        .or_else(|| config.get("prometheus").and_then(Value::as_object).and_then(|p| p.get("enabled").and_then(Value::as_bool)))
+    let enabled = config
+        .get("enabled")
+        .and_then(Value::as_bool)
+        .or_else(|| {
+            config
+                .get("prometheus")
+                .and_then(Value::as_object)
+                .and_then(|p| p.get("enabled").and_then(Value::as_bool))
+        })
         .unwrap_or(true);
 
     if !enabled {
@@ -48,8 +55,15 @@ pub fn materialize(
     }
 
     // 2. Path resolution (defaults to /metrics)
-    let path = config.get("path").and_then(Value::as_str)
-        .or_else(|| config.get("prometheus").and_then(Value::as_object).and_then(|p| p.get("path").and_then(Value::as_str)))
+    let path = config
+        .get("path")
+        .and_then(Value::as_str)
+        .or_else(|| {
+            config
+                .get("prometheus")
+                .and_then(Value::as_object)
+                .and_then(|p| p.get("path").and_then(Value::as_str))
+        })
         .unwrap_or("/metrics");
 
     if !path.starts_with('/') || path.contains([' ', ';', '{', '}', '\r', '\n', '\0']) {
@@ -63,7 +77,9 @@ pub fn materialize(
         .get("allowlist")
         .or_else(|| config.get("allowed_cidrs"))
         .or_else(|| {
-            config.get("prometheus").and_then(Value::as_object)
+            config
+                .get("prometheus")
+                .and_then(Value::as_object)
                 .and_then(|p| p.get("allowlist").or_else(|| p.get("allowed_cidrs")))
         });
 
@@ -140,10 +156,13 @@ mod tests {
         let mut http = String::new();
         let mut has_http = false;
         let mut count = 0;
-        let config: Map<String, Value> = serde_json::from_str(r#"{
+        let config: Map<String, Value> = serde_json::from_str(
+            r#"{
             "port": 9145,
             "allowlist": ["127.0.0.1", "10.0.0.0/8"]
-        }"#).unwrap();
+        }"#,
+        )
+        .unwrap();
 
         materialize("prom-1", &config, &mut http, &mut has_http, &mut count).unwrap();
         assert!(has_http);

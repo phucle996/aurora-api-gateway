@@ -1,14 +1,23 @@
+//! Core In-Process Rate Limiting Engine (Slot 2).
+//!
+//! Orchestrates the high-performance rate limiting pipeline:
+//! Radix tree route matching -> SWAR partition hash -> Fixed-point atomic counter
+//! -> Single-pass zero-allocation 429 response renderer
+//! -> Asynchronous Dual-Trigger Batch Sync with Redis.
+
+use super::algorithm::build_exceeded_decision;
+use super::policy::{
+    ActionOnExceeded, CompiledHeader, CompiledRule, LimitBy, MAX_RATE_LIMIT_POLICY_BYTES,
+    NUM_SHARDS, OnErrorAction, RateLimitDecision, RateLimitMode, RateLimitPolicy, ResolvedHeader,
+};
 use super::redis::RedisRateLimiter;
 use super::shard::{Shard, ShardConfig, hash_key, insert_shard_entry};
-use super::types::{
-    ActionOnExceeded, CompiledHeader, CompiledRule, LimitBy, MAX_RATE_LIMIT_POLICY_BYTES,
-    MAX_RATE_LIMIT_RULES, NUM_SHARDS, OnErrorAction, RateLimitDecision, RateLimitMode,
-    ResolvedHeader, Snapshot,
-};
 use crate::radix::PathRadixTree;
 use crate::{Error, MAX_PATH_BYTES, host_matches, host_specificity};
-use std::sync::Mutex;
+use std::sync::atomic::Ordering;
+use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
+use tokio::sync::Notify;
 
 pub(crate) struct IndexedRule {
     pub(crate) idx: usize,
@@ -16,17 +25,21 @@ pub(crate) struct IndexedRule {
 }
 
 #[repr(align(64))]
-struct CacheAligned<T>(pub T);
+pub struct CacheAligned<T>(pub T);
 
+/// Active in-memory Rate Limiting Engine.
 pub struct RateLimitEngine {
     generation: u64,
     mode: RateLimitMode,
     shard_cfg: ShardConfig,
     rules: PathRadixTree<IndexedRule>,
-    shards: Vec<CacheAligned<Mutex<Shard>>>,
+    pub(crate) shards: Arc<Vec<CacheAligned<Mutex<Shard>>>>,
     redis: Option<RedisRateLimiter>,
+    early_flush_notify: Arc<Notify>,
+    is_async_batch_sync: bool,
 }
 
+#[inline]
 fn now_epoch_secs_and_ms() -> (u64, u64) {
     let now = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
@@ -34,12 +47,33 @@ fn now_epoch_secs_and_ms() -> (u64, u64) {
     (now.as_secs(), now.as_millis() as u64)
 }
 
-fn render_template(template: &str, vars: &[(&str, &str)]) -> String {
-    let mut result = template.to_string();
-    for &(var, val) in vars {
-        result = result.replace(var, val);
+/// Single-pass $O(N)$ template renderer. Replaces variables with zero intermediate allocations.
+fn render_template_single_pass(template: &str, vars: &[(&str, &str)]) -> String {
+    let mut out = String::with_capacity(template.len().saturating_add(64));
+    let bytes = template.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'$' {
+            let rest = &template[i..];
+            let mut matched = false;
+            for &(var, val) in vars {
+                if rest.starts_with(var) {
+                    out.push_str(val);
+                    i += var.len();
+                    matched = true;
+                    break;
+                }
+            }
+            if !matched {
+                out.push('$');
+                i += 1;
+            }
+        } else {
+            out.push(bytes[i] as char);
+            i += 1;
+        }
     }
-    result
+    out
 }
 
 fn apply_custom_response(decision: &mut RateLimitDecision, rule: &CompiledRule) {
@@ -72,92 +106,68 @@ fn apply_custom_response(decision: &mut RateLimitDecision, rule: &CompiledRule) 
         ("$custom_reason", custom_reason_str),
     ];
 
-    // 1. Render custom response headers
+    // 1. Render custom response headers in single pass
     if !rule.response_headers.is_empty() {
         let mut headers = Vec::with_capacity(rule.response_headers.len());
         for h in &rule.response_headers {
-            let rendered_name = render_template(&h.name, &vars);
-            let rendered_value = render_template(&h.value, &vars);
-            if !rendered_name.is_empty() {
-                headers.push(ResolvedHeader {
-                    name: rendered_name,
-                    value: rendered_value,
-                });
-            }
+            let rendered_name = render_template_single_pass(&h.name, &vars);
+            let rendered_value = render_template_single_pass(&h.value, &vars);
+            headers.push(ResolvedHeader {
+                name: rendered_name,
+                value: rendered_value,
+            });
         }
         decision.headers = headers;
     }
 
-    // 2. Render custom message body
-    if let Some(ref msg_tmpl) = rule.custom_message {
-        let rendered_body = render_template(msg_tmpl, &vars);
+    // 2. Render custom response body in single pass
+    if let Some(ref msg) = rule.custom_message {
+        let rendered_body = render_template_single_pass(msg, &vars);
         decision.body = Some(rendered_body.into_bytes());
-    } else if let Some(reason) = decision.custom_reason.as_deref().filter(|s| !s.is_empty()) {
-        decision.body = Some(reason.as_bytes().to_vec());
     }
 }
 
 impl RateLimitEngine {
+    /// Deserializes, validates, and initializes RateLimitEngine from raw JSON bytes.
     pub fn from_snapshot(bytes: &[u8]) -> Result<Self, Error> {
         if bytes.is_empty() || bytes.len() > MAX_RATE_LIMIT_POLICY_BYTES {
             return Err(Error::InvalidPolicy);
         }
-        let mut snapshot: Snapshot =
+        let policy: RateLimitPolicy =
             serde_json::from_slice(bytes).map_err(|_| Error::InvalidPolicy)?;
-        if snapshot.schema_version != 1
-            || snapshot.generation > i64::MAX as u64
-            || snapshot.rules.is_empty()
-            || snapshot.rules.len() > MAX_RATE_LIMIT_RULES
-        {
-            return Err(Error::InvalidPolicy);
-        }
+        policy.validate().map_err(|_| Error::InvalidPolicy)?;
+        Self::from_policy(&policy)
+    }
 
-        // Memory budget bounds: strictly enforce without clamping or silent shrinking
-        if snapshot.memory_size_mb == 0
-            || snapshot.memory_size_mb > 1024
-            || snapshot.max_keys < 16
-            || snapshot.max_keys > 5_000_000
-        {
-            return Err(Error::InvalidPolicy);
-        }
-
-        let mb_keys = (snapshot.memory_size_mb as usize * 1024 * 1024) / 128;
-        if snapshot.max_keys > mb_keys {
-            return Err(Error::InvalidPolicy);
-        }
-
-        let total_max_keys = snapshot.max_keys;
+    /// Compiles an active `RateLimitEngine` from a validated `RateLimitPolicy`.
+    pub fn from_policy(policy: &RateLimitPolicy) -> Result<Self, Error> {
+        let total_max_keys = policy.max_keys;
         let max_keys_per_shard = total_max_keys / NUM_SHARDS;
         if max_keys_per_shard == 0 {
             return Err(Error::InvalidPolicy);
         }
 
-        let mut ids = std::collections::HashSet::with_capacity(snapshot.rules.len());
-        for rule in &snapshot.rules {
-            if rule.id.trim().is_empty() || rule.id.len() > 128 || !ids.insert(rule.id.clone()) {
-                return Err(Error::InvalidPolicy);
-            }
-        }
+        let threshold_percent = policy
+            .redis
+            .as_ref()
+            .map(|r| r.threshold_percent)
+            .unwrap_or(20);
+        let min_delta = policy
+            .redis
+            .as_ref()
+            .map(|r| r.min_delta_threshold)
+            .unwrap_or(5);
+        let max_delta = policy
+            .redis
+            .as_ref()
+            .map(|r| r.max_delta_threshold)
+            .unwrap_or(100);
 
-        snapshot
-            .rules
-            .sort_by_key(|r| (r.priority, host_specificity(&r.host), r.id.clone()));
+        let mut sorted_rules = policy.rules.clone();
+        sorted_rules.sort_by_key(|r| (r.priority, host_specificity(&r.host), r.id.clone()));
 
-        let mut rules = Vec::with_capacity(snapshot.rules.len());
-        for rule in snapshot.rules {
-            let host_valid = if rule.host == "*" {
-                true
-            } else if let Some(sub) = rule.host.strip_prefix("*.") {
-                !sub.is_empty()
-                    && sub
-                        .bytes()
-                        .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
-            } else {
-                rule.host
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
-            };
-
+        let mut compiled_rules = Vec::with_capacity(sorted_rules.len());
+        for rule in sorted_rules {
             let rejected_code = match rule.rejected_code {
                 Some(code) if (200..=599).contains(&code) => code,
                 Some(_) => return Err(Error::InvalidPolicy),
@@ -169,37 +179,10 @@ impl RateLimitEngine {
                 },
             };
 
-            if rule.rate == 0
-                || rule.period_secs == 0
-                || rule.period_secs > 86400
-                || !host_valid
-                || rule.host.is_empty()
-                || rule.host.len() > 253
-                || !rule.path_prefix.starts_with('/')
-                || rule.path_prefix.len() > 8192
-                || rule.path_prefix.bytes().any(|b| b <= 32 || b >= 127)
-            {
-                return Err(Error::InvalidPolicy);
-            }
-
-            if rule
-                .custom_message
-                .as_deref()
-                .is_some_and(|msg| msg.len() > 2048)
-            {
-                return Err(Error::InvalidPolicy);
-            }
-
             let response_headers = match rule.response_headers {
                 Some(headers) => {
-                    if headers.len() > 8 {
-                        return Err(Error::InvalidPolicy);
-                    }
                     let mut compiled = Vec::with_capacity(headers.len());
                     for h in headers {
-                        if h.name.trim().is_empty() || h.name.len() > 64 || h.value.len() > 256 {
-                            return Err(Error::InvalidPolicy);
-                        }
                         compiled.push(CompiledHeader {
                             name: h.name,
                             value: h.value,
@@ -220,26 +203,20 @@ impl RateLimitEngine {
                         .map(|s| s.trim().to_ascii_lowercase())
                         .filter(|s| !s.is_empty())
                         .ok_or(Error::InvalidPolicy)?;
-                    if h_name.len() > 64
-                        || !h_name
-                            .bytes()
-                            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-                    {
-                        return Err(Error::InvalidPolicy);
-                    }
                     (LimitBy::Header, Some(h_name))
                 }
                 _ => return Err(Error::InvalidPolicy),
             };
 
             let burst = match rule.burst {
-                Some(0) => return Err(Error::InvalidPolicy),
-                Some(b) if b < rule.rate => return Err(Error::InvalidPolicy),
                 Some(b) => b,
                 None => rule.rate,
             };
 
-            rules.push(CompiledRule {
+            let calc_delta = ((rule.rate * threshold_percent as u64) / 100) as u32;
+            let emergency_delta_threshold = calc_delta.clamp(min_delta, max_delta);
+
+            compiled_rules.push(CompiledRule {
                 id: rule.id,
                 host: rule.host.into_bytes(),
                 path_prefix: rule.path_prefix.into_bytes(),
@@ -252,6 +229,7 @@ impl RateLimitEngine {
                 rejected_code,
                 custom_message: rule.custom_message,
                 response_headers,
+                emergency_delta_threshold,
             });
         }
 
@@ -259,34 +237,64 @@ impl RateLimitEngine {
         for _ in 0..NUM_SHARDS {
             shards.push(CacheAligned(Mutex::new(Shard::new())));
         }
+        let shards = Arc::new(shards);
+        let early_flush_notify = Arc::new(Notify::new());
 
-        let redis = if snapshot.mode == RateLimitMode::Distributed {
-            let redis_cfg = snapshot.redis.as_ref().ok_or(Error::InvalidPolicy)?;
-            Some(RedisRateLimiter::new(redis_cfg, snapshot.algorithm)?)
+        let redis = if policy.mode == RateLimitMode::Distributed {
+            let redis_cfg = policy.redis.as_ref().ok_or(Error::InvalidPolicy)?;
+            Some(RedisRateLimiter::new(redis_cfg, policy.algorithm)?)
         } else {
             None
         };
 
+        let sync_interval_ms = policy
+            .redis
+            .as_ref()
+            .map(|r| r.sync_interval_ms)
+            .unwrap_or(0);
+        let is_async_batch_sync = policy.mode == RateLimitMode::Distributed && sync_interval_ms > 0;
+
+        // Dispatch background shadow sync worker if async batch sync is active
+        if is_async_batch_sync && let Some(ref r) = redis {
+            let shards_clone = Arc::clone(&shards);
+            let pool_clone = Arc::clone(&r.pool);
+            let notify_clone = Arc::clone(&early_flush_notify);
+            let sync_interval = std::time::Duration::from_millis(sync_interval_ms);
+
+            let _ = aurora_engine::shadow::try_dispatch_shadow(Box::pin(async move {
+                super::redis_sync::run_rate_limit_redis_shadow_sync(
+                    shards_clone,
+                    pool_clone,
+                    notify_clone,
+                    sync_interval,
+                )
+                .await;
+            }));
+        }
+
         let mut rules_tree = PathRadixTree::new();
-        for (idx, rule) in rules.into_iter().enumerate() {
+        for (idx, rule) in compiled_rules.into_iter().enumerate() {
             rules_tree.insert(&rule.path_prefix.clone(), IndexedRule { idx, rule });
         }
 
         Ok(Self {
-            generation: snapshot.generation,
-            mode: snapshot.mode,
+            generation: policy.generation,
+            mode: policy.mode,
             shard_cfg: ShardConfig {
                 max_keys_per_shard,
-                eviction_policy: snapshot.eviction_policy,
-                overflow_strategy: snapshot.overflow_strategy,
-                algorithm: snapshot.algorithm,
+                eviction_policy: policy.eviction_policy,
+                overflow_strategy: policy.overflow_strategy,
+                algorithm: policy.algorithm,
             },
             rules: rules_tree,
             shards,
             redis,
+            early_flush_notify,
+            is_async_batch_sync,
         })
     }
 
+    #[inline]
     pub fn generation(&self) -> u64 {
         self.generation
     }
@@ -364,7 +372,9 @@ impl RateLimitEngine {
             };
 
             let mut decision = if self.mode == RateLimitMode::Distributed {
-                if let Some(ref r) = self.redis {
+                if self.is_async_batch_sync {
+                    self.evaluate_rule_shard(idx, rule, identifier, now_secs, now_ms)
+                } else if let Some(ref r) = self.redis {
                     match r.evaluate(idx, rule, identifier, now_ms) {
                         Ok(d) => d,
                         Err(()) => match r.on_error {
@@ -391,11 +401,13 @@ impl RateLimitEngine {
             } else {
                 self.evaluate_rule_shard(idx, rule, identifier, now_secs, now_ms)
             };
+
             if !decision.allowed {
                 apply_custom_response(&mut decision, rule);
                 blocked_decision = Some(decision);
                 return;
             }
+
             if decision.remaining < min_remaining {
                 min_remaining = decision.remaining;
             }
@@ -450,7 +462,22 @@ impl RateLimitEngine {
         if let Some(entry) = shard.entries.get_mut(&map_key) {
             entry.last_access_secs = now_secs;
             entry.access_count += 1;
-            return entry.state.advance(rule, now_secs, now_ms);
+
+            if self.mode == RateLimitMode::Distributed
+                && entry.cluster_blocked.load(Ordering::Relaxed)
+            {
+                let retry_after = rule.period_secs.max(1) as u32;
+                return build_exceeded_decision(rule, retry_after, now_secs + retry_after as u64);
+            }
+
+            let decision = entry.state.advance(rule, now_secs, now_ms);
+            if self.mode == RateLimitMode::Distributed && decision.allowed {
+                let delta = entry.pending_delta.fetch_add(1, Ordering::Relaxed) + 1;
+                if delta >= rule.emergency_delta_threshold {
+                    self.early_flush_notify.notify_one();
+                }
+            }
+            return decision;
         }
 
         let entry = match insert_shard_entry(
@@ -467,6 +494,20 @@ impl RateLimitEngine {
 
         entry.last_access_secs = now_secs;
         entry.access_count += 1;
-        entry.state.advance(rule, now_secs, now_ms)
+
+        if self.mode == RateLimitMode::Distributed && entry.cluster_blocked.load(Ordering::Relaxed)
+        {
+            let retry_after = rule.period_secs.max(1) as u32;
+            return build_exceeded_decision(rule, retry_after, now_secs + retry_after as u64);
+        }
+
+        let decision = entry.state.advance(rule, now_secs, now_ms);
+        if self.mode == RateLimitMode::Distributed && decision.allowed {
+            let delta = entry.pending_delta.fetch_add(1, Ordering::Relaxed) + 1;
+            if delta >= rule.emergency_delta_threshold {
+                self.early_flush_notify.notify_one();
+            }
+        }
+        decision
     }
 }

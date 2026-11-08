@@ -11,10 +11,11 @@ pub mod policy;
 #[cfg(test)]
 mod tests;
 
-pub use compressor::{compress_into, max_compressed_len, CompressionAlgorithm};
+pub use compressor::{CompressionAlgorithm, compress_into, max_compressed_len};
 pub use evaluator::{
-    CLIENT_ENCODING_BR, CLIENT_ENCODING_GZIP, CLIENT_ENCODING_ZSTD,
-    parse_accept_encoding_mask, HeaderDecision, HeaderDecisionAction, ResponseCompressionEngine,
+    CLIENT_ENCODING_BR, CLIENT_ENCODING_GZIP, CLIENT_ENCODING_ZSTD, HeaderDecision,
+    HeaderDecisionAction, ResponseCompressionEngine, parse_accept_encoding_mask,
+    scan_accept_encoding_swar,
 };
 pub use materialize::materialize;
 pub use policy::{ResponseCompressionConfig, RouteCompressionOverride};

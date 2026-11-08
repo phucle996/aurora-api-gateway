@@ -20,6 +20,7 @@ use crate::{
     resource_limit::ResourceLimiter,
     traffic_shaper::TrafficShaperEngine,
     traffic_split::TrafficSplitEngine,
+    waf_lite::WafLiteEngine,
 };
 
 /// Type alias for pre-rendered HTTP headers wrapped in an atomic reference counter.
@@ -29,6 +30,7 @@ pub type HeaderListArc = Arc<[(String, String)]>;
 #[derive(Default)]
 pub struct AccessPhaseEngines<'a> {
     pub ip_restriction: Option<&'a IpRestrictionEngine>,
+    pub waf_lite: Option<&'a WafLiteEngine>,
     pub jwt: Option<&'a JwtEngine>,
     pub rate_limit: Option<&'a RateLimitEngine>,
     pub connection_limit: Option<&'a ConnectionLimitEngine>,
@@ -52,11 +54,11 @@ impl<'a> AccessPhaseSpace<'a> {
         Self { engines }
     }
 
-    /// Single Responsibility: Early admission filtering (IP, payload size, termination).
+    /// Single Responsibility: Early admission filtering (IP, WAF, payload size, termination).
     fn check_admission(
         &self,
         ctx: &AccessRequestContext<'a>,
-        _header_lookup: &impl Fn(&str) -> Option<&'a [u8]>,
+        header_lookup: &impl Fn(&str) -> Option<&'a [u8]>,
     ) -> Option<AccessDenial<'a>> {
         if let Some(ip_eng) = self.engines.ip_restriction
             && let Ok(decision) = ip_eng.evaluate_ctx(ctx)
@@ -67,6 +69,18 @@ impl<'a> AccessPhaseSpace<'a> {
                 www_authenticate: false,
                 content_type: None,
                 body: None,
+            });
+        }
+
+        if let Some(waf_eng) = self.engines.waf_lite
+            && let Ok(decision) = waf_eng.evaluate_ctx(ctx, header_lookup)
+            && decision.action == 1
+        {
+            return Some(AccessDenial {
+                status: 403,
+                www_authenticate: false,
+                content_type: None,
+                body: Some(b"403 Forbidden: WAF Security Policy Violation\n"),
             });
         }
 
@@ -83,7 +97,7 @@ impl<'a> AccessPhaseSpace<'a> {
         }
 
         if let Some(term_eng) = self.engines.request_termination {
-            let decision = term_eng.evaluate_ctx(ctx);
+            let decision = term_eng.evaluate_ctx(ctx, header_lookup);
             if decision.matched && decision.should_terminate {
                 return Some(AccessDenial {
                     status: decision.status_code,
@@ -179,6 +193,7 @@ impl<'a> AccessPhaseSpace<'a> {
                             is_redis: token.is_redis,
                             rule_id: token.rule_id,
                             identifier: String::from_utf8_lossy(&token.identifier).to_string(),
+                            key_hash: token.key_hash,
                         });
                     }
                 }
@@ -326,7 +341,10 @@ mod tests {
                 rate_limit_bytes_per_sec,
                 conn_token,
             } => {
-                assert!(forwarded_headers.is_none(), "Must be None to avoid atomic bus locks on empty headers");
+                assert!(
+                    forwarded_headers.is_none(),
+                    "Must be None to avoid atomic bus locks on empty headers"
+                );
                 assert_eq!(target_upstream, None);
                 assert_eq!(rate_limit_bytes_per_sec, 0);
                 assert!(conn_token.is_none());
@@ -348,9 +366,9 @@ mod tests {
             ]
         });
 
-        let bg_eng = crate::blue_green::BlueGreenEngine::from_snapshot(
-            policy.to_string().as_bytes()
-        ).expect("Valid policy");
+        let bg_eng =
+            crate::blue_green::BlueGreenEngine::from_snapshot(policy.to_string().as_bytes())
+                .expect("Valid policy");
 
         let engines = AccessPhaseEngines {
             blue_green: Some(&bg_eng),
@@ -378,8 +396,12 @@ mod tests {
                 ..
             } => {
                 assert_eq!(target_upstream, Some("blue_backend"));
-                let headers = forwarded_headers.expect("Must have forwarded headers from blue-green");
-                assert_eq!(headers.as_ref(), &[("x-version".to_string(), "v1.0".to_string())]);
+                let headers =
+                    forwarded_headers.expect("Must have forwarded headers from blue-green");
+                assert_eq!(
+                    headers.as_ref(),
+                    &[("x-version".to_string(), "v1.0".to_string())]
+                );
             }
             AccessDecision::Deny { .. } => panic!("Expected Allow"),
         }

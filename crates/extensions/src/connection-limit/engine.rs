@@ -1,25 +1,94 @@
+//! Connection Limit Evaluation Engine (Slot 3)
+//!
+//! Provides high-performance, sharded concurrent connection tracking and rate throttling
+//! with zero-allocation local tracking and fallback-tolerant distributed Redis L2 coordination.
+
+use super::policy::{
+    ActionOnExceeded, ConnLimitDecision, ConnLimitMode, ConnLimitToken, ConnectionLimitPolicy,
+    LimitBy, MAX_CONN_LIMIT_POLICY_BYTES, OnErrorAction, ResolvedHeader,
+};
 use super::redis::RedisConnectionLimiter;
 use super::tracker::ShardedConnTracker;
-use super::types::{
-    ActionOnExceeded, CompiledHeader, CompiledRule, ConnLimitDecision, ConnLimitMode,
-    ConnLimitSnapshot, ConnLimitToken, LimitBy, MAX_CONN_LIMIT_POLICY_BYTES, MAX_CONN_LIMIT_RULES,
-    OnErrorAction, ResolvedHeader,
-};
 use crate::{Error, MAX_PATH_BYTES, host_matches, host_specificity};
+use std::sync::Arc;
+
+#[derive(Clone, Debug)]
+pub(crate) struct CompiledHeader {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct CompiledRule {
+    pub id: String,
+    pub id_hash_prefix: u64,
+    pub host: String,
+    pub path_prefix: String,
+    pub is_wildcard_host: bool,
+    pub is_root_path: bool,
+    pub is_pure: bool,
+    pub limit_by: LimitBy,
+    pub header_name: Option<String>,
+    pub max_connections: u32,
+    pub action_on_exceeded: ActionOnExceeded,
+    pub rejected_code: u16,
+    pub response_headers: Vec<CompiledHeader>,
+    pub response_body: Option<String>,
+}
+
+impl CompiledRule {
+    /// Branchless request-to-rule filter.
+    ///
+    /// For pure rules (`host == "*"` and `path_prefix == "/"`), bypasses string matching entirely.
+    #[inline(always)]
+    pub fn matches_request(&self, host: &[u8], path: &[u8]) -> bool {
+        if self.is_pure {
+            return true;
+        }
+        (self.is_wildcard_host || host_matches(self.host.as_bytes(), host))
+            && (self.is_root_path || path_matches(self.path_prefix.as_bytes(), path))
+    }
+
+    /// Resolves the tracking key identifier based on rule configuration.
+    #[inline(always)]
+    pub fn resolve_identifier<'a>(
+        &self,
+        client_ip: &'a [u8],
+        path: &'a [u8],
+        header_lookup: &impl Fn(&str) -> Option<&'a [u8]>,
+    ) -> &'a [u8] {
+        match self.limit_by {
+            LimitBy::ClientIp => client_ip,
+            LimitBy::RoutePath => path,
+            LimitBy::Header => {
+                if let Some(ref h_name) = self.header_name {
+                    header_lookup(h_name).unwrap_or(client_ip)
+                } else {
+                    client_ip
+                }
+            }
+        }
+    }
+}
 
 pub struct ConnectionLimitEngine {
     generation: u64,
     mode: ConnLimitMode,
     rules: Vec<CompiledRule>,
-    local_tracker: ShardedConnTracker,
+    pub(crate) local_tracker: Arc<ShardedConnTracker>,
     redis: Option<RedisConnectionLimiter>,
+    is_async_batch_sync: bool,
 }
 
+#[inline(always)]
 fn path_matches(prefix: &[u8], path: &[u8]) -> bool {
-    path.starts_with(prefix)
-        && (prefix.ends_with(b"/")
-            || path.len() == prefix.len()
-            || path.get(prefix.len()) == Some(&b'/'))
+    if path.len() < prefix.len() || !path.starts_with(prefix) {
+        return false;
+    }
+    if prefix == b"/" || prefix.ends_with(b"/") {
+        return true;
+    }
+    path.len() == prefix.len() || path[prefix.len()] == b'/'
 }
 
 fn render_template(template: &str, vars: &[(&str, &str)]) -> String {
@@ -69,48 +138,23 @@ fn apply_custom_response(
 }
 
 impl ConnectionLimitEngine {
+    /// Compiles a new `ConnectionLimitEngine` from raw policy JSON bytes.
     pub fn from_snapshot(bytes: &[u8]) -> Result<Self, Error> {
         if bytes.is_empty() || bytes.len() > MAX_CONN_LIMIT_POLICY_BYTES {
             return Err(Error::InvalidPolicy);
         }
 
-        let mut snapshot: ConnLimitSnapshot =
+        let mut policy: ConnectionLimitPolicy =
             serde_json::from_slice(bytes).map_err(|_| Error::InvalidPolicy)?;
 
-        if snapshot.schema_version != 1 {
-            return Err(Error::InvalidPolicy);
-        }
+        policy.validate().map_err(|_| Error::InvalidPolicy)?;
 
-        if snapshot.rules.len() > MAX_CONN_LIMIT_RULES {
-            return Err(Error::InvalidPolicy);
-        }
-
-        let mut ids = std::collections::HashSet::with_capacity(snapshot.rules.len());
-        for rule in &snapshot.rules {
-            if rule.id.trim().is_empty() || rule.id.len() > 128 || !ids.insert(rule.id.clone()) {
-                return Err(Error::InvalidPolicy);
-            }
-        }
-
-        snapshot
+        policy
             .rules
             .sort_by_key(|r| (r.priority, host_specificity(&r.host), r.id.clone()));
 
-        let mut rules = Vec::with_capacity(snapshot.rules.len());
-        for rule in snapshot.rules {
-            let host_valid = if rule.host == "*" {
-                true
-            } else if let Some(sub) = rule.host.strip_prefix("*.") {
-                !sub.is_empty()
-                    && sub
-                        .bytes()
-                        .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
-            } else {
-                rule.host
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
-            };
-
+        let mut rules = Vec::with_capacity(policy.rules.len());
+        for rule in policy.rules {
             let rejected_code = match rule.rejected_code {
                 Some(code) if (200..=599).contains(&code) => code,
                 Some(_) => return Err(Error::InvalidPolicy),
@@ -122,31 +166,11 @@ impl ConnectionLimitEngine {
                 },
             };
 
-            if rule.max_connections == 0
-                || !host_valid
-                || rule.host.is_empty()
-                || rule.host.len() > 253
-                || !rule.path_prefix.starts_with('/')
-                || rule.path_prefix.len() > MAX_PATH_BYTES
-            {
-                return Err(Error::InvalidPolicy);
-            }
-
             let response_headers = match rule.response_headers {
-                Some(hdrs) => {
-                    if hdrs.len() > 8 {
-                        return Err(Error::InvalidPolicy);
-                    }
-                    let mut compiled = Vec::with_capacity(hdrs.len());
-                    for h in hdrs {
-                        if h.name.trim().is_empty()
-                            || h.name.len() > 64
-                            || h.value.len() > 256
-                            || !h
-                                .name
-                                .bytes()
-                                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-                        {
+                Some(headers) => {
+                    let mut compiled = Vec::with_capacity(headers.len());
+                    for h in headers {
+                        if h.name.len() > 64 || h.value.len() > 512 {
                             return Err(Error::InvalidPolicy);
                         }
                         compiled.push(CompiledHeader {
@@ -159,34 +183,21 @@ impl ConnectionLimitEngine {
                 None => Vec::new(),
             };
 
-            let (limit_by, header_name) = match rule.limit_by.trim().to_ascii_lowercase().as_str() {
-                "client_ip" => (LimitBy::ClientIp, None),
-                "route_path" => (LimitBy::RoutePath, None),
-                "header" => {
-                    let h_name = rule
-                        .header_name
-                        .as_ref()
-                        .map(|s| s.trim().to_ascii_lowercase())
-                        .filter(|s| !s.is_empty())
-                        .ok_or(Error::InvalidPolicy)?;
-                    if h_name.len() > 64
-                        || !h_name
-                            .bytes()
-                            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-                    {
-                        return Err(Error::InvalidPolicy);
-                    }
-                    (LimitBy::Header, Some(h_name))
-                }
-                _ => return Err(Error::InvalidPolicy),
-            };
+            let is_wildcard_host = rule.host == "*";
+            let is_root_path = rule.path_prefix == "/";
+            let is_pure = is_wildcard_host && is_root_path;
+            let id_hash_prefix = ShardedConnTracker::precompute_rule_hash(rule.id.as_bytes());
 
             rules.push(CompiledRule {
+                id_hash_prefix,
                 id: rule.id,
                 host: rule.host,
                 path_prefix: rule.path_prefix,
-                limit_by,
-                header_name,
+                is_wildcard_host,
+                is_root_path,
+                is_pure,
+                limit_by: rule.limit_by,
+                header_name: rule.header_name,
                 max_connections: rule.max_connections,
                 action_on_exceeded: rule.action_on_exceeded,
                 rejected_code,
@@ -195,29 +206,65 @@ impl ConnectionLimitEngine {
             });
         }
 
-        let redis = match snapshot.mode {
+        let redis = match policy.mode {
             ConnLimitMode::Local => None,
             ConnLimitMode::Distributed => {
-                let cfg = snapshot.redis.as_ref().ok_or(Error::InvalidPolicy)?;
+                let cfg = policy.redis.as_ref().ok_or(Error::InvalidPolicy)?;
                 Some(RedisConnectionLimiter::new(cfg)?)
             }
         };
 
+        let is_async_batch_sync = match policy.mode {
+            ConnLimitMode::Local => false,
+            ConnLimitMode::Distributed => policy
+                .redis
+                .as_ref()
+                .map(|r| r.sync_interval_ms > 0)
+                .unwrap_or(false),
+        };
+
+        let local_tracker = Arc::new(ShardedConnTracker::new());
+
+        if is_async_batch_sync && let Some(ref r) = redis {
+            let tracker_clone = Arc::clone(&local_tracker);
+            let pool_clone = Arc::clone(&r.pool);
+            let sync_interval = std::time::Duration::from_millis(
+                policy
+                    .redis
+                    .as_ref()
+                    .map(|rc| rc.sync_interval_ms)
+                    .unwrap_or(500),
+            );
+            let lease_ttl = r.lease_ttl_secs;
+
+            let _ = aurora_engine::shadow::try_dispatch_shadow(Box::pin(async move {
+                super::redis_sync::run_conn_limit_redis_shadow_sync(
+                    tracker_clone,
+                    pool_clone,
+                    sync_interval,
+                    lease_ttl,
+                )
+                .await;
+            }));
+        }
+
         Ok(Self {
-            generation: snapshot.generation,
-            mode: snapshot.mode,
+            generation: policy.generation,
+            mode: policy.mode,
             rules,
-            local_tracker: ShardedConnTracker::new(),
+            local_tracker,
             redis,
+            is_async_batch_sync,
         })
     }
 
+    #[inline]
     pub fn generation(&self) -> u64 {
         self.generation
     }
 
     #[inline]
-    pub fn acquire_ctx<'a, 'h>(
+    pub fn acquire_ctx<'a, 'h: 'a>(
         &self,
         ctx: &crate::AccessRequestContext<'h>,
         header_lookup: impl Fn(&str) -> Option<&'a [u8]>,
@@ -228,15 +275,15 @@ impl ConnectionLimitEngine {
     pub fn acquire<'a>(
         &self,
         host: &[u8],
-        path: &[u8],
-        client_ip: &[u8],
+        path: &'a [u8],
+        client_ip: &'a [u8],
         header_lookup: impl Fn(&str) -> Option<&'a [u8]>,
     ) -> Result<ConnLimitDecision, Error> {
         if host.is_empty()
             || host.len() > 253
             || path.is_empty()
             || path.len() > MAX_PATH_BYTES
-            || !path.starts_with(b"/")
+            || path[0] != b'/'
             || client_ip.is_empty()
             || client_ip.len() > 64
         {
@@ -244,58 +291,41 @@ impl ConnectionLimitEngine {
         }
 
         for rule in &self.rules {
-            if !host_matches(rule.host.as_bytes(), host) {
-                continue;
-            }
-            if !path_matches(rule.path_prefix.as_bytes(), path) {
+            if !rule.matches_request(host, path) {
                 continue;
             }
 
-            let identifier = match rule.limit_by {
-                LimitBy::ClientIp => client_ip,
-                LimitBy::RoutePath => path,
-                LimitBy::Header => {
-                    if let Some(ref h_name) = rule.header_name {
-                        header_lookup(h_name).unwrap_or(client_ip)
-                    } else {
-                        client_ip
-                    }
-                }
-            };
+            let identifier = rule.resolve_identifier(client_ip, path, &header_lookup);
 
-            let key_len = rule.id.len() + 1 + identifier.len();
-            let mut stack_key = [0u8; 128];
-            let mut heap_key = Vec::new();
-            let tracker_key: &[u8] = if key_len <= 128 {
-                let id_bytes = rule.id.as_bytes();
-                stack_key[..id_bytes.len()].copy_from_slice(id_bytes);
-                stack_key[id_bytes.len()] = b':';
-                stack_key[id_bytes.len() + 1..key_len].copy_from_slice(identifier);
-                &stack_key[..key_len]
-            } else {
-                heap_key.reserve_exact(key_len);
-                heap_key.extend_from_slice(rule.id.as_bytes());
-                heap_key.push(b':');
-                heap_key.extend_from_slice(identifier);
-                &heap_key
-            };
+            // Fast numerical hashing continuing from precomputed rule prefix
+            let key_hash = ShardedConnTracker::hash_with_prefix(rule.id_hash_prefix, identifier);
 
             let (allowed, current, is_redis) = match self.mode {
                 ConnLimitMode::Local => {
                     let (ok, cur) = self
                         .local_tracker
-                        .acquire(tracker_key, rule.max_connections);
+                        .acquire_hash(key_hash, rule.max_connections);
                     (ok, cur, false)
                 }
                 ConnLimitMode::Distributed => {
-                    if let Some(ref redis) = self.redis {
+                    if self.is_async_batch_sync {
+                        let (ok, cur) = self.local_tracker.acquire_hash_with_key(
+                            key_hash,
+                            rule.max_connections,
+                            || {
+                                let id_str = String::from_utf8_lossy(identifier);
+                                format!("aurora:cl:cluster:{}:{id_str}", rule.id)
+                            },
+                        );
+                        (ok, cur, false)
+                    } else if let Some(ref redis) = self.redis {
                         match redis.acquire(&rule.id, identifier, rule.max_connections) {
                             Ok((ok, cur)) => (ok, cur, true),
                             Err(_) => match redis.on_error {
                                 OnErrorAction::FallbackLocal => {
                                     let (ok, cur) = self
                                         .local_tracker
-                                        .acquire(tracker_key, rule.max_connections);
+                                        .acquire_hash(key_hash, rule.max_connections);
                                     (ok, cur, false)
                                 }
                                 OnErrorAction::Pass => (true, 0, false),
@@ -305,7 +335,7 @@ impl ConnectionLimitEngine {
                     } else {
                         let (ok, cur) = self
                             .local_tracker
-                            .acquire(tracker_key, rule.max_connections);
+                            .acquire_hash(key_hash, rule.max_connections);
                         (ok, cur, false)
                     }
                 }
@@ -321,6 +351,7 @@ impl ConnectionLimitEngine {
                     token: Some(ConnLimitToken {
                         rule_id: rule.id.clone(),
                         identifier: identifier.to_vec(),
+                        key_hash,
                         is_redis,
                     }),
                     headers: Vec::new(),
@@ -359,6 +390,13 @@ impl ConnectionLimitEngine {
         })
     }
 
+    /// Direct numerical 64-bit key_hash release for zero-allocation hot-path.
+    #[inline(always)]
+    pub fn release_hash(&self, key_hash: u64) {
+        self.local_tracker.release_hash(key_hash);
+    }
+
+    /// Releases an acquired connection slot.
     pub fn release(&self, token: &ConnLimitToken) {
         if token.is_redis
             && let Some(ref redis) = self.redis
@@ -367,22 +405,11 @@ impl ConnectionLimitEngine {
             return;
         }
 
-        let key_len = token.rule_id.len() + 1 + token.identifier.len();
-        let mut stack_key = [0u8; 128];
-        let mut heap_key = Vec::new();
-        let tracker_key: &[u8] = if key_len <= 128 {
-            let id_bytes = token.rule_id.as_bytes();
-            stack_key[..id_bytes.len()].copy_from_slice(id_bytes);
-            stack_key[id_bytes.len()] = b':';
-            stack_key[id_bytes.len() + 1..key_len].copy_from_slice(&token.identifier);
-            &stack_key[..key_len]
+        let key_hash = if token.key_hash != 0 {
+            token.key_hash
         } else {
-            heap_key.reserve_exact(key_len);
-            heap_key.extend_from_slice(token.rule_id.as_bytes());
-            heap_key.push(b':');
-            heap_key.extend_from_slice(&token.identifier);
-            &heap_key
+            ShardedConnTracker::hash_key(token.rule_id.as_bytes(), &token.identifier)
         };
-        self.local_tracker.release(tracker_key);
+        self.local_tracker.release_hash(key_hash);
     }
 }

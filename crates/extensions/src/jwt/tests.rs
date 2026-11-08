@@ -1,5 +1,5 @@
 use super::engine::JwtEngine;
-use super::types::JwtDecision;
+use super::policy::JwtDecision;
 use jsonwebtoken::{EncodingKey, Header, encode};
 use serde::Serialize;
 use std::sync::Arc;
@@ -1152,9 +1152,17 @@ fn test_flexible_numeric_and_string_exp_nbf() {
         &Header::default(),
         &claims_float_exp,
         &EncodingKey::from_secret(secret.as_bytes()),
-    ).unwrap();
+    )
+    .unwrap();
     let auth = format!("Bearer {token_float}");
-    let res = engine.evaluate_at(b"api.enterprise.local", b"/api/data", Some(auth.as_bytes()), 1700000000).unwrap();
+    let res = engine
+        .evaluate_at(
+            b"api.enterprise.local",
+            b"/api/data",
+            Some(auth.as_bytes()),
+            1700000000,
+        )
+        .unwrap();
     assert!(matches!(res, JwtDecision::Allow { .. }));
 
     // 2. Float exp in the past -> Unauthorized (Expired)
@@ -1166,9 +1174,17 @@ fn test_flexible_numeric_and_string_exp_nbf() {
         &Header::default(),
         &claims_expired_float,
         &EncodingKey::from_secret(secret.as_bytes()),
-    ).unwrap();
+    )
+    .unwrap();
     let auth = format!("Bearer {token_expired_float}");
-    let res = engine.evaluate_at(b"api.enterprise.local", b"/api/data", Some(auth.as_bytes()), 1700000000).unwrap();
+    let res = engine
+        .evaluate_at(
+            b"api.enterprise.local",
+            b"/api/data",
+            Some(auth.as_bytes()),
+            1700000000,
+        )
+        .unwrap();
     assert_eq!(res, JwtDecision::Unauthorized);
 
     // 3. String exp in the future -> Allow
@@ -1180,9 +1196,17 @@ fn test_flexible_numeric_and_string_exp_nbf() {
         &Header::default(),
         &claims_str_exp,
         &EncodingKey::from_secret(secret.as_bytes()),
-    ).unwrap();
+    )
+    .unwrap();
     let auth = format!("Bearer {token_str}");
-    let res = engine.evaluate_at(b"api.enterprise.local", b"/api/data", Some(auth.as_bytes()), 1700000000).unwrap();
+    let res = engine
+        .evaluate_at(
+            b"api.enterprise.local",
+            b"/api/data",
+            Some(auth.as_bytes()),
+            1700000000,
+        )
+        .unwrap();
     assert!(matches!(res, JwtDecision::Allow { .. }));
 
     // 4. String float exp in the future -> Allow
@@ -1194,9 +1218,17 @@ fn test_flexible_numeric_and_string_exp_nbf() {
         &Header::default(),
         &claims_str_float_exp,
         &EncodingKey::from_secret(secret.as_bytes()),
-    ).unwrap();
+    )
+    .unwrap();
     let auth = format!("Bearer {token_str_float}");
-    let res = engine.evaluate_at(b"api.enterprise.local", b"/api/data", Some(auth.as_bytes()), 1700000000).unwrap();
+    let res = engine
+        .evaluate_at(
+            b"api.enterprise.local",
+            b"/api/data",
+            Some(auth.as_bytes()),
+            1700000000,
+        )
+        .unwrap();
     assert!(matches!(res, JwtDecision::Allow { .. }));
 
     // 5. Future nbf (float) -> Unauthorized
@@ -1209,9 +1241,17 @@ fn test_flexible_numeric_and_string_exp_nbf() {
         &Header::default(),
         &claims_future_nbf,
         &EncodingKey::from_secret(secret.as_bytes()),
-    ).unwrap();
+    )
+    .unwrap();
     let auth = format!("Bearer {token_nbf}");
-    let res = engine.evaluate_at(b"api.enterprise.local", b"/api/data", Some(auth.as_bytes()), 1700000000).unwrap();
+    let res = engine
+        .evaluate_at(
+            b"api.enterprise.local",
+            b"/api/data",
+            Some(auth.as_bytes()),
+            1700000000,
+        )
+        .unwrap();
     assert_eq!(res, JwtDecision::Unauthorized);
 
     // 6. When validate_exp is explicitly set to false, expired tokens are NOT rejected
@@ -1232,9 +1272,17 @@ fn test_flexible_numeric_and_string_exp_nbf() {
             }
         ]
     });
-    let engine_no_val_exp = JwtEngine::from_snapshot(policy_no_validate_exp.to_string().as_bytes()).unwrap();
+    let engine_no_val_exp =
+        JwtEngine::from_snapshot(policy_no_validate_exp.to_string().as_bytes()).unwrap();
     let expired_auth = format!("Bearer {token_expired_float}");
-    let res_no_val = engine_no_val_exp.evaluate_at(b"api.enterprise.local", b"/api/data", Some(expired_auth.as_bytes()), 1700000000).unwrap();
+    let res_no_val = engine_no_val_exp
+        .evaluate_at(
+            b"api.enterprise.local",
+            b"/api/data",
+            Some(expired_auth.as_bytes()),
+            1700000000,
+        )
+        .unwrap();
     assert!(matches!(res_no_val, JwtDecision::Allow { .. }));
 }
 
@@ -1282,17 +1330,32 @@ fn test_enterprise_claim_types_and_nested_array_indexing() {
         &Header::default(),
         &claims,
         &EncodingKey::from_secret(secret.as_bytes()),
-    ).unwrap();
+    )
+    .unwrap();
     let auth = format!("Bearer {token}");
 
-    let res = engine.evaluate_at(b"api.types.local", b"/api/data", Some(auth.as_bytes()), 1700000000).unwrap();
+    let res = engine
+        .evaluate_at(
+            b"api.types.local",
+            b"/api/data",
+            Some(auth.as_bytes()),
+            1700000000,
+        )
+        .unwrap();
     match res {
         JwtDecision::Allow { forwarded_headers } => {
             let map: std::collections::HashMap<_, _> = forwarded_headers.iter().cloned().collect();
             assert_eq!(map.get("X-Is-Active").map(|s| s.as_str()), Some("true"));
             assert_eq!(map.get("X-First-Member").map(|s| s.as_str()), Some("alice"));
-            assert_eq!(map.get("X-Tags").map(|s| s.as_str()), Some("alpha, 123, false"));
-            assert!(map.get("X-Settings").unwrap().contains("\"theme\":\"dark\""));
+            assert_eq!(
+                map.get("X-Tags").map(|s| s.as_str()),
+                Some("alpha, 123, false")
+            );
+            assert!(
+                map.get("X-Settings")
+                    .unwrap()
+                    .contains("\"theme\":\"dark\"")
+            );
         }
         JwtDecision::Unauthorized => panic!("Expected Allow"),
     }
@@ -1336,34 +1399,55 @@ fn test_strict_case_sensitivity_cookie_and_prefix() {
         &Header::default(),
         &claims,
         &EncodingKey::from_secret(secret.as_bytes()),
-    ).unwrap();
+    )
+    .unwrap();
 
     // 1. Exact cookie name "AuthToken" -> Allow
     let cookie_exact = format!("AuthToken={token}");
-    let res = engine.evaluate_with_lookup_at(b"api.case.local", b"/cookie", |n| {
-        (n == "cookie").then_some(cookie_exact.as_bytes())
-    }, 1700000000).unwrap();
+    let res = engine
+        .evaluate_with_lookup_at(
+            b"api.case.local",
+            b"/cookie",
+            |n| (n == "cookie").then_some(cookie_exact.as_bytes()),
+            1700000000,
+        )
+        .unwrap();
     assert!(matches!(res, JwtDecision::Allow { .. }));
 
     // 2. Lowercase cookie name "authtoken" -> Unauthorized
     let cookie_lower = format!("authtoken={token}");
-    let res = engine.evaluate_with_lookup_at(b"api.case.local", b"/cookie", |n| {
-        (n == "cookie").then_some(cookie_lower.as_bytes())
-    }, 1700000000).unwrap();
+    let res = engine
+        .evaluate_with_lookup_at(
+            b"api.case.local",
+            b"/cookie",
+            |n| (n == "cookie").then_some(cookie_lower.as_bytes()),
+            1700000000,
+        )
+        .unwrap();
     assert_eq!(res, JwtDecision::Unauthorized);
 
     // 3. Exact prefix "Bearer " -> Allow
     let auth_exact = format!("Bearer {token}");
-    let res = engine.evaluate_with_lookup_at(b"api.case.local", b"/prefix", |n| {
-        (n == "Authorization").then_some(auth_exact.as_bytes())
-    }, 1700000000).unwrap();
+    let res = engine
+        .evaluate_with_lookup_at(
+            b"api.case.local",
+            b"/prefix",
+            |n| (n == "Authorization").then_some(auth_exact.as_bytes()),
+            1700000000,
+        )
+        .unwrap();
     assert!(matches!(res, JwtDecision::Allow { .. }));
 
     // 4. Lowercase prefix "bearer " -> Unauthorized
     let auth_lower = format!("bearer {token}");
-    let res = engine.evaluate_with_lookup_at(b"api.case.local", b"/prefix", |n| {
-        (n == "Authorization").then_some(auth_lower.as_bytes())
-    }, 1700000000).unwrap();
+    let res = engine
+        .evaluate_with_lookup_at(
+            b"api.case.local",
+            b"/prefix",
+            |n| (n == "Authorization").then_some(auth_lower.as_bytes()),
+            1700000000,
+        )
+        .unwrap();
     assert_eq!(res, JwtDecision::Unauthorized);
 }
 
@@ -1485,7 +1569,12 @@ fn test_explicit_raw_payload_format_with_regex_captures() {
     let auth = format!("Bearer {token}");
 
     let res = engine
-        .evaluate_at(b"api.raw.local", b"/api/report", Some(auth.as_bytes()), 1700000000)
+        .evaluate_at(
+            b"api.raw.local",
+            b"/api/report",
+            Some(auth.as_bytes()),
+            1700000000,
+        )
         .unwrap();
 
     match res {
@@ -1493,7 +1582,10 @@ fn test_explicit_raw_payload_format_with_regex_captures() {
             let map: std::collections::HashMap<_, _> = forwarded_headers.iter().cloned().collect();
             assert_eq!(map.get("X-User-Id").map(|s| s.as_str()), Some("usr_999"));
             assert_eq!(map.get("X-User-Role").map(|s| s.as_str()), Some("admin"));
-            assert_eq!(map.get("X-Dept-Code").map(|s| s.as_str()), Some("finance_sec"));
+            assert_eq!(
+                map.get("X-Dept-Code").map(|s| s.as_str()),
+                Some("finance_sec")
+            );
         }
         JwtDecision::Unauthorized => panic!("Expected Allow for valid raw token"),
     }
@@ -1506,7 +1598,12 @@ fn test_explicit_raw_payload_format_with_regex_captures() {
     );
     let bad_auth = format!("Bearer {bad_role_token}");
     let res_bad = engine
-        .evaluate_at(b"api.raw.local", b"/api/report", Some(bad_auth.as_bytes()), 1700000000)
+        .evaluate_at(
+            b"api.raw.local",
+            b"/api/report",
+            Some(bad_auth.as_bytes()),
+            1700000000,
+        )
         .unwrap();
     assert_eq!(res_bad, JwtDecision::Unauthorized);
 }
@@ -1613,7 +1710,8 @@ fn test_explicit_payload_format_strict_no_auto() {
 fn test_declarative_revocation_token_and_jti_in_snapshot() {
     let secret = "revocation-secret-key-123456789";
 
-    let valid_claims = serde_json::json!({ "sub": "user_valid", "jti": "jti_allowed", "exp": 2_000_000_000u64 });
+    let valid_claims =
+        serde_json::json!({ "sub": "user_valid", "jti": "jti_allowed", "exp": 2_000_000_000u64 });
     let valid_token = encode(
         &Header::default(),
         &valid_claims,
@@ -1621,7 +1719,8 @@ fn test_declarative_revocation_token_and_jti_in_snapshot() {
     )
     .unwrap();
 
-    let revoked_tok_claims = serde_json::json!({ "sub": "user_revoked_tok", "exp": 2_000_000_000u64 });
+    let revoked_tok_claims =
+        serde_json::json!({ "sub": "user_revoked_tok", "exp": 2_000_000_000u64 });
     let revoked_token = encode(
         &Header::default(),
         &revoked_tok_claims,
@@ -1696,7 +1795,8 @@ fn test_declarative_revocation_token_and_jti_in_snapshot() {
 fn test_runtime_revocation_token_and_jti_via_engine() {
     let secret = "runtime-revocation-secret-987654";
 
-    let tok1_claims = serde_json::json!({ "sub": "user_runtime_1", "jti": "jti_111", "exp": 2_000_000_000u64 });
+    let tok1_claims =
+        serde_json::json!({ "sub": "user_runtime_1", "jti": "jti_111", "exp": 2_000_000_000u64 });
     let token1 = encode(
         &Header::default(),
         &tok1_claims,
@@ -1704,7 +1804,8 @@ fn test_runtime_revocation_token_and_jti_via_engine() {
     )
     .unwrap();
 
-    let tok2_claims = serde_json::json!({ "sub": "user_runtime_2", "jti": "jti_222", "exp": 2_000_000_000u64 });
+    let tok2_claims =
+        serde_json::json!({ "sub": "user_runtime_2", "jti": "jti_222", "exp": 2_000_000_000u64 });
     let token2 = encode(
         &Header::default(),
         &tok2_claims,
@@ -1872,8 +1973,155 @@ fn test_jwt_redis_config_deserialization_and_pre_arming() {
     let cache = super::cache::JwtCache::new(2, 16, 300, 60);
 
     super::redis_sync::apply_revocation_item(&cache, raw_token, 100);
-    assert_eq!(cache.lookup(token_hash, 100), super::cache::CacheLookup::HitDeny);
+    assert_eq!(
+        cache.lookup(token_hash, 100),
+        super::cache::CacheLookup::HitDeny
+    );
 
     super::redis_sync::apply_revocation_item(&cache, "jti:blacklisted-jti-42:2000", 100);
     assert!(cache.is_negative(super::cache::JwtCache::hash_jti("blacklisted-jti-42"), 1500));
+}
+
+#[test]
+fn test_jwt_policy_validation_success_and_failures() {
+    use super::policy::JwtPolicy;
+
+    let valid_json = serde_json::json!({
+        "schema_version": 1,
+        "generation": 10,
+        "origins": [
+            {
+                "id": "valid-origin",
+                "host": "api.example.com",
+                "path_prefix": "/api",
+                "algorithm": "HS256",
+                "secret": "my-valid-secret-123456",
+                "token_source": "header",
+                "header_name": "Authorization",
+                "token_prefix": "Bearer ",
+                "claim_rules": [
+                    { "payload_key": "sub", "header_key": "X-User-Id" }
+                ]
+            }
+        ]
+    });
+
+    let policy: JwtPolicy = serde_json::from_value(valid_json).unwrap();
+    assert!(policy.validate().is_ok());
+
+    // 1. Invalid schema_version
+    let mut bad_policy = policy.clone();
+    bad_policy.schema_version = 2;
+    assert!(bad_policy.validate().is_err());
+
+    // 2. Empty origins
+    let mut bad_policy = policy.clone();
+    bad_policy.origins.clear();
+    assert!(bad_policy.validate().is_err());
+
+    // 3. Duplicate origin id
+    let mut bad_policy = policy.clone();
+    bad_policy.origins.push(policy.origins[0].clone());
+    assert!(bad_policy.validate().is_err());
+
+    // 4. Invalid host
+    let mut bad_policy = policy.clone();
+    bad_policy.origins[0].host = "invalid host with spaces".to_string();
+    assert!(bad_policy.validate().is_err());
+
+    // 5. Invalid path_prefix
+    let mut bad_policy = policy.clone();
+    bad_policy.origins[0].path_prefix = "no-leading-slash".to_string();
+    assert!(bad_policy.validate().is_err());
+
+    // 6. Unsupported algorithm
+    let mut bad_policy = policy.clone();
+    bad_policy.origins[0].algorithm = "UNSUPPORTED_ALG".to_string();
+    assert!(bad_policy.validate().is_err());
+}
+
+#[test]
+fn test_jwt_materialize_to_dataplane_shm() {
+    use super::materialize::materialize;
+    use aurora_engine::shm::AURORA_EXT_JWT;
+
+    let config_val = serde_json::json!({
+        "schema_version": 1,
+        "generation": 25,
+        "origins": [
+            {
+                "id": "mat-origin",
+                "host": "api.materialize.local",
+                "path_prefix": "/api",
+                "algorithm": "HS256",
+                "secret": "materialize-secret-777",
+                "token_source": "header",
+                "header_name": "Authorization",
+                "token_prefix": "Bearer "
+            }
+        ]
+    });
+
+    let mut shm_slots = Vec::new();
+    assert!(materialize(&config_val, &mut shm_slots).is_ok());
+    assert_eq!(shm_slots.len(), 1);
+    assert_eq!(shm_slots[0].0, AURORA_EXT_JWT);
+
+    let parsed: serde_json::Value = serde_json::from_slice(&shm_slots[0].1).unwrap();
+    assert_eq!(parsed["generation"], 25);
+    assert_eq!(parsed["origins"][0]["id"], "mat-origin");
+}
+
+#[test]
+fn test_fast_parse_jose_header_coverage() {
+    use super::crypto::fast_parse_jose_header;
+
+    // 1. Standard RS256
+    let h1 = b"{\"alg\":\"RS256\",\"typ\":\"JWT\"}";
+    let parsed1 = fast_parse_jose_header(h1).unwrap();
+    assert_eq!(parsed1.alg, "RS256");
+    assert_eq!(parsed1.kid, None);
+
+    // 2. RS256 with kid
+    let h2 = b"{\"alg\":\"RS256\",\"kid\":\"key-2026-v1\",\"typ\":\"JWT\"}";
+    let parsed2 = fast_parse_jose_header(h2).unwrap();
+    assert_eq!(parsed2.alg, "RS256");
+    assert_eq!(parsed2.kid, Some("key-2026-v1"));
+
+    // 3. Reverse order with spacing
+    let h3 = b"{\"typ\": \"JWT\", \"kid\": \"primary-key\", \"alg\": \"HS512\"}";
+    let parsed3 = fast_parse_jose_header(h3).unwrap();
+    assert_eq!(parsed3.alg, "HS512");
+    assert_eq!(parsed3.kid, Some("primary-key"));
+
+    // 4. Fallback on invalid / escaped JSON
+    let h4 = b"{\"alg\":\"RS\\\"256\"}";
+    assert!(fast_parse_jose_header(h4).is_none());
+
+    let h5 = b"not json at all";
+    assert!(fast_parse_jose_header(h5).is_none());
+}
+
+#[test]
+fn test_jwt_cache_sampled_clock_eviction() {
+    use super::cache::{CacheLookup, JwtCache};
+
+    // Create a 1-shard cache with base capacity = 16 (max_burst = 64)
+    let cache = JwtCache::new(1, 16, 300, 30);
+    let now = 1000;
+
+    // Insert 64 entries (filling up to max_burst)
+    for i in 0..64u64 {
+        let headers = Arc::from([(format!("h_{i}"), format!("v_{i}"))]);
+        // Entry 0 has lowest expiry (1001), others have higher expiry (2000 + i)
+        let exp = if i == 0 { now + 1 } else { now + 1000 + i };
+        cache.insert_positive(i, exp, headers, None, now);
+    }
+
+    // Insert 65th entry triggering eviction
+    let headers_new = Arc::from([("new".to_string(), "val".to_string())]);
+    cache.insert_positive(999, now + 3000, headers_new, None, now);
+
+    // The newly inserted entry must be present
+    assert!(matches!(cache.lookup(999, now), CacheLookup::HitAllow(_)));
 }

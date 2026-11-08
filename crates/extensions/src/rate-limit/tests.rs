@@ -1,5 +1,5 @@
 use super::RateLimitEngine;
-use super::types::ActionOnExceeded;
+use super::policy::ActionOnExceeded;
 use crate::Error;
 
 #[test]
@@ -22,10 +22,10 @@ fn borrowed_counter_keys_preserve_hash_and_rule_identity() {
 
 #[test]
 fn ttl_bound_preserves_expiry_with_mixed_periods_and_clock_rollback() {
-    use super::shard::{RateLimitKeyRef, Shard, ShardConfig, insert_shard_entry};
-    use super::types::{
+    use super::policy::{
         CompiledRule, EvictionPolicy, LimitBy, OverflowStrategy, RateLimitAlgorithm,
     };
+    use super::shard::{RateLimitKeyRef, Shard, ShardConfig, insert_shard_entry};
 
     let mut rule = CompiledRule {
         id: "ttl".into(),
@@ -40,6 +40,7 @@ fn ttl_bound_preserves_expiry_with_mixed_periods_and_clock_rollback() {
         rejected_code: 429,
         custom_message: None,
         response_headers: Vec::new(),
+        emergency_delta_threshold: 20,
     };
     let cfg = ShardConfig {
         max_keys_per_shard: 2,
@@ -132,10 +133,10 @@ fn ttl_bound_preserves_expiry_with_mixed_periods_and_clock_rollback() {
 
 #[test]
 fn full_shard_preserves_each_eviction_policy() {
-    use super::shard::{RateLimitKeyRef, Shard, ShardConfig, insert_shard_entry};
-    use super::types::{
+    use super::policy::{
         CompiledRule, EvictionPolicy, LimitBy, OverflowStrategy, RateLimitAlgorithm,
     };
+    use super::shard::{RateLimitKeyRef, Shard, ShardConfig, insert_shard_entry};
 
     let rule = CompiledRule {
         id: "eviction".into(),
@@ -150,6 +151,7 @@ fn full_shard_preserves_each_eviction_policy() {
         rejected_code: 429,
         custom_message: None,
         response_headers: Vec::new(),
+        emergency_delta_threshold: 20,
     };
     for (policy, victim) in [
         (EvictionPolicy::Lru, b"b"),
@@ -1017,4 +1019,170 @@ fn test_custom_message_and_headers_interpolation() {
         r2.retry_after_secs
     );
     assert_eq!(body_str, expected_body);
+}
+
+#[test]
+fn test_rate_limit_policy_validate_schema_and_bounds() {
+    use super::policy::RateLimitPolicy;
+
+    // 1. Invalid schema_version
+    let json = serde_json::json!({
+        "schema_version": 2,
+        "generation": 1,
+        "mode": "local",
+        "algorithm": "token_bucket",
+        "memory_size_mb": 10,
+        "max_keys": 1000,
+        "eviction_policy": "lru",
+        "overflow_strategy": "evict_and_track",
+        "rules": [{
+            "id": "r1",
+            "host": "*",
+            "path_prefix": "/api",
+            "limit_by": "client_ip",
+            "rate": 10,
+            "period_secs": 1,
+            "action_on_exceeded": "throttle"
+        }]
+    });
+    let policy: RateLimitPolicy = serde_json::from_value(json).unwrap();
+    assert!(policy.validate().is_err());
+
+    // 2. Valid policy
+    let valid_json = serde_json::json!({
+        "schema_version": 1,
+        "generation": 1,
+        "mode": "local",
+        "algorithm": "token_bucket",
+        "memory_size_mb": 10,
+        "max_keys": 1000,
+        "eviction_policy": "lru",
+        "overflow_strategy": "evict_and_track",
+        "rules": [{
+            "id": "r1",
+            "host": "*",
+            "path_prefix": "/api",
+            "limit_by": "client_ip",
+            "rate": 10,
+            "period_secs": 1,
+            "action_on_exceeded": "throttle"
+        }]
+    });
+    let valid_policy: RateLimitPolicy = serde_json::from_value(valid_json).unwrap();
+    assert!(valid_policy.validate().is_ok());
+
+    // 3. Burst less than rate
+    let mut bad_burst = valid_policy.clone();
+    bad_burst.rules[0].burst = Some(5); // rate is 10
+    assert!(bad_burst.validate().is_err());
+}
+
+#[test]
+fn test_swar_64_bit_hash_distribution() {
+    use super::policy::NUM_SHARDS;
+    use super::shard::hash_key;
+
+    for len in [1, 7, 8, 9, 15, 16, 17, 32, 64] {
+        let key = vec![b'a'; len];
+        let shard_idx = hash_key(0, &key);
+        assert!(shard_idx < NUM_SHARDS);
+    }
+}
+
+#[test]
+fn test_materialize_rate_limit_slot() {
+    use super::materialize::materialize;
+    use aurora_engine::shm::AURORA_EXT_RATE_LIMIT;
+
+    let config = serde_json::json!({
+        "schema_version": 1,
+        "generation": 1,
+        "mode": "local",
+        "algorithm": "token_bucket",
+        "memory_size_mb": 10,
+        "max_keys": 1000,
+        "eviction_policy": "lru",
+        "overflow_strategy": "evict_and_track",
+        "rules": [{
+            "id": "mat_r1",
+            "host": "*",
+            "path_prefix": "/mat",
+            "limit_by": "client_ip",
+            "rate": 50,
+            "period_secs": 1,
+            "action_on_exceeded": "throttle"
+        }]
+    });
+
+    let mut shm_slots = Vec::new();
+    materialize(&config, &mut shm_slots).expect("materialization succeeds");
+
+    assert_eq!(shm_slots.len(), 1);
+    assert_eq!(shm_slots[0].0, AURORA_EXT_RATE_LIMIT);
+    assert!(!shm_slots[0].1.is_empty());
+}
+
+#[test]
+fn test_async_batch_sync_dual_trigger_emergency_flush() {
+    use std::sync::atomic::Ordering;
+
+    let json = serde_json::json!({
+        "schema_version": 1,
+        "generation": 1,
+        "mode": "distributed",
+        "algorithm": "token_bucket",
+        "memory_size_mb": 16,
+        "max_keys": 1000,
+        "eviction_policy": "lru",
+        "overflow_strategy": "evict_and_track",
+        "redis": {
+            "endpoint": "redis://127.0.0.1:6379",
+            "timeout_ms": 100,
+            "pool_size": 4,
+            "on_error": "fallback_local",
+            "sync_interval_ms": 500,
+            "threshold_percent": 20,
+            "min_delta_threshold": 5,
+            "max_delta_threshold": 100
+        },
+        "rules": [{
+            "id": "async_r1",
+            "host": "*",
+            "path_prefix": "/async",
+            "limit_by": "client_ip",
+            "rate": 100,
+            "burst": 100,
+            "period_secs": 1,
+            "action_on_exceeded": "throttle"
+        }]
+    });
+
+    let raw = serde_json::to_vec(&json).unwrap();
+    let engine = RateLimitEngine::from_snapshot(&raw).expect("engine load");
+
+    let ip = b"192.168.1.50";
+    let host = b"example.com";
+    let path = b"/async/test";
+
+    // Rate = 100, threshold_percent = 20% -> emergency_delta_threshold = 20 reqs.
+    // First 10 requests allowed in RAM, delta accumulates
+    for _ in 0..10 {
+        let d = engine.evaluate(host, path, ip, |_| None).unwrap();
+        assert!(d.allowed);
+    }
+
+    // Simulate cluster-wide block received from Redis
+    let shard_idx = super::shard::hash_key(0, ip);
+    let map_key = super::shard::RateLimitKeyRef(0, ip);
+    {
+        let mut shard = engine.shards[shard_idx].0.lock().unwrap();
+        let entry = shard.entries.get_mut(&map_key).unwrap();
+        assert_eq!(entry.pending_delta.load(Ordering::Relaxed), 10);
+        entry.cluster_blocked.store(true, Ordering::Release);
+    }
+
+    // 11th request: blocked by cluster flag immediately in < 50ns with 429!
+    let d_blocked = engine.evaluate(host, path, ip, |_| None).unwrap();
+    assert!(!d_blocked.allowed);
+    assert_eq!(d_blocked.status_code, 429);
 }

@@ -106,28 +106,37 @@ pub struct FlatIpv4Rule {
     pub host: HostMatcher,
     pub path_prefix: Vec<u8>,
     pub log: bool,
+    pub is_pure: bool,
 }
 
 impl FlatIpv4Rule {
     #[inline(always)]
-    pub fn matches(&self, ip: u32, req_method_mask: u16, host: &[u8], path: &[u8]) -> bool {
-        // 1. Bitwise IP subnet match (AND + CMP)
-        if (ip & self.mask) != self.network {
-            return false;
+    pub fn matches_request(&self, req_method_mask: u16, host: &[u8], path: &[u8]) -> bool {
+        if self.is_pure {
+            return true;
         }
 
-        // 2. HTTP method bitwise match (TEST)
+        // 1. HTTP method bitwise match (TEST)
         if (self.method_mask & req_method_mask) == 0 {
             return false;
         }
 
-        // 3. Host match
+        // 2. Host match
         if !self.host.matches(host) {
             return false;
         }
 
-        // 4. Path prefix match
+        // 3. Path prefix match
         self.matches_path(path)
+    }
+
+    #[inline(always)]
+    pub fn matches(&self, ip: u32, req_method_mask: u16, host: &[u8], path: &[u8]) -> bool {
+        // Bitwise IP subnet match (AND + CMP)
+        if (ip & self.mask) != self.network {
+            return false;
+        }
+        self.matches_request(req_method_mask, host, path)
     }
 
     #[inline(always)]
@@ -157,28 +166,37 @@ pub struct FlatIpv6Rule {
     pub host: HostMatcher,
     pub path_prefix: Vec<u8>,
     pub log: bool,
+    pub is_pure: bool,
 }
 
 impl FlatIpv6Rule {
     #[inline(always)]
-    pub fn matches(&self, ip: u128, req_method_mask: u16, host: &[u8], path: &[u8]) -> bool {
-        // 1. Bitwise IP subnet match (AND + CMP)
-        if (ip & self.mask) != self.network {
-            return false;
+    pub fn matches_request(&self, req_method_mask: u16, host: &[u8], path: &[u8]) -> bool {
+        if self.is_pure {
+            return true;
         }
 
-        // 2. HTTP method bitwise match (TEST)
+        // 1. HTTP method bitwise match (TEST)
         if (self.method_mask & req_method_mask) == 0 {
             return false;
         }
 
-        // 3. Host match
+        // 2. Host match
         if !self.host.matches(host) {
             return false;
         }
 
-        // 4. Path prefix match
+        // 3. Path prefix match
         self.matches_path(path)
+    }
+
+    #[inline(always)]
+    pub fn matches(&self, ip: u128, req_method_mask: u16, host: &[u8], path: &[u8]) -> bool {
+        // Bitwise IP subnet match (AND + CMP)
+        if (ip & self.mask) != self.network {
+            return false;
+        }
+        self.matches_request(req_method_mask, host, path)
     }
 
     #[inline(always)]

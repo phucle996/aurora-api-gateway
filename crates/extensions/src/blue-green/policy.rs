@@ -3,8 +3,8 @@
 //! Handles JSON deserialization, validation, priority sorting, and precompilation
 //! of network CIDRs, FNV-1a secret hashes, and 64-byte L1 cacheline slot sheets.
 
-use std::sync::Arc;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 pub const SLOT_BLUE: u8 = 0;
 pub const SLOT_GREEN: u8 = 1;

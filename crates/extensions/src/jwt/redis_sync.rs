@@ -18,8 +18,8 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use crate::redis_pool::RedisConnectionPool;
 use super::cache::JwtCache;
+use crate::redis_pool::RedisConnectionPool;
 
 /// Global Redis key tracking global revocation version counter.
 pub const REDIS_JWT_REVOCATION_VERSION_KEY: &str = "aurora:jwt:revocation_version";
@@ -35,10 +35,7 @@ pub const SSCAN_BATCH_SIZE: usize = 100;
 pub const PUBSUB_READ_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Autonomous Shadow task that keeps the L1 In-Memory Sheet Cache synchronized with L2 Redis.
-pub async fn run_jwt_redis_shadow_sync(
-    cache: Arc<JwtCache>,
-    pool: Arc<RedisConnectionPool>,
-) {
+pub async fn run_jwt_redis_shadow_sync(cache: Arc<JwtCache>, pool: Arc<RedisConnectionPool>) {
     tokio::task::spawn_blocking(move || {
         let mut backoff = Duration::from_secs(1);
         let mut local_version: Option<u64> = None;
@@ -66,22 +63,25 @@ pub async fn run_jwt_redis_shadow_sync(
                                             .duration_since(UNIX_EPOCH)
                                             .unwrap_or_default()
                                             .as_secs();
-                                        if let Some(msg_version) = apply_revocation_item(&cache, &item, now) {
-                                            local_version = Some(
-                                                local_version.unwrap_or(0).max(msg_version)
-                                            );
+                                        if let Some(msg_version) =
+                                            apply_revocation_item(&cache, &item, now)
+                                        {
+                                            local_version =
+                                                Some(local_version.unwrap_or(0).max(msg_version));
                                         }
                                     }
 
                                     // Periodic check even under continuous message flow
-                                    if last_reconcile.elapsed() >= PERIODIC_RECONCILIATION_INTERVAL {
+                                    if last_reconcile.elapsed() >= PERIODIC_RECONCILIATION_INTERVAL
+                                    {
                                         reconcile_from_redis(&cache, &pool, &mut local_version);
                                         last_reconcile = Instant::now();
                                     }
                                 }
                                 Err(err) if err.is_timeout() => {
                                     // Pub/Sub idle timeout: run periodic reconciliation if interval elapsed
-                                    if last_reconcile.elapsed() >= PERIODIC_RECONCILIATION_INTERVAL {
+                                    if last_reconcile.elapsed() >= PERIODIC_RECONCILIATION_INTERVAL
+                                    {
                                         reconcile_from_redis(&cache, &pool, &mut local_version);
                                         last_reconcile = Instant::now();
                                     }
@@ -241,7 +241,8 @@ mod tests {
 
     #[test]
     fn test_apply_revocation_item_formats() {
-        let err: redis::RedisError = redis::RedisError::from(std::io::Error::from(std::io::ErrorKind::TimedOut));
+        let err: redis::RedisError =
+            redis::RedisError::from(std::io::Error::from(std::io::ErrorKind::TimedOut));
         assert!(err.is_timeout());
         let cache = JwtCache::new(4, 32, 300, 60);
         let now = 1000;

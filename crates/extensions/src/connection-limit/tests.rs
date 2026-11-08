@@ -140,7 +140,8 @@ fn test_distributed_mode_failover_and_pool_reuse() {
             "timeout_ms": 20,
             "pool_size": 4,
             "on_error": "fallback_local",
-            "lease_ttl_secs": 30
+            "lease_ttl_secs": 30,
+            "sync_interval_ms": 0
         },
         "rules": [
             {
@@ -163,7 +164,8 @@ fn test_distributed_mode_failover_and_pool_reuse() {
             "timeout_ms": 20,
             "pool_size": 4,
             "on_error": "pass",
-            "lease_ttl_secs": 30
+            "lease_ttl_secs": 30,
+            "sync_interval_ms": 0
         },
         "rules": [
             {
@@ -325,4 +327,256 @@ fn test_header_and_route_path_connection_limiting() {
     engine.release(&tok_beta1);
     engine.release(&tok_fallback);
     engine.release(&tok_path1);
+}
+
+#[test]
+fn test_policy_validation() {
+    use super::materialize::materialize;
+    use super::policy::ConnectionLimitPolicy;
+
+    // Valid policy
+    let valid_json = json!({
+        "schema_version": 1,
+        "generation": 1,
+        "mode": "local",
+        "rules": [
+            {
+                "id": "rule-1",
+                "host": "example.com",
+                "path_prefix": "/api",
+                "limit_by": "client_ip",
+                "max_connections": 10
+            }
+        ]
+    });
+    let policy: ConnectionLimitPolicy = serde_json::from_value(valid_json.clone()).unwrap();
+    assert!(policy.validate().is_ok());
+
+    let mut slots = Vec::new();
+    assert!(materialize(&valid_json, &mut slots).is_ok());
+    assert_eq!(slots.len(), 1);
+    assert_eq!(slots[0].0, aurora_engine::shm::AURORA_EXT_CONN_LIMIT);
+
+    // Invalid schema version
+    let mut invalid = valid_json.clone();
+    invalid["schema_version"] = json!(2);
+    let policy: ConnectionLimitPolicy = serde_json::from_value(invalid).unwrap();
+    assert!(policy.validate().is_err());
+
+    // Invalid relative path
+    let mut invalid_path = valid_json.clone();
+    invalid_path["rules"][0]["path_prefix"] = json!("../etc/passwd");
+    let policy: ConnectionLimitPolicy = serde_json::from_value(invalid_path).unwrap();
+    assert!(policy.validate().is_err());
+
+    // Duplicate rule id
+    let duplicate_id = json!({
+        "schema_version": 1,
+        "generation": 1,
+        "mode": "local",
+        "rules": [
+            { "id": "dup", "path_prefix": "/a", "max_connections": 5 },
+            { "id": "dup", "path_prefix": "/b", "max_connections": 5 }
+        ]
+    });
+    let policy: ConnectionLimitPolicy = serde_json::from_value(duplicate_id).unwrap();
+    assert!(policy.validate().is_err());
+}
+
+#[test]
+fn test_sharded_conn_tracker_zero_alloc_hash() {
+    use super::tracker::ShardedConnTracker;
+
+    let tracker = ShardedConnTracker::new();
+    let rule_id = b"test-rule";
+    let identifier = b"192.168.1.10";
+
+    let hash1 = ShardedConnTracker::hash_key(rule_id, identifier);
+    let hash2 = ShardedConnTracker::hash_key(rule_id, identifier);
+    assert_eq!(hash1, hash2);
+
+    // Acquire up to limit 2
+    let (ok1, cur1) = tracker.acquire_hash(hash1, 2);
+    assert!(ok1);
+    assert_eq!(cur1, 1);
+
+    let (ok2, cur2) = tracker.acquire_hash(hash1, 2);
+    assert!(ok2);
+    assert_eq!(cur2, 2);
+
+    // 3rd should be rejected
+    let (ok3, cur3) = tracker.acquire_hash(hash1, 2);
+    assert!(!ok3);
+    assert_eq!(cur3, 2);
+
+    // Release
+    tracker.release_hash(hash1);
+    let (ok4, cur4) = tracker.acquire_hash(hash1, 2);
+    assert!(ok4);
+    assert_eq!(cur4, 2);
+
+    tracker.release_hash(hash1);
+    tracker.release_hash(hash1);
+}
+
+#[test]
+fn test_distributed_async_shadow_sync() {
+    use rustc_hash::FxHashSet;
+
+    let policy_json = json!({
+        "schema_version": 1,
+        "generation": 1,
+        "mode": "distributed",
+        "redis": {
+            "endpoint": "redis://127.0.0.1:6379",
+            "timeout_ms": 50,
+            "pool_size": 4,
+            "on_error": "fallback_local",
+            "lease_ttl_secs": 30,
+            "sync_interval_ms": 500
+        },
+        "rules": [
+            {
+                "id": "async-rule-1",
+                "host": "*",
+                "path_prefix": "/api",
+                "limit_by": "client_ip",
+                "max_connections": 10,
+                "action_on_exceeded": "throttle"
+            }
+        ]
+    });
+
+    let raw = serde_json::to_vec(&policy_json).unwrap();
+    let engine = ConnectionLimitEngine::from_snapshot(&raw).unwrap();
+
+    let host = b"example.com";
+    let path = b"/api/v1/test";
+    let ip = b"10.0.0.99";
+
+    // Request is admitted directly in RAM (fast L1 path)
+    let d1 = engine.acquire(host, path, ip, |_| None).unwrap();
+    assert!(d1.allowed);
+    assert_eq!(d1.current_connections, 1);
+    let token1 = d1.token.unwrap();
+    assert!(!token1.is_redis); // L1 mode on hot-path: no blocking Redis release
+
+    // Harvest sync entries collects active in-flight count
+    let entries = engine.local_tracker.harvest_sync_entries();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].1, "aurora:cl:cluster:async-rule-1:10.0.0.99");
+    assert_eq!(entries[0].2, 1); // active_count
+
+    // Simulate cluster-wide limit exceeded received from Redis
+    let key_hash = entries[0].0;
+    let mut blocked = FxHashSet::default();
+    blocked.insert(key_hash);
+    engine
+        .local_tracker
+        .apply_cluster_blocks(&blocked, &[key_hash]);
+
+    // Next request from this client is rejected immediately in L1 RAM
+    let d2 = engine.acquire(host, path, ip, |_| None).unwrap();
+    assert!(!d2.allowed);
+    assert_eq!(d2.status_code, 503);
+
+    // Simulate cluster unblocked
+    let empty_blocked = FxHashSet::default();
+    engine
+        .local_tracker
+        .apply_cluster_blocks(&empty_blocked, &[key_hash]);
+
+    // Request is allowed again
+    let d3 = engine.acquire(host, path, ip, |_| None).unwrap();
+    assert!(d3.allowed);
+
+    engine.release(&token1);
+}
+
+#[test]
+fn test_precomputed_hash_prefix_and_branchless_arithmetic() {
+    use super::tracker::ShardedConnTracker;
+
+    let rule_id = b"test-tenant-rate-limit-rule-xyz";
+    let identifier = b"192.168.1.100";
+
+    // 1. Verify precomputed prefix produces identical hash to full hash
+    let prefix = ShardedConnTracker::precompute_rule_hash(rule_id);
+    let streaming_hash = ShardedConnTracker::hash_with_prefix(prefix, identifier);
+    let full_hash = ShardedConnTracker::hash_key(rule_id, identifier);
+    assert_eq!(streaming_hash, full_hash);
+
+    // 2. Verify packed 32-bit single-comparison branchless arithmetic
+    let tracker = ShardedConnTracker::new();
+    let max_conn = 2;
+
+    // Normal acquire 1
+    let (ok1, cur1) = tracker.acquire_hash(full_hash, max_conn);
+    assert!(ok1);
+    assert_eq!(cur1, 1);
+
+    // Normal acquire 2
+    let (ok2, cur2) = tracker.acquire_hash(full_hash, max_conn);
+    assert!(ok2);
+    assert_eq!(cur2, 2);
+
+    // Normal reject 3 (local count >= max_conn)
+    let (ok3, cur3) = tracker.acquire_hash(full_hash, max_conn);
+    assert!(!ok3);
+    assert_eq!(cur3, 2);
+
+    // Release 1
+    tracker.release_hash(full_hash);
+    let (ok4, cur4) = tracker.acquire_hash(full_hash, max_conn);
+    assert!(ok4);
+    assert_eq!(cur4, 2);
+
+    // Simulate cluster block via single bitwise OR
+    let mut blocked_set = rustc_hash::FxHashSet::default();
+    blocked_set.insert(full_hash);
+    tracker.apply_cluster_blocks(&blocked_set, &[full_hash]);
+
+    // Single comparison rejects immediately (< 5ns)
+    let (ok_blocked, cur_blocked) = tracker.acquire_hash(full_hash, max_conn);
+    assert!(!ok_blocked);
+    assert_eq!(cur_blocked, 2);
+
+    // Unblock
+    let empty_set = rustc_hash::FxHashSet::default();
+    tracker.apply_cluster_blocks(&empty_set, &[full_hash]);
+
+    // Clean up
+    tracker.release_hash(full_hash);
+    tracker.release_hash(full_hash);
+}
+
+#[test]
+fn test_pure_rule_branchless_bypass() {
+    let policy_json = json!({
+        "schema_version": 1,
+        "generation": 1,
+        "mode": "local",
+        "rules": [
+            {
+                "id": "pure-rule-1",
+                "host": "*",
+                "path_prefix": "/",
+                "limit_by": "client_ip",
+                "max_connections": 10
+            }
+        ]
+    });
+
+    let raw = serde_json::to_vec(&policy_json).unwrap();
+    let engine = ConnectionLimitEngine::from_snapshot(&raw).unwrap();
+
+    // Verify pure rule matches any host and any path without string comparison
+    let d1 = engine
+        .acquire(b"any.host.com", b"/any/path", b"1.1.1.1", |_| None)
+        .unwrap();
+    assert!(d1.allowed);
+    let token1 = d1.token.unwrap();
+    assert_ne!(token1.key_hash, 0);
+
+    engine.release(&token1);
 }

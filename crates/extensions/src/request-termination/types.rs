@@ -28,6 +28,8 @@ pub struct RequestTerminationRuleInput {
     #[serde(default = "default_body")]
     pub body: String,
     #[serde(default)]
+    pub match_headers: Vec<HeaderPairInput>,
+    #[serde(default)]
     pub headers: Vec<HeaderPairInput>,
     #[serde(default)]
     pub bypass_headers: Vec<HeaderPairInput>,
@@ -63,14 +65,9 @@ fn default_body() -> String {
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct RequestTerminationSnapshot {
-    pub schema_version: Option<u32>,
-    pub generation: Option<u64>,
-    pub status_code: Option<u16>,
-    pub content_type: Option<String>,
-    pub body: Option<String>,
-    pub headers: Option<Vec<HeaderPairInput>>,
-    pub bypass_headers: Option<Vec<HeaderPairInput>>,
-    pub rules: Option<Vec<RequestTerminationRuleInput>>,
+    pub schema_version: u32,
+    pub generation: u64,
+    pub rules: Vec<RequestTerminationRuleInput>,
 }
 
 #[derive(Debug, Clone, Default)]

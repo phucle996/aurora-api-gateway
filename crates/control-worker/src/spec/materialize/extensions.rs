@@ -3,14 +3,14 @@
 //! Delegates proxy directive generation to each respective extension in `aurora_extensions`,
 //! and routes dataplane extensions directly to their Shared Memory (SHM) policy slots.
 
+use super::route::RoutingSpec;
 use aurora_engine::shm::{
     AURORA_EXT_BLUE_GREEN, AURORA_EXT_CANARY_RELEASE, AURORA_EXT_CONN_LIMIT,
     AURORA_EXT_IP_RESTRICTION, AURORA_EXT_JWT, AURORA_EXT_RATE_LIMIT, AURORA_EXT_REQUEST_MIRROR,
     AURORA_EXT_REQUEST_TERMINATION, AURORA_EXT_RESOURCE_LIMIT, AURORA_EXT_RESPONSE_CACHE,
     AURORA_EXT_RESPONSE_COMPRESSION, AURORA_EXT_TRAFFIC_SHAPER, AURORA_EXT_TRAFFIC_SPLIT,
-    AURORA_SLOT_ROUTE_MASKS, RouteMaskRule, RouteMaskSnapshot,
+    AURORA_EXT_WAF_LITE, AURORA_SLOT_ROUTE_MASKS, RouteMaskRule, RouteMaskSnapshot,
 };
-use super::route::RoutingSpec;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -64,6 +64,7 @@ pub fn resolve_dataplane_shm_slot(renderer: &str) -> Option<u32> {
         "request-termination" => Some(AURORA_EXT_REQUEST_TERMINATION),
         "response-compression" | "compression-gzip" => Some(AURORA_EXT_RESPONSE_COMPRESSION),
         "response-cache" => Some(AURORA_EXT_RESPONSE_CACHE),
+        "waf-lite" | "waf_lite" => Some(AURORA_EXT_WAF_LITE),
         _ => None,
     }
 }
@@ -89,6 +90,7 @@ pub fn resolve_extension_key_slot(key: &str) -> Option<u32> {
             Some(AURORA_EXT_RESPONSE_COMPRESSION)
         }
         "response-cache" | "response_cache" => Some(AURORA_EXT_RESPONSE_CACHE),
+        "waf-lite" | "waf_lite" | "waf" => Some(AURORA_EXT_WAF_LITE),
         _ => None,
     }
 }
@@ -210,7 +212,8 @@ pub fn compile_route_masks_into_shm(routing: &RoutingSpec, rendered: &mut Render
                                 (Some(true), Some(s_trim))
                             }
                         } else if let Some(obj) = v.as_object() {
-                            let prof_str = obj.get("profile").and_then(|p| p.as_str()).map(str::trim);
+                            let prof_str =
+                                obj.get("profile").and_then(|p| p.as_str()).map(str::trim);
                             if prof_str.is_some() && explicit_mode_override != Some("inherit") {
                                 explicit = true;
                             }
@@ -226,7 +229,14 @@ pub fn compile_route_masks_into_shm(routing: &RoutingSpec, rendered: &mut Render
                             } else {
                                 obj.get("enabled").and_then(|x| x.as_bool()).unwrap_or(true)
                             };
-                            (Some(en), if en { Some(prof_str.unwrap_or("default")) } else { None })
+                            (
+                                Some(en),
+                                if en {
+                                    Some(prof_str.unwrap_or("default"))
+                                } else {
+                                    None
+                                },
+                            )
                         } else {
                             (None, None)
                         };
@@ -282,15 +292,23 @@ pub fn compile_route_masks_into_shm(routing: &RoutingSpec, rendered: &mut Render
                                     || prof_name != "default"
                                 {
                                     let mut entry = serde_json::Map::new();
-                                    entry.insert("path_prefix".to_string(), Value::String(path.clone()));
+                                    entry.insert(
+                                        "path_prefix".to_string(),
+                                        Value::String(path.clone()),
+                                    );
                                     entry.insert("enabled".to_string(), Value::Bool(true));
                                     if let Some(ttl) = ttl_opt {
-                                        entry.insert("ttl_secs".to_string(), Value::Number(ttl.into()));
+                                        entry.insert(
+                                            "ttl_secs".to_string(),
+                                            Value::Number(ttl.into()),
+                                        );
                                     }
                                     if let Some(hdrs) = headers_opt {
                                         entry.insert(
                                             "cache_key_headers".to_string(),
-                                            Value::Array(hdrs.into_iter().map(Value::String).collect()),
+                                            Value::Array(
+                                                hdrs.into_iter().map(Value::String).collect(),
+                                            ),
                                         );
                                     }
                                     cache_overrides.push(Value::Object(entry));
@@ -348,15 +366,23 @@ pub fn compile_route_masks_into_shm(routing: &RoutingSpec, rendered: &mut Render
                                     .or(builtin_algos);
                                 if min_len.is_some() || algos.is_some() {
                                     let mut entry = serde_json::Map::new();
-                                    entry.insert("path_prefix".to_string(), Value::String(path.clone()));
+                                    entry.insert(
+                                        "path_prefix".to_string(),
+                                        Value::String(path.clone()),
+                                    );
                                     entry.insert("enabled".to_string(), Value::Bool(true));
                                     if let Some(ml) = min_len {
-                                        entry.insert("min_length".to_string(), Value::Number(ml.into()));
+                                        entry.insert(
+                                            "min_length".to_string(),
+                                            Value::Number(ml.into()),
+                                        );
                                     }
                                     if let Some(a) = algos {
                                         entry.insert(
                                             "prefer_algorithms".to_string(),
-                                            Value::Array(a.into_iter().map(Value::String).collect()),
+                                            Value::Array(
+                                                a.into_iter().map(Value::String).collect(),
+                                            ),
                                         );
                                     }
                                     compression_overrides.push(Value::Object(entry));
@@ -531,9 +557,10 @@ pub fn compile_route_masks_into_shm(routing: &RoutingSpec, rendered: &mut Render
         if let Some(arr) = overrides_arr.as_array_mut() {
             for entry in cache_overrides {
                 let path_prefix = entry.get("path_prefix").and_then(|p| p.as_str());
-                if !arr.iter().any(|item| {
-                    item.get("path_prefix").and_then(|p| p.as_str()) == path_prefix
-                }) {
+                if !arr
+                    .iter()
+                    .any(|item| item.get("path_prefix").and_then(|p| p.as_str()) == path_prefix)
+                {
                     arr.push(entry);
                 }
             }
@@ -558,9 +585,10 @@ pub fn compile_route_masks_into_shm(routing: &RoutingSpec, rendered: &mut Render
         if let Some(arr) = overrides_arr.as_array_mut() {
             for entry in compression_overrides {
                 let path_prefix = entry.get("path_prefix").and_then(|p| p.as_str());
-                if !arr.iter().any(|item| {
-                    item.get("path_prefix").and_then(|p| p.as_str()) == path_prefix
-                }) {
+                if !arr
+                    .iter()
+                    .any(|item| item.get("path_prefix").and_then(|p| p.as_str()) == path_prefix)
+                {
                     arr.push(entry);
                 }
             }
@@ -585,9 +613,10 @@ pub fn compile_route_masks_into_shm(routing: &RoutingSpec, rendered: &mut Render
         if let Some(arr) = rules_arr.as_array_mut() {
             for rule in rate_limit_rules {
                 let path_prefix = rule.get("path_prefix").and_then(|p| p.as_str());
-                if !arr.iter().any(|item| {
-                    item.get("path_prefix").and_then(|p| p.as_str()) == path_prefix
-                }) {
+                if !arr
+                    .iter()
+                    .any(|item| item.get("path_prefix").and_then(|p| p.as_str()) == path_prefix)
+                {
                     arr.push(rule);
                 }
             }
@@ -612,9 +641,10 @@ pub fn compile_route_masks_into_shm(routing: &RoutingSpec, rendered: &mut Render
         if let Some(arr) = rules_arr.as_array_mut() {
             for rule in conn_limit_rules {
                 let path_prefix = rule.get("path_prefix").and_then(|p| p.as_str());
-                if !arr.iter().any(|item| {
-                    item.get("path_prefix").and_then(|p| p.as_str()) == path_prefix
-                }) {
+                if !arr
+                    .iter()
+                    .any(|item| item.get("path_prefix").and_then(|p| p.as_str()) == path_prefix)
+                {
                     arr.push(rule);
                 }
             }
@@ -639,9 +669,10 @@ pub fn compile_route_masks_into_shm(routing: &RoutingSpec, rendered: &mut Render
         if let Some(arr) = rules_arr.as_array_mut() {
             for rule in ip_restriction_rules {
                 let path_prefix = rule.get("path_prefix").and_then(|p| p.as_str());
-                if !arr.iter().any(|item| {
-                    item.get("path_prefix").and_then(|p| p.as_str()) == path_prefix
-                }) {
+                if !arr
+                    .iter()
+                    .any(|item| item.get("path_prefix").and_then(|p| p.as_str()) == path_prefix)
+                {
                     arr.push(rule);
                 }
             }
@@ -782,30 +813,36 @@ pub fn render_extensions(
                     &mut has_server,
                 )?;
             }
-            "correlation-id" => {
-                aurora_extensions::correlation_id::materialize(&config, &mut regular_server, &mut has_server)?
+            "correlation-id" => aurora_extensions::correlation_id::materialize(
+                &config,
+                &mut regular_server,
+                &mut has_server,
+            )?,
+            "cors" => {
+                aurora_extensions::cors::materialize(&config, &mut regular_server, &mut has_server)?
             }
-            "cors" => aurora_extensions::cors::materialize(&config, &mut regular_server, &mut has_server)?,
             "request-header-transform" => aurora_extensions::request_header_transform::materialize(
                 &config,
                 &mut ingress_server,
                 &mut has_server,
             )?,
-            "response-header-transform" => aurora_extensions::response_header_transform::materialize(
+            "response-header-transform" => {
+                aurora_extensions::response_header_transform::materialize(
+                    &config,
+                    &mut regular_server,
+                    &mut has_server,
+                )?
+            }
+            "uri-rewrite" => {}
+            "response-buffering" => aurora_extensions::response_buffering::materialize(
+                &mut regular_server,
+                &mut has_server,
+            )?,
+            "timeout-policy" => aurora_extensions::timeout_policy::materialize(
                 &config,
                 &mut regular_server,
                 &mut has_server,
             )?,
-            "uri-rewrite" => {}
-            "response-buffering" => {
-                aurora_extensions::response_buffering::materialize(&mut regular_server, &mut has_server)?
-            }
-            "timeout-policy" => {
-                aurora_extensions::timeout_policy::materialize(&config, &mut regular_server, &mut has_server)?
-            }
-            "maintenance" => {
-                aurora_extensions::maintenance::materialize(&config, &mut regular_server, &mut has_server)?
-            }
             renderer => {
                 return Err(format!(
                     "extension instance {} uses unsupported renderer {renderer}",
@@ -865,10 +902,26 @@ mod tests {
         }];
 
         let rendered = render_extensions(&instances).expect("render must succeed");
-        assert!(rendered.server_conf.contains("set $aurora_req_id $request_id;"));
-        assert!(rendered.server_conf.contains("proxy_set_header X-Request-ID $request_id;"));
-        assert!(rendered.server_conf.contains("add_header X-Request-ID $request_id always;"));
-        assert!(rendered.server_conf.contains("proxy_set_header traceparent \"00-$request_id-$aurora_span_id-01\";"));
+        assert!(
+            rendered
+                .server_conf
+                .contains("set $aurora_req_id $request_id;")
+        );
+        assert!(
+            rendered
+                .server_conf
+                .contains("proxy_set_header X-Request-ID $request_id;")
+        );
+        assert!(
+            rendered
+                .server_conf
+                .contains("add_header X-Request-ID $request_id always;")
+        );
+        assert!(
+            rendered
+                .server_conf
+                .contains("proxy_set_header traceparent \"00-$request_id-$aurora_span_id-01\";")
+        );
     }
 
     #[test]
@@ -919,7 +972,9 @@ mod tests {
         // Dataplane SHM slot contains the serialized config
         let slot = rendered.get_shm_slot(AURORA_EXT_RESPONSE_COMPRESSION);
         assert!(slot.is_some());
-        let val = rendered.get_shm_slot_json(AURORA_EXT_RESPONSE_COMPRESSION).unwrap();
+        let val = rendered
+            .get_shm_slot_json(AURORA_EXT_RESPONSE_COMPRESSION)
+            .unwrap();
         assert_eq!(val["min_length"], 512);
     }
 
@@ -944,7 +999,8 @@ mod tests {
             },
         ];
 
-        let err = render_extensions(&instances).expect_err("duplicate response-compression should fail");
+        let err =
+            render_extensions(&instances).expect_err("duplicate response-compression should fail");
         assert!(err.contains("NodeSpec contains more than one response-compression extension"));
     }
 
@@ -1024,18 +1080,28 @@ mod tests {
         let snap: RouteMaskSnapshot = serde_json::from_slice(mask_bytes).unwrap();
         assert_eq!(snap.routes.len(), 2);
 
-        let r1 = snap.routes.iter().find(|r| r.path == "/api/v1/12kb").unwrap();
+        let r1 = snap
+            .routes
+            .iter()
+            .find(|r| r.path == "/api/v1/12kb")
+            .unwrap();
         assert!(r1.explicit);
         assert_ne!(r1.allow_mask & (1 << AURORA_EXT_RESPONSE_CACHE), 0);
         assert_ne!(r1.allow_mask & (1 << AURORA_EXT_RESPONSE_COMPRESSION), 0);
         assert_eq!(r1.allow_mask & (1 << AURORA_EXT_JWT), 0);
 
-        let r2 = snap.routes.iter().find(|r| r.path == "/api/v1/webhook").unwrap();
+        let r2 = snap
+            .routes
+            .iter()
+            .find(|r| r.path == "/api/v1/webhook")
+            .unwrap();
         assert!(r2.explicit);
         assert_eq!(r2.allow_mask, 0);
 
         // Verify route-level ttl_secs was merged into response-cache slot
-        let cache_val = rendered.get_shm_slot_json(AURORA_EXT_RESPONSE_CACHE).unwrap();
+        let cache_val = rendered
+            .get_shm_slot_json(AURORA_EXT_RESPONSE_CACHE)
+            .unwrap();
         let overrides = cache_val["routes_override"].as_array().unwrap();
         assert_eq!(overrides.len(), 1);
         assert_eq!(overrides[0]["path_prefix"], "/api/v1/12kb");
@@ -1137,7 +1203,11 @@ mod tests {
         // 1. Check route mask
         let mask_bytes = rendered.get_shm_slot(AURORA_SLOT_ROUTE_MASKS).unwrap();
         let snap: RouteMaskSnapshot = serde_json::from_slice(mask_bytes).unwrap();
-        let rule = snap.routes.iter().find(|r| r.path == "/api/v1/catalog").unwrap();
+        let rule = snap
+            .routes
+            .iter()
+            .find(|r| r.path == "/api/v1/catalog")
+            .unwrap();
         assert!(rule.explicit);
         assert_ne!(rule.allow_mask & (1 << AURORA_EXT_RESPONSE_CACHE), 0);
         assert_ne!(rule.allow_mask & (1 << AURORA_EXT_RATE_LIMIT), 0);
@@ -1145,7 +1215,9 @@ mod tests {
         assert_eq!(rule.allow_mask & (1 << AURORA_EXT_JWT), 0);
 
         // 2. Check custom profile `vip_cache` resolved into response-cache SHM
-        let cache_val = rendered.get_shm_slot_json(AURORA_EXT_RESPONSE_CACHE).unwrap();
+        let cache_val = rendered
+            .get_shm_slot_json(AURORA_EXT_RESPONSE_CACHE)
+            .unwrap();
         let cache_overrides = cache_val["routes_override"].as_array().unwrap();
         assert_eq!(cache_overrides.len(), 1);
         assert_eq!(cache_overrides[0]["path_prefix"], "/api/v1/catalog");
@@ -1161,7 +1233,9 @@ mod tests {
         assert_eq!(rl_rules[0]["burst"], 1000);
 
         // 4. Check built-in profile `fast_zstd` resolved into response-compression SHM
-        let comp_val = rendered.get_shm_slot_json(AURORA_EXT_RESPONSE_COMPRESSION).unwrap();
+        let comp_val = rendered
+            .get_shm_slot_json(AURORA_EXT_RESPONSE_COMPRESSION)
+            .unwrap();
         let comp_overrides = comp_val["routes_override"].as_array().unwrap();
         assert_eq!(comp_overrides.len(), 1);
         assert_eq!(comp_overrides[0]["path_prefix"], "/api/v1/catalog");

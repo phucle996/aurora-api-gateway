@@ -98,12 +98,12 @@ fn test_extensions_generation() {
             config_json: r#"{"allow_origins":["https://example.com"],"allow_methods":["GET","POST"],"allow_headers":["Authorization","Content-Type"],"allow_credentials":true,"max_age":3600}"#.to_string(),
         },
         crate::spec::extensions::ExtensionInstanceSpec {
-            instance_id: "maintenance".to_string(),
-            key: "builtin/maintenance-mode".to_string(),
+            instance_id: "request-termination".to_string(),
+            key: "builtin/request-termination".to_string(),
             version: 1,
-            renderer: "maintenance".to_string(),
+            renderer: "request-termination".to_string(),
             manifest_digest: String::new(),
-            config_json: r#"{"status_code":503,"bypass_header":"X-Bypass","retry_after_secs":120,"message":"Under upgrade"}"#.to_string(),
+            config_json: r#"{"schema_version":1,"generation":1,"rules":[{"id":"m1","priority":1,"origin":"*","path_prefix":"/","status_code":503,"content_type":"application/json","body":"{\"error\":\"Under upgrade\"}","headers":[{"name":"Retry-After","value":"120"}],"bypass_headers":[{"name":"X-Bypass","value":"secret"}]}]}"#.to_string(),
         },
         crate::spec::extensions::ExtensionInstanceSpec {
             instance_id: "jwt-authentication".to_string(),
@@ -127,9 +127,17 @@ fn test_extensions_generation() {
         server_conf.contains("add_header Access-Control-Allow-Origin \"$http_origin\" always;")
     );
     assert!(server_conf.contains("add_header Access-Control-Allow-Credentials \"true\" always;"));
-    assert!(server_conf.contains("add_header Retry-After 120 always;"));
-    assert!(server_conf.contains("if ($http_x_bypass)"));
-    assert!(server_conf.contains("return 503 \"{\\\"error\\\":\\\"Under upgrade\\\"}\";"));
+    assert!(
+        rendered
+            .get_shm_slot(aurora_engine::shm::AURORA_EXT_REQUEST_TERMINATION)
+            .is_some()
+    );
+    assert_eq!(
+        rendered
+            .get_shm_slot_json(aurora_engine::shm::AURORA_EXT_REQUEST_TERMINATION)
+            .unwrap()["rules"][0]["status_code"],
+        503
+    );
     assert!(!server_conf.contains("gateway_jwt_policy"));
     assert_eq!(
         rendered
@@ -696,9 +704,17 @@ async fn test_materialize_gateway_writes_and_removes_request_termination_snapsho
             renderer: "request-termination".to_string(),
             manifest_digest: String::new(),
             config_json: r#"{
-                "status_code": 503,
-                "content_type": "application/json",
-                "body": "{\"error\": \"Under Maintenance\"}"
+                "schema_version": 1,
+                "generation": 501,
+                "rules": [{
+                    "id": "term-503",
+                    "priority": 1,
+                    "origin": "*",
+                    "path_prefix": "/",
+                    "status_code": 503,
+                    "content_type": "application/json",
+                    "body": "{\"error\": \"Under Maintenance\"}"
+                }]
             }"#
             .to_string(),
         }],
@@ -1458,4 +1474,3 @@ fn test_l4_streams_memory_leak_audit() {
         drop(conf);
     }
 }
-

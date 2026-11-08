@@ -2,8 +2,8 @@
 //!
 //! Inspects and streams egress response body chunks before delivering to the client.
 
-use aurora_extensions::response_compression::CompressionAlgorithm;
 use super::access::AuroraAllocFn;
+use aurora_extensions::response_compression::CompressionAlgorithm;
 use std::panic::catch_unwind;
 
 pub const AURORA_BODY_FILTER_PASSTHROUGH: u32 = 0;
