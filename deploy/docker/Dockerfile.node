@@ -94,8 +94,9 @@ COPY --from=rust-builder /app/target/release/aurora-control-worker /usr/local/bi
 
 COPY deploy/docker/nginx-node.conf.template /etc/nginx/nginx-node.conf.template
 COPY deploy/docker/entrypoint-node.sh /entrypoint.sh
+COPY scripts/aurora-tune-network.sh /usr/local/bin/aurora-tune-network.sh
 
-RUN chmod +x /usr/local/bin/aurora-control-worker /usr/local/bin/aurora-gateway /entrypoint.sh
+RUN chmod +x /usr/local/bin/aurora-control-worker /usr/local/bin/aurora-gateway /entrypoint.sh /usr/local/bin/aurora-tune-network.sh
 
 EXPOSE 80 443 9145
 

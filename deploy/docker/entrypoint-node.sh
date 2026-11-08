@@ -21,6 +21,11 @@ if [[ ! "${NGINX_RESOLVER}" =~ ^[0-9a-fA-F:.]+$ ]]; then
 fi
 export NGINX_RESOLVER
 
+# Dynamically tune network queues (Hardware RSS vs Software RPS) if running on host/privileged network
+if [ -x "/usr/local/bin/aurora-tune-network.sh" ]; then
+    /usr/local/bin/aurora-tune-network.sh || true
+fi
+
 echo "[Aurora Dataplane] Configuring connection to Controller: ${CONTROLLER_URL}..."
 
 # Trust only explicitly configured proxy IPs/CIDRs, never arbitrary forwarded headers.
