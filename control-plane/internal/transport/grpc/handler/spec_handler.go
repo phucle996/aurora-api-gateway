@@ -27,7 +27,6 @@ func (h *SpecSyncHandler) SyncSpec(ctx context.Context, req *pb.SyncSpecRequest)
 	}
 
 	res, err := h.specService.SyncSpec(ctx, entity.SpecSyncQuery{
-		NodeID:      req.NodeId,
 		CurrentHash: req.CurrentHash,
 	})
 	if err != nil {

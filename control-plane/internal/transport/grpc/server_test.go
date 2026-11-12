@@ -153,7 +153,7 @@ func TestServer_Plaintext(t *testing.T) {
 	defer cancel()
 
 	ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer secret-token")
-	_, err = client.SyncSpec(ctx, &pb.SyncSpecRequest{NodeId: "test-node"})
+	_, err = client.SyncSpec(ctx, &pb.SyncSpecRequest{})
 	if err != nil && err.Error() != "rpc error: code = Unimplemented desc = unknown service aurora.sync.v1.SpecSyncService" {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -190,7 +190,7 @@ func TestServer_TLS(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 		defer cancel()
 		client := pb.NewSpecSyncServiceClient(plainConn)
-		_, err = client.SyncSpec(ctx, &pb.SyncSpecRequest{NodeId: "test-node"})
+		_, err = client.SyncSpec(ctx, &pb.SyncSpecRequest{})
 		if err == nil {
 			t.Fatal("expected plaintext client to fail against TLS server, but it succeeded")
 		}
@@ -221,7 +221,7 @@ func TestServer_TLS(t *testing.T) {
 	defer cancel()
 
 	ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer secret-token")
-	_, err = client.SyncSpec(ctx, &pb.SyncSpecRequest{NodeId: "test-node"})
+	_, err = client.SyncSpec(ctx, &pb.SyncSpecRequest{})
 	if err != nil && err.Error() != "rpc error: code = Unimplemented desc = unknown service aurora.sync.v1.SpecSyncService" {
 		t.Fatalf("unexpected error with valid TLS: %v", err)
 	}
@@ -268,7 +268,7 @@ func TestServer_mTLS(t *testing.T) {
 	}
 	ctx1, cancel1 := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel1()
-	_, err = pb.NewSpecSyncServiceClient(noCertConn).SyncSpec(ctx1, &pb.SyncSpecRequest{NodeId: "test-node"})
+	_, err = pb.NewSpecSyncServiceClient(noCertConn).SyncSpec(ctx1, &pb.SyncSpecRequest{})
 	if err == nil {
 		t.Fatal("expected client without certificate to fail against mTLS server, but it succeeded")
 	}
@@ -294,7 +294,7 @@ func TestServer_mTLS(t *testing.T) {
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel2()
 	ctx2 = metadata.AppendToOutgoingContext(ctx2, "authorization", "Bearer secret-token")
-	_, err = pb.NewSpecSyncServiceClient(mtlsConn).SyncSpec(ctx2, &pb.SyncSpecRequest{NodeId: "test-node"})
+	_, err = pb.NewSpecSyncServiceClient(mtlsConn).SyncSpec(ctx2, &pb.SyncSpecRequest{})
 	if err != nil && err.Error() != "rpc error: code = Unimplemented desc = unknown service aurora.sync.v1.SpecSyncService" {
 		t.Fatalf("unexpected error with valid mTLS: %v", err)
 	}

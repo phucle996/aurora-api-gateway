@@ -139,7 +139,7 @@ impl SpecSyncRunner {
         let local_hash = self.current_hash.lock().await.clone();
 
         let handler = self.grpc.spec_handler();
-        match handler.sync_spec(&self.cfg.hostname, &local_hash).await {
+        match handler.sync_spec(&local_hash).await {
             Ok(res) => {
                 if res.in_sync {
                     debug!(hash = %local_hash, "NodeSpec is in sync via gRPC");

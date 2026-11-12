@@ -23,8 +23,7 @@ const (
 
 type SyncSpecRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
-	CurrentHash   string                 `protobuf:"bytes,2,opt,name=current_hash,json=currentHash,proto3" json:"current_hash,omitempty"`
+	CurrentHash   string                 `protobuf:"bytes,1,opt,name=current_hash,json=currentHash,proto3" json:"current_hash,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -57,13 +56,6 @@ func (x *SyncSpecRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use SyncSpecRequest.ProtoReflect.Descriptor instead.
 func (*SyncSpecRequest) Descriptor() ([]byte, []int) {
 	return file_sync_v1_spec_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *SyncSpecRequest) GetNodeId() string {
-	if x != nil {
-		return x.NodeId
-	}
-	return ""
 }
 
 func (x *SyncSpecRequest) GetCurrentHash() string {
@@ -143,11 +135,10 @@ func (x *SyncSpecResponse) GetSpecJson() string {
 
 type ReportSpecRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
-	ReleaseId     int64                  `protobuf:"varint,2,opt,name=release_id,json=releaseId,proto3" json:"release_id,omitempty"`
-	Hash          string                 `protobuf:"bytes,3,opt,name=hash,proto3" json:"hash,omitempty"`
-	Status        string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"` // "in_sync", "out_of_sync"
-	Message       string                 `protobuf:"bytes,5,opt,name=message,proto3" json:"message,omitempty"`
+	ReleaseId     int64                  `protobuf:"varint,1,opt,name=release_id,json=releaseId,proto3" json:"release_id,omitempty"`
+	Hash          string                 `protobuf:"bytes,2,opt,name=hash,proto3" json:"hash,omitempty"`
+	Status        string                 `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"` // "in_sync", "out_of_sync"
+	Message       string                 `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -180,13 +171,6 @@ func (x *ReportSpecRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ReportSpecRequest.ProtoReflect.Descriptor instead.
 func (*ReportSpecRequest) Descriptor() ([]byte, []int) {
 	return file_sync_v1_spec_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *ReportSpecRequest) GetNodeId() string {
-	if x != nil {
-		return x.NodeId
-	}
-	return ""
 }
 
 func (x *ReportSpecRequest) GetReleaseId() int64 {
@@ -265,23 +249,21 @@ var File_sync_v1_spec_proto protoreflect.FileDescriptor
 
 const file_sync_v1_spec_proto_rawDesc = "" +
 	"\n" +
-	"\x12sync/v1/spec.proto\x12\x0eaurora.sync.v1\"M\n" +
-	"\x0fSyncSpecRequest\x12\x17\n" +
-	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12!\n" +
-	"\fcurrent_hash\x18\x02 \x01(\tR\vcurrentHash\"{\n" +
+	"\x12sync/v1/spec.proto\x12\x0eaurora.sync.v1\"4\n" +
+	"\x0fSyncSpecRequest\x12!\n" +
+	"\fcurrent_hash\x18\x01 \x01(\tR\vcurrentHash\"{\n" +
 	"\x10SyncSpecResponse\x12\x17\n" +
 	"\ain_sync\x18\x01 \x01(\bR\x06inSync\x12\x1d\n" +
 	"\n" +
 	"release_id\x18\x02 \x01(\x03R\treleaseId\x12\x12\n" +
 	"\x04hash\x18\x03 \x01(\tR\x04hash\x12\x1b\n" +
-	"\tspec_json\x18\x04 \x01(\tR\bspecJson\"\x91\x01\n" +
-	"\x11ReportSpecRequest\x12\x17\n" +
-	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x1d\n" +
+	"\tspec_json\x18\x04 \x01(\tR\bspecJson\"x\n" +
+	"\x11ReportSpecRequest\x12\x1d\n" +
 	"\n" +
-	"release_id\x18\x02 \x01(\x03R\treleaseId\x12\x12\n" +
-	"\x04hash\x18\x03 \x01(\tR\x04hash\x12\x16\n" +
-	"\x06status\x18\x04 \x01(\tR\x06status\x12\x18\n" +
-	"\amessage\x18\x05 \x01(\tR\amessage\".\n" +
+	"release_id\x18\x01 \x01(\x03R\treleaseId\x12\x12\n" +
+	"\x04hash\x18\x02 \x01(\tR\x04hash\x12\x16\n" +
+	"\x06status\x18\x03 \x01(\tR\x06status\x12\x18\n" +
+	"\amessage\x18\x04 \x01(\tR\amessage\".\n" +
 	"\x12ReportSpecResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess2\xb5\x01\n" +
 	"\x0fSpecSyncService\x12M\n" +

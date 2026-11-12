@@ -42,7 +42,6 @@ func TestSpecSyncHandler_SyncSpec(t *testing.T) {
 
 	// Test InSync case
 	resp, err := h.SyncSpec(context.Background(), &pb.SyncSpecRequest{
-		NodeId:      "node-01",
 		CurrentHash: "valid-hash",
 	})
 	if err != nil {
@@ -54,7 +53,6 @@ func TestSpecSyncHandler_SyncSpec(t *testing.T) {
 
 	// Test OutOfSync case
 	resp2, err := h.SyncSpec(context.Background(), &pb.SyncSpecRequest{
-		NodeId:      "node-01",
 		CurrentHash: "old-hash",
 	})
 	if err != nil {

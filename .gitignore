@@ -18,3 +18,4 @@
 !/control-plane/internal/console/dist/index.html
 /crates/engine/benches/*.csv
 backend/aurora-backend
+/docs/diagrams/

@@ -15,12 +15,10 @@ impl SpecGrpcHandler {
 
     pub async fn sync_spec(
         &self,
-        node_id: &str,
         current_hash: &str,
     ) -> Result<SyncSpecResponse, String> {
         let mut client = self.client.clone();
         let req = SyncSpecRequest {
-            node_id: node_id.to_string(),
             current_hash: current_hash.to_string(),
         };
 
@@ -50,7 +48,6 @@ impl SpecGrpcHandler {
 
     pub async fn report_spec(
         &self,
-        node_id: &str,
         release_id: i64,
         hash: &str,
         status: &str,
@@ -58,7 +55,6 @@ impl SpecGrpcHandler {
     ) -> Result<(), String> {
         let mut client = self.client.clone();
         let req = ReportSpecRequest {
-            node_id: node_id.to_string(),
             release_id,
             hash: hash.to_string(),
             status: status.to_string(),
